@@ -30,6 +30,8 @@ ALLOWED_FILES = {
     "src/sparse_rtdetr/__init__.py",
     "src/sparse_rtdetr/data_protocol/__init__.py",
     "src/sparse_rtdetr/data_protocol/categories.py",
+    "src/sparse_rtdetr/data_protocol/cli.py",
+    "src/sparse_rtdetr/data_protocol/converter.py",
     "src/sparse_rtdetr/data_protocol/evaluation.py",
     "src/sparse_rtdetr/data_protocol/lineage.py",
     "src/sparse_rtdetr/data_protocol/parser.py",
@@ -49,6 +51,7 @@ ALLOWED_FILES = {
     "docs/contracts/ENVIRONMENT_POLICY.md",
     "docs/contracts/AUTODL_MIGRATION.md",
     "docs/contracts/VISDRONE_PROTOCOL_V1.md",
+    "docs/contracts/VISDRONE_CONVERTER_V1.md",
     "docs/upstream/RTDETRV2_SELECTION.md",
     "docs/legacy_p2/P2_FINAL_CLOSURE.md",
     "manifests/p2_legacy_manifest.json",
@@ -63,6 +66,7 @@ ALLOWED_FILES = {
     "environment/pip-packages.json",
     "environment/manifest.json",
     "tests/test_visdrone_protocol.py",
+    "tests/test_visdrone_converter.py",
     *VENDOR_ADDITIONAL_FILES,
 }
 

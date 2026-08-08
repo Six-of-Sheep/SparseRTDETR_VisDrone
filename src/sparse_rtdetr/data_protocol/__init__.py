@@ -14,6 +14,17 @@ from .categories import (
     training_to_coco_id,
     training_to_raw_id,
 )
+from .converter import (
+    ConversionBundle,
+    ConversionContractError,
+    RawImageRecord,
+    assign_coco_image_ids,
+    build_conversion_bundle,
+    collect_split,
+    record_from_bytes,
+    run_conversion,
+    write_conversion_artifacts,
+)
 from .evaluation import (
     COCOGroundTruth,
     COCODiagnosticInput,
@@ -34,10 +45,11 @@ from .split import AtomicGroup, ImageIdentity, SplitPlan, build_atomic_groups, p
 __all__ = [
     "AnnotationDisposition", "AnnotationFields", "AnnotationLineage", "AnnotationParseError", "AnnotationStatus",
     "AtomicGroup", "COCO_CATEGORY_IDS", "COCOGroundTruth", "COCODiagnosticInput", "COCODiagnosticOutput",
-    "CategoryMapping", "Detection", "ImageIdentity", "NUM_CLASSES", "PROTOCOL_SCHEMA", "ParsedAnnotation",
+    "CategoryMapping", "ConversionBundle", "ConversionContractError", "Detection", "ImageIdentity", "NUM_CLASSES", "PROTOCOL_SCHEMA", "ParsedAnnotation",
     "PrimaryEvaluatorInput", "PrimaryEvaluatorOutput", "PrimaryGroundTruth", "ProtocolContractError", "SplitPlan", "annotate_records",
-    "assert_primary_input", "assert_secondary_input", "build_atomic_groups", "canonical_json_bytes",
+    "assert_primary_input", "assert_secondary_input", "assign_coco_image_ids", "build_atomic_groups", "build_conversion_bundle", "canonical_json_bytes",
     "category_mapping", "coco_to_training_id", "ensure_allowed_dataset_path", "parse_annotation_bytes",
     "parse_annotation_line", "plan_confirmatory_split", "protocol_schema", "raw_to_training_id",
-    "stable_annotation_id", "stable_image_id", "training_to_coco_id", "training_to_raw_id",
+    "record_from_bytes", "run_conversion", "stable_annotation_id", "stable_image_id", "training_to_coco_id", "training_to_raw_id",
+    "RawImageRecord", "collect_split", "write_conversion_artifacts",
 ]
