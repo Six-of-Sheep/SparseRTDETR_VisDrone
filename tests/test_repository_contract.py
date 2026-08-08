@@ -21,6 +21,18 @@ class RepositoryContractTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotRegex(text, r"(?m)^\\s*(from|import)\\s+(torch|ultralytics|rtdetr)\\b")
 
+    def test_frozen_upstream_identity(self):
+        manifest = (ROOT / "manifests" / "rtdetrv2_upstream.json").read_text(encoding="utf-8")
+        self.assertIn(CHECKER.EXPECTED_UPSTREAM_COMMIT, manifest)
+        self.assertIn(CHECKER.EXPECTED_UPSTREAM_SUBTREE, manifest)
+        self.assertIn(CHECKER.EXPECTED_LICENSE_SHA256, manifest)
+
+    def test_contract_sources_do_not_import_vendor(self):
+        for directory in (ROOT / "src", ROOT / "tools", ROOT / "scripts"):
+            for path in directory.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotRegex(text, r"(?m)^\s*(from|import)\s+vendor\b")
+
 
 if __name__ == "__main__":
     unittest.main()

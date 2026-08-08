@@ -1,0 +1,887 @@
+{
+  "schema_version": 1,
+  "upstream_repository": "https://github.com/lyuwenyu/RT-DETR.git",
+  "upstream_branch": "main",
+  "upstream_commit": "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47",
+  "upstream_commit_time": "2026-06-15T13:50:44+09:00",
+  "upstream_root_tree": "b6de37e186373fc59b91d23c846bb0eda35b6986",
+  "upstream_subtree": "96a3b3e7e015d5e548e2917df2fec9641375e96e",
+  "license_name": "Apache-2.0",
+  "license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "implementation": "rtdetrv2_pytorch",
+  "vendor_relative_path": "vendor/rtdetrv2_pytorch",
+  "file_count": 124,
+  "total_size_bytes": 373735,
+  "inventory_algorithm": "sha256(canonical_json(files))",
+  "canonical_inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7",
+  "files": [
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/Dockerfile",
+      "size_bytes": 173,
+      "sha256": "b70f9c9f822e10e71a419f6cf11b6b820cd6498d0509f4d0021cee5dc3fc1abb",
+      "executable": false,
+      "source_role": "environment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/LICENSE",
+      "size_bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "executable": false,
+      "source_role": "p3_additional"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/README.md",
+      "size_bytes": 9072,
+      "sha256": "43c4b95deb8976111cf75129cb8bea38a678b82038eb3c4f7a99be1ed130ec93",
+      "executable": false,
+      "source_role": "package_or_documentation"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/UPSTREAM.md",
+      "size_bytes": 927,
+      "sha256": "ed31fe0dcdf0d6a232af95c61348368538fe266d262483ddf3927a6ec3501e13",
+      "executable": false,
+      "source_role": "p3_additional"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/dataset/coco_detection.yml",
+      "size_bytes": 933,
+      "sha256": "bdf466fa99c3e3e3fcdecb7ba8eba0e61df9f713c1871a84f5fd1c81b0fd8794",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/dataset/voc_detection.yml",
+      "size_bytes": 702,
+      "sha256": "fb21d8e20c9d7fac16852b6cddd3b71132e4970d5b368bb9b9225fd86d530be8",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/include/dataloader.yml",
+      "size_bytes": 946,
+      "sha256": "a0be3bdadfd51193643cc968c58e2ecad1608c1a236986eec8db38eb13d87076",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/include/optimizer.yml",
+      "size_bytes": 611,
+      "sha256": "aa4a3e26c1fd9c0c3f7b9efd04c0cfd759b72863b9323bf932a24cc95ba15f36",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/include/rtdetr_r50vd.yml",
+      "size_bytes": 1224,
+      "sha256": "12366cc52da8468d143dd594ed37f5bc86077b34a8193f1f3d7a478233f9d05b",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/readme.md",
+      "size_bytes": 5648,
+      "sha256": "b8eeea78be3330bd87bb5a968af3e506d67442f7ef9ac9e64559046b159e7371",
+      "executable": false,
+      "source_role": "package_or_documentation"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r101vd_6x_coco.yml",
+      "size_bytes": 621,
+      "sha256": "671b71559d1ddb38ab66904be55ed2c9ede47625f60e460c7eeb103a714cfad3",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r18vd_6x_coco.yml",
+      "size_bytes": 772,
+      "sha256": "5d1187b7e45c4f28e6e9dc270b6e335f104bf7d569150886d81f3f694a5f0bd5",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r34vd_6x_coco.yml",
+      "size_bytes": 772,
+      "sha256": "be6bdd2d34fee69424ef8f6fc0407ba155c8b4e6895c17fb34e9eb6e819dffa6",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r50vd_6x_coco.yml",
+      "size_bytes": 211,
+      "sha256": "769366a19629de02d400ab7842ee9fc239e1aea859cad23a66f040a7174aca53",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r50vd_m_6x_coco.yml",
+      "size_bytes": 579,
+      "sha256": "2c633c6747cbe47b43a62162e18e9ec18056eb6bfc809c20d2603eb16bd8696d",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/dataloader.yml",
+      "size_bytes": 1185,
+      "sha256": "a3d5a204c8de2b05a29228422c4e865113ad6c87c0b4a7e6c1d21dccd884442b",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/optimizer.yml",
+      "size_bytes": 514,
+      "sha256": "30bc23da028bf8c451ad46f1800c40864e364403f6eb0ea95394d7cce465fc3a",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml",
+      "size_bytes": 1370,
+      "sha256": "57b7fe0920b8c3046f66981f503045023ec68cff0148c88caf7b1e40c9b117c4",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_hgnetv2_h_6x_coco.yml",
+      "size_bytes": 761,
+      "sha256": "b36d195be0a31199aae50dac94d0cfce2e23dc7f0225dcb5bc9c8a563b69cd8d",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_hgnetv2_l_6x_coco.yml",
+      "size_bytes": 611,
+      "sha256": "2ad81af7064ca9abf59e384815cd7e62a5094a9af271853463a2297cc8abd966",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_hgnetv2_x_6x_coco.yml",
+      "size_bytes": 738,
+      "sha256": "a970ca550e0e5114b45d323e64e626fedf7ebd6bad07d55850b9f4f7dbe570f3",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r101vd_6x_coco.yml",
+      "size_bytes": 626,
+      "sha256": "b16c4a1199940c0101c6f2e59cd1f39fe0503a8bae571e9611e0b3e1800e3f47",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+      "size_bytes": 643,
+      "sha256": "93182eb778c58346e31b947dec4cb7e673373d3d93210d271a10cc1c6043a1e9",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_voc.yml",
+      "size_bytes": 664,
+      "sha256": "e33604db25c7a2511d38373799da9ca93776e5e9e9d3abed826dc3fbc7330b26",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_dsp_3x_coco.yml",
+      "size_bytes": 792,
+      "sha256": "cfe70c6e00d2b4173d1665d753768d3d2778237d59729569c39d3fcc24b80658",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_sp1_120e_coco.yml",
+      "size_bytes": 671,
+      "sha256": "bc83d5cd5f4ff93da89b983e8b546777d2fe75978c6c1e705490b92864e239fd",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_sp2_120e_coco.yml",
+      "size_bytes": 671,
+      "sha256": "31d11a06fcf395c7363fa341ab5134e77ebb604b1e53d281b7333eb35bfc0e59",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_sp3_120e_coco.yml",
+      "size_bytes": 671,
+      "sha256": "ed08462e472193aae00795b55fcefef73261785f27407bb245267416dd87e657",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r34vd_120e_coco.yml",
+      "size_bytes": 908,
+      "sha256": "4e3abd582539c42f9d13144233d99409934df2b2d5379db4d15c48fc1fc63d61",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r34vd_dsp_1x_coco.yml",
+      "size_bytes": 1037,
+      "sha256": "6a0c1200f28fc73679fb03f7c263392ea77e8df712cf2f806dbccca373fd9bc6",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_6x_coco.yml",
+      "size_bytes": 473,
+      "sha256": "f5c2f8a5fbd4748fe8b9e1cee33879b035a801726583e64c0c27dcd8d7fa1e20",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_dsp_1x_coco.yml",
+      "size_bytes": 494,
+      "sha256": "c7feb4f481bdc822fa89c7e8652d0024084c6bd1fa40dd024062c225c5641e32",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_m_7x_coco.yml",
+      "size_bytes": 702,
+      "sha256": "d3fa48a084b4bd55bb478f21d1db8e4aa3aad836e38045b511b1a7e004f3c0de",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_m_dsp_3x_coco.yml",
+      "size_bytes": 835,
+      "sha256": "a992e4d4877d739ec567f26b65a9fbb70780d02f7c100c5a56065919f59d136c",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/configs/runtime.yml",
+      "size_bytes": 234,
+      "sha256": "1b7c050257197e06f69049e0a27b9ea734e175a998a1655c9ad83ed124876e2d",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/dataset/readme.md",
+      "size_bytes": 83,
+      "sha256": "ae9e83e1dde81cdab03513482e2e77fee7652de63a5330c51d0efd754e57090d",
+      "executable": false,
+      "source_role": "package_or_documentation"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/docker-compose.yml",
+      "size_bytes": 496,
+      "sha256": "4dd0e451d7013fbe4800d3f6e3b253937da49babbf1026cb251aabb410d3f354",
+      "executable": false,
+      "source_role": "config"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/references/deploy/readme.md",
+      "size_bytes": 14,
+      "sha256": "419063ae4ba95cc1cc315ac3779ea801367f601c71e4478d191234766f07b03e",
+      "executable": false,
+      "source_role": "deployment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_onnxruntime.py",
+      "size_bytes": 1549,
+      "sha256": "49b2be51d55203974e796bf36d612eee91b18f981050d49ef9f8e96e20487bda",
+      "executable": false,
+      "source_role": "deployment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_openvino.py",
+      "size_bytes": 124,
+      "sha256": "85c4667f375be74e2d87003d035fbaca13c56fedbaba13458933e9dfd6000bcc",
+      "executable": false,
+      "source_role": "deployment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_tensorrt.py",
+      "size_bytes": 10831,
+      "sha256": "6916f6c0d6bded0ab76a7ee3b40b208772d1307afa204d032a80f7f372e22fa9",
+      "executable": false,
+      "source_role": "deployment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_torch.py",
+      "size_bytes": 2412,
+      "sha256": "2c9b2a545874efa9a1830034699fae7925ea9e7428157a0157a91eaac3186568",
+      "executable": false,
+      "source_role": "deployment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/requirements.txt",
+      "size_bytes": 114,
+      "sha256": "55d52013f956c560e4a94d10603720c26026e7f5f1eb8c822da0e37e7c6ad306",
+      "executable": false,
+      "source_role": "environment"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/__init__.py",
+      "size_bytes": 154,
+      "sha256": "b2cc58fbd3d05d7f4c0b2cf2a7653ab80d72f2627eef0ba1373d2025a7e6977f",
+      "executable": false,
+      "source_role": "package_or_documentation"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/core/__init__.py",
+      "size_bytes": 206,
+      "sha256": "2c9bf5ec2d0ea54f5ff738691b60a865bfa7b4f3ead1cb0db23afbf0ee7aedf1",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/core/_config.py",
+      "size_bytes": 9123,
+      "sha256": "0fad282eaadb6e16e1a805987a7e629ded2e0b125a52e84d5890bcce325304a6",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/core/workspace.py",
+      "size_bytes": 5529,
+      "sha256": "968b302b474f30561b853032081810a8d1cdd9bfd6249e2216f5def9d24e57f4",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/core/yaml_config.py",
+      "size_bytes": 6736,
+      "sha256": "4877886fc1e440987e19c328ca95baf5ae23540b6ff907307a9e99227f590d82",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/core/yaml_utils.py",
+      "size_bytes": 3085,
+      "sha256": "22c9808a52c1c19f8037442468d00cc289442a202368e740321b8b57063dd81a",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/__init__.py",
+      "size_bytes": 473,
+      "sha256": "f20570f96778c5e91e50d1f5b374a490dbfc8dfa9442ac303cacf33a7adf5f64",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/_misc.py",
+      "size_bytes": 1830,
+      "sha256": "a3cbaaac2ed24b007042f85a7fb3271739ee6044a27a81c35b03fb30d9db6039",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataloader.py",
+      "size_bytes": 2937,
+      "sha256": "3159fbb487fc3c5eede0f6773a0e981e0158d571ff4619fd86c2f58b93acc89e",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/__init__.py",
+      "size_bytes": 460,
+      "sha256": "018308935b1fde2828f9aa31e9d11de41095dfb08b3d55319976f5fc83372567",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/_dataset.py",
+      "size_bytes": 650,
+      "sha256": "a8fc180cd47d7f6814b46f9adde14d16629a4eb7bc9c1415f1d2991407c4d31e",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/cifar_dataset.py",
+      "size_bytes": 507,
+      "sha256": "db337b701edd46d26fd7446b2f7feaa8488e9c5aace3f4c90029ac0c6dd25a0b",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/coco_dataset.py",
+      "size_bytes": 7820,
+      "sha256": "81df510b22906869bd6b9324dbdba2286d217daa292b026ec4f6950247cd9bf7",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/coco_eval.py",
+      "size_bytes": 618,
+      "sha256": "418137810813aa6e2d3ff4b0c9964c181d8923e381526da7cd10ed16154fb006",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/coco_utils.py",
+      "size_bytes": 6803,
+      "sha256": "33e0fac3274ac254aeb05284ab473724a8b002209e9e2d38100d6cd8cfde7e66",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/voc_detection.py",
+      "size_bytes": 2855,
+      "sha256": "6bfa5a2b875a6bebb05541ec568df5c9b236335bcd3253cb19bd65a42342287b",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/dataset/voc_eval.py",
+      "size_bytes": 163,
+      "sha256": "86badc1a8d805811ea553c7c0ab1322b8441ace26cf6b2924c79d14d471efc97",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/transforms/__init__.py",
+      "size_bytes": 384,
+      "sha256": "2583fd076e3531c4c2baae0d06ec4e8ef5c5ff7e284f610a49c518dfa1d09a83",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/transforms/_transforms.py",
+      "size_bytes": 4686,
+      "sha256": "8334c9d0ebaeca5227b0ec1150287b496a79366dd1225c48ad71d54737013518",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/transforms/container.py",
+      "size_bytes": 2778,
+      "sha256": "1b7e8a6215423bbd7580cc93e361685945b24667b56524bc8e39657cd96ee8fd",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/transforms/functional.py",
+      "size_bytes": 5792,
+      "sha256": "ca64c65a7c9d4888afc1a3cf534176562f2223ce3b98704b20591dcf60aa365d",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/transforms/mosaic.py",
+      "size_bytes": 2498,
+      "sha256": "eb0448ef30e5925de8a29db2435d660a61cf8502ec8b6d95b9706bc19ed81452",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/data/transforms/presets.py",
+      "size_bytes": 57,
+      "sha256": "86b01d70b4f4a941ab262e230f3eacb395034c91905c70a7d6b4de95b69208f0",
+      "executable": false,
+      "source_role": "data_adapter"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/__init__.py",
+      "size_bytes": 187,
+      "sha256": "21cfb511e77e56640aa669e867251bcc6306b2f5d0f1e2cf90b8fe711c057c64",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/box_ops.py",
+      "size_bytes": 2850,
+      "sha256": "a733c55f71300b2dc5ac8ceffd1bd03d398bdf6948a914cf9381775666e90a6d",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/dist_utils.py",
+      "size_bytes": 7154,
+      "sha256": "772746c92aeec58b74903c4ff8c6b73665dd27b7bb545c10c705e9df70f73aae",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/lazy_loader.py",
+      "size_bytes": 2211,
+      "sha256": "6cd831c6aa1eb13866933a21d42fa0fac3d772319120786362877b523bdf7c7d",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/logger.py",
+      "size_bytes": 7731,
+      "sha256": "63d5f91f1f20286d1b79a3b14eb45ef0313918d257a7458d5c13a96578ce85da",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/profiler_utils.py",
+      "size_bytes": 1780,
+      "sha256": "aff51e6ccd495f5ff735e7b29cc888741fe9f6e9169920c4abca2ee357362baa",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/misc/visualizer.py",
+      "size_bytes": 876,
+      "sha256": "50f9fc4d8307ffea4f854647fa7ef1ab725fad8669cb777daf65da78e2afb137",
+      "executable": false,
+      "source_role": "runtime"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/__init__.py",
+      "size_bytes": 256,
+      "sha256": "02c2f3587f3120f131fb0bfeeccf4f5a312d19d6824ceee4f16f1c778ea3686d",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/arch/__init__.py",
+      "size_bytes": 134,
+      "sha256": "534787ef4341ea282b60f19dc9188733bef72326a6197e6f2b6f50d23b379492",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/arch/classification.py",
+      "size_bytes": 969,
+      "sha256": "85cd129dd00203c748f0580ec4345bc0e7d2a0f2c97171e60b58349b7ea22be2",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/arch/yolo.py",
+      "size_bytes": 725,
+      "sha256": "1e9aff75928f1cd73f7ae77dcaf3f8841557c7ceffdb5db5cba9831bb2b3e92a",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/__init__.py",
+      "size_bytes": 403,
+      "sha256": "3146ee953e04576d2040db04ef45e2b0ad2c5385ec3fdf4ae1f34141cb79cc15",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/common.py",
+      "size_bytes": 2940,
+      "sha256": "c4721e8ace22bfd522a39fe0cf259ef528d303c49898e3ecb96fc55b88569dd4",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/csp_darknet.py",
+      "size_bytes": 6281,
+      "sha256": "ab3361169bb92955869c33e19a149e72728c9e77c981f0e3896170555ce761ee",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/csp_resnet.py",
+      "size_bytes": 9120,
+      "sha256": "6cdcfe8646c75e317ee6436f0ce6b231be4a898c68ef0a306947faf0eb4d5eb8",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/hgnetv2.py",
+      "size_bytes": 13541,
+      "sha256": "92c530ccee060f0e240ff5081336e4f7639e53f2eabe3386cd0b2a76525a279b",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/presnet.py",
+      "size_bytes": 7431,
+      "sha256": "7b07405d6c3e79ebb50b7940b4b235a8aacea71f1e38018f2d0ffd5b7a10afc8",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/test_resnet.py",
+      "size_bytes": 2697,
+      "sha256": "53caeaa7c74848b0dcd9d363e2f560c423ad4443d0d6a9d01462a87b1878c0a8",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/timm_model.py",
+      "size_bytes": 2112,
+      "sha256": "f2e8c123723898988bf9f13255ba395d339b8419e5a3046c131fb401670fe66c",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/torchvision_model.py",
+      "size_bytes": 1214,
+      "sha256": "4aedc9442ccad8a99c0bbfefa1c75cd2e06a05e8737708a5557ea5e5f937ee99",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/utils.py",
+      "size_bytes": 1786,
+      "sha256": "aba7306d02d955bd081677d1bdf90de462724b9fc1fb7a50f1cfa6830d659735",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/criterion/__init__.py",
+      "size_bytes": 203,
+      "sha256": "f1588cee5218c0861dadf4a4cb68c2b956d1fb0ee00dedcdb8ce81dd328e264f",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/criterion/det_criterion.py",
+      "size_bytes": 7565,
+      "sha256": "665b01b5f3ff6172975c531e390fba92a2ea39b548f1e1cd2cad63913e57f618",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/postprocessor/__init__.py",
+      "size_bytes": 108,
+      "sha256": "b6c8f1a02067c0bb8468de16dc3289a0268f0ed9f53316510d791ae2316b2113",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/postprocessor/box_revert.py",
+      "size_bytes": 1777,
+      "sha256": "83732aff52886dced562857283a6fa53242942c9681e9e76c2448639fa6f34b0",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/postprocessor/detr_postprocessor.py",
+      "size_bytes": 2613,
+      "sha256": "3373e1f347d781a91f4f8653e73d502b7af51ab79e9e096b82e62645086191b5",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/nn/postprocessor/nms_postprocessor.py",
+      "size_bytes": 2386,
+      "sha256": "db8be4d654f91fe07a1e25a03f8a02a74982494272a6284708f089903564a13c",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/optim/__init__.py",
+      "size_bytes": 137,
+      "sha256": "099e80bbb73915bbd6772f5f2e56a1c8e5f1d399773cf31d4bbe1c5d8d42f560",
+      "executable": false,
+      "source_role": "optimization"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/optim/amp.py",
+      "size_bytes": 196,
+      "sha256": "e3086cdd3ddee8547ed909f9c9d0901a82e2fad73044f697d0c33a59069e088b",
+      "executable": false,
+      "source_role": "optimization"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/optim/ema.py",
+      "size_bytes": 3221,
+      "sha256": "5e3a9cf725adf2557992d5002083a354d0704dec91ab7ea06dde2b54189e3d7d",
+      "executable": false,
+      "source_role": "optimization"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/optim/optim.py",
+      "size_bytes": 565,
+      "sha256": "041e0a002e962a9e9c6ab3635e433549e2aabf5464995484a28051bdd1e75da7",
+      "executable": false,
+      "source_role": "optimization"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/optim/warmup.py",
+      "size_bytes": 1515,
+      "sha256": "78fdc26d44d3be3758a30b97f859270c3373755b6a325f93676846e30443be4b",
+      "executable": false,
+      "source_role": "optimization"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/solver/__init__.py",
+      "size_bytes": 284,
+      "sha256": "95048daababeb274472ccf472824e5e8bec87fc54d8a3139a3009998d6250a6d",
+      "executable": false,
+      "source_role": "training"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/solver/_solver.py",
+      "size_bytes": 5797,
+      "sha256": "71985b05f05a8052bc7e15a25341fa547bc831c5de4abfd7324ff4610101f5bd",
+      "executable": false,
+      "source_role": "training"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/solver/clas_engine.py",
+      "size_bytes": 2400,
+      "sha256": "a1aaf34e271531ea6ac4b4693d97d7b1b59fab94ab097c9d2ea0005b9c400b73",
+      "executable": false,
+      "source_role": "training"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/solver/clas_solver.py",
+      "size_bytes": 2608,
+      "sha256": "8f28be1d56a738dca44d50acc83050ae727d3fbbc2f926149a359e605e6c1c81",
+      "executable": false,
+      "source_role": "training"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/solver/det_engine.py",
+      "size_bytes": 5825,
+      "sha256": "615bc2d5e1f8b35813230d6d00838c37a9addb64226ef6a9702ad00a03ea8915",
+      "executable": false,
+      "source_role": "training"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/solver/det_solver.py",
+      "size_bytes": 4880,
+      "sha256": "d9b70dd5012d38ff96a4be16703b8ca70e00d320f987ac55ef05c50b532697c2",
+      "executable": false,
+      "source_role": "training"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/__init__.py",
+      "size_bytes": 79,
+      "sha256": "53702f1e51e92b0c8da696bef44a2c6c1bfb825ff62d003f5f3813c696b41e70",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/__init__.py",
+      "size_bytes": 416,
+      "sha256": "44003b6e216de69bef6e4bd12edfa7d991b03d1c0f2ee9ff29604a0bc104c0d9",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/box_ops.py",
+      "size_bytes": 2655,
+      "sha256": "5f24d21f5e252287eb6d6de302f5840f4e120446bc858933a2dd5523a8f0aa91",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/conver_params.py",
+      "size_bytes": 2659,
+      "sha256": "fd2b1f8cdda786ddea00af55a23de29efe160a9093a49df78c0d6e37eef77cb0",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/denoising.py",
+      "size_bytes": 4625,
+      "sha256": "a10115c9e06e55c6bdbf79e1883c5a13b74c7626a20cc9f6ee539ecc34589f3d",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/hybrid_encoder.py",
+      "size_bytes": 12309,
+      "sha256": "404bbf44f9c89d3b727e8c2fc719d214d1731a34395129c6cc036f016804a1a3",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/matcher.py",
+      "size_bytes": 5010,
+      "sha256": "11a221ea7a2ad4e728a008ead7f73d1cba3649066f795b2076200c0d41738ad1",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr.py",
+      "size_bytes": 937,
+      "sha256": "9a827fc91ed2f45a534c71655d71c72eeddee6f5840612a6888b9d23826ca76e",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr_criterion.py",
+      "size_bytes": 12791,
+      "sha256": "ab73b070381be17c579197c8bdbe6384ebb31aaab239b0a648cef84cc443b46c",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr_decoder.py",
+      "size_bytes": 23024,
+      "sha256": "fd24792d3bfc14b5628dfac53e43aebc9a8a19dae813c9a5fa801dbbbf0838bd",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr_postprocessor.py",
+      "size_bytes": 3104,
+      "sha256": "c37e19aa2f22c6136ba212cd84864d0a3f0304afe90bb10cea99b64c1a76275a",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_criterion.py",
+      "size_bytes": 12656,
+      "sha256": "df149c47e8054831334355b05e03a98cbbd974ba51e0ed08f476ca64b2944b4e",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py",
+      "size_bytes": 24521,
+      "sha256": "01c7b7ab8f070de09dd10e0b34cdd8332874cf63f48cae7e9a608a8574122b6a",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/utils.py",
+      "size_bytes": 5971,
+      "sha256": "0de3857351de6e0fd675c0b22410cefa46e1ef7f1330ad8727c242160529cdf0",
+      "executable": false,
+      "source_role": "model"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/tools/README.md",
+      "size_bytes": 4117,
+      "sha256": "7a5af541d841ff52322b3e76bc1d6ba80edd47231802b2b730a0549a663ce170",
+      "executable": false,
+      "source_role": "tool"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/tools/export_onnx.py",
+      "size_bytes": 3340,
+      "sha256": "a4b327444134907d005fb1a9d90b89157c71a6ab94258af4427d32b7f58c8ed6",
+      "executable": false,
+      "source_role": "tool"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/tools/export_trt.py",
+      "size_bytes": 3567,
+      "sha256": "5e4696df4f2135eb715bf53b08f19d9696b658f3a823adb4b433586761e6f4d3",
+      "executable": false,
+      "source_role": "tool"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/tools/onnx2trt.sh",
+      "size_bytes": 1098,
+      "sha256": "e40ff5c918d266069e64be4b65aa843c255bf51470d0f8ce56e90eb4b62cb26c",
+      "executable": false,
+      "source_role": "tool"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/tools/run_profile.py",
+      "size_bytes": 3323,
+      "sha256": "9d2d88762e9eaccf8b0d878c5fad3db9acf947644bc1106ce13d2ad9f74f9cae",
+      "executable": false,
+      "source_role": "tool"
+    },
+    {
+      "relative_path": "vendor/rtdetrv2_pytorch/tools/train.py",
+      "size_bytes": 2140,
+      "sha256": "fa6866bac963e38840098864db03be8f8c51f1b22bbec23c94adad84376b602a",
+      "executable": false,
+      "source_role": "tool"
+    }
+  ]
+}
