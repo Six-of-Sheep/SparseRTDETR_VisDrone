@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "environment_name": "sparse-rtdetrv2-p3-r2",
+  "created_from_branch": "codex/p3-rtdetrv2-vendor-r1",
+  "created_from_commit": "7653fca41a81787fd083781137c9ce56ffe9ebc2",
+  "vendor": {
+    "relative_path": "vendor/rtdetrv2_pytorch",
+    "file_count": 124,
+    "total_size_bytes": 373735,
+    "inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
+  },
+  "core_identity": {
+    "python": "3.10.16",
+    "pytorch": "2.4.1",
+    "pytorch_build": "py3.10_cuda12.4_cudnn9.1.0_0",
+    "torchvision": "0.19.1",
+    "torchvision_build": "py310_cu124",
+    "pytorch_cuda": "12.4",
+    "torchtriton": "3.0.0",
+    "mkl": "2023.1.0",
+    "intel_openmp": "2023.1.0",
+    "numpy": "1.26.4",
+    "scipy": "1.13.1"
+  },
+  "r1": {
+    "environment_name": "sparse-rtdetrv2-p3",
+    "status": "PERMANENT_INCOMPLETE",
+    "failure_class": "MKL_IJIT_BINARY_ABI_INCOMPATIBILITY",
+    "preserved": true,
+    "not_reused_or_modified": true
+  },
+  "artifacts": {
+    "conda_explicit_lock": {
+      "path": "environment/conda-linux-64.explicit.txt",
+      "sha256": "eeaeed7f26976ff1b370f27a5a320a7a0ccf066eb29cfa1c63ce55fc0cdc665e"
+    },
+    "conda_package_manifest": {
+      "path": "environment/conda-packages.json",
+      "sha256": "2d566c9f779543768984a015fb8992b441f1ed491d03d251347c664320656e20"
+    },
+    "pip_package_manifest": {
+      "path": "environment/pip-packages.json",
+      "sha256": "0fbd2eee06ebbbc579785ff01035fb42ab4fdc3e0c3a4f321978cfff80694977"
+    },
+    "pip_constraints": {
+      "path": "environment/pip-constraints.txt",
+      "sha256": "c90cb610d4b3ea3a33897fbbe78503528ee13c69d8c71bee5983246a7985bd87"
+    }
+  },
+  "validation": {
+    "pip_check": "PASS",
+    "vendor_python_compile_count": 83,
+    "vendor_core_import": "PASS",
+    "r18_config": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+    "r18_backbone_depth": 18,
+    "r18_model_class": "src.zoo.rtdetr.rtdetr.RTDETR",
+    "r18_total_parameters": 20184464,
+    "r18_trainable_parameters": 20184464,
+    "r18_parameters_finite": true,
+    "r18_download_calls": 0,
+    "forward_called": false,
+    "backward_called": false,
+    "dataset_or_dataloader_constructed": false,
+    "data_accessed": false,
+    "checkpoint_loaded": false,
+    "cuda_hidden": true,
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "cuda_initialized": false,
+    "libtorch_unresolved_symbols": false,
+    "test_count": 12,
+    "test_result": "PASS"
+  },
+  "safety": {
+    "vendor_modified": false,
+    "base_modified": false,
+    "r1_modified": false,
+    "deployment_toolchain_installed": false,
+    "training_or_evaluation_run": false,
+    "speed_measurement": false,
+    "data_protocol_frozen": false,
+    "model_selection": false,
+    "promotion": false
+  }
+}

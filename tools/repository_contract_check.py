@@ -30,6 +30,7 @@ ALLOWED_FILES = {
     "src/sparse_rtdetr/__init__.py",
     "configs/README.md",
     "tests/test_repository_contract.py",
+    "tests/test_environment_contract.py",
     "tools/repository_contract_check.py",
     "scripts/README.md",
     "docs/contracts/P3_RESEARCH_CONTRACT.md",
@@ -44,6 +45,13 @@ ALLOWED_FILES = {
     "manifests/legacy_source_identity.json",
     "manifests/rtdetrv2_upstream.json",
     "environment/README.md",
+    "environment/CPU_CONTRACT.md",
+    "environment/REBUILD_R2.md",
+    "environment/conda-linux-64.explicit.txt",
+    "environment/conda-packages.json",
+    "environment/pip-constraints.txt",
+    "environment/pip-packages.json",
+    "environment/manifest.json",
     *VENDOR_ADDITIONAL_FILES,
 }
 
