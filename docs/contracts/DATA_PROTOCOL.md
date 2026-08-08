@@ -1,14 +1,18 @@
 # Data Protocol
 
-- VISDRONE_ROOT, ARTIFACT_ROOT, and PRETRAINED_ROOT are supplied by
-  configuration or environment variables.
-- Source code must not contain a server-specific dataset path.
-- The current dataset is not moved by repository initialization.
-- Historical P1 work observed test and proposed 5% top-k afterward; that
-  evidence is post-hoc and exploratory.
-- Historical test is not an independent unseen P3 confirmatory set.
-- Train, development, selection, and confirmatory protocols must be frozen
-  in a later authorized phase.
-- The confirmatory source is undecided.
-- TEST_ACCESS_ALLOWED=false.
-- This initialization does not define a concrete image split.
+The frozen implementation is documented in
+`docs/contracts/VISDRONE_PROTOCOL_V1.md` and represented by
+`configs/visdrone_protocol_v1.json`. Source code accepts only in-memory
+bytes and relative train/val paths; it does not enumerate a dataset root.
+
+The protocol identity is bound to the audited official train and val
+inventories (6471 and 548 images respectively). The inventory algorithm is
+the sorted list of `{relative_path, size_bytes, file_sha256}` records encoded
+as canonical UTF-8 JSON with `ensure_ascii=true`, `sort_keys=true`, compact
+separators, and no trailing newline. No production JSON or split membership
+file is generated in this phase.
+
+Historical P2 work observed the official test split and used a 5% top-k
+post-hoc exploratory analysis. That evidence is not an independent unseen P3
+confirmatory result. The historical official val set was also used for
+selection and diagnostics. `TEST_ACCESS_ALLOWED=false` remains in force.

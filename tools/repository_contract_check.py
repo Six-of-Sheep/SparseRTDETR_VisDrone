@@ -28,7 +28,16 @@ ALLOWED_FILES = {
     ".gitattributes",
     "pyproject.toml",
     "src/sparse_rtdetr/__init__.py",
+    "src/sparse_rtdetr/data_protocol/__init__.py",
+    "src/sparse_rtdetr/data_protocol/categories.py",
+    "src/sparse_rtdetr/data_protocol/evaluation.py",
+    "src/sparse_rtdetr/data_protocol/lineage.py",
+    "src/sparse_rtdetr/data_protocol/parser.py",
+    "src/sparse_rtdetr/data_protocol/protocol.py",
+    "src/sparse_rtdetr/data_protocol/schema.py",
+    "src/sparse_rtdetr/data_protocol/split.py",
     "configs/README.md",
+    "configs/visdrone_protocol_v1.json",
     "tests/test_repository_contract.py",
     "tests/test_environment_contract.py",
     "tools/repository_contract_check.py",
@@ -39,6 +48,7 @@ ALLOWED_FILES = {
     "docs/contracts/ARTIFACT_POLICY.md",
     "docs/contracts/ENVIRONMENT_POLICY.md",
     "docs/contracts/AUTODL_MIGRATION.md",
+    "docs/contracts/VISDRONE_PROTOCOL_V1.md",
     "docs/upstream/RTDETRV2_SELECTION.md",
     "docs/legacy_p2/P2_FINAL_CLOSURE.md",
     "manifests/p2_legacy_manifest.json",
@@ -52,6 +62,7 @@ ALLOWED_FILES = {
     "environment/pip-constraints.txt",
     "environment/pip-packages.json",
     "environment/manifest.json",
+    "tests/test_visdrone_protocol.py",
     *VENDOR_ADDITIONAL_FILES,
 }
 
@@ -254,6 +265,27 @@ def check_repository(root: Path) -> bool:
                 failures.append(f"large file: {path.relative_to(root)}")
 
     _check_vendor(root, failures)
+
+    protocol_path = root / "configs/visdrone_protocol_v1.json"
+    try:
+        protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+        if protocol.get("schema_version") != 1:
+            failures.append("VisDrone protocol schema mismatch")
+        if protocol.get("protocol_id") != "P3-VISDRONE-DATA-PROTOCOL-V1":
+            failures.append("VisDrone protocol ID mismatch")
+        if protocol.get("test_access_allowed") is not False:
+            failures.append("VisDrone test access is not disabled")
+        if protocol.get("real_conversion_outputs_generated") is not False:
+            failures.append("real conversion output marker is not false")
+        if protocol.get("production_split_manifest_generated") is not False:
+            failures.append("production split marker is not false")
+        split = protocol.get("split", {})
+        if split.get("seed") != 20260808 or split.get("salt") != "P3-confirmatory-v1":
+            failures.append("VisDrone split seed/salt mismatch")
+        if split.get("test") != "disabled":
+            failures.append("VisDrone test split is not disabled")
+    except (OSError, TypeError, json.JSONDecodeError) as exc:
+        failures.append(f"VisDrone protocol parse failure: {type(exc).__name__}")
 
     identity_path = root / "manifests/legacy_source_identity.json"
     manifest_path = root / "manifests/p2_legacy_manifest.json"
