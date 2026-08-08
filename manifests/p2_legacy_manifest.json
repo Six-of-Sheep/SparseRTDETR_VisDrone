@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "legacy_git_parent_head": "a5508d63b503eacb98d5f9b812ffed04f97747f7",
+  "closure_branch": "codex/p2-legacy-closure-r1",
+  "base_ap_small": 0.17575682354003425,
+  "scientific_closure": {
+    "all_four_generations_net_positive_merged_ap_small": false,
+    "shared_nms_confidence_competition": "evidence_consistent_explanation_not_unique_causal_proof",
+    "p2_sidecar_query_continuation": "stopped"
+  },
+  "test_protocol_status": "HISTORICALLY_OBSERVED_POST_HOC_TOPK",
+  "environment_snapshot_type": "SAFE_PACKAGE_INVENTORY",
+  "exact_environment_rebuild_supported": false,
+  "full_runs_intentionally_not_hashed": true,
+  "p3_training_ready": false,
+  "artifacts": [
+    {"relative_path":"coarse_sparse_det/p2_t12p_semantic_probe_smoke.py","size_bytes":18132,"sha256":"8bed82816a838e5ef1a915ec4f52d5f96b48d93559d01db2bc4a7ba4ab8020e3","evidence_role":"T12 smoke source","artifact_status":"source_frozen_untracked_parent"},
+    {"relative_path":"coarse_sparse_det/p2_t12p_semantic_probe_smoke_wrapper.sh","size_bytes":1008,"sha256":"a1b4c3bd912e7edcf045148d5848d6e89e2133ecb1367582cd7078371d73f00b","evidence_role":"T12 smoke launcher","artifact_status":"source_frozen_untracked_parent"},
+    {"relative_path":"coarse_sparse_det/p2_t12t_semantic_probe_formal_15epoch.py","size_bytes":38849,"sha256":"550ee03553d191931801c592d09b95ae7a0e36ac16769aca32f1db6679bc6d44","evidence_role":"T12 formal source","artifact_status":"source_frozen_untracked_parent"},
+    {"relative_path":"coarse_sparse_det/p2_t12t_semantic_probe_formal_15epoch_wrapper.sh","size_bytes":1431,"sha256":"951202cad3bdafd325fd07659b27f2996b46d15cef209a68a87fc7fb389facff","evidence_role":"T12 formal launcher","artifact_status":"source_frozen_untracked_parent"},
+    {"relative_path":"coarse_sparse_det/phase2/semantic_probe.py","size_bytes":24749,"sha256":"c22cfbd407f1d4e5a876bc416fe37127b6692c0427ceac255531dd2bd1a93a59","evidence_role":"T12 probe implementation","artifact_status":"source_frozen_untracked_parent"},
+    {"relative_path":"coarse_sparse_det/test_p2_t12p_semantic_probe.py","size_bytes":17046,"sha256":"81694d819290e04debd80ce0adf567303f315f44984a6fe462618dc320b72509","evidence_role":"T12 CPU contract tests","artifact_status":"test_source_frozen_untracked_parent"},
+    {"relative_path":"docs/p2_legacy/P2_FINAL_CLOSURE.md","size_bytes":3048,"sha256":"5779cb8f6e787f273d2f01d53b3c4c418172af9d6cbe646847f80532ffd52ff8","evidence_role":"P2 closure document","artifact_status":"archive_document"},
+    {"relative_path":"docs/p2_legacy/p2_environment_core.yml","size_bytes":424,"sha256":"5e40f721568364e01c6fa02c0426b36c4edaaac5a2aaab7346cd6c4d9e66758d","evidence_role":"safe core environment contract","artifact_status":"safe_inventory"},
+    {"relative_path":"docs/p2_legacy/p2_conda_inventory.json","size_bytes":7290,"sha256":"34a94ab694fc6c58944bd74e0d6532aaf7bf9ff9af1e0dce10672a91d3302338","evidence_role":"sanitized conda package inventory","artifact_status":"safe_inventory"},
+    {"relative_path":"docs/p2_legacy/p2_pip_inventory.json","size_bytes":3446,"sha256":"7d43fec61fcda8e5c42770ac962b257bc6cafd2a6af6c153e897180031e2cdc0","evidence_role":"sanitized pip package inventory","artifact_status":"safe_inventory"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t2_tile_mapping/p2_t2_summary.md","size_bytes":2909,"sha256":"8f7b8486b6bebfd58e51a8e4ed35fdc4774209337daae26d419f5f8feccdc515","evidence_role":"P2-T2 authoritative summary","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t3_sparse_detect/p2_t3_summary.md","size_bytes":5497,"sha256":"dc0aa33024e165bab8a9a5b65e530d7353b4a494bfcf1231a7c20bd2cf64a2dc","evidence_role":"P2-T3 authoritative summary","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t7d_latency_diagnosis/p2_t7d_decision.json","size_bytes":366,"sha256":"7dbb862422a1838adce302cb8ad5a0b18dfdb41f2246e29c501a5807cbe55822","evidence_role":"P2-T7D decision","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t10e_query_val_selection_r3/selection.json","size_bytes":16234,"sha256":"757e3d89112b2e8f8a86ef534991e2f4bc0c521ee0f9834adfa7839a9f224da2","evidence_role":"Confidence-v1 formal selection","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t11e_confidence_v2_val_selection_r2/selection.json","size_bytes":15997,"sha256":"d75532292c1cafd5028ec5b231ac6a5fc9cb43ec4a102af1be8fa2b93da6a43b","evidence_role":"Confidence-v2 formal selection","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t11f_val_threshold_sweep_offline_r4/threshold_sweep_metrics.json","size_bytes":30961,"sha256":"70139dc8a3ecf17edcd88c4cb16ffd6b52789467119b2315846a08cb1782c434","evidence_role":"Confidence-v3 threshold sweep","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t12t_semantic_probe_formal_15epoch/formal_summary.json","size_bytes":2934776,"sha256":"dbf5e78a24b051208cdd550a4a5c9e0cecdaf46a4ff3ac9ea9d239fd4077af60","evidence_role":"semantic probe formal summary","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p2_t12t_semantic_probe_formal_15epoch/completion.json","size_bytes":16681,"sha256":"8043bd08594d9d279a8fea7d59fca1239129497403a6237ac0924fef5eeb3164","evidence_role":"semantic probe completion","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p1_t6a_failure_diagnosis/protocol_history.md","size_bytes":1774,"sha256":"d0f549681f40878f30bdcc90f466270196321d3a10af598449f0fcea67e50f33","evidence_role":"historical test protocol","artifact_status":"legacy_evidence_reference"},
+    {"relative_path":"coarse_sparse_det/runs/p1_t6a_failure_diagnosis/phase2_candidate_protocol.json","size_bytes":2060,"sha256":"ecf008726adaf8b8f10e086ace8e50e6810d3005d6c2d20b59e853a467b30f2a","evidence_role":"historical exploratory candidate protocol","artifact_status":"legacy_evidence_reference"}
+  ]
+}

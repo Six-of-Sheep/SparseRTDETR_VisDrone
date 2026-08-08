@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sparse-rtdetr-visdrone"
+version = "0.0.0"
+description = "Research contracts and skeleton for real sparse VisDrone detection."
+requires-python = ">=3.10,<3.12"
+dependencies = []
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

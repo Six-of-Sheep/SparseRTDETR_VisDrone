@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "source_repository_name": "VisDrone_baseline",
+  "source_branch": "codex/p2-legacy-closure-r1",
+  "source_commit": "5ff9f102e9ba623fffa93a44674220f4725cf9af",
+  "source_tree": "73c979238c85c63b787fe15abe5e8ed435d0f498",
+  "source_parent_commit": "a5508d63b503eacb98d5f9b812ffed04f97747f7",
+  "files": [
+    {
+      "old_relative_path": "docs/p2_legacy/P2_FINAL_CLOSURE.md",
+      "new_relative_path": "docs/legacy_p2/P2_FINAL_CLOSURE.md",
+      "size_bytes": 3048,
+      "sha256": "5779cb8f6e787f273d2f01d53b3c4c418172af9d6cbe646847f80532ffd52ff8"
+    },
+    {
+      "old_relative_path": "manifests/p2_legacy_manifest.json",
+      "new_relative_path": "manifests/p2_legacy_manifest.json",
+      "size_bytes": 6091,
+      "sha256": "ccfd0600f9ab33d6cb9be9b715e1f2e32547c28715e9770b272bc1334b35175c"
+    }
+  ],
+  "copied_byte_exact": true,
+  "legacy_runs_copied": false,
+  "legacy_checkpoints_copied": false,
+  "legacy_environment_reused": false
+}

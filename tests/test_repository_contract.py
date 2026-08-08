@@ -1,0 +1,26 @@
+import importlib.util
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CHECKER_PATH = ROOT / "tools" / "repository_contract_check.py"
+SPEC = importlib.util.spec_from_file_location("repository_contract_check", CHECKER_PATH)
+CHECKER = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+SPEC.loader.exec_module(CHECKER)
+
+
+class RepositoryContractTests(unittest.TestCase):
+    def test_contract_passes(self):
+        self.assertTrue(CHECKER.check_repository(ROOT))
+
+    def test_no_model_framework_imports(self):
+        for directory in (ROOT / "src", ROOT / "tools", ROOT / "scripts"):
+            for path in directory.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotRegex(text, r"(?m)^\\s*(from|import)\\s+(torch|ultralytics|rtdetr)\\b")
+
+
+if __name__ == "__main__":
+    unittest.main()
