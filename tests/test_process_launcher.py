@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -201,7 +202,6 @@ if mode == "missing_inventory":
         "selection_allowed": False, "metrics_access_allowed": False,
         "single_final_access_only": True, "project_test_split_historically_observed": True,
         "confirmatory_metrics_accessed": False,
-        "project_test_split_historically_observed": True,
         "dataset_test_accessed_by_this_process": False, "completion_self_hash_included": False,
         "production_conversion_executed": True,
     }), encoding="utf-8")
@@ -259,6 +259,21 @@ class ProcessLauncherTests(unittest.TestCase):
         self.assertFalse(result["output_directory_created"])
         self.assertFalse(result["process_evidence_created"])
         self.assertFalse(result["dataset_test_accessed_by_this_process"])
+
+    def test_fake_cli_has_no_static_duplicate_string_keys(self):
+        duplicates = []
+        tree = ast.parse(FAKE_CLI)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            seen = set()
+            for key in node.keys:
+                if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                    continue
+                if key.value in seen:
+                    duplicates.append((key.lineno, key.value))
+                seen.add(key.value)
+        self.assertEqual(duplicates, [])
 
     def test_launcher_rejects_visible_cuda_and_test_split(self):
         with mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0", "PYTHONNOUSERSITE": "1"}, clear=False):
