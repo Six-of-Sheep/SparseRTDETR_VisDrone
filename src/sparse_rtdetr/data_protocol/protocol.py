@@ -82,7 +82,21 @@ PROTOCOL_SCHEMA = {
 }
 
 
+PROTOCOL_V2_SCHEMA = deepcopy(PROTOCOL_SCHEMA)
+PROTOCOL_V2_SCHEMA["protocol_id"] = "P3-VISDRONE-DATA-PROTOCOL-V2"
+PROTOCOL_V2_SCHEMA["split"]["selection_policy"] = "feasibility_first_nearest_hash_prefix_v2"
+PROTOCOL_V2_SCHEMA["split"]["planner"] = "plan_confirmatory_split_v2"
+PROTOCOL_V2_SCHEMA["split"]["evaluated_prefix_count"] = 184
+PROTOCOL_V2_SCHEMA["split"]["feasible_prefix_count"] = 64
+
+
 def protocol_schema() -> dict:
     """Return a defensive copy suitable for assertions or serialization."""
 
     return deepcopy(PROTOCOL_SCHEMA)
+
+
+def protocol_v2_schema() -> dict:
+    """Return a defensive copy of the independent feasibility-first V2 schema."""
+
+    return deepcopy(PROTOCOL_V2_SCHEMA)

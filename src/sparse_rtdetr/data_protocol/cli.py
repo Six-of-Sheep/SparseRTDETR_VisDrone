@@ -11,14 +11,14 @@ from .converter import (
     ALLOWED_SPLITS,
     AUTHORIZATION_ENV,
     ConversionContractError,
-    load_protocol_config,
+    load_protocol_v2_config,
     run_conversion,
 )
 from .schema import canonical_json_bytes
 
 
 def _default_protocol_config() -> Path:
-    return Path(__file__).resolve().parents[3] / "configs" / "visdrone_protocol_v1.json"
+    return Path(__file__).resolve().parents[3] / "configs" / "visdrone_protocol_v2.json"
 
 
 def _split_arg(value: str) -> tuple[str, ...]:
@@ -46,7 +46,7 @@ def contract_check() -> dict[str, object]:
     if os.environ.get("CUDA_VISIBLE_DEVICES") != "":
         raise ConversionContractError("contract-check requires CUDA_VISIBLE_DEVICES=''")
     config_path = _default_protocol_config()
-    config = load_protocol_config(config_path)
+    config = load_protocol_v2_config(config_path)
     if config.get("test_access_allowed") is not False:
         raise ConversionContractError("test access is not disabled")
     return {
@@ -61,7 +61,8 @@ def contract_check() -> dict[str, object]:
         "model_constructed": False,
         "dataset_or_dataloader_constructed": False,
         "network_requested": False,
-        "test_accessed": False,
+        "project_test_split_historically_observed": True,
+        "dataset_test_accessed_by_this_process": False,
     }
 
 

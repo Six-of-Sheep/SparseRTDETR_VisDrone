@@ -14,14 +14,14 @@ import re
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 from .categories import CATEGORY_NAMES, category_mapping
 from .lineage import AnnotationLineage, AnnotationStatus, annotate_records
 from .parser import ParsedAnnotation, parse_annotation_bytes
-from .protocol import protocol_schema
+from .protocol import protocol_schema, protocol_v2_schema
 from .schema import ProtocolContractError, canonical_json_bytes, ensure_allowed_dataset_path, stable_image_id
-from .split import AtomicGroup, ImageIdentity, SplitPlan, build_atomic_groups, plan_confirmatory_split
+from .split import AtomicGroup, ImageIdentity, SplitPlan, build_atomic_groups, plan_confirmatory_split, plan_confirmatory_split_v2
 
 
 class ConversionContractError(ProtocolContractError):
@@ -35,6 +35,7 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 MAX_ARTIFACT_BYTES = 1024 * 1024
 AUTHORIZATION_ENV = "P3_VISDRONE_PRODUCTION_CONVERSION_AUTHORIZED"
 EXPECTED_AUTHORIZATION = "1"
+_OFFICIAL_IMAGE_NAME = re.compile(r"^(?P<sequence>[0-9]{7})_[0-9]+_d_[0-9]+\.jpg$")
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,9 @@ class ConversionBundle:
     atomic_groups: tuple[AtomicGroup, ...]
     split_plan: SplitPlan
     files: Mapping[str, bytes]
+    protocol_id: str = "P3-VISDRONE-DATA-PROTOCOL-V1"
+    selection_policy: str = "nearest_hash_prefix_v1"
+    protocol_config_sha256: str | None = None
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -111,11 +115,15 @@ def _jsonl_bytes(records: Iterable[Mapping[str, object]]) -> bytes:
 
 
 def _sequence_key(relative_path: str) -> str:
-    stem = PurePosixPath(relative_path).stem
-    if "_" in stem:
-        return stem.rsplit("_", 1)[0]
-    match = re.match(r"^(.*?)(?:[-.]\d+)$", stem)
-    return match.group(1) if match else stem
+    """Extract the official seven-digit VisDrone video ID."""
+
+    name = PurePosixPath(relative_path).name
+    match = _OFFICIAL_IMAGE_NAME.fullmatch(name)
+    if match is None:
+        raise ConversionContractError(
+            "image filename must match <7-digit-sequence>_<frame>_d_<ordinal>.jpg"
+        )
+    return match.group("sequence")
 
 
 def _image_size(image_bytes: bytes) -> tuple[int, int]:
@@ -348,6 +356,10 @@ def _split_plan_dict(plan: SplitPlan) -> dict[str, object]:
         "selection_allowed": plan.selection_allowed,
         "metrics_access_allowed": plan.metrics_access_allowed,
         "single_final_access_only": plan.single_final_access_only,
+        "selection_policy": plan.selection_policy,
+        "evaluated_prefix_count": plan.evaluated_prefix_count,
+        "feasible_prefix_count": plan.feasible_prefix_count,
+        "selected_prefix_length": plan.selected_prefix_length,
         "checks": [{"name": name, "passed": passed} for name, passed in plan.checks],
     }
 
@@ -431,6 +443,8 @@ def _round_trip_audit(
         "unique_coco_image_ids": len(coco_ids) == len(train_core) + len(development),
         "confirmatory_has_no_coco_annotations": True,
         "test_access_count": 0,
+        "project_test_split_historically_observed": True,
+        "dataset_test_accessed_by_this_process": False,
         "development_is_official_val": all(record.split == "val" for record in development),
         "confirmatory_metrics_accessed": False,
         "byte_determinism_contract": "rerun_same_inputs_and_compare_all_artifact_bytes",
@@ -463,14 +477,14 @@ def _chunk_jsonl(records: Iterable[Mapping[str, object]], stem: str, max_bytes: 
     return chunks
 
 
-def _config_for_output() -> dict[str, object]:
-    config = protocol_schema()
+def _config_for_output(protocol_definition: Callable[[], dict[str, object]]) -> dict[str, object]:
+    config = protocol_definition()
     config["converter_schema_version"] = CONVERTER_SCHEMA_VERSION
     config["real_conversion_outputs_generated"] = True
     return config
 
 
-def _invocation_for_output() -> dict[str, object]:
+def _invocation_for_output(protocol_id: str) -> dict[str, object]:
     return {
         "schema_version": 1,
         "mode": "run",
@@ -479,7 +493,9 @@ def _invocation_for_output() -> dict[str, object]:
         "resume": False,
         "data_root_recorded": False,
         "absolute_data_root_in_artifacts": False,
-        "test_accessed": False,
+        "project_test_split_historically_observed": True,
+        "dataset_test_accessed_by_this_process": False,
+        "protocol_id": protocol_id,
     }
 
 
@@ -490,6 +506,10 @@ def build_conversion_bundle(
     planner_train_image_count: int = 6471,
     planner_target_ratio: float = 0.10,
     planner_tolerance: float = 0.05,
+    planner: Callable[..., SplitPlan] = plan_confirmatory_split,
+    protocol_definition: Callable[[], dict[str, object]] = protocol_schema,
+    protocol_id: str = "P3-VISDRONE-DATA-PROTOCOL-V1",
+    protocol_config_sha256: str | None = None,
 ) -> ConversionBundle:
     """Build all deterministic production artifacts in memory."""
 
@@ -513,7 +533,7 @@ def build_conversion_bundle(
     ]
     groups = build_atomic_groups(train_images)
     development_sequences = frozenset(record.sequence_key for record in val)
-    plan = plan_confirmatory_split(
+    plan = planner(
         groups,
         train_image_count=planner_train_image_count,
         target_ratio=planner_target_ratio,
@@ -529,22 +549,25 @@ def build_conversion_bundle(
     confirmatory = tuple(record for record in train if group_by_path[record.relative_path] in selected_ids)
     train_core = tuple(record for record in train if record.relative_path not in {item.relative_path for item in confirmatory})
     development = val
+    protocol = protocol_definition()
     train_core_coco = _coco_json(train_core, ids)
     development_coco = _coco_json(development, ids)
     files: dict[str, bytes] = {
-        "config.json": _canonical_json(_config_for_output()),
-        "invocation.json": _canonical_json(_invocation_for_output()),
+        "config.json": _canonical_json(_config_for_output(protocol_definition)),
+        "invocation.json": _canonical_json(_invocation_for_output(protocol_id)),
         "source_identity.json": _canonical_json({
             "schema_version": 1,
-            "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V1",
-            "audited_protocol_data_identity": protocol_schema()["data_identity"],
+            "protocol_id": protocol_id,
+            "audited_protocol_data_identity": protocol["data_identity"],
+            "protocol_config_sha256": protocol_config_sha256,
             "train_image_count": len(train),
             "val_image_count": len(val),
             "train_raw_manifest_sha256": _sha256_bytes(_jsonl_bytes(_manifest_records(train, ids))),
             "val_raw_manifest_sha256": _sha256_bytes(_jsonl_bytes(_manifest_records(val, ids))),
             "train_annotation_count": sum(len(record.lineage) for record in train),
             "val_annotation_count": sum(len(record.lineage) for record in val),
-            "test_accessed": False,
+            "project_test_split_historically_observed": True,
+            "dataset_test_accessed_by_this_process": False,
         }),
         "sequence_groups.json": _canonical_json({"schema_version": 1, "groups": [_group_dict(group) for group in groups]}),
         "split_plan.json": _canonical_json(_split_plan_dict(plan)),
@@ -570,6 +593,8 @@ def build_conversion_bundle(
             "development": _audit(development, development_coco),
             "confirmatory": _audit(confirmatory, None),
             "test_access_count": 0,
+            "project_test_split_historically_observed": True,
+            "dataset_test_accessed_by_this_process": False,
         }),
         "round_trip_audit.json": _canonical_json(_round_trip_audit(train_core, development, confirmatory, ids)),
     }
@@ -585,6 +610,9 @@ def build_conversion_bundle(
         atomic_groups=groups,
         split_plan=plan,
         files=files,
+        protocol_id=protocol_id,
+        selection_policy=plan.selection_policy,
+        protocol_config_sha256=protocol_config_sha256,
     )
 
 
@@ -616,6 +644,49 @@ def load_protocol_config(path: Path) -> dict[str, object]:
     if not isinstance(config, dict):
         raise ConversionContractError("protocol config must be a JSON object")
     validate_protocol_config(config)
+    return config
+
+
+def validate_protocol_v2_config(config: Mapping[str, object]) -> None:
+    """Validate the independent V2 feasibility-first input configuration."""
+
+    if config.get("schema_version") != 1 or config.get("protocol_id") != "P3-VISDRONE-DATA-PROTOCOL-V2":
+        raise ConversionContractError("protocol V2 config identity mismatch")
+    if config.get("real_conversion_outputs_generated") is not False:
+        raise ConversionContractError("protocol V2 config is not a pre-run schema")
+    if config.get("production_split_manifest_generated") is not False:
+        raise ConversionContractError("protocol V2 split manifest is already generated")
+    if config.get("confirmatory_metrics_accessed") is not False or config.get("test_access_allowed") is not False:
+        raise ConversionContractError("protocol V2 access gates are not closed")
+    split = config.get("split")
+    if not isinstance(split, Mapping):
+        raise ConversionContractError("protocol V2 split schema is missing")
+    required = {
+        "test": "disabled",
+        "seed": 20260808,
+        "salt": "P3-confirmatory-v1",
+        "target_images": 647,
+        "selection_allowed": False,
+        "metrics_access_allowed": False,
+        "single_final_access_only": True,
+        "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
+        "planner": "plan_confirmatory_split_v2",
+        "distribution_tolerance_percentage_points": 5,
+    }
+    if any(split.get(key) != value for key, value in required.items()):
+        raise ConversionContractError("protocol V2 split identity mismatch")
+
+
+def load_protocol_v2_config(path: Path) -> dict[str, object]:
+    if path.is_symlink() or not path.is_file():
+        raise ConversionContractError("protocol V2 config must be a regular file")
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ConversionContractError("protocol V2 config cannot be parsed") from exc
+    if not isinstance(config, dict):
+        raise ConversionContractError("protocol V2 config must be a JSON object")
+    validate_protocol_v2_config(config)
     return config
 
 
@@ -719,7 +790,8 @@ def write_failure_evidence(
             "metrics_access_allowed": False,
             "single_final_access_only": True,
             "confirmatory_metrics_accessed": False,
-            "test_accessed": False,
+            "project_test_split_historically_observed": True,
+            "dataset_test_accessed_by_this_process": False,
             "completion_self_hash_included": False,
         }))
 
@@ -734,22 +806,29 @@ def _write_success_files(output_dir: Path, bundle: ConversionBundle) -> dict[str
     inventory_bytes = _canonical_json(inventory)
     _atomic_write(output_dir / "artifact_inventory.json", inventory_bytes)
     run_nonce = _sha256_bytes(_canonical_json({
+        "protocol_id": bundle.protocol_id,
         "config_sha256": _sha256_bytes(bundle.files["config.json"]),
         "source_identity_sha256": _sha256_bytes(bundle.files["source_identity.json"]),
         "split_plan_sha256": _sha256_bytes(bundle.files["split_plan.json"]),
+        "input_protocol_config_sha256": bundle.protocol_config_sha256,
     }))
     completion = {
         "schema_version": 1,
         "status": "COMPLETED",
+        "protocol_id": bundle.protocol_id,
+        "selection_policy": bundle.selection_policy,
         "run_nonce": run_nonce,
         "config_sha256": _sha256_bytes(bundle.files["config.json"]),
+        "split_plan_sha256": _sha256_bytes(bundle.files["split_plan.json"]),
+        "input_protocol_config_sha256": bundle.protocol_config_sha256,
         "artifact_inventory_sha256": _sha256_bytes(inventory_bytes),
         "output_path_recorded": False,
         "selection_allowed": False,
         "metrics_access_allowed": False,
         "single_final_access_only": True,
         "confirmatory_metrics_accessed": False,
-        "test_accessed": False,
+        "project_test_split_historically_observed": True,
+        "dataset_test_accessed_by_this_process": False,
         "completion_self_hash_included": False,
         "production_conversion_executed": True,
     }
@@ -780,12 +859,20 @@ def run_conversion(
     """Authorized future production entry point; never called by contract-check."""
 
     resolved_output = validate_run_arguments(data_root, output_dir, protocol_config, splits)
+    config = load_protocol_v2_config(protocol_config)
+    protocol_config_sha256 = _sha256_bytes(protocol_config.read_bytes())
     resolved_output.mkdir(parents=True)
     try:
-        load_protocol_config(protocol_config)
         train = collect_split(data_root, "train")
         val = collect_split(data_root, "val")
-        bundle = build_conversion_bundle(train, val)
+        bundle = build_conversion_bundle(
+            train,
+            val,
+            planner=plan_confirmatory_split_v2,
+            protocol_definition=protocol_v2_schema,
+            protocol_id=config["protocol_id"],
+            protocol_config_sha256=protocol_config_sha256,
+        )
         return _write_success_files(resolved_output, bundle)
     except Exception as error:
         write_failure_evidence(resolved_output, error, redactions=(str(data_root), str(protocol_config)))

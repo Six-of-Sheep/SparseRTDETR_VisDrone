@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import inspect
 import unittest
 
 from sparse_rtdetr.data_protocol import (
@@ -19,7 +21,9 @@ from sparse_rtdetr.data_protocol import (
     ensure_allowed_dataset_path,
     parse_annotation_bytes,
     plan_confirmatory_split,
+    plan_confirmatory_split_v2,
     protocol_schema,
+    protocol_v2_schema,
     raw_to_training_id,
     stable_annotation_id,
     stable_image_id,
@@ -28,6 +32,7 @@ from sparse_rtdetr.data_protocol import (
 from sparse_rtdetr.data_protocol.evaluation import Detection
 from sparse_rtdetr.data_protocol.parser import AnnotationParseError
 from sparse_rtdetr.data_protocol.schema import ProtocolContractError
+from sparse_rtdetr.data_protocol.split import AtomicGroup, ProtocolV2ContractError
 
 
 class VisDroneProtocolTests(unittest.TestCase):
@@ -98,6 +103,21 @@ class VisDroneProtocolTests(unittest.TestCase):
         self.assertIn(b'"test_access_allowed":false', first)
         self.assertIn(b'"target_confirmatory_images":647', first)
 
+    def test_v1_planner_source_and_v2_identity_are_separate(self):
+        from sparse_rtdetr.data_protocol.split import plan_confirmatory_split
+
+        self.assertEqual(
+            hashlib.sha256(inspect.getsource(plan_confirmatory_split).encode("utf-8")).hexdigest(),
+            "ab6e54ef4ab83add4810b1f08e4345a18e6a1a5b97f8365205ae58f9fb927aad",
+        )
+        self.assertEqual(protocol_schema()["protocol_id"], "P3-VISDRONE-DATA-PROTOCOL-V1")
+        self.assertEqual(protocol_v2_schema()["protocol_id"], "P3-VISDRONE-DATA-PROTOCOL-V2")
+        self.assertNotIn("selection_policy", protocol_schema()["split"])
+        self.assertEqual(
+            protocol_v2_schema()["split"]["selection_policy"],
+            "feasibility_first_nearest_hash_prefix_v2",
+        )
+
     def test_test_split_path_is_rejected_without_filesystem_access(self):
         for split, path in (("test", "test/000001.jpg"), ("train", "train/test/000001.jpg")):
             with self.assertRaises(ProtocolContractError):
@@ -158,6 +178,44 @@ class VisDroneProtocolTests(unittest.TestCase):
         ]
         with self.assertRaises(ProtocolContractError):
             plan_confirmatory_split(build_atomic_groups(images), train_image_count=2, target_ratio=0.5)
+
+    def test_v2_feasibility_first_selects_only_passing_prefixes(self):
+        images = [
+            self._image(f"{name}/1.jpg", name, sha, counts=(1,) * 10)
+            for name, sha in (("a", "a" * 64), ("b", "b" * 64), ("c", "c" * 64))
+        ]
+        plan = plan_confirmatory_split_v2(
+            build_atomic_groups(images), train_image_count=4, target_ratio=0.5, tolerance=0.05
+        )
+        self.assertEqual(plan.selection_policy, "feasibility_first_nearest_hash_prefix_v2")
+        self.assertEqual(plan.evaluated_prefix_count, 3)
+        self.assertEqual(plan.feasible_prefix_count, 2)
+        self.assertEqual(plan.selected_prefix_length, 2)
+        self.assertEqual(plan.selected_image_count, 2)
+        self.assertTrue(all(passed for _, passed in plan.checks))
+        self.assertFalse(plan.selection_allowed)
+        self.assertFalse(plan.metrics_access_allowed)
+
+    def test_v2_no_feasible_prefix_fails_with_v2_error(self):
+        images = [
+            self._image("a/1.jpg", "a", "a" * 64, counts=(10,) + (0,) * 9),
+            self._image("b/1.jpg", "b", "b" * 64, counts=(0, 10) + (0,) * 8),
+        ]
+        with self.assertRaises(ProtocolV2ContractError):
+            plan_confirmatory_split_v2(build_atomic_groups(images), train_image_count=2, target_ratio=0.5)
+
+    def test_v2_not_over_target_tie_break(self):
+        groups = tuple(
+            AtomicGroup(
+                group_id=f"group-{name}", sequence_keys=(name,), image_paths=(f"{name}.jpg",),
+                image_sha256s=(name * 64,), image_count=2, valid_target_count=20,
+                class_counts=(2,) * 10, small_target_count=2, identity_closed=True, abnormal=False,
+            )
+            for name in ("a", "b", "c")
+        )
+        plan = plan_confirmatory_split_v2(groups, train_image_count=5, target_ratio=0.5, tolerance=0.05)
+        self.assertEqual(plan.target_image_count, 3)
+        self.assertEqual(plan.selected_image_count, 2)
 
     def test_primary_and_secondary_schemas_are_separate(self):
         detection = Detection("image", 1, (0, 0, 2, 2), 0.5)

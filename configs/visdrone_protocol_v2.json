@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V2",
+  "implementation": "src/sparse_rtdetr/data_protocol",
+  "real_conversion_outputs_generated": false,
+  "production_split_manifest_generated": false,
+  "confirmatory_metrics_accessed": false,
+  "test_access_allowed": false,
+  "canonical_json": {
+    "ensure_ascii": true,
+    "sort_keys": true,
+    "separators": [",", ":"],
+    "encoding": "UTF-8",
+    "trailing_newline": false
+  },
+  "data_identity": {
+    "train_images": 6471,
+    "val_images": 548,
+    "train_image_inventory_sha256": "390e35ee7ff3fe46b4c147230a6650f6001264d133ebbdc89f3de3c950a54e29",
+    "train_annotation_inventory_sha256": "f03551a62514e84255bfb07c8d137740d2cd015d35e0043fb9b2137a1779dc62",
+    "val_image_inventory_sha256": "feaa06717e35d33b85c84e2af567df90bed8eeb32ab0bd72289b0c421b2ebded",
+    "val_annotation_inventory_sha256": "fd110fe03a8b4ab1f6446104c2a5c4c6878e42460ee60c00cf6edd43e9744b98",
+    "train_sequence_keys": 208,
+    "val_sequence_keys": 76,
+    "shared_train_val_sequence_keys": 24,
+    "exact_cross_split_image_sha_overlap": 0
+  },
+  "split": {
+    "train_core": "official_train_minus_sealed_sequence_group_holdout",
+    "development": "official_val",
+    "confirmatory": "sealed_sequence_group_holdout_from_official_train",
+    "test": "disabled",
+    "seed": 20260808,
+    "salt": "P3-confirmatory-v1",
+    "target_images": 647,
+    "distribution_tolerance_percentage_points": 5,
+    "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
+    "planner": "plan_confirmatory_split_v2",
+    "evaluated_prefix_count": 184,
+    "feasible_prefix_count": 64,
+    "selection_allowed": false,
+    "metrics_access_allowed": false,
+    "single_final_access_only": true
+  }
+}

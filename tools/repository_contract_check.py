@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -35,11 +36,13 @@ ALLOWED_FILES = {
     "src/sparse_rtdetr/data_protocol/evaluation.py",
     "src/sparse_rtdetr/data_protocol/lineage.py",
     "src/sparse_rtdetr/data_protocol/parser.py",
+    "src/sparse_rtdetr/data_protocol/process_launcher.py",
     "src/sparse_rtdetr/data_protocol/protocol.py",
     "src/sparse_rtdetr/data_protocol/schema.py",
     "src/sparse_rtdetr/data_protocol/split.py",
     "configs/README.md",
     "configs/visdrone_protocol_v1.json",
+    "configs/visdrone_protocol_v2.json",
     "tests/test_repository_contract.py",
     "tests/test_environment_contract.py",
     "tools/repository_contract_check.py",
@@ -51,7 +54,9 @@ ALLOWED_FILES = {
     "docs/contracts/ENVIRONMENT_POLICY.md",
     "docs/contracts/AUTODL_MIGRATION.md",
     "docs/contracts/VISDRONE_PROTOCOL_V1.md",
+    "docs/contracts/VISDRONE_PROTOCOL_V2.md",
     "docs/contracts/VISDRONE_CONVERTER_V1.md",
+    "docs/contracts/TEST_ACCESS_INCIDENT.md",
     "docs/upstream/RTDETRV2_SELECTION.md",
     "docs/legacy_p2/P2_FINAL_CLOSURE.md",
     "manifests/p2_legacy_manifest.json",
@@ -67,6 +72,7 @@ ALLOWED_FILES = {
     "environment/manifest.json",
     "tests/test_visdrone_protocol.py",
     "tests/test_visdrone_converter.py",
+    "tests/test_process_launcher.py",
     *VENDOR_ADDITIONAL_FILES,
 }
 
@@ -84,8 +90,101 @@ def _relative_files(root: Path) -> set[str]:
     return {
         p.relative_to(root).as_posix()
         for p in root.rglob("*")
-        if p.is_file() and ".git" not in p.relative_to(root).parts
+        if (p.is_file() or p.is_symlink()) and ".git" not in p.relative_to(root).parts
     }
+
+
+def _git_tracked_files(root: Path) -> set[str]:
+    """Read the index without treating ignored tracked files as runtime data."""
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    return {item for item in result.stdout.decode("utf-8").split("\0") if item}
+
+
+def _gitignore_patterns(root: Path) -> list[tuple[bool, str]]:
+    try:
+        lines = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    patterns: list[tuple[bool, str]] = []
+    for raw in lines:
+        value = raw.strip()
+        if not value or value.startswith("#"):
+            continue
+        negated = value.startswith("!")
+        if negated:
+            value = value[1:]
+        if value.endswith("/"):
+            value = value[:-1]
+        if value:
+            patterns.append((negated, value.lstrip("/")))
+    return patterns
+
+
+def _gitignored(relative: str, patterns: list[tuple[bool, str]]) -> bool:
+    """Cover the repository's Gitignore grammar without walking runtime data."""
+
+    from fnmatch import fnmatchcase
+
+    parts = relative.split("/")
+    ignored = False
+    for negated, pattern in patterns:
+        if "/" in pattern:
+            matched = fnmatchcase(relative, pattern) or any(
+                fnmatchcase("/".join(parts[index:]), pattern)
+                for index in range(len(parts))
+            )
+        else:
+            matched = any(fnmatchcase(part, pattern) for part in parts)
+        if matched:
+            ignored = not negated
+    return ignored
+
+
+def _file_policy(root: Path) -> tuple[set[str], list[str]]:
+    """Separate ignored runtime files from source while still auditing them."""
+
+    failures: list[str] = []
+    all_files = _relative_files(root)
+    tracked_files = _git_tracked_files(root)
+    ignore_patterns = _gitignore_patterns(root)
+    files: set[str] = set()
+    for relative in all_files:
+        path = root / relative
+        ignored = _gitignored(relative, ignore_patterns)
+        if path.is_symlink():
+            failures.append(f"symlink: {relative}")
+        if ignored:
+            if relative in tracked_files:
+                if relative == "artifacts" or relative.startswith("artifacts/"):
+                    failures.append(f"tracked runtime artifact: {relative}")
+                else:
+                    files.add(relative)
+            continue
+        files.add(relative)
+    artifacts_root = root / "artifacts"
+    if artifacts_root.exists() and (artifacts_root.is_symlink() or not artifacts_root.is_dir()):
+        failures.append("artifacts must be a real directory")
+    for path in root.rglob("*"):
+        if ".git" in path.relative_to(root).parts or path.is_symlink() or not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if _gitignored(relative, ignore_patterns):
+            continue
+        if path.stat().st_size == 0:
+            failures.append(f"empty file: {relative}")
+        if path.stat().st_size > 10 * 1024 * 1024:
+            failures.append(f"large file: {relative}")
+    return files, failures
 
 
 def _vendor_source_role(relative: str) -> str:
@@ -251,22 +350,13 @@ def _check_vendor(root: Path, failures: list[str]) -> None:
 
 def check_repository(root: Path) -> bool:
     failures: list[str] = []
-    files = _relative_files(root)
+    files, file_policy_failures = _file_policy(root)
+    failures.extend(file_policy_failures)
+
     vendor_files = {relative for relative in files if relative.startswith(VENDOR_PREFIX)}
     allowed_files = ALLOWED_FILES | vendor_files
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
-
-    for path in root.rglob("*"):
-        if ".git" in path.relative_to(root).parts:
-            continue
-        if path.is_symlink():
-            failures.append(f"symlink: {path.relative_to(root)}")
-        elif path.is_file():
-            if path.stat().st_size == 0:
-                failures.append(f"empty file: {path.relative_to(root)}")
-            if path.stat().st_size > 10 * 1024 * 1024:
-                failures.append(f"large file: {path.relative_to(root)}")
 
     _check_vendor(root, failures)
 

@@ -1,6 +1,9 @@
 import importlib.util
+import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +35,54 @@ class RepositoryContractTests(unittest.TestCase):
             for path in directory.rglob("*.py"):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotRegex(text, r"(?m)^\s*(from|import)\s+vendor\b")
+
+    def test_runtime_artifact_policy_uses_gitignore_and_checks_symlinks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+            (root / "artifacts").mkdir()
+            (root / "artifacts" / "ordinary.bin").write_bytes(b"ok")
+            files, failures = CHECKER._file_policy(root)
+            self.assertNotIn("artifacts/ordinary.bin", files)
+            self.assertEqual(failures, [])
+
+    def test_ignored_large_artifact_is_stat_checked_without_source_limit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+            (root / "artifacts").mkdir()
+            with (root / "artifacts" / "large.bin").open("wb") as handle:
+                handle.truncate(11 * 1024 * 1024)
+            files, failures = CHECKER._file_policy(root)
+            self.assertNotIn("artifacts/large.bin", files)
+            self.assertEqual(failures, [])
+
+    def test_artifact_symlink_and_tracked_artifact_fail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+            (root / "artifacts").mkdir()
+            (root / "source.txt").write_text("source", encoding="utf-8")
+            os.symlink(root / "source.txt", root / "artifacts" / "link.txt")
+            with mock.patch.object(CHECKER, "_git_tracked_files", return_value={"artifacts/tracked.txt"}):
+                (root / "artifacts" / "tracked.txt").write_text("tracked", encoding="utf-8")
+                _files, failures = CHECKER._file_policy(root)
+            self.assertIn("symlink: artifacts/link.txt", failures)
+            self.assertIn("tracked runtime artifact: artifacts/tracked.txt", failures)
+
+    def test_nonignored_artifact_and_source_limits_fail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n!artifacts/keep.txt\n", encoding="utf-8")
+            (root / "artifacts").mkdir()
+            (root / "artifacts" / "keep.txt").write_text("source-visible", encoding="utf-8")
+            os.symlink(root / "artifacts" / "keep.txt", root / "source-link.txt")
+            with (root / "large-source.txt").open("wb") as handle:
+                handle.truncate(11 * 1024 * 1024)
+            files, failures = CHECKER._file_policy(root)
+            self.assertIn("artifacts/keep.txt", files)
+            self.assertIn("symlink: source-link.txt", failures)
+            self.assertIn("large file: large-source.txt", failures)
 
 
 if __name__ == "__main__":

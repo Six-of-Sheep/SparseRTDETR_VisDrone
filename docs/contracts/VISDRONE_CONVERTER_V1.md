@@ -54,3 +54,15 @@ hash cycle. Completion binds the config and inventory SHA but does not contain
 its own SHA. A failed run retains its directory and writes `error.json`,
 `partial_inventory.json`, and a failed `completion.json`; it never writes a
 fake successful completion and cannot resume.
+
+## Process evidence
+
+The independent process_launcher owns a separate, preconditioned evidence
+directory and never creates the child output directory. It records the exact
+child argv, child Python, source module path, PYTHONPATH, hidden CUDA state,
+flushed console SHA, timing, an ASCII exit-code file, entry completion and
+artifact inventory references, and a process inventory. Child contract failure
+and generic failure retain their actual return codes and still produce process
+completion plus partial evidence. Missing entry completion is fail-closed and
+cannot be reported as success. Process completion excludes itself from its
+inventory to avoid a hash cycle.
