@@ -335,6 +335,74 @@ def test_runtime_image_path_rejects_strict_types_and_invalid_files(tmp_path):
         resolve_runtime_image_path(root_link, "train_core", f"train/images/{name}")
 
 
+@pytest.mark.parametrize("role,logical_prefix,raw_split", [
+    ("train_core", "train/images", "VisDrone2019-DET-train"),
+    ("development", "val/images", "VisDrone2019-DET-val"),
+])
+@pytest.mark.parametrize("target_scope", ["internal", "external"])
+def test_runtime_image_path_rejects_intermediate_split_symlink(tmp_path, role, logical_prefix, raw_split, target_scope):
+    root = tmp_path / "VisDrone"
+    root.mkdir()
+    target_root = root / "internal-target" if target_scope == "internal" else tmp_path / "external-target"
+    image = target_root / raw_split / "images" / "0000001_00001_d_0000001.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"synthetic-jpg")
+    (root / raw_split).symlink_to(target_root / raw_split, target_is_directory=True)
+
+    with pytest.raises(BaselineContractError, match="may not be a symlink"):
+        resolve_runtime_image_path(
+            root.resolve(),
+            role,
+            f"{logical_prefix}/0000001_00001_d_0000001.jpg",
+        )
+
+
+@pytest.mark.parametrize("component,target_scope", [
+    ("images", "internal"),
+    ("images", "external"),
+    ("image", "internal"),
+    ("image", "external"),
+])
+def test_runtime_image_path_rejects_symlink_images_and_final_jpg(tmp_path, component, target_scope):
+    root = tmp_path / "VisDrone"
+    raw_dir = root / "VisDrone2019-DET-train"
+    raw_dir.mkdir(parents=True)
+    target_root = root / "internal-target" if target_scope == "internal" else tmp_path / "external-target"
+    name = "0000001_00001_d_0000001.jpg"
+    target = target_root / ("images" if component == "images" else name)
+    if component == "images":
+        target.mkdir(parents=True)
+        (target / name).write_bytes(b"synthetic-jpg")
+        (raw_dir / "images").symlink_to(target, target_is_directory=True)
+    else:
+        (raw_dir / "images").mkdir()
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"synthetic-jpg")
+        (raw_dir / "images" / name).symlink_to(target)
+
+    with pytest.raises(BaselineContractError, match="may not be a symlink"):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+
+
+def test_runtime_image_path_rejects_missing_and_non_directory_components(tmp_path):
+    name = "0000001_00001_d_0000001.jpg"
+    root = tmp_path / "VisDrone"
+    root.mkdir()
+    with pytest.raises(BaselineContractError, match="missing or invalid"):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+
+    split = root / "VisDrone2019-DET-train"
+    split.write_bytes(b"not-a-directory")
+    with pytest.raises(BaselineContractError, match="must be a directory"):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+
+    split.unlink()
+    (split / "images").mkdir(parents=True)
+    (split / "images" / name).mkdir()
+    with pytest.raises(BaselineContractError, match="must be a regular file"):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+
+
 def test_runtime_image_path_rejects_test_root_and_never_enumerates(tmp_path, monkeypatch):
     root = tmp_path / "VisDrone"
     image = root / "VisDrone2019-DET-train" / "images" / "0000001_00001_d_0000001.jpg"

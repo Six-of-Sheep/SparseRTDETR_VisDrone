@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,8 +28,8 @@ ROLE_ANNOTATIONS = {
 }
 FORBIDDEN_ROLES = frozenset({"confirmatory", "test", "raw_train", "raw_val"})
 RUNTIME_IMAGE_MAPPING = {
-    "train_core": ("train/images", "VisDrone2019-DET-train/images"),
-    "development": ("val/images", "VisDrone2019-DET-val/images"),
+    "train_core": ("train/images", "VisDrone2019-DET-train"),
+    "development": ("val/images", "VisDrone2019-DET-val"),
 }
 
 
@@ -204,6 +205,21 @@ def resolve_runtime_paths(
     )
 
 
+def _require_runtime_component(path: Path, *, directory: bool, description: str) -> None:
+    """Validate one fixed path component without following a symlink."""
+
+    try:
+        mode = path.lstat().st_mode
+    except OSError as exc:
+        raise BaselineContractError(f"{description} is missing or invalid") from exc
+    if stat.S_ISLNK(mode):
+        raise BaselineContractError(f"{description} may not be a symlink")
+    expected = stat.S_ISDIR if directory else stat.S_ISREG
+    if not expected(mode):
+        kind = "directory" if directory else "regular file"
+        raise BaselineContractError(f"{description} must be a {kind}")
+
+
 def resolve_runtime_image_path(
     data_root: Path,
     role: str,
@@ -227,21 +243,19 @@ def resolve_runtime_image_path(
     filename = parts[2]
     if _OFFICIAL_IMAGE_NAME.fullmatch(filename) is None:
         raise BaselineContractError("runtime image basename is not an official VisDrone JPG")
-    if data_root.is_symlink():
-        raise BaselineContractError("runtime image data_root may not be a symlink")
+    _require_runtime_component(data_root, directory=True, description="runtime image data_root")
     try:
         canonical_root = data_root.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
         raise BaselineContractError("runtime image data_root is missing or invalid") from exc
-    if canonical_root.is_symlink() or not canonical_root.is_dir():
-        raise BaselineContractError("runtime image data_root must be a regular directory")
+    _require_runtime_component(canonical_root, directory=True, description="runtime image data_root")
     _reject_test_path(canonical_root)
-    raw_images = canonical_root / raw_relative_dir
-    if raw_images.is_symlink() or not raw_images.is_dir():
-        raise BaselineContractError("official raw VisDrone image directory is missing or invalid")
+    raw_split = canonical_root / raw_relative_dir
+    _require_runtime_component(raw_split, directory=True, description="official raw VisDrone split directory")
+    raw_images = raw_split / "images"
+    _require_runtime_component(raw_images, directory=True, description="official raw VisDrone image directory")
     candidate = raw_images / filename
-    if candidate.is_symlink() or not candidate.is_file():
-        raise BaselineContractError("official raw VisDrone image is missing or invalid")
+    _require_runtime_component(candidate, directory=False, description="official raw VisDrone image")
     try:
         canonical_images = raw_images.resolve(strict=True)
         canonical_candidate = candidate.resolve(strict=True)

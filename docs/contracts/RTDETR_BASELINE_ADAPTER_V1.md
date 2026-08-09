@@ -68,10 +68,13 @@ single runtime image resolver maps the certified logical COCO paths
 `train/images/<official-name>.jpg` and `val/images/<official-name>.jpg` to the
 fixed official raw directories `VisDrone2019-DET-train/images` and
 `VisDrone2019-DET-val/images`, respectively. It requires an existing regular
-file, rejects symlinks and path escape, and does not enumerate a parent
-directory or discover sibling splits. The dataset adapter and Smoke pre-hash
-check use this same resolver; the COCO `file_name` remains unchanged and raw
-absolute paths never enter portable entry evidence.
+file, checks `data_root`, the fixed raw split directory, `images`, and the
+final JPG with non-following component checks, rejects symlinks and path
+escape, and does not enumerate a parent directory or discover sibling splits.
+Canonical containment is verified only after the complete component chain has
+passed those checks. The dataset adapter and Smoke pre-hash check use this
+same resolver; the COCO `file_name` remains unchanged and raw absolute paths
+never enter portable entry evidence.
 
 The primary evaluator is `visdrone_official_style_v1`. It is not implemented
 by this adapter. `coco_secondary_vendor_v1` is diagnostic only and is not
