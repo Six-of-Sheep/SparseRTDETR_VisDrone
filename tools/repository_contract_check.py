@@ -74,6 +74,7 @@ ALLOWED_FILES = {
     "tests/test_visdrone_converter.py",
     "tests/test_process_launcher.py",
     "tests/test_rtdetr_baseline_adapter.py",
+    "tests/test_rtdetr_baseline_smoke.py",
     *VENDOR_ADDITIONAL_FILES,
 }
 
@@ -87,11 +88,17 @@ BASELINE_FILES = {
     "src/sparse_rtdetr/baseline/contract.py",
     "src/sparse_rtdetr/baseline/dataset.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
+    "src/sparse_rtdetr/baseline/smoke.py",
+    "src/sparse_rtdetr/baseline/smoke_evidence.py",
+    "src/sparse_rtdetr/baseline/smoke_launcher.py",
+    "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json",
+    "docs/contracts/RTDETR_BASELINE_SMOKE_V1.md",
 }
 
 BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
+    "src/sparse_rtdetr/baseline/smoke.py",
 }
 
 LEGACY_FILES = {

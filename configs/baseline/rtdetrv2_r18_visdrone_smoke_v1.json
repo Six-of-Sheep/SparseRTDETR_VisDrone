@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "smoke_id": "rtdetrv2_r18_visdrone_baseline_smoke_v1",
+  "mode": "smoke",
+  "split_role": "train_core",
+  "execution": {
+    "image_count": 2,
+    "batch_size": 2,
+    "workers": 0,
+    "expected_batches": 1,
+    "expected_dataset_next_calls": 1,
+    "expected_model_forward_calls": 1,
+    "expected_postprocessor_calls": 1,
+    "expected_evaluator_calls": 0,
+    "expected_criterion_calls": 0,
+    "expected_backward_calls": 0,
+    "expected_optimizer_steps": 0,
+    "expected_scheduler_steps": 0,
+    "expected_checkpoint_loads": 0,
+    "expected_network_calls": 0
+  },
+  "model": {
+    "baseline_id": "rtdetrv2_r18_visdrone_baseline_v1",
+    "num_classes": 10,
+    "parameters": 20094584,
+    "input_size": [640, 640],
+    "pretrained": false,
+    "checkpoint": null,
+    "seed": 0,
+    "num_queries": 300,
+    "num_top_queries": 300,
+    "nms": false
+  },
+  "image_selection": {
+    "manifest_relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json",
+    "selection_policy": "explicit_coco_image_ids_only",
+    "records": [
+      {
+        "coco_image_id": 1,
+        "relative_path": "train/images/0000002_00005_d_0000014.jpg",
+        "stable_image_id": "5129422a3f13f97e398e6d5cf77efe3fa2398f20f2fc06ba9d8fc8d76b2bfd96",
+        "image_size_bytes": 98691,
+        "image_sha256": "17532f304f390479d8b7998863af7d2c51549702977c1e76b82ed8700dea7085",
+        "annotation_relative_path": "train/annotations/0000002_00005_d_0000014.txt",
+        "annotation_size_bytes": 1982,
+        "annotation_sha256": "598f421aafd38aa19348ac922a97bc3a297deb96b4243f1961f30662332e45c3",
+        "width": 960,
+        "height": 540,
+        "raw_annotation_rows": 88,
+        "keep_rows": 82,
+        "ignore_rows": 6,
+        "filtered_rows": 0,
+        "sequence_key": "0000002",
+        "split": "train"
+      },
+      {
+        "coco_image_id": 2,
+        "relative_path": "train/images/0000002_00448_d_0000015.jpg",
+        "stable_image_id": "4e912e6a969c3e0b4c8ef02ba7512318f0a4351cbd8e74951846bca66421a3a4",
+        "image_size_bytes": 100183,
+        "image_sha256": "699587aa61bdcd0a0fd49dd001df3cbce002dd78c08586788462c2cf486d0b88",
+        "annotation_relative_path": "train/annotations/0000002_00448_d_0000015.txt",
+        "annotation_size_bytes": 2188,
+        "annotation_sha256": "07fcae5c681eb1e154b532eecb59994a0d219ba1f0dcb4b7c2fba3018858b6fd",
+        "width": 960,
+        "height": 540,
+        "raw_annotation_rows": 95,
+        "keep_rows": 85,
+        "ignore_rows": 10,
+        "filtered_rows": 0,
+        "sequence_key": "0000002",
+        "split": "train"
+      }
+    ]
+  },
+  "runtime": {
+    "authorized_env": "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED=1",
+    "visible_devices": "0",
+    "device_count": 1,
+    "cpu_fallback": false,
+    "output_relative_path": "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1",
+    "process_evidence_relative_path": "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"
+  },
+  "evidence": {
+    "completion_status": "COMPLETED",
+    "entry_inventory_excludes": ["artifact_inventory.json", "completion.json"],
+    "process_inventory_excludes": ["process_inventory.json", "process_completion.json"],
+    "non_reportable": true
+  }
+}
