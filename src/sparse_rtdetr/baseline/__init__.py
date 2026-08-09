@@ -1,6 +1,6 @@
 """Frozen RT-DETRv2 R18 VisDrone baseline adapter interfaces."""
 
-from .artifacts import RuntimePaths, R3ArtifactBinding, resolve_runtime_paths, validate_runtime_role, verify_r3_binding
+from .artifacts import RuntimePaths, R3ArtifactBinding, resolve_runtime_image_path, resolve_runtime_paths, validate_runtime_role, verify_r3_binding
 from .categories import (
     coco_categories_to_model_labels,
     coco_category_to_model_label,
@@ -36,6 +36,7 @@ __all__ = [
     "model_labels_to_coco_categories",
     "model_label_to_coco_category",
     "resolve_runtime_paths",
+    "resolve_runtime_image_path",
     "validate_runtime_role",
     "verify_r3_binding",
 ]

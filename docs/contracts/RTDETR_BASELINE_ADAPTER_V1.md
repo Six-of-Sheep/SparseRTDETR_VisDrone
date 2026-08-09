@@ -64,7 +64,14 @@ Only explicit `train_core` and `development` roles can be resolved. The
 confirmatory role is sealed and forbidden. The test role is forbidden. Runtime
 data roots are explicit parameters, are never written into the portable JSON,
 and are rejected when they contain an independent `test` path segment. The
-resolver does not enumerate a parent directory or discover sibling splits.
+single runtime image resolver maps the certified logical COCO paths
+`train/images/<official-name>.jpg` and `val/images/<official-name>.jpg` to the
+fixed official raw directories `VisDrone2019-DET-train/images` and
+`VisDrone2019-DET-val/images`, respectively. It requires an existing regular
+file, rejects symlinks and path escape, and does not enumerate a parent
+directory or discover sibling splits. The dataset adapter and Smoke pre-hash
+check use this same resolver; the COCO `file_name` remains unchanged and raw
+absolute paths never enter portable entry evidence.
 
 The primary evaluator is `visdrone_official_style_v1`. It is not implemented
 by this adapter. `coco_secondary_vendor_v1` is diagnostic only and is not

@@ -14,7 +14,7 @@ import pytest
 torch = importlib.import_module("torch")
 nn = importlib.import_module("torch.nn")
 
-from sparse_rtdetr.baseline.artifacts import resolve_runtime_paths, verify_r3_binding
+from sparse_rtdetr.baseline.artifacts import resolve_runtime_image_path, resolve_runtime_paths, verify_r3_binding
 from sparse_rtdetr.baseline.categories import (
     coco_category_to_model_label,
     map_coco_tensor_to_model,
@@ -258,6 +258,164 @@ def test_runtime_roles_and_path_gate():
             resolve_runtime_paths(ROOT, "/portable/visdrone/data", role)
     with pytest.raises(BaselineContractError):
         resolve_runtime_paths(ROOT, "/portable/visdrone/test/images", "development")
+
+
+@pytest.mark.parametrize("role,logical,raw_dir", [
+    ("train_core", "train/images/0000001_00001_d_0000001.jpg", "VisDrone2019-DET-train/images"),
+    ("development", "val/images/0000001_00001_d_0000001.jpg", "VisDrone2019-DET-val/images"),
+])
+def test_runtime_image_path_maps_each_allowed_role(tmp_path, role, logical, raw_dir):
+    root = tmp_path / "VisDrone"
+    image = root / raw_dir / "0000001_00001_d_0000001.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"synthetic-jpg")
+    assert resolve_runtime_image_path(root, role, logical) == image.resolve()
+
+
+@pytest.mark.parametrize("role,logical", [
+    ("train_core", "val/images/0000001_00001_d_0000001.jpg"),
+    ("development", "train/images/0000001_00001_d_0000001.jpg"),
+    ("confirmatory", "train/images/0000001_00001_d_0000001.jpg"),
+    ("test", "train/images/0000001_00001_d_0000001.jpg"),
+    ("raw_train", "train/images/0000001_00001_d_0000001.jpg"),
+    ("raw_val", "train/images/0000001_00001_d_0000001.jpg"),
+    ("unknown", "train/images/0000001_00001_d_0000001.jpg"),
+])
+def test_runtime_image_path_rejects_role_or_split_drift(tmp_path, role, logical):
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(tmp_path.resolve(), role, logical)
+
+
+@pytest.mark.parametrize("logical", [
+    "",
+    "/train/images/0000001_00001_d_0000001.jpg",
+    "train\\images\\0000001_00001_d_0000001.jpg",
+    "train/images/../0000001_00001_d_0000001.jpg",
+    "train/images/./0000001_00001_d_0000001.jpg",
+    "train/images/sub/0000001_00001_d_0000001.jpg",
+    "train/images/not-an-official-name.jpg",
+    "train/images/0000001_00001_d_0000001.png",
+])
+def test_runtime_image_path_rejects_logical_path_drift(tmp_path, logical):
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(tmp_path.resolve(), "train_core", logical)
+
+
+def test_runtime_image_path_rejects_strict_types_and_invalid_files(tmp_path):
+    root = tmp_path / "VisDrone"
+    raw_dir = root / "VisDrone2019-DET-train" / "images"
+    raw_dir.mkdir(parents=True)
+    name = "0000001_00001_d_0000001.jpg"
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(str(root.resolve()), "train_core", f"train/images/{name}")
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(root.resolve(), "train_core", Path(f"train/images/{name}"))
+    class LogicalString(str):
+        pass
+
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(root.resolve(), "train_core", LogicalString(f"train/images/{name}"))
+
+    missing = raw_dir / name
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+    missing.mkdir()
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+    missing.rmdir()
+    target = raw_dir / "target.jpg"
+    target.write_bytes(b"synthetic-jpg")
+    missing.symlink_to(target)
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(root.resolve(), "train_core", f"train/images/{name}")
+    missing.unlink()
+    root_link = tmp_path / "root-link"
+    root_link.symlink_to(root, target_is_directory=True)
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(root_link, "train_core", f"train/images/{name}")
+
+
+def test_runtime_image_path_rejects_test_root_and_never_enumerates(tmp_path, monkeypatch):
+    root = tmp_path / "VisDrone"
+    image = root / "VisDrone2019-DET-train" / "images" / "0000001_00001_d_0000001.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"synthetic-jpg")
+    test_root = tmp_path / "test" / "VisDrone"
+    test_root.mkdir(parents=True)
+    with pytest.raises(BaselineContractError):
+        resolve_runtime_image_path(test_root, "train_core", "train/images/0000001_00001_d_0000001.jpg")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("runtime image resolver must not enumerate directories")
+
+    monkeypatch.setattr(Path, "iterdir", forbidden)
+    monkeypatch.setattr(Path, "glob", forbidden)
+    monkeypatch.setattr(Path, "rglob", forbidden)
+    monkeypatch.setattr(os, "walk", forbidden)
+    assert resolve_runtime_image_path(root.resolve(), "train_core", "train/images/0000001_00001_d_0000001.jpg") == image.resolve()
+
+
+@pytest.mark.parametrize("role,logical,raw_dir", [
+    ("train_core", "train/images/0000001_00001_d_0000001.jpg", "VisDrone2019-DET-train/images"),
+    ("development", "val/images/0000001_00001_d_0000001.jpg", "VisDrone2019-DET-val/images"),
+])
+def test_dataset_load_image_uses_resolver_once_and_preserves_coco_and_transform(
+    tmp_path, monkeypatch, role, logical, raw_dir,
+):
+    from PIL import Image
+
+    import sparse_rtdetr.baseline.dataset as dataset_module
+
+    root = tmp_path / "VisDrone"
+    image_path = root / raw_dir / "0000001_00001_d_0000001.jpg"
+    image_path.parent.mkdir(parents=True)
+    Image.new("RGB", (3, 2), color=(10, 20, 30)).save(image_path, format="JPEG")
+    observed = []
+    calls = []
+
+    class FakeCoco:
+        def loadImgs(self, image_id):
+            return [{"id": image_id, "file_name": logical}]
+
+    class FakeVendor:
+        def __init__(self, img_folder, ann_file, transforms=None, return_masks=False, remap_mscoco_category=False):
+            self.coco = FakeCoco()
+            self.ids = [7]
+
+        def load_item(self, index):
+            return self._load_image(self.ids[index]), {
+                "labels": torch.tensor([1, 10], dtype=torch.int64),
+                "boxes": torch.zeros((2, 4)),
+            }
+
+    real_resolver = dataset_module.resolve_runtime_image_path
+
+    def recording_resolver(data_root, selected_role, logical_path):
+        calls.append((data_root, selected_role, logical_path))
+        return real_resolver(data_root, selected_role, logical_path)
+
+    monkeypatch.setattr(dataset_module, "_vendor_coco_detection", lambda _root: FakeVendor)
+    monkeypatch.setattr(dataset_module, "resolve_runtime_image_path", recording_resolver)
+
+    def transform(image, target, dataset):
+        observed.append(target["labels"].clone())
+        return image, target, None
+
+    dataset = VisDroneCocoDetection(
+        root,
+        tmp_path / "annotations.json",
+        transforms=transform,
+        vendor_root=tmp_path / "vendor",
+        role=role,
+    )
+    before = dataset._vendor.coco.loadImgs(7)[0]["file_name"]
+    image, target = dataset[0]
+    after = dataset._vendor.coco.loadImgs(7)[0]["file_name"]
+    assert image.size == (3, 2)
+    assert target["labels"].tolist() == [0, 9]
+    assert observed[0].tolist() == [0, 9]
+    assert after == before == logical
+    assert calls == [(root, role, logical)]
 
 
 def test_portable_config_is_deterministic_and_unshared():

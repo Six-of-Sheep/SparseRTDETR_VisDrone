@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..data_protocol.converter import _OFFICIAL_IMAGE_NAME
 from .contract import (
     BaselineContractError,
     R3_ARTIFACT_INVENTORY_SHA256,
@@ -25,6 +26,10 @@ ROLE_ANNOTATIONS = {
     "development": "development_coco.json",
 }
 FORBIDDEN_ROLES = frozenset({"confirmatory", "test", "raw_train", "raw_val"})
+RUNTIME_IMAGE_MAPPING = {
+    "train_core": ("train/images", "VisDrone2019-DET-train/images"),
+    "development": ("val/images", "VisDrone2019-DET-val/images"),
+}
 
 
 @dataclass(frozen=True)
@@ -197,3 +202,52 @@ def resolve_runtime_paths(
         annotation_file=annotation,
         artifact_binding=binding,
     )
+
+
+def resolve_runtime_image_path(
+    data_root: Path,
+    role: str,
+    logical_relative_path: str,
+) -> Path:
+    """Map one certified logical COCO image path to an official raw image."""
+
+    if not isinstance(data_root, Path) or not data_root.is_absolute():
+        raise BaselineContractError("runtime image data_root must be an absolute Path")
+    selected_role = validate_runtime_role(role)
+    if selected_role not in RUNTIME_IMAGE_MAPPING:
+        raise BaselineContractError("runtime image role has no frozen path mapping")
+    if type(logical_relative_path) is not str or not logical_relative_path:
+        raise BaselineContractError("runtime image logical path must be a built-in non-empty string")
+    if logical_relative_path.startswith("/") or "\\" in logical_relative_path:
+        raise BaselineContractError("runtime image logical path must be a relative POSIX path")
+    parts = logical_relative_path.split("/")
+    logical_prefix, raw_relative_dir = RUNTIME_IMAGE_MAPPING[selected_role]
+    if len(parts) != 3 or "/".join(parts[:2]) != logical_prefix or any(part in {"", ".", ".."} for part in parts):
+        raise BaselineContractError("runtime image logical path has an invalid frozen structure")
+    filename = parts[2]
+    if _OFFICIAL_IMAGE_NAME.fullmatch(filename) is None:
+        raise BaselineContractError("runtime image basename is not an official VisDrone JPG")
+    if data_root.is_symlink():
+        raise BaselineContractError("runtime image data_root may not be a symlink")
+    try:
+        canonical_root = data_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise BaselineContractError("runtime image data_root is missing or invalid") from exc
+    if canonical_root.is_symlink() or not canonical_root.is_dir():
+        raise BaselineContractError("runtime image data_root must be a regular directory")
+    _reject_test_path(canonical_root)
+    raw_images = canonical_root / raw_relative_dir
+    if raw_images.is_symlink() or not raw_images.is_dir():
+        raise BaselineContractError("official raw VisDrone image directory is missing or invalid")
+    candidate = raw_images / filename
+    if candidate.is_symlink() or not candidate.is_file():
+        raise BaselineContractError("official raw VisDrone image is missing or invalid")
+    try:
+        canonical_images = raw_images.resolve(strict=True)
+        canonical_candidate = candidate.resolve(strict=True)
+        relative_candidate = canonical_candidate.relative_to(canonical_images)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise BaselineContractError("runtime image path escapes the official raw image directory") from exc
+    if len(relative_candidate.parts) != 1 or canonical_candidate.is_symlink():
+        raise BaselineContractError("runtime image path is outside the official raw image directory")
+    return canonical_candidate

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from .artifacts import resolve_runtime_paths, verify_r3_binding
+from .artifacts import resolve_runtime_image_path, resolve_runtime_paths, verify_r3_binding
 from .config import build_r18_cpu_model
 from .contract import (
     BaselineContractError,
@@ -649,17 +649,17 @@ def run_authorized_smoke(
         "handoff_receipt_relative_path": "handoff_receipt.json",
     })
     try:
+        selected = load_frozen_image_selection(repo_root)
+        for record in selected:
+            image_path = resolve_runtime_image_path(paths.data_root, "train_core", record["relative_path"])
+            if _sha256_file(image_path) != record["image_sha256"]:
+                raise SmokeContractError(f"frozen image SHA drift: {record['coco_image_id']}")
         runtime = validate_real_smoke_environment()
         import torch
 
         rng_before = _rng_state(torch)
         rng_before_audit = _rng_snapshot(torch)
         _seed_smoke(torch, config["model"]["seed"], cuda=True)
-        selected = load_frozen_image_selection(repo_root)
-        for record in selected:
-            image_path = paths.data_root / record["relative_path"]
-            if _sha256_file(image_path) != record["image_sha256"]:
-                raise SmokeContractError(f"frozen image SHA drift: {record['coco_image_id']}")
         from torch.utils.data import DataLoader
         from .config import _vendor_path
         from .dataset import VisDroneCocoDetection

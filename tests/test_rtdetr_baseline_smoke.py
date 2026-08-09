@@ -26,6 +26,7 @@ from sparse_rtdetr.baseline.smoke import (
     contract_check,
     load_frozen_image_selection,
     load_smoke_config,
+    run_authorized_smoke,
     run_synthetic_smoke,
     synthetic_batch,
     validate_real_smoke_environment,
@@ -222,6 +223,42 @@ def test_contract_check_is_data_free_and_does_not_import_torch():
     assert evidence["torch_imported"] is False
     assert evidence["output_directory_created"] is False
     assert evidence["dataset_or_dataloader_constructed"] is False
+
+
+def test_real_smoke_prehash_uses_shared_resolver_before_cuda(monkeypatch, tmp_path):
+    smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
+    dataset_module = importlib.import_module("sparse_rtdetr.baseline.dataset")
+    data_root = _runtime_data_root(tmp_path)
+    output = tmp_path / "entry"
+    calls = []
+
+    def fail_resolver(root, role, logical_path):
+        calls.append((root, role, logical_path))
+        raise SmokeContractError("resolver sentinel")
+
+    def forbidden_cuda_gate():
+        raise AssertionError("invalid runtime image path must fail before CUDA validation")
+
+    assert smoke.resolve_runtime_image_path is dataset_module.resolve_runtime_image_path
+    monkeypatch.setattr(smoke, "resolve_runtime_image_path", fail_resolver)
+    monkeypatch.setattr(smoke, "validate_real_smoke_environment", forbidden_cuda_gate)
+    receipt = {
+        "nonce": "a" * 32,
+        "launcher_pid": 1,
+        "child_pid": 2,
+        "child_ppid": 3,
+        "child_argv_sha256": "0" * 64,
+    }
+    with pytest.raises(SmokeContractError, match="resolver sentinel"):
+        run_authorized_smoke(
+            ROOT,
+            data_root,
+            output,
+            handoff_receipt=receipt,
+            handoff_receipt_sha256="0" * 64,
+        )
+    assert calls == [(data_root, "train_core", FROZEN_IMAGE_RECORDS[0]["relative_path"])]
+    assert _read_object(output / "completion.json")["status"] == "FAILED"
 
 
 def test_real_smoke_environment_rejects_unauthorized_cpu(monkeypatch):
@@ -466,6 +503,8 @@ def test_entry_artifacts_are_portable(tmp_path):
         text = path.read_text(encoding="utf-8")
         assert media_prefix not in text
         assert home_prefix not in text
+        assert "VisDrone2019-DET-train" not in text
+        assert "VisDrone2019-DET-val" not in text
     binding = _read_object(output / "data_binding_audit.json")
     assert binding["portable"] is True
     assert binding["nonportable"] is False

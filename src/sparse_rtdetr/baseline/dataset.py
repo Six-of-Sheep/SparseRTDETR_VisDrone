@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .artifacts import validate_runtime_role
+from .artifacts import resolve_runtime_image_path, validate_runtime_role
 from .categories import map_target_labels_to_model
 from .config import _vendor_path
 from .contract import BaselineContractError
@@ -20,6 +20,25 @@ def _vendor_coco_detection(vendor_root: Path):
         from src.data.dataset.coco_dataset import CocoDetection
 
         return CocoDetection
+
+
+def _mapped_vendor_coco_detection(vendor_root: Path):
+    vendor_class = _vendor_coco_detection(vendor_root)
+
+    class MappedCocoDetection(vendor_class):
+        def __init__(self, *args, runtime_data_root: Path, runtime_role: str, **kwargs):
+            self._runtime_data_root = runtime_data_root
+            self._runtime_role = runtime_role
+            super().__init__(*args, **kwargs)
+
+        def _load_image(self, image_id: int):
+            from PIL import Image
+
+            logical_path = self.coco.loadImgs(image_id)[0]["file_name"]
+            raw_path = resolve_runtime_image_path(self._runtime_data_root, self._runtime_role, logical_path)
+            return Image.open(raw_path).convert("RGB")
+
+    return MappedCocoDetection
 
 
 class VisDroneCocoDetection:
@@ -42,13 +61,15 @@ class VisDroneCocoDetection:
         if vendor_dataset is None:
             if vendor_root is None:
                 raise BaselineContractError("vendor_root is required for dataset construction")
-            dataset_cls = _vendor_coco_detection(Path(vendor_root))
+            dataset_cls = _mapped_vendor_coco_detection(Path(vendor_root))
             vendor_dataset = dataset_cls(
                 img_folder=str(img_folder),
                 ann_file=str(ann_file),
                 transforms=None,
                 return_masks=return_masks,
                 remap_mscoco_category=False,
+                runtime_data_root=Path(img_folder),
+                runtime_role=self.role,
             )
         self._vendor = vendor_dataset
         self._transforms = transforms

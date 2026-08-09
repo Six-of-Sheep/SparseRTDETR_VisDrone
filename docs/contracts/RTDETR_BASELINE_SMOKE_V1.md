@@ -54,6 +54,14 @@ receipt binding rather than rereading the mutable environment. The child owns
 the entry output directory and creates it only after the launcher has
 established the process evidence.
 
+The real entrypoint resolves each certified logical image path through the
+baseline runtime image adapter before CUDA validation or torch import, then
+performs the frozen image SHA check on the returned official raw path. Dataset
+image loading uses the same resolver. `train_core` maps to
+`VisDrone2019-DET-train/images` and `development` maps to
+`VisDrone2019-DET-val/images`; no split discovery, fallback, symlink, or
+portable-artifact absolute path is permitted.
+
 ## Evidence
 
 The child writes `config.json` atomically before any model, dataset, dataloader,
