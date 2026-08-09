@@ -73,7 +73,25 @@ ALLOWED_FILES = {
     "tests/test_visdrone_protocol.py",
     "tests/test_visdrone_converter.py",
     "tests/test_process_launcher.py",
+    "tests/test_rtdetr_baseline_adapter.py",
     *VENDOR_ADDITIONAL_FILES,
+}
+
+BASELINE_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json",
+    "docs/contracts/RTDETR_BASELINE_ADAPTER_V1.md",
+    "src/sparse_rtdetr/baseline/__init__.py",
+    "src/sparse_rtdetr/baseline/artifacts.py",
+    "src/sparse_rtdetr/baseline/categories.py",
+    "src/sparse_rtdetr/baseline/config.py",
+    "src/sparse_rtdetr/baseline/contract.py",
+    "src/sparse_rtdetr/baseline/dataset.py",
+    "src/sparse_rtdetr/baseline/postprocessor.py",
+}
+
+BASELINE_MODEL_IMPORT_FILES = {
+    "src/sparse_rtdetr/baseline/categories.py",
+    "src/sparse_rtdetr/baseline/postprocessor.py",
 }
 
 LEGACY_FILES = {
@@ -210,6 +228,30 @@ def _vendor_source_role(relative: str) -> str:
     if inner.startswith(("src/core/", "src/misc/")):
         return "runtime"
     return "package_or_documentation"
+
+
+def _source_policy_failures(root: Path, files: set[str]) -> list[str]:
+    """Reject machine-specific paths and model imports outside explicit files."""
+
+    failures: list[str] = []
+    media_path = "/" + "media/"
+    home_path = "/" + "home/"
+    mount_path = "/" + "mnt/"
+    file_scheme = "file" + "://"
+    forbidden_path = re.compile("(?:" + re.escape(media_path) + "|" + re.escape(home_path) + "|" + re.escape(mount_path) + "|" + re.escape(file_scheme) + r"|https?://[^\s]+@)")
+    forbidden_import = re.compile(r"(?m)^\s*(?:from|import)\s+(?:torch|ultralytics|rtdetr)\b")
+    for relative in sorted(files - LEGACY_FILES):
+        if relative.startswith(VENDOR_PREFIX):
+            continue
+        path = root / relative
+        if path.suffix not in {".py", ".md", ".toml", ".yml", ".json", ".gitattributes", ""}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if forbidden_path.search(text):
+            failures.append(f"machine-specific path: {relative}")
+        if path.suffix == ".py" and forbidden_import.search(text) and relative not in BASELINE_MODEL_IMPORT_FILES:
+            failures.append(f"model import: {relative}")
+    return failures
 
 
 def _vendor_inventory(root: Path) -> list[dict[str, object]]:
@@ -355,6 +397,7 @@ def check_repository(root: Path) -> bool:
 
     vendor_files = {relative for relative in files if relative.startswith(VENDOR_PREFIX)}
     allowed_files = ALLOWED_FILES | vendor_files
+    allowed_files |= BASELINE_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -407,23 +450,7 @@ def check_repository(root: Path) -> bool:
     except (OSError, json.JSONDecodeError):
         failures.append("legacy manifest parse failure")
 
-    media_path = "/" + "media/"
-    home_path = "/" + "home/"
-    mount_path = "/" + "mnt/"
-    file_scheme = "file" + "://"
-    forbidden_path = re.compile("(?:" + re.escape(media_path) + "|" + re.escape(home_path) + "|" + re.escape(mount_path) + "|" + re.escape(file_scheme) + r"|https?://[^\s]+@)")
-    forbidden_import = re.compile(r"(?m)^\s*(?:from|import)\s+(?:torch|ultralytics|rtdetr)\b")
-    for relative in sorted(files - LEGACY_FILES):
-        if relative.startswith(VENDOR_PREFIX):
-            continue
-        path = root / relative
-        if path.suffix not in {".py", ".md", ".toml", ".yml", ".json", ".gitattributes", ""}:
-            continue
-        text = path.read_text(encoding="utf-8")
-        if forbidden_path.search(text):
-            failures.append(f"machine-specific path: {relative}")
-        if path.suffix == ".py" and forbidden_import.search(text):
-            failures.append(f"model import: {relative}")
+    failures.extend(_source_policy_failures(root, files))
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
