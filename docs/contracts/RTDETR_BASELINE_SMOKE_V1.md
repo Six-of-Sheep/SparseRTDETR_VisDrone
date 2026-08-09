@@ -28,8 +28,8 @@ values.
 
 The committed config and child entry artifact are portable: they contain only
 relative repository identities, certified R3 hashes, and the two frozen stable
-image IDs/relative paths. Runtime absolute repository, output, and process
-paths are restricted to the nonportable launcher process evidence.
+image IDs/relative paths. Runtime absolute repository, output, process, and
+data-root paths are restricted to the nonportable launcher process evidence.
 
 `contract-check` runs with `CUDA_VISIBLE_DEVICES=''` and
 `PYTHONNOUSERSITE=1`. It validates source/config/R3 metadata without importing
@@ -44,8 +44,15 @@ single-use `handoff_prepared.json`. The child must consume that handoff before
 importing torch or creating entry output, then atomically writes the only
 child-owned process file, `handoff_receipt.json`. The launcher cross-checks the
 receipt against the child PID/PPID, argv SHA, nonce, paths, and prepared-handoff
-SHA. The child owns the entry output directory and creates it only after the
-launcher has established the process evidence.
+SHA. The launcher first resolves and validates the explicit `train_core` data
+root as an absolute, existing, non-symlink directory with no independent
+`test` component. That canonical path is bound into the prepared handoff,
+receipt, process invocation, and process completion evidence. The child must
+resolve `P3_SMOKE_DATA_ROOT` before receipt or output creation and match it to
+the prepared binding; after consumption, the real entry receives the validated
+receipt binding rather than rereading the mutable environment. The child owns
+the entry output directory and creates it only after the launcher has
+established the process evidence.
 
 ## Evidence
 
@@ -70,4 +77,8 @@ postprocessor components under the R2 Python environment with CUDA hidden. They
 exercise schema drift, manifest drift, one-batch limits, failure ordering,
 finite-value gates, RNG restoration, evidence binding, launcher ownership,
 nonce handoff, process-group signal handling, and repository source policy.
-These tests never launch the real smoke path.
+These tests never launch the real smoke path. Runtime data-root tests also
+cover canonical-path validation, pre-receipt environment drift, prepared and
+receipt binding drift, process-invocation drift, and post-consumption
+environment changes. Absolute runtime roots are present only in nonportable
+process evidence; entry JSON remains portable.

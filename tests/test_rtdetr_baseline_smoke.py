@@ -61,6 +61,23 @@ def _base_env() -> dict[str, str]:
     }
 
 
+def _runtime_data_root(tmp_path: Path, name: str = "data") -> Path:
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def _assert_no_absolute_posix_paths(value: object) -> None:
+    if isinstance(value, dict):
+        for child in value.values():
+            _assert_no_absolute_posix_paths(child)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_no_absolute_posix_paths(child)
+    elif isinstance(value, str):
+        assert not value.startswith("/")
+
+
 def _entry_completion() -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -102,9 +119,11 @@ def _write_success_child(
     path: Path,
     invocation_mutation: dict[str, object] | None = None,
     receipt_mutation: dict[str, object] | None = None,
+    process_invocation_mutation: dict[str, object] | None = None,
 ) -> None:
     mutation = {} if invocation_mutation is None else invocation_mutation
     receipt_drift = {} if receipt_mutation is None else receipt_mutation
+    process_invocation_drift = {} if process_invocation_mutation is None else process_invocation_mutation
     path.write_text(
         "\n".join(
             [
@@ -117,6 +136,10 @@ def _write_success_child(
                 "receipt, receipt_sha = _consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))",
                 "receipt.update(" + repr(receipt_drift) + ")",
                 "Path(os.environ['P3_SMOKE_PROCESS_EVIDENCE_DIR'], 'handoff_receipt.json').write_text(json.dumps(receipt), encoding='utf-8') if " + repr(bool(receipt_drift)) + " else None",
+                "process_invocation_path = Path(os.environ['P3_SMOKE_PROCESS_EVIDENCE_DIR'], 'process_invocation.json')",
+                "process_invocation = json.loads(process_invocation_path.read_text(encoding='utf-8'))",
+                "process_invocation.update(" + repr(process_invocation_drift) + ")",
+                "process_invocation_path.write_text(json.dumps(process_invocation), encoding='utf-8') if " + repr(bool(process_invocation_drift)) + " else None",
                 "evidence = SmokeEvidence(output)",
                 "config_sha = evidence.write_config({'synthetic_launcher_child': True})",
                 "invocation = {'schema_version': 1, 'mode': 'synthetic', 'smoke_id': 'rtdetrv2_r18_visdrone_baseline_smoke_v1', 'config_sha256': config_sha, 'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'}",
@@ -290,7 +313,7 @@ def test_launcher_rejects_entry_identity_drift(tmp_path, monkeypatch, mutation):
     _write_success_child(child, mutation)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="a" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="a" * 32)
     assert result == 2
     assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
 
@@ -310,7 +333,7 @@ def test_launcher_rejects_receipt_identity_drift(tmp_path, monkeypatch, mutation
     _write_success_child(child, receipt_mutation=mutation)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="9" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="9" * 32)
     assert result == 2
     assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
 
@@ -323,7 +346,7 @@ def test_unconsuming_success_child_is_rejected(tmp_path, monkeypatch):
     _write_unconsuming_child(child)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="1" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="1" * 32)
     assert result == 2
     completion = _read_object(process / "process_completion.json")
     assert completion["status"] == "FAILED_ENTRY_CONTRACT"
@@ -344,7 +367,7 @@ def test_prepared_handoff_is_single_use(tmp_path, monkeypatch):
     )
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="2" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="2" * 32)
     assert result == 2
     assert _read_object(process / "handoff_receipt.json")["consumed"] is True
     assert not output.exists()
@@ -585,6 +608,7 @@ def test_launcher_rejects_unauthorized_environment(monkeypatch, tmp_path):
             [str(PYTHON), "-c", "pass"],
             tmp_path / "entry",
             process,
+            data_root=_runtime_data_root(tmp_path),
             child_python=PYTHON,
             repo_root=ROOT,
         )
@@ -602,9 +626,148 @@ def test_launcher_does_not_take_existing_output(tmp_path, monkeypatch):
             [str(PYTHON), "-c", "pass"],
             output,
             tmp_path / "process",
+            data_root=_runtime_data_root(tmp_path),
             child_python=PYTHON,
             repo_root=ROOT,
         )
+
+
+@pytest.mark.parametrize("kind", ["relative", "missing", "file", "symlink", "test_component"])
+def test_launcher_rejects_invalid_runtime_data_root_before_process_evidence(tmp_path, monkeypatch, kind):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    if kind == "relative":
+        data_root = Path("relative-data-root")
+    elif kind == "missing":
+        data_root = tmp_path / "missing"
+    elif kind == "file":
+        data_root = tmp_path / "file"
+        data_root.write_text("not a directory", encoding="utf-8")
+    elif kind == "symlink":
+        target = _runtime_data_root(tmp_path, "symlink_target")
+        data_root = tmp_path / "symlink"
+        data_root.symlink_to(target, target_is_directory=True)
+    else:
+        parent = tmp_path / "Test"
+        parent.mkdir()
+        data_root = parent / "train_core"
+        data_root.mkdir()
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    with pytest.raises(SmokeLauncherError):
+        launch_smoke(
+            [str(PYTHON), "-c", "pass"],
+            output,
+            process,
+            data_root=data_root,
+            child_python=PYTHON,
+            repo_root=ROOT,
+        )
+    assert not output.exists()
+    assert not process.exists()
+
+
+def test_child_rejects_runtime_data_root_drift_before_receipt_or_output(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    root_a = _runtime_data_root(tmp_path, "root_a")
+    root_b = _runtime_data_root(tmp_path, "root_b")
+    child = tmp_path / "drifting_child.py"
+    child.write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "os.environ['P3_SMOKE_DATA_ROOT'] = os.environ['P3_SMOKE_DRIFT_ROOT']\n"
+        "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff\n"
+        "_consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    env = _base_env()
+    env["P3_SMOKE_DRIFT_ROOT"] = str(root_b)
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=root_a,
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=env,
+        nonce="f" * 32,
+    )
+    assert result != 0
+    assert not output.exists()
+    assert not (process / "handoff_receipt.json").exists()
+    assert "prepared handoff runtime data root mismatch" in (process / "process_console.log").read_text(encoding="utf-8")
+    assert _read_object(process / "process_completion.json")["child_returncode"] != 0
+
+
+def test_child_rejects_missing_runtime_data_root_before_output(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "missing_root_child.py"
+    child.write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "os.environ.pop('P3_SMOKE_DATA_ROOT', None)\n"
+        "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff\n"
+        "_consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=_runtime_data_root(tmp_path),
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=_base_env(),
+    )
+    assert result != 0
+    assert not output.exists()
+    assert not (process / "handoff_receipt.json").exists()
+    assert "handoff consumer environment is incomplete" in (process / "process_console.log").read_text(encoding="utf-8")
+
+
+def test_child_rejects_modified_prepared_runtime_data_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    root_a = _runtime_data_root(tmp_path, "root_a")
+    root_b = _runtime_data_root(tmp_path, "root_b")
+    child = tmp_path / "modified_prepared_child.py"
+    child.write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "path = Path(os.environ['P3_SMOKE_HANDOFF_PATH'])\n"
+        "prepared = json.loads(path.read_text(encoding='utf-8'))\n"
+        "prepared['runtime_data_root'] = os.environ['P3_SMOKE_DRIFT_ROOT']\n"
+        "path.write_text(json.dumps(prepared), encoding='utf-8')\n"
+        "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff\n"
+        "_consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    env = _base_env()
+    env["P3_SMOKE_DRIFT_ROOT"] = str(root_b)
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=root_a,
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=env,
+    )
+    assert result != 0
+    assert not output.exists()
+    assert not (process / "handoff_receipt.json").exists()
 
 
 def test_launcher_requires_entry_contract_even_when_child_exits_zero(tmp_path, monkeypatch):
@@ -617,6 +780,7 @@ def test_launcher_requires_entry_contract_even_when_child_exits_zero(tmp_path, m
         [str(PYTHON), "-c", "pass"],
         output,
         process,
+        data_root=_runtime_data_root(tmp_path),
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
@@ -639,10 +803,12 @@ def test_launcher_success_owns_process_evidence_and_handoffs_nonce(tmp_path, mon
     _write_success_child(child)
     output = tmp_path / "entry"
     process = tmp_path / "process"
+    runtime_data_root = _runtime_data_root(tmp_path)
     result = launch_smoke(
         [str(PYTHON), str(child)],
         output,
         process,
+        data_root=runtime_data_root,
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
@@ -656,17 +822,126 @@ def test_launcher_success_owns_process_evidence_and_handoffs_nonce(tmp_path, mon
     assert type(completion["child_pid"]) is int
     assert completion["child_sid"] == completion["child_pgid"]
     assert completion["handoff_receipt"]["present"] is True
+    assert completion["runtime_data_root"] == str(runtime_data_root)
+    assert completion["data_role"] == "train_core"
     receipt = _read_object(process / "handoff_receipt.json")
     assert receipt["child_pid"] == completion["child_pid"]
+    assert receipt["runtime_data_root"] == str(runtime_data_root)
+    prepared = _read_object(process / "handoff_prepared.json")
+    assert prepared["runtime_data_root"] == str(runtime_data_root)
+    process_invocation = _read_object(process / "process_invocation.json")
+    assert process_invocation["runtime_data_root"] == str(runtime_data_root)
+    assert process_invocation["data_role"] == "train_core"
+    assert process_invocation["nonportable"] is True
+    assert process_invocation["confirmatory_metrics_accessed"] is False
+    assert process_invocation["dataset_test_accessed_by_this_process"] is False
     entry_invocation = _read_object(output / "invocation.json")
     assert entry_invocation["nonce"] == completion["nonce"]
     assert entry_invocation["child_pid"] == completion["child_pid"]
     assert entry_invocation["handoff_receipt_sha256"] == completion["handoff_receipt_sha256"]
     assert entry_invocation["handoff_receipt_sha256"] == hashlib.sha256((process / "handoff_receipt.json").read_bytes()).hexdigest()
     assert _read_object(output / "completion.json")["status"] == "COMPLETED"
+    for artifact in output.glob("*.json"):
+        _assert_no_absolute_posix_paths(_read_object(artifact))
+        assert str(runtime_data_root) not in artifact.read_text(encoding="utf-8")
     assert (process / "process_exit_code.txt").read_bytes() == b"0\n"
     assert not (process / "process_partial_inventory.json").exists()
     assert not (output / "error.json").exists()
+
+
+def test_launcher_rejects_receipt_runtime_data_root_drift(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    root_a = _runtime_data_root(tmp_path, "root_a")
+    root_b = _runtime_data_root(tmp_path, "root_b")
+    child = tmp_path / "receipt_drift_child.py"
+    _write_success_child(child, receipt_mutation={"runtime_data_root": str(root_b)})
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=root_a,
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=_base_env(),
+    )
+    assert result == 2
+    completion = _read_object(process / "process_completion.json")
+    assert completion["status"] == "FAILED_ENTRY_CONTRACT"
+    assert completion["entry"]["entry_status"] == "FAILED_HANDOFF_CONTRACT"
+    assert "runtime data root mismatch" in completion["handoff_validation_error"]
+
+
+def test_launcher_rejects_process_invocation_runtime_data_root_drift(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    root_a = _runtime_data_root(tmp_path, "root_a")
+    root_b = _runtime_data_root(tmp_path, "root_b")
+    child = tmp_path / "process_invocation_drift_child.py"
+    _write_success_child(child, process_invocation_mutation={"runtime_data_root": str(root_b)})
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=root_a,
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=_base_env(),
+    )
+    assert result == 2
+    completion = _read_object(process / "process_completion.json")
+    assert completion["status"] == "FAILED_ENTRY_CONTRACT"
+    assert completion["entry"]["entry_status"] == "FAILED_HANDOFF_CONTRACT"
+    assert "process invocation evidence drift" in completion["handoff_validation_error"]
+
+
+def test_child_uses_receipt_runtime_data_root_after_environment_drift(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    root_a = _runtime_data_root(tmp_path, "root_a")
+    root_b = _runtime_data_root(tmp_path, "root_b")
+    capture = tmp_path / "captured_root"
+    child = tmp_path / "receipt_runtime_child.py"
+    child.write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "import sparse_rtdetr.baseline.smoke_launcher as launcher\n"
+        "original_consume = launcher._consume_handoff\n"
+        "def consume(repo_root):\n"
+        "    result = original_consume(repo_root)\n"
+        "    os.environ['P3_SMOKE_DATA_ROOT'] = os.environ['P3_SMOKE_DRIFT_ROOT']\n"
+        "    return result\n"
+        "def sentinel(repo_root, data_root, output_dir, *, handoff_receipt, handoff_receipt_sha256):\n"
+        "    Path(os.environ['P3_SMOKE_CAPTURE']).write_text(str(data_root), encoding='utf-8')\n"
+        "    return {}\n"
+        "launcher._consume_handoff = consume\n"
+        "launcher.run_authorized_smoke = sentinel\n"
+        "raise SystemExit(launcher.main(['_child', '--repo-root', os.environ['P3_SMOKE_REPO_ROOT']]))\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    env = _base_env()
+    env.update({"P3_SMOKE_DRIFT_ROOT": str(root_b), "P3_SMOKE_CAPTURE": str(capture)})
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=root_a,
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=env,
+    )
+    assert result == 2
+    assert capture.read_text(encoding="utf-8") == str(root_a)
+    assert not output.exists()
 
 
 def test_launcher_forwards_signal_and_escalates_to_sigkill(tmp_path):
@@ -681,11 +956,13 @@ def test_launcher_forwards_signal_and_escalates_to_sigkill(tmp_path):
     )
     output = tmp_path / "entry"
     process = tmp_path / "process"
+    runtime_data_root = _runtime_data_root(tmp_path)
     env = _base_env()
     env.update({
         "P3_SMOKE_CHILD": str(child),
         "P3_SMOKE_OUTPUT": str(output),
         "P3_SMOKE_PROCESS": str(process),
+        "P3_SMOKE_DATA_ROOT_FOR_TEST": str(runtime_data_root),
         "P3_SMOKE_MARKER": str(tmp_path / "child_ready"),
     })
     wrapper = (
@@ -694,6 +971,7 @@ def test_launcher_forwards_signal_and_escalates_to_sigkill(tmp_path):
         "from sparse_rtdetr.baseline.smoke_launcher import launch_smoke\n"
         "raise SystemExit(launch_smoke([sys.executable, os.environ['P3_SMOKE_CHILD']], "
         "Path(os.environ['P3_SMOKE_OUTPUT']), Path(os.environ['P3_SMOKE_PROCESS']), "
+        "data_root=Path(os.environ['P3_SMOKE_DATA_ROOT_FOR_TEST']), "
         "child_python=Path(sys.executable), repo_root=Path(" + repr(str(ROOT)) + "), "
         "env=dict(os.environ), nonce='d'*32))\n"
     )
@@ -729,6 +1007,7 @@ def test_process_inventory_binds_all_launcher_files(tmp_path, monkeypatch):
         [str(PYTHON), "-c", "pass"],
         tmp_path / "entry",
         process,
+        data_root=_runtime_data_root(tmp_path),
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),

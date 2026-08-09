@@ -74,6 +74,22 @@ def _validate_launch_paths(output_dir: Path, process_evidence_dir: Path, child_p
         raise SmokeLauncherError("child Python must be an executable regular file")
 
 
+def _canonical_runtime_data_root(data_root: Path) -> Path:
+    if not isinstance(data_root, Path) or not data_root.is_absolute():
+        raise SmokeLauncherError("smoke runtime data root must be absolute")
+    if data_root.is_symlink():
+        raise SmokeLauncherError("smoke runtime data root may not be a symlink")
+    try:
+        canonical = data_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SmokeLauncherError("smoke runtime data root is missing or invalid") from exc
+    if canonical.is_symlink() or not canonical.is_dir():
+        raise SmokeLauncherError("smoke runtime data root must be a regular directory")
+    if any(part.casefold() == "test" for part in canonical.parts):
+        raise SmokeLauncherError("smoke runtime data root may not contain an independent test component")
+    return canonical
+
+
 def _validate_frozen_runtime_paths(repo_root: Path, output_dir: Path, process_evidence_dir: Path) -> None:
     expected_output = repo_root.resolve() / SMOKE_OUTPUT_RELATIVE
     expected_process = repo_root.resolve() / SMOKE_PROCESS_RELATIVE
@@ -109,10 +125,12 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
     handoff_path_value = os.environ.get("P3_SMOKE_HANDOFF_PATH")
     output_value = os.environ.get("P3_SMOKE_OUTPUT_DIR")
     process_value = os.environ.get("P3_SMOKE_PROCESS_EVIDENCE_DIR")
+    data_root_value = os.environ.get("P3_SMOKE_DATA_ROOT")
     nonce_value = os.environ.get(SMOKE_NONCE_ENV)
-    if not all(isinstance(value, str) and value for value in (handoff_path_value, output_value, process_value, nonce_value)):
+    if not all(isinstance(value, str) and value for value in (handoff_path_value, output_value, process_value, data_root_value, nonce_value)):
         raise SmokeLauncherError("handoff consumer environment is incomplete")
     _validate_nonce(nonce_value)
+    runtime_data_root = _canonical_runtime_data_root(Path(data_root_value))
     handoff_path = Path(handoff_path_value)
     output_dir = Path(output_value)
     process_dir = Path(process_value)
@@ -136,6 +154,7 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         "repo_root",
         "output_dir",
         "process_evidence_dir",
+        "runtime_data_root",
         "child_argv",
         "child_argv_sha256",
         "created_at_utc",
@@ -148,6 +167,8 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         raise SmokeLauncherError("prepared handoff nonce or repository binding mismatch")
     if prepared.get("output_dir") != str(output_dir) or prepared.get("process_evidence_dir") != str(process_dir):
         raise SmokeLauncherError("prepared handoff path binding mismatch")
+    if prepared.get("runtime_data_root") != str(runtime_data_root):
+        raise SmokeLauncherError("prepared handoff runtime data root mismatch")
     if type(prepared.get("launcher_pid")) is not int or prepared["launcher_pid"] != os.getppid():
         raise SmokeLauncherError("prepared handoff launcher PID mismatch")
     actual_argv = _actual_child_argv()
@@ -166,6 +187,7 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         "prepared_sha256": prepared_sha256,
         "output_dir": str(output_dir),
         "process_evidence_dir": str(process_dir),
+        "runtime_data_root": prepared["runtime_data_root"],
         "consumed_at_utc": _utc_now(),
     }
     receipt_sha256 = _atomic_json(receipt_path, receipt)
@@ -194,6 +216,7 @@ def _validate_handoff_receipt(
         "prepared_sha256",
         "output_dir",
         "process_evidence_dir",
+        "runtime_data_root",
         "consumed_at_utc",
     }
     if set(receipt) != required or receipt.get("schema_version") != 1 or receipt.get("consumed") is not True:
@@ -206,7 +229,7 @@ def _validate_handoff_receipt(
     _validate_nonce(receipt.get("nonce"))
     _validate_sha(receipt.get("child_argv_sha256"), "handoff receipt child_argv_sha256")
     _validate_sha(receipt.get("prepared_sha256"), "handoff receipt prepared_sha256")
-    if not all(type(receipt.get(field)) is str and receipt[field] for field in ("output_dir", "process_evidence_dir", "consumed_at_utc")):
+    if not all(type(receipt.get(field)) is str and receipt[field] for field in ("output_dir", "process_evidence_dir", "runtime_data_root", "consumed_at_utc")):
         raise SmokeLauncherError("handoff receipt string field is invalid")
     if receipt.get("nonce") != invocation["nonce"] or receipt.get("launcher_pid") != invocation["launcher_pid"]:
         raise SmokeLauncherError("handoff receipt nonce or launcher PID mismatch")
@@ -216,6 +239,11 @@ def _validate_handoff_receipt(
         raise SmokeLauncherError("handoff receipt argv SHA mismatch")
     if receipt.get("output_dir") != invocation["output_dir"] or receipt.get("process_evidence_dir") != invocation["process_evidence_dir"]:
         raise SmokeLauncherError("handoff receipt path mismatch")
+    if receipt.get("runtime_data_root") != invocation["runtime_data_root"]:
+        raise SmokeLauncherError("handoff receipt runtime data root mismatch")
+    prepared = _read_object(prepared_path)
+    if prepared.get("runtime_data_root") != receipt.get("runtime_data_root"):
+        raise SmokeLauncherError("prepared and receipt runtime data root mismatch")
     if receipt.get("prepared_sha256") != sha256_file(prepared_path):
         raise SmokeLauncherError("handoff prepared SHA mismatch")
     receipt_sha256 = sha256_file(receipt_path)
@@ -332,6 +360,9 @@ def _finalize_process(
     handoff_receipt_sha256: str | None = None
     handoff_error: str | None = None
     try:
+        process_invocation = _read_object(process_dir / "process_invocation.json")
+        if process_invocation != invocation:
+            raise SmokeLauncherError("process invocation evidence drift")
         handoff_receipt, handoff_receipt_sha256 = _validate_handoff_receipt(process_dir, invocation, child_identity)
     except (OSError, SmokeEvidenceError, SmokeLauncherError, ValueError) as exc:
         handoff_error = f"{type(exc).__name__}: {exc}"
@@ -387,6 +418,8 @@ def _finalize_process(
         "handoff_prepared": file_ref(process_dir, HANDOFF_PREPARED_NAME),
         "handoff_receipt": file_ref(process_dir, HANDOFF_RECEIPT_NAME),
         "handoff_receipt_sha256": handoff_receipt_sha256,
+        "runtime_data_root": invocation["runtime_data_root"],
+        "data_role": "train_core",
         "handoff_validation_error": handoff_error,
         "internal_error": None if internal_error is None else {"type": type(internal_error).__name__, "message": str(internal_error)},
         "non_training": True,
@@ -404,6 +437,7 @@ def launch_smoke(
     output_dir: Path,
     process_evidence_dir: Path,
     *,
+    data_root: Path,
     child_python: Path,
     repo_root: Path,
     env: dict[str, str] | None = None,
@@ -411,6 +445,7 @@ def launch_smoke(
 ) -> int:
     """Launch a child without creating or reserving its output directory."""
 
+    canonical_data_root = _canonical_runtime_data_root(data_root)
     _validate_launch_paths(output_dir, process_evidence_dir, child_python)
     if os.environ.get(SMOKE_AUTH_ENV) != "1" or os.environ.get("CUDA_VISIBLE_DEVICES") != "0" or os.environ.get("PYTHONNOUSERSITE") != "1":
         raise SmokeLauncherError("authorized smoke environment is not exact")
@@ -432,6 +467,7 @@ def launch_smoke(
         "P3_SMOKE_OUTPUT_DIR": str(output_dir),
         "P3_SMOKE_PROCESS_EVIDENCE_DIR": str(process_evidence_dir),
         "P3_SMOKE_HANDOFF_PATH": str(process_evidence_dir / HANDOFF_PREPARED_NAME),
+        "P3_SMOKE_DATA_ROOT": str(canonical_data_root),
         SMOKE_NONCE_ENV: actual_nonce,
         "PYTHONNOUSERSITE": "1",
         "CUDA_VISIBLE_DEVICES": "0",
@@ -446,6 +482,7 @@ def launch_smoke(
         "repo_root": str(repo_root.resolve()),
         "output_dir": str(output_dir),
         "process_evidence_dir": str(process_evidence_dir),
+        "runtime_data_root": str(canonical_data_root),
         "child_argv": canonical_child_argv,
         "child_argv_sha256": argv_sha256(canonical_child_argv),
         "created_at_utc": _utc_now(),
@@ -463,10 +500,15 @@ def launch_smoke(
         "repo_root": str(repo_root),
         "output_dir": str(output_dir),
         "process_evidence_dir": str(process_evidence_dir),
+        "runtime_data_root": str(canonical_data_root),
+        "data_role": "train_core",
         "handoff_prepared_relative_path": HANDOFF_PREPARED_NAME,
         "handoff_prepared_sha256": handoff_sha256,
         "output_dir_not_created_by_launcher": True,
         "process_evidence_owner": "launcher",
+        "nonportable": True,
+        "confirmatory_metrics_accessed": False,
+        "dataset_test_accessed_by_this_process": False,
         "cuda_visible_devices": "0",
         "python_no_user_site": "1",
     }
@@ -523,7 +565,7 @@ def main(argv: list[str] | None = None) -> int:
             handoff_receipt, handoff_receipt_sha256 = _consume_handoff(args.repo_root)
             run_authorized_smoke(
                 args.repo_root,
-                Path(os.environ["P3_SMOKE_DATA_ROOT"]),
+                Path(handoff_receipt["runtime_data_root"]),
                 Path(os.environ["P3_SMOKE_OUTPUT_DIR"]),
                 handoff_receipt=handoff_receipt,
                 handoff_receipt_sha256=handoff_receipt_sha256,
@@ -540,12 +582,12 @@ def main(argv: list[str] | None = None) -> int:
             "--repo-root", str(repo_root),
         ]
         env = dict(os.environ)
-        env["P3_SMOKE_DATA_ROOT"] = str(args.data_root)
         env["P3_SMOKE_OUTPUT_DIR"] = str(args.output_dir)
         return launch_smoke(
             child_argv,
             args.output_dir,
             args.process_evidence_dir,
+            data_root=args.data_root,
             child_python=args.child_python,
             repo_root=repo_root,
             env=env,
