@@ -481,6 +481,9 @@ def _config_for_output(protocol_definition: Callable[[], dict[str, object]]) -> 
     config = protocol_definition()
     config["converter_schema_version"] = CONVERTER_SCHEMA_VERSION
     config["real_conversion_outputs_generated"] = True
+    config["production_split_manifest_generated"] = True
+    config["confirmatory_metrics_accessed"] = False
+    config["test_access_allowed"] = False
     return config
 
 

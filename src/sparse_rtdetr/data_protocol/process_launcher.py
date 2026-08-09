@@ -335,13 +335,65 @@ def _json_object(path: Path) -> dict[str, object]:
     return value
 
 
+def _input_protocol_config_ref(path: Path) -> dict[str, object]:
+    if path.is_symlink() or not path.is_file():
+        return {"present": False, "relative_path": "protocol_config.json"}
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        return {"present": False, "relative_path": "protocol_config.json"}
+    return {
+        "present": True,
+        "relative_path": "protocol_config.json",
+        "size_bytes": len(payload),
+        "sha256": _sha256_bytes(payload),
+    }
+
+
+def _validate_input_protocol_config(path: Path) -> None:
+    try:
+        config = _json_object(path)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+        raise ProcessLauncherContractError(
+            f"input protocol config is invalid: {type(error).__name__}"
+        ) from error
+    split = config.get("split")
+    required = {
+        "schema_version": 1,
+        "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V2",
+        "real_conversion_outputs_generated": False,
+        "production_split_manifest_generated": False,
+        "confirmatory_metrics_accessed": False,
+        "test_access_allowed": False,
+    }
+    if any(config.get(key) != value for key, value in required.items()) or not isinstance(split, dict):
+        raise ProcessLauncherContractError("input protocol config is not the frozen V2 pre-run schema")
+    split_required = {
+        "test": "disabled",
+        "seed": 20260808,
+        "salt": "P3-confirmatory-v1",
+        "target_images": 647,
+        "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
+        "planner": "plan_confirmatory_split_v2",
+        "selection_allowed": False,
+        "metrics_access_allowed": False,
+        "single_final_access_only": True,
+    }
+    if any(split.get(key) != value for key, value in split_required.items()):
+        raise ProcessLauncherContractError("input protocol V2 split identity mismatch")
+
+
 def _sha256_field(value: object) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(
         character in "0123456789abcdef" for character in value
     )
 
 
-def _validate_entry(output_dir: Path) -> dict[str, object]:
+def _validate_entry(
+    output_dir: Path,
+    input_protocol_config_before: dict[str, object],
+    input_protocol_config_after: dict[str, object],
+) -> dict[str, object]:
     completion_path = output_dir / "completion.json"
     inventory_path = output_dir / "artifact_inventory.json"
     result: dict[str, object] = {
@@ -389,6 +441,15 @@ def _validate_entry(output_dir: Path) -> dict[str, object]:
     )):
         result["entry_status"] = "FAILED_ENTRY_COMPLETION_INVALID"
         result["entry_validation_message"] = "completion binding fields are invalid"
+        return result
+    if (
+        input_protocol_config_before.get("present") is not True
+        or input_protocol_config_after.get("present") is not True
+        or input_protocol_config_before != input_protocol_config_after
+        or completion.get("input_protocol_config_sha256") != input_protocol_config_before.get("sha256")
+    ):
+        result["entry_status"] = "FAILED_ENTRY_INPUT_PROTOCOL_CONFIG_BINDING"
+        result["entry_validation_message"] = "input protocol config changed or completion binding mismatched"
         return result
     if not inventory_path.is_file() or inventory_path.is_symlink():
         result["entry_status"] = "FAILED_ENTRY_ARTIFACT_INVENTORY_MISSING"
@@ -487,24 +548,58 @@ def _validate_entry(output_dir: Path) -> dict[str, object]:
         result["entry_status"] = "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH"
         result["entry_validation_message"] = f"config or split plan is invalid: {type(error).__name__}"
         return result
-    data_identity = config.get("data_identity")
     split_config = config.get("split")
     if (
         config.get("schema_version") != 1
-        or config.get("protocol_id") != "P3-VISDRONE-DATA-PROTOCOL-V1"
-        or not isinstance(data_identity, dict)
-        or data_identity.get("test_access_allowed") is not False
+        or config.get("protocol_id") != "P3-VISDRONE-DATA-PROTOCOL-V2"
+        or config.get("test_access_allowed") is not False
+        or config.get("confirmatory_metrics_accessed") is not False
+        or config.get("real_conversion_outputs_generated") is not True
+        or config.get("production_split_manifest_generated") is not True
         or not isinstance(split_config, dict)
         or split_config.get("test") != "disabled"
-        or split_plan.get("seed") != 20260808
-        or split_plan.get("salt") != "P3-confirmatory-v1"
-        or not isinstance(split_plan.get("target_image_count"), int)
-        or not isinstance(split_plan.get("selected_image_count"), int)
-        or not isinstance(split_plan.get("checks"), list)
-        or not all(isinstance(item, dict) and item.get("passed") is True for item in split_plan["checks"])
+        or split_config.get("seed") != 20260808
+        or split_config.get("salt") != "P3-confirmatory-v1"
+        or split_config.get("target_confirmatory_images") != 647
+        or split_config.get("selection_policy") != "feasibility_first_nearest_hash_prefix_v2"
+        or split_config.get("planner") != "plan_confirmatory_split_v2"
+        or split_config.get("selection_allowed") is not False
+        or split_config.get("metrics_access_allowed") is not False
+        or split_config.get("single_final_access_only") is not True
     ):
         result["entry_status"] = "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH"
-        result["entry_validation_message"] = "config or split plan contract is invalid"
+        result["entry_validation_message"] = "V2 output config contract is invalid"
+        return result
+    integer_fields = (
+        "schema_version", "target_image_count", "selected_image_count", "seed",
+        "evaluated_prefix_count", "feasible_prefix_count", "selected_prefix_length",
+    )
+    if (
+        split_plan.get("schema_version") != 1
+        or split_plan.get("selection_policy") != split_config.get("selection_policy")
+        or split_plan.get("seed") != split_config.get("seed")
+        or split_plan.get("salt") != split_config.get("salt")
+        or split_plan.get("target_image_count") != split_config.get("target_confirmatory_images")
+        or any(type(split_plan.get(key)) is not int for key in integer_fields)
+        or split_plan.get("evaluated_prefix_count", 0) <= 0
+        or split_plan.get("feasible_prefix_count", 0) <= 0
+        or split_plan.get("feasible_prefix_count", 0) > split_plan.get("evaluated_prefix_count", 0)
+        or split_plan.get("selected_prefix_length", 0) > split_plan.get("evaluated_prefix_count", 0)
+        or not _sha256_field(split_plan.get("selected_group_list_sha256"))
+        or split_plan.get("selection_allowed") is not False
+        or split_plan.get("metrics_access_allowed") is not False
+        or split_plan.get("single_final_access_only") is not True
+        or not isinstance(split_plan.get("checks"), list)
+        or not split_plan["checks"]
+        or not all(
+            isinstance(item, dict)
+            and type(item.get("passed")) is bool
+            and item.get("passed") is True
+            for item in split_plan["checks"]
+        )
+    ):
+        result["entry_status"] = "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH"
+        result["entry_validation_message"] = "V2 split plan contract is invalid"
         return result
     result["entry_status"] = "COMPLETED"
     result["entry_success_accepted"] = True
@@ -544,6 +639,8 @@ def _finalize(
     signal_events: list[dict[str, object]],
     kill_sent: bool,
     internal_error: BaseException | None,
+    input_protocol_config_before: dict[str, object],
+    input_protocol_config_after: dict[str, object],
 ) -> int:
     if internal_error is not None:
         process_error = _write_internal_error(evidence_dir, internal_error)
@@ -561,10 +658,12 @@ def _finalize(
         _safe_atomic_write(evidence_dir / "process_exit_code.txt", exit_payload)
     exit_ref = _file_ref(evidence_dir / "process_exit_code.txt", relative_path="process_exit_code.txt")
     if returncode == 0 and internal_error is None:
-        entry = _validate_entry(output_dir)
+        entry = _validate_entry(output_dir, input_protocol_config_before, input_protocol_config_after)
         status = str(entry["entry_status"])
     elif returncode == 2:
-        entry = _validate_entry(output_dir) if (output_dir / "completion.json").exists() else {
+        entry = _validate_entry(
+            output_dir, input_protocol_config_before, input_protocol_config_after
+        ) if (output_dir / "completion.json").exists() else {
             "entry_completion": _file_ref(output_dir / "completion.json", relative_path="completion.json"),
             "entry_artifact_inventory": _file_ref(output_dir / "artifact_inventory.json", relative_path="artifact_inventory.json"),
             "entry_partial_inventory": _file_ref(output_dir / "partial_inventory.json", relative_path="partial_inventory.json"),
@@ -647,6 +746,9 @@ def _finalize(
             "sha256": _sha256_bytes(process_inventory_bytes),
         },
         "process_error": process_error,
+        "input_protocol_config_before": input_protocol_config_before,
+        "input_protocol_config_after": input_protocol_config_after,
+        "input_protocol_config_unchanged": input_protocol_config_before == input_protocol_config_after,
         "dataset_test_accessed_by_this_process": False,
         "confirmatory_metrics_accessed": False,
         "completion_self_hash_included": False,
@@ -670,6 +772,8 @@ def run(
     output_dir, evidence_dir, child_python, protocol_config, source_root = _validate_run_args(
         data_root, output_dir, protocol_config, splits, process_evidence_dir, child_python, source_root
     )
+    _validate_input_protocol_config(protocol_config)
+    input_protocol_config_before = _input_protocol_config_ref(protocol_config)
     evidence_dir.mkdir(parents=True)
     module_path = _module_source(source_root).resolve()
     argv = _child_argv(child_python, data_root, output_dir, protocol_config, splits)
@@ -696,6 +800,7 @@ def run(
         "portable_entry_artifacts_exclude_data_root": True,
         "output_dir": str(output_dir),
         "process_evidence_dir": str(evidence_dir),
+        "input_protocol_config_before": input_protocol_config_before,
         "dataset_test_accessed_by_this_process": False,
         "confirmatory_metrics_accessed": False,
     }
@@ -706,6 +811,7 @@ def run(
     kill_sent = False
     internal_error: BaseException | None = None
     previous_handlers: dict[int, object] = {}
+    input_protocol_config_after = {"present": False, "relative_path": "protocol_config.json"}
     try:
         _atomic_write(evidence_dir / "process_invocation.json", canonical_json_bytes(invocation))
         console_path = evidence_dir / "process_console.log"
@@ -715,6 +821,7 @@ def run(
             )
     except BaseException as error:
         internal_error = error
+    input_protocol_config_after = _input_protocol_config_ref(protocol_config)
     try:
         return _finalize(
             evidence_dir,
@@ -729,6 +836,8 @@ def run(
             signal_events=signal_events,
             kill_sent=kill_sent,
             internal_error=internal_error,
+            input_protocol_config_before=input_protocol_config_before,
+            input_protocol_config_after=input_protocol_config_after,
         )
     finally:
         for signum, previous in previous_handlers.items():

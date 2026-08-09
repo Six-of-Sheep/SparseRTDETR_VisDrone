@@ -20,7 +20,8 @@ from sparse_rtdetr.data_protocol.process_launcher import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "configs" / "visdrone_protocol_v1.json"
+CONFIG = ROOT / "configs" / "visdrone_protocol_v2.json"
+V1_CONFIG = ROOT / "configs" / "visdrone_protocol_v1.json"
 SOURCE = ROOT / "src"
 
 
@@ -30,6 +31,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+args = sys.argv
 
 def _canonical(value):
     return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -41,21 +44,60 @@ def _output():
     args = sys.argv
     return Path(args[args.index("--output-dir") + 1])
 
-def _write_success(unlisted=False, bad_inventory_hash=False):
+def _write_success(
+    unlisted=False,
+    bad_inventory_hash=False,
+    output_protocol="P3-VISDRONE-DATA-PROTOCOL-V2",
+    top_level_test=True,
+    generated=True,
+    bad_input_sha=False,
+    bad_split=False,
+    bad_planner=False,
+    bad_count=False,
+    bad_type=False,
+    bad_checks=False,
+):
     output = _output()
     output.mkdir(parents=True)
+    protocol_config = Path(args[args.index("--protocol-config") + 1])
+    input_config_sha = _sha(protocol_config.read_bytes())
     config = {
         "schema_version": 1,
-        "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V1",
-        "data_identity": {"test_access_allowed": False},
-        "split": {"test": "disabled"},
+        "protocol_id": output_protocol,
+        "real_conversion_outputs_generated": generated,
+        "production_split_manifest_generated": generated,
+        "confirmatory_metrics_accessed": False,
+        "split": {
+            "test": "disabled",
+            "seed": 20260808,
+            "salt": "P3-confirmatory-v1",
+            "target_confirmatory_images": 647,
+            "selection_policy": "wrong-policy" if bad_split else "feasibility_first_nearest_hash_prefix_v2",
+            "planner": "wrong-planner" if bad_split or bad_planner else "plan_confirmatory_split_v2",
+            "selection_allowed": False,
+            "metrics_access_allowed": False,
+            "single_final_access_only": True,
+        },
     }
+    if top_level_test:
+        config["test_access_allowed"] = False
+    else:
+        config["data_identity"] = {"test_access_allowed": False}
     split = {
+        "schema_version": 1,
         "seed": 20260808,
         "salt": "P3-confirmatory-v1",
         "target_image_count": 647,
         "selected_image_count": 647,
-        "checks": [{"name": "synthetic", "passed": True}],
+        "selected_group_list_sha256": "a" * 64,
+        "selection_policy": "wrong-policy" if bad_split else "feasibility_first_nearest_hash_prefix_v2",
+        "evaluated_prefix_count": True if bad_type else 0 if bad_count else 1,
+        "feasible_prefix_count": 1,
+        "selected_prefix_length": 1,
+        "selection_allowed": False,
+        "metrics_access_allowed": False,
+        "single_final_access_only": True,
+        "checks": [{"name": "synthetic", "passed": False if bad_split or bad_checks else True}],
     }
     config_bytes = _canonical(config)
     split_bytes = _canonical(split)
@@ -80,14 +122,13 @@ def _write_success(unlisted=False, bad_inventory_hash=False):
         "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
         "config_sha256": _sha(config_bytes),
         "split_plan_sha256": _sha(split_bytes),
-        "input_protocol_config_sha256": "a" * 64,
+        "input_protocol_config_sha256": "a" * 64 if bad_input_sha else input_config_sha,
         "artifact_inventory_sha256": "0" * 64 if bad_inventory_hash else _sha(inventory_bytes),
         "selection_allowed": False,
         "metrics_access_allowed": False,
         "single_final_access_only": True,
         "project_test_split_historically_observed": True,
         "confirmatory_metrics_accessed": False,
-        "project_test_split_historically_observed": True,
         "dataset_test_accessed_by_this_process": False,
         "completion_self_hash_included": False,
         "production_conversion_executed": True,
@@ -102,6 +143,38 @@ if mode in {"success", "session"}:
     if mode == "session":
         print(f"independent-session={os.getsid(0) == os.getpid()}", flush=True)
     _write_success()
+    raise SystemExit(0)
+if mode == "v1_output":
+    _write_success(output_protocol="P3-VISDRONE-DATA-PROTOCOL-V1")
+    raise SystemExit(0)
+if mode == "nested_test":
+    _write_success(top_level_test=False)
+    raise SystemExit(0)
+if mode == "generated_false":
+    _write_success(generated=False)
+    raise SystemExit(0)
+if mode == "fake_input_sha":
+    _write_success(bad_input_sha=True)
+    raise SystemExit(0)
+if mode == "split_drift":
+    _write_success(bad_split=True)
+    raise SystemExit(0)
+if mode == "split_planner":
+    _write_success(bad_planner=True)
+    raise SystemExit(0)
+if mode == "split_count":
+    _write_success(bad_count=True)
+    raise SystemExit(0)
+if mode == "split_type":
+    _write_success(bad_type=True)
+    raise SystemExit(0)
+if mode == "split_checks":
+    _write_success(bad_checks=True)
+    raise SystemExit(0)
+if mode == "mutate_config":
+    _write_success()
+    protocol_config = Path(args[args.index("--protocol-config") + 1])
+    protocol_config.write_bytes(protocol_config.read_bytes() + b"\\n")
     raise SystemExit(0)
 if mode == "unlisted":
     _write_success(unlisted=True)
@@ -118,12 +191,13 @@ if mode == "invalid_inventory":
 if mode == "missing_inventory":
     output = _output()
     output.mkdir(parents=True)
+    input_config_sha = _sha(Path(args[args.index("--protocol-config") + 1]).read_bytes())
     (output / "completion.json").write_text(json.dumps({
         "schema_version": 1, "status": "COMPLETED",
         "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V2",
         "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
         "config_sha256": "0" * 64, "split_plan_sha256": "0" * 64,
-        "input_protocol_config_sha256": "a" * 64, "artifact_inventory_sha256": "0" * 64,
+        "input_protocol_config_sha256": input_config_sha, "artifact_inventory_sha256": "0" * 64,
         "selection_allowed": False, "metrics_access_allowed": False,
         "single_final_access_only": True, "project_test_split_historically_observed": True,
         "confirmatory_metrics_accessed": False,
@@ -164,13 +238,17 @@ class ProcessLauncherTests(unittest.TestCase):
         source = _fake_source(root / "source")
         output = root / "output"
         evidence = root / "evidence"
+        config = CONFIG
+        if mode == "mutate_config":
+            config = root / "protocol_v2.json"
+            config.write_bytes(CONFIG.read_bytes())
         env = {
             "CUDA_VISIBLE_DEVICES": "",
             "PYTHONNOUSERSITE": "1",
             "FAKE_CHILD_MODE": mode,
         }
         with mock.patch.dict(os.environ, env, clear=False):
-            code = run(root / "data", output, CONFIG, ("train", "val"), evidence, Path(sys.executable), source)
+            code = run(root / "data", output, config, ("train", "val"), evidence, Path(sys.executable), source)
         return temp, root, output, evidence, code
 
     def test_launcher_contract_check_is_data_free(self):
@@ -189,6 +267,22 @@ class ProcessLauncherTests(unittest.TestCase):
         with self.assertRaises(Exception):
             _split_arg("test,val")
 
+    def test_v1_input_config_is_rejected_before_child_start(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _fake_source(root / "source")
+            output = root / "output"
+            evidence = root / "evidence"
+            with mock.patch.dict(
+                os.environ,
+                {"CUDA_VISIBLE_DEVICES": "", "PYTHONNOUSERSITE": "1"},
+                clear=False,
+            ):
+                with self.assertRaises(ProcessLauncherContractError):
+                    run(root / "data", output, V1_CONFIG, ("train", "val"), evidence, Path(sys.executable), source)
+            self.assertFalse(output.exists())
+            self.assertFalse(evidence.exists())
+
     def test_success_exit_code_and_completion_bindings(self):
         temp, root, output, evidence, code = self._run_fake("success")
         try:
@@ -202,6 +296,15 @@ class ProcessLauncherTests(unittest.TestCase):
             self.assertTrue(completion["entry_success_accepted"])
             self.assertTrue(completion["entry_artifact_inventory"]["present"])
             self.assertEqual(completion["entry_completion_status"], "COMPLETED")
+            self.assertTrue(completion["input_protocol_config_unchanged"])
+            self.assertEqual(
+                completion["input_protocol_config_before"]["sha256"],
+                hashlib.sha256(CONFIG.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                completion["input_protocol_config_before"],
+                completion["input_protocol_config_after"],
+            )
             self.assertTrue((evidence / "process_inventory.json").is_file())
             self.assertTrue((output / "completion.json").is_file())
             process_inventory = json.loads((evidence / "process_inventory.json").read_text(encoding="utf-8"))
@@ -238,6 +341,15 @@ class ProcessLauncherTests(unittest.TestCase):
             "invalid_inventory": "FAILED_ENTRY_COMPLETION_INVALID",
             "binding": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
             "unlisted": "FAILED_ENTRY_ARTIFACT_INVENTORY_INVALID",
+            "v1_output": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "nested_test": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "generated_false": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "fake_input_sha": "FAILED_ENTRY_INPUT_PROTOCOL_CONFIG_BINDING",
+            "split_drift": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "split_planner": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "split_count": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "split_type": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
+            "split_checks": "FAILED_ENTRY_INVENTORY_BINDING_MISMATCH",
         }
         for mode, status in expected.items():
             temp, root, output, evidence, code = self._run_fake(mode)
@@ -250,6 +362,20 @@ class ProcessLauncherTests(unittest.TestCase):
                 self.assertTrue((evidence / "partial_inventory.json").is_file(), mode)
             finally:
                 temp.cleanup()
+
+    def test_input_protocol_config_change_fails_closed(self):
+        temp, root, output, evidence, code = self._run_fake("mutate_config")
+        try:
+            self.assertEqual(code, 1)
+            completion = json.loads((evidence / "process_completion.json").read_text(encoding="utf-8"))
+            self.assertEqual(completion["status"], "FAILED_ENTRY_INPUT_PROTOCOL_CONFIG_BINDING")
+            self.assertFalse(completion["input_protocol_config_unchanged"])
+            self.assertNotEqual(
+                completion["input_protocol_config_before"],
+                completion["input_protocol_config_after"],
+            )
+        finally:
+            temp.cleanup()
 
     def test_child_has_independent_process_group(self):
         temp, root, output, evidence, code = self._run_fake("session")

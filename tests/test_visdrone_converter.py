@@ -25,11 +25,13 @@ from sparse_rtdetr.data_protocol.converter import (
     write_conversion_artifacts,
     write_failure_evidence,
 )
+from sparse_rtdetr.data_protocol.process_launcher import _input_protocol_config_ref, _validate_entry
 from sparse_rtdetr.data_protocol.split import plan_confirmatory_split_v2
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "configs" / "visdrone_protocol_v1.json"
+V1_CONFIG = ROOT / "configs" / "visdrone_protocol_v1.json"
+CONFIG = ROOT / "configs" / "visdrone_protocol_v2.json"
 
 
 def _record(path: str, annotation: bytes, image: bytes = b"synthetic-image", split: str = "train"):
@@ -70,6 +72,32 @@ def _bundle():
     )
 
 
+def _v2_bundle():
+    formal = b"".join(
+        f"1,2,40,40,1,{raw},0,0\n".encode("ascii") for raw in range(1, 11)
+    )
+    train = tuple(
+        _record(
+            f"000000{index}_00001_d_000000{index}.jpg",
+            formal,
+            image=f"v2-image-{index}".encode(),
+        )
+        for index in range(1, 5)
+    )
+    val = (_record("0000005_00001_d_0000005.jpg", formal, image=b"v2-val", split="val"),)
+    return build_conversion_bundle(
+        train,
+        val,
+        planner_train_image_count=6471,
+        planner_target_ratio=0.10,
+        planner_tolerance=0.05,
+        planner=plan_confirmatory_split_v2,
+        protocol_definition=protocol_v2_schema,
+        protocol_id="P3-VISDRONE-DATA-PROTOCOL-V2",
+        protocol_config_sha256=hashlib.sha256(CONFIG.read_bytes()).hexdigest(),
+    )
+
+
 class VisDroneConverterTests(unittest.TestCase):
     def test_official_sequence_key_requires_strict_filename(self):
         self.assertEqual(_sequence_key("train/images/0000001_02999_d_0000005.jpg"), "0000001")
@@ -104,7 +132,7 @@ class VisDroneConverterTests(unittest.TestCase):
         self.assertEqual(v2["protocol_id"], "P3-VISDRONE-DATA-PROTOCOL-V2")
         validate_protocol_v2_config(v2)
         with self.assertRaises(ConversionContractError):
-            validate_protocol_v2_config(json.loads(CONFIG.read_text(encoding="utf-8")))
+            validate_protocol_v2_config(json.loads(V1_CONFIG.read_text(encoding="utf-8")))
         with self.assertRaises(ConversionContractError):
             validate_protocol_config(protocol_v2_schema())
 
@@ -138,6 +166,25 @@ class VisDroneConverterTests(unittest.TestCase):
             completion = write_conversion_artifacts(Path(temp) / "v2", bundle)
             self.assertEqual(completion["protocol_id"], "P3-VISDRONE-DATA-PROTOCOL-V2")
             self.assertEqual(completion["input_protocol_config_sha256"], "a" * 64)
+
+    def test_real_v2_writer_output_is_accepted_by_launcher_validator(self):
+        bundle = _v2_bundle()
+        input_before = CONFIG.read_bytes()
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "v2"
+            completion = write_conversion_artifacts(output, bundle)
+            output_config = json.loads((output / "config.json").read_text(encoding="utf-8"))
+            self.assertEqual(output_config["protocol_id"], "P3-VISDRONE-DATA-PROTOCOL-V2")
+            self.assertTrue(output_config["real_conversion_outputs_generated"])
+            self.assertTrue(output_config["production_split_manifest_generated"])
+            self.assertFalse(output_config["confirmatory_metrics_accessed"])
+            self.assertFalse(output_config["test_access_allowed"])
+            before_ref = _input_protocol_config_ref(CONFIG)
+            after_ref = _input_protocol_config_ref(CONFIG)
+            result = _validate_entry(output, before_ref, after_ref)
+            self.assertTrue(result["entry_success_accepted"])
+            self.assertEqual(completion["input_protocol_config_sha256"], before_ref["sha256"])
+        self.assertEqual(CONFIG.read_bytes(), input_before)
 
     def test_cli_run_requires_all_arguments_and_authorization(self):
         with tempfile.TemporaryDirectory() as temp:
