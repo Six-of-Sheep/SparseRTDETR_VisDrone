@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib
 import json
 import os
@@ -21,6 +22,7 @@ from sparse_rtdetr.baseline.smoke import (
     SyntheticOneBatchLoader,
     SyntheticSmokeModel,
     SyntheticSmokePostProcessor,
+    _validate_batch,
     contract_check,
     load_frozen_image_selection,
     load_smoke_config,
@@ -29,6 +31,7 @@ from sparse_rtdetr.baseline.smoke import (
     validate_real_smoke_environment,
 )
 from sparse_rtdetr.baseline.smoke_evidence import (
+    canonical_json_bytes,
     SmokeEvidence,
     SmokeEvidenceError,
     _read_object,
@@ -37,6 +40,7 @@ from sparse_rtdetr.baseline.smoke_evidence import (
 from sparse_rtdetr.baseline.config import canonical_config_bytes
 from sparse_rtdetr.baseline.smoke_launcher import (
     SmokeLauncherError,
+    _consume_handoff,
     _validate_frozen_runtime_paths,
     launch_smoke,
 )
@@ -64,6 +68,9 @@ def _entry_completion() -> dict[str, object]:
         "mode": "smoke",
         "smoke_pass_candidate": True,
         "non_training": True,
+        "inference_only": True,
+        "model_eval": True,
+        "torch_no_grad": True,
         "non_selection": True,
         "non_reportable": True,
         "formal_resume_eligible": False,
@@ -71,6 +78,9 @@ def _entry_completion() -> dict[str, object]:
         "baseline_training_ready": False,
         "confirmatory_metrics_accessed": False,
         "dataset_test_accessed_by_this_process": False,
+        "speed_measurement": False,
+        "config_sha256": "",
+        "total_predictions": 600,
         "images_requested": 2,
         "images_loaded": 2,
         "batches_requested": 1,
@@ -88,20 +98,56 @@ def _entry_completion() -> dict[str, object]:
     }
 
 
-def _write_success_child(path: Path) -> None:
+def _write_success_child(
+    path: Path,
+    invocation_mutation: dict[str, object] | None = None,
+    receipt_mutation: dict[str, object] | None = None,
+) -> None:
+    mutation = {} if invocation_mutation is None else invocation_mutation
+    receipt_drift = {} if receipt_mutation is None else receipt_mutation
     path.write_text(
         "\n".join(
             [
                 "import os",
                 "from pathlib import Path",
+                "import json",
                 "from sparse_rtdetr.baseline.smoke_evidence import SmokeEvidence",
+                "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff",
                 "output = Path(os.environ['P3_SMOKE_OUTPUT_DIR'])",
+                "receipt, receipt_sha = _consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))",
+                "receipt.update(" + repr(receipt_drift) + ")",
+                "Path(os.environ['P3_SMOKE_PROCESS_EVIDENCE_DIR'], 'handoff_receipt.json').write_text(json.dumps(receipt), encoding='utf-8') if " + repr(bool(receipt_drift)) + " else None",
                 "evidence = SmokeEvidence(output)",
-                "evidence.write_config({'synthetic_launcher_child': True})",
-                f"evidence.finalize_success({_entry_completion()!r})",
+                "config_sha = evidence.write_config({'synthetic_launcher_child': True})",
+                "invocation = {'schema_version': 1, 'mode': 'synthetic', 'smoke_id': 'rtdetrv2_r18_visdrone_baseline_smoke_v1', 'config_sha256': config_sha, 'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'}",
+                "invocation.update(" + repr(mutation) + ")",
+                "evidence.write_json('invocation.json', invocation)",
+                "[evidence.write_json(name, {}) for name in ('source_identity.json', 'data_binding_audit.json', 'image_selection_audit.json', 'cuda_runtime_identity.json', 'model_identity.json', 'call_audit.json', 'input_batch_audit.json', 'model_output_audit.json', 'postprocess_audit.json', 'rng_audit.json')]",
+                "completion = " + repr(_entry_completion()),
+                "completion['config_sha256'] = config_sha",
+                "evidence.finalize_success(completion)",
             ]
         )
         + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_unconsuming_child(path: Path) -> None:
+    path.write_text(
+        "\n".join([
+            "import os",
+            "from pathlib import Path",
+            "from sparse_rtdetr.baseline.smoke_evidence import SmokeEvidence",
+            "output = Path(os.environ['P3_SMOKE_OUTPUT_DIR'])",
+            "evidence = SmokeEvidence(output)",
+            "config_sha = evidence.write_config({'unconsuming_child': True})",
+            "evidence.write_json('invocation.json', {'schema_version': 1, 'mode': 'synthetic', 'smoke_id': 'rtdetrv2_r18_visdrone_baseline_smoke_v1', 'config_sha256': config_sha})",
+            "[evidence.write_json(name, {}) for name in ('source_identity.json', 'data_binding_audit.json', 'image_selection_audit.json', 'cuda_runtime_identity.json', 'model_identity.json', 'call_audit.json', 'input_batch_audit.json', 'model_output_audit.json', 'postprocess_audit.json', 'rng_audit.json')]",
+            "completion = " + repr(_entry_completion()),
+            "completion['config_sha256'] = config_sha",
+            "evidence.finalize_success(completion)",
+        ]) + "\n",
         encoding="utf-8",
     )
 
@@ -187,6 +233,220 @@ def test_synthetic_smoke_has_exact_one_batch_and_complete_evidence(tmp_path):
     assert completion["total_predictions"] == 600
     assert _read_object(output / "rng_audit.json")["restored_equal"] is True
     assert validate_entry_output(output)["entry_success_accepted"] is True
+
+
+@pytest.mark.parametrize("field", ["inference_only", "model_eval", "torch_no_grad", "speed_measurement", "total_predictions", "config_sha256"])
+def test_completion_required_fields_fail_closed(tmp_path, field):
+    output = tmp_path / field
+    run_synthetic_smoke(ROOT, output)
+    completion_path = output / "completion.json"
+    completion = _read_object(completion_path)
+    completion.pop(field)
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_completion_rejects_boolean_counter(tmp_path):
+    output = tmp_path / "bool_counter"
+    run_synthetic_smoke(ROOT, output)
+    completion_path = output / "completion.json"
+    completion = _read_object(completion_path)
+    completion["images_requested"] = True
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_config_three_way_byte_binding_fails_closed(tmp_path):
+    output = tmp_path / "config_binding"
+    run_synthetic_smoke(ROOT, output)
+    config_path = output / "config.json"
+    config_path.write_bytes(config_path.read_bytes() + b" ")
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_config_can_only_be_written_once(tmp_path):
+    evidence = SmokeEvidence(tmp_path / "entry")
+    evidence.write_config({"once": True})
+    with pytest.raises(SmokeEvidenceError):
+        evidence.write_config({"twice": True})
+
+
+@pytest.mark.parametrize("mutation", [
+    {"nonce": "0" * 32},
+    {"child_pid": 1},
+    {"child_ppid": 1},
+    {"child_argv_sha256": "0" * 64},
+    {"handoff_receipt_sha256": "0" * 64},
+    {"handoff_receipt_relative_path": "wrong.json"},
+])
+def test_launcher_rejects_entry_identity_drift(tmp_path, monkeypatch, mutation):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "identity_child.py"
+    _write_success_child(child, mutation)
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="a" * 32)
+    assert result == 2
+    assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
+
+
+@pytest.mark.parametrize("mutation", [
+    {"child_pid": 1},
+    {"child_ppid": 1},
+    {"child_argv_sha256": "0" * 64},
+    {"output_dir": "/wrong/output"},
+    {"process_evidence_dir": "/wrong/process"},
+])
+def test_launcher_rejects_receipt_identity_drift(tmp_path, monkeypatch, mutation):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "receipt_child.py"
+    _write_success_child(child, receipt_mutation=mutation)
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="9" * 32)
+    assert result == 2
+    assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
+
+
+def test_unconsuming_success_child_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "unconsuming_child.py"
+    _write_unconsuming_child(child)
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="1" * 32)
+    assert result == 2
+    completion = _read_object(process / "process_completion.json")
+    assert completion["status"] == "FAILED_ENTRY_CONTRACT"
+    assert completion["entry"]["entry_status"] == "FAILED_HANDOFF_CONTRACT"
+
+
+def test_prepared_handoff_is_single_use(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "double_consume.py"
+    child.write_text(
+        "from pathlib import Path\n"
+        "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff\n"
+        "receipt, _ = _consume_handoff(Path(__import__('os').environ['P3_SMOKE_REPO_ROOT']))\n"
+        "_consume_handoff(Path(__import__('os').environ['P3_SMOKE_REPO_ROOT']))\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke([str(PYTHON), str(child)], output, process, child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="2" * 32)
+    assert result == 2
+    assert _read_object(process / "handoff_receipt.json")["consumed"] is True
+    assert not output.exists()
+
+
+def test_direct_child_without_handoff_fails_before_output(tmp_path):
+    env = _base_env()
+    env.pop("P3_SMOKE_HANDOFF_PATH", None)
+    output = tmp_path / "entry"
+    env["P3_SMOKE_OUTPUT_DIR"] = str(output)
+    result = subprocess.run(
+        [str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", "_child", "--repo-root", str(ROOT)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "torch" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("case", [
+    "image_rank",
+    "image_channel",
+    "image_dtype",
+    "image_nan",
+    "labels_float",
+    "labels_bool",
+    "labels_nan",
+    "labels_out_of_range",
+    "target_boxes_shape",
+    "target_boxes_nan",
+    "sizes_float",
+    "sizes_negative",
+    "sizes_zero",
+    "sizes_nan",
+    "sizes_shape",
+])
+def test_batch_schema_rejects_each_invalid_case(case):
+    batch = synthetic_batch()
+    if case == "image_rank":
+        batch["images"] = batch["images"][:, 0]
+    elif case == "image_channel":
+        batch["images"] = batch["images"][:, :1]
+    elif case == "image_dtype":
+        batch["images"] = batch["images"].double()
+    elif case == "image_nan":
+        batch["images"][0, 0, 0, 0] = float("nan")
+    elif case == "labels_float":
+        batch["targets"][0]["labels"] = torch.tensor([1.0])
+    elif case == "labels_bool":
+        batch["targets"][0]["labels"] = torch.tensor([True])
+    elif case == "labels_nan":
+        batch["targets"][0]["labels"] = torch.tensor([float("nan")])
+    elif case == "labels_out_of_range":
+        batch["targets"][0]["labels"] = torch.tensor([10], dtype=torch.int64)
+    elif case == "target_boxes_shape":
+        batch["targets"][0]["boxes"] = torch.zeros((2, 4), dtype=torch.float32)
+    elif case == "target_boxes_nan":
+        batch["targets"][0]["boxes"] = torch.full((1, 4), float("nan"), dtype=torch.float32)
+    elif case == "sizes_float":
+        batch["orig_target_sizes"] = batch["orig_target_sizes"].float()
+    elif case == "sizes_negative":
+        batch["orig_target_sizes"][0, 0] = -1
+    elif case == "sizes_zero":
+        batch["orig_target_sizes"][0, 0] = 0
+    elif case == "sizes_nan":
+        batch["orig_target_sizes"] = batch["orig_target_sizes"].float()
+        batch["orig_target_sizes"][0, 0] = float("nan")
+    elif case == "sizes_shape":
+        batch["orig_target_sizes"] = batch["orig_target_sizes"][:, :1]
+    with pytest.raises(SmokeContractError):
+        _validate_batch(batch, torch)
+
+
+@pytest.mark.parametrize("label_tensor", [torch.ones((300,), dtype=torch.float32), torch.ones((300,), dtype=torch.bool)])
+def test_postprocessor_schema_rejects_float_and_bool_labels(tmp_path, label_tensor):
+    class BadPostprocessor(SyntheticSmokePostProcessor):
+        def __call__(self, outputs, orig_target_sizes):
+            results = super().__call__(outputs, orig_target_sizes)
+            results[0]["labels"] = label_tensor
+            return results
+
+    with pytest.raises(SmokeContractError):
+        run_synthetic_smoke(ROOT, tmp_path / "bad_post", postprocessor_factory=BadPostprocessor)
+
+
+def test_entry_artifacts_are_portable(tmp_path):
+    output = tmp_path / "entry"
+    run_synthetic_smoke(ROOT, output)
+    media_prefix = "/" + "media/"
+    home_prefix = "/" + "home/"
+    for path in output.glob("*.json"):
+        text = path.read_text(encoding="utf-8")
+        assert media_prefix not in text
+        assert home_prefix not in text
+    binding = _read_object(output / "data_binding_audit.json")
+    assert binding["portable"] is True
+    assert binding["nonportable"] is False
+    assert "data_root" not in binding
 
 
 def test_config_is_written_before_any_injected_component(tmp_path):
@@ -366,7 +626,7 @@ def test_launcher_requires_entry_contract_even_when_child_exits_zero(tmp_path, m
     completion = _read_object(process / "process_completion.json")
     assert completion["status"] == "FAILED_ENTRY_CONTRACT"
     assert completion["child_returncode"] == 0
-    assert completion["entry"]["entry_status"] == "FAILED_ENTRY_MISSING"
+    assert completion["entry"]["entry_status"] == "FAILED_HANDOFF_CONTRACT"
     assert (process / "process_partial_inventory.json").is_file()
     assert not output.exists()
 
@@ -379,7 +639,6 @@ def test_launcher_success_owns_process_evidence_and_handoffs_nonce(tmp_path, mon
     _write_success_child(child)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    nonce = "c" * 32
     result = launch_smoke(
         [str(PYTHON), str(child)],
         output,
@@ -387,14 +646,23 @@ def test_launcher_success_owns_process_evidence_and_handoffs_nonce(tmp_path, mon
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
-        nonce=nonce,
     )
     assert result == 0
     completion = _read_object(process / "process_completion.json")
     assert completion["status"] == "COMPLETED"
     assert completion["child_returncode"] == 0
-    assert completion["nonce"] == nonce
+    nonce = completion["nonce"]
+    assert type(nonce) is str and len(nonce) == 32 and all(character in "0123456789abcdef" for character in nonce)
+    assert type(completion["child_pid"]) is int
     assert completion["child_sid"] == completion["child_pgid"]
+    assert completion["handoff_receipt"]["present"] is True
+    receipt = _read_object(process / "handoff_receipt.json")
+    assert receipt["child_pid"] == completion["child_pid"]
+    entry_invocation = _read_object(output / "invocation.json")
+    assert entry_invocation["nonce"] == completion["nonce"]
+    assert entry_invocation["child_pid"] == completion["child_pid"]
+    assert entry_invocation["handoff_receipt_sha256"] == completion["handoff_receipt_sha256"]
+    assert entry_invocation["handoff_receipt_sha256"] == hashlib.sha256((process / "handoff_receipt.json").read_bytes()).hexdigest()
     assert _read_object(output / "completion.json")["status"] == "COMPLETED"
     assert (process / "process_exit_code.txt").read_bytes() == b"0\n"
     assert not (process / "process_partial_inventory.json").exists()

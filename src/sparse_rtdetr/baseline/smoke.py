@@ -13,7 +13,12 @@ from typing import Any, Callable, Iterable
 
 from .artifacts import resolve_runtime_paths, verify_r3_binding
 from .config import build_r18_cpu_model
-from .contract import BaselineContractError
+from .contract import (
+    BaselineContractError,
+    R3_ARTIFACT_INVENTORY_SHA256,
+    R3_ARTIFACT_RELATIVE,
+    R3_ENTRY_CANONICAL_INVENTORY_SHA256,
+)
 from .smoke_evidence import SmokeEvidence
 
 
@@ -326,17 +331,21 @@ def _validate_batch(batch: dict[str, Any], torch: Any) -> None:
     if set(batch) != {"images", "targets", "orig_target_sizes", "stable_image_ids"}:
         raise SmokeContractError("smoke batch schema drift")
     images = batch["images"]
-    if not torch.is_tensor(images) or list(images.shape[:1]) != [2] or list(images.shape[-2:]) != [640, 640] or not bool(torch.isfinite(images).all()):
+    if not torch.is_tensor(images) or images.dtype != torch.float32 or tuple(images.shape) != (2, 3, 640, 640) or not bool(torch.isfinite(images).all()):
         raise SmokeContractError("smoke input batch shape or finite contract failed")
     targets = batch["targets"]
     if not isinstance(targets, list) or len(targets) != 2:
         raise SmokeContractError("smoke target batch count drift")
     for target in targets:
         labels = target.get("labels") if isinstance(target, dict) else None
-        if not torch.is_tensor(labels) or labels.dtype == torch.bool or labels.numel() and (bool((labels < 0).any()) or bool((labels > 9).any())):
+        if not torch.is_tensor(labels) or labels.dtype != torch.int64 or labels.ndim != 1 or not bool(torch.isfinite(labels).all()) or labels.numel() and (bool((labels < 0).any()) or bool((labels > 9).any())):
             raise SmokeContractError("smoke model labels are not 0..9")
+        if isinstance(target, dict) and "boxes" in target:
+            boxes = target["boxes"]
+            if not torch.is_tensor(boxes) or not torch.is_floating_point(boxes) or tuple(boxes.shape) != (labels.numel(), 4) or not bool(torch.isfinite(boxes).all()):
+                raise SmokeContractError("smoke target boxes schema drift")
     sizes = batch["orig_target_sizes"]
-    if not torch.is_tensor(sizes) or tuple(sizes.shape) != (2, 2):
+    if not torch.is_tensor(sizes) or sizes.dtype != torch.int64 or tuple(sizes.shape) != (2, 2) or not bool((sizes > 0).all()):
         raise SmokeContractError("smoke original size shape drift")
     stable_ids = batch["stable_image_ids"]
     expected_ids = [record["stable_image_id"] for record in FROZEN_IMAGE_RECORDS]
@@ -439,14 +448,16 @@ def run_synthetic_smoke(
         total_predictions = 0
         postprocess_audit: list[dict[str, Any]] = []
         for result in results:
-            labels = result.get("labels") if isinstance(result, dict) else None
-            result_boxes = result.get("boxes") if isinstance(result, dict) else None
-            scores = result.get("scores") if isinstance(result, dict) else None
+            if not isinstance(result, dict) or set(result) != {"labels", "boxes", "scores"}:
+                raise SmokeContractError("smoke postprocessor result schema drift")
+            labels = result["labels"]
+            result_boxes = result["boxes"]
+            scores = result["scores"]
             if not all(torch.is_tensor(value) for value in (labels, result_boxes, scores)):
                 raise SmokeContractError("smoke postprocessor tensor schema drift")
-            if tuple(labels.shape) != (300,) or tuple(result_boxes.shape) != (300, 4) or tuple(scores.shape) != (300,):
+            if labels.dtype != torch.int64 or tuple(labels.shape) != (300,) or not torch.is_floating_point(result_boxes) or tuple(result_boxes.shape) != (300, 4) or not torch.is_floating_point(scores) or tuple(scores.shape) != (300,):
                 raise SmokeContractError("smoke prediction shape drift")
-            if bool((labels < 1).any()) or bool((labels > 10).any()) or not bool(torch.isfinite(result_boxes).all()) or not bool(torch.isfinite(scores).all()):
+            if not bool(torch.isfinite(labels).all()) or bool((labels < 1).any()) or bool((labels > 10).any()) or not bool(torch.isfinite(result_boxes).all()) or not bool(torch.isfinite(scores).all()):
                 raise SmokeContractError("smoke prediction finite/category contract failed")
             total_predictions += len(labels)
             postprocess_audit.append({
@@ -480,14 +491,24 @@ def run_synthetic_smoke(
             raise SmokeContractError("smoke call counters drift")
         completion = _base_completion(counters, success=True)
         completion.update({"config_sha256": config_sha, "total_predictions": total_predictions})
-        evidence.write_json("invocation.json", {"mode": "synthetic", "smoke_id": SMOKE_ID, "config_sha256": config_sha})
+        evidence.write_json("invocation.json", {"schema_version": 1, "mode": "synthetic", "smoke_id": SMOKE_ID, "config_sha256": config_sha})
         evidence.write_json("source_identity.json", {"baseline_id": config["model"]["baseline_id"], "synthetic": True})
-        evidence.write_json("data_binding_audit.json", {"role": "train_core", "real_data_accessed": False})
+        evidence.write_json("data_binding_audit.json", {
+            "role": "train_core",
+            "r3_artifact_relative_path": R3_ARTIFACT_RELATIVE,
+            "r3_artifact_inventory_sha256": R3_ARTIFACT_INVENTORY_SHA256,
+            "r3_entry_canonical_inventory_sha256": R3_ENTRY_CANONICAL_INVENTORY_SHA256,
+            "manifest_relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json",
+            "records": [{"stable_image_id": record["stable_image_id"], "relative_path": record["relative_path"]} for record in FROZEN_IMAGE_RECORDS],
+            "portable": True,
+            "nonportable": False,
+            "real_data_accessed": False,
+        })
         evidence.write_json("image_selection_audit.json", {"records": list(FROZEN_IMAGE_RECORDS), "verified_from_manifest": True})
         evidence.write_json("cuda_runtime_identity.json", {"mode": "synthetic", "device": "cpu", "cuda_visible_devices": "", "cpu_fallback": True})
         evidence.write_json("model_identity.json", {"parameters": 0, "pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)})
         evidence.write_json("call_audit.json", counters.as_dict())
-        evidence.write_json("input_batch_audit.json", {"image_count": 2, "batch_count": 1, "target_labels_model_space": True})
+        evidence.write_json("input_batch_audit.json", {"image_count": 2, "batch_count": 1, "target_labels_model_space": True, "stable_image_ids": batch["stable_image_ids"]})
         evidence.write_json("model_output_audit.json", {"pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)})
         evidence.write_json("postprocess_audit.json", {"images": postprocess_audit, "total_predictions": total_predictions, "nms": False, "threshold": None})
         rng_after = _rng_snapshot(torch)
@@ -508,7 +529,7 @@ def synthetic_batch() -> dict[str, Any]:
     return {
         "images": torch.zeros((2, 3, 640, 640), dtype=torch.float32),
         "targets": [{"labels": torch.tensor([0], dtype=torch.int64)}, {"labels": torch.tensor([9], dtype=torch.int64)}],
-        "orig_target_sizes": torch.tensor([[960, 540], [960, 540]], dtype=torch.float32),
+        "orig_target_sizes": torch.tensor([[960, 540], [960, 540]], dtype=torch.int64),
         "stable_image_ids": [record["stable_image_id"] for record in FROZEN_IMAGE_RECORDS],
     }
 
@@ -592,22 +613,40 @@ def validate_real_smoke_environment() -> dict[str, Any]:
     }
 
 
-def run_authorized_smoke(repo_root: str | Path, data_root: Path, output_dir: Path) -> dict[str, Any]:
+def run_authorized_smoke(
+    repo_root: str | Path,
+    data_root: Path,
+    output_dir: Path,
+    *,
+    handoff_receipt: dict[str, Any],
+    handoff_receipt_sha256: str,
+) -> dict[str, Any]:
     """Run the future real one-batch smoke entrypoint under its exact gates."""
 
     config = load_smoke_config(repo_root)
     paths = resolve_runtime_paths(repo_root, data_root, "train_core")
+    if not isinstance(handoff_receipt, dict) or type(handoff_receipt.get("child_pid")) is not int or type(handoff_receipt.get("child_ppid")) is not int:
+        raise SmokeContractError("real smoke handoff receipt is invalid")
+    if type(handoff_receipt_sha256) is not str or len(handoff_receipt_sha256) != 64:
+        raise SmokeContractError("real smoke handoff receipt SHA is invalid")
     if output_dir.exists() or output_dir.is_symlink():
         raise SmokeContractError("real smoke output directory already exists")
     evidence = SmokeEvidence(output_dir)
     config_sha = evidence.write_config(config)
     evidence.write_json("invocation.json", {
+        "schema_version": 1,
         "mode": "real",
         "smoke_id": SMOKE_ID,
         "config_sha256": config_sha,
         "data_role": "train_core",
         "cuda_visible_devices": "0",
-        "nonce": os.environ.get(SMOKE_NONCE_ENV),
+        "nonce": handoff_receipt["nonce"],
+        "launcher_pid": handoff_receipt["launcher_pid"],
+        "child_pid": handoff_receipt["child_pid"],
+        "child_ppid": handoff_receipt["child_ppid"],
+        "child_argv_sha256": handoff_receipt["child_argv_sha256"],
+        "handoff_receipt_sha256": handoff_receipt_sha256,
+        "handoff_receipt_relative_path": "handoff_receipt.json",
     })
     try:
         runtime = validate_real_smoke_environment()
@@ -685,9 +724,13 @@ def run_authorized_smoke(repo_root: str | Path, data_root: Path, output_dir: Pat
             config_sha,
             data_binding={
                 "role": "train_core",
-                "data_root": str(paths.data_root),
-                "annotation_file": str(paths.annotation_file),
-                "r3_artifact_root": str(paths.artifact_binding.artifact_root),
+                "r3_artifact_relative_path": R3_ARTIFACT_RELATIVE,
+                "r3_artifact_inventory_sha256": R3_ARTIFACT_INVENTORY_SHA256,
+                "r3_entry_canonical_inventory_sha256": R3_ENTRY_CANONICAL_INVENTORY_SHA256,
+                "manifest_relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json",
+                "records": [{"stable_image_id": record["stable_image_id"], "relative_path": record["relative_path"]} for record in selected],
+                "portable": True,
+                "nonportable": False,
                 "real_data_accessed": True,
             },
             rng_before=rng_before,
@@ -754,14 +797,16 @@ def _run_prepared_smoke(
         total_predictions = 0
         postprocess_audit: list[dict[str, Any]] = []
         for result in results:
-            labels = result.get("labels") if isinstance(result, dict) else None
-            result_boxes = result.get("boxes") if isinstance(result, dict) else None
-            scores = result.get("scores") if isinstance(result, dict) else None
+            if not isinstance(result, dict) or set(result) != {"labels", "boxes", "scores"}:
+                raise SmokeContractError("smoke postprocessor result schema drift")
+            labels = result["labels"]
+            result_boxes = result["boxes"]
+            scores = result["scores"]
             if not all(torch.is_tensor(value) for value in (labels, result_boxes, scores)):
                 raise SmokeContractError("smoke postprocessor tensor schema drift")
-            if tuple(labels.shape) != (300,) or tuple(result_boxes.shape) != (300, 4) or tuple(scores.shape) != (300,):
+            if labels.dtype != torch.int64 or tuple(labels.shape) != (300,) or not torch.is_floating_point(result_boxes) or tuple(result_boxes.shape) != (300, 4) or not torch.is_floating_point(scores) or tuple(scores.shape) != (300,):
                 raise SmokeContractError("smoke prediction shape drift")
-            if bool((labels < 1).any()) or bool((labels > 10).any()) or not bool(torch.isfinite(result_boxes).all()) or not bool(torch.isfinite(scores).all()):
+            if not bool(torch.isfinite(labels).all()) or bool((labels < 1).any()) or bool((labels > 10).any()) or not bool(torch.isfinite(result_boxes).all()) or not bool(torch.isfinite(scores).all()):
                 raise SmokeContractError("smoke prediction finite/category contract failed")
             total_predictions += len(labels)
             postprocess_audit.append({

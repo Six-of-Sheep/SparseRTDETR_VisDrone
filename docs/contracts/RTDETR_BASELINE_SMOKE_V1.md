@@ -26,6 +26,11 @@ an explicit data root, rejects a path with an independent `test` component, and
 reads only the two manifest-selected image paths after verifying their SHA-256
 values.
 
+The committed config and child entry artifact are portable: they contain only
+relative repository identities, certified R3 hashes, and the two frozen stable
+image IDs/relative paths. Runtime absolute repository, output, and process
+paths are restricted to the nonportable launcher process evidence.
+
 `contract-check` runs with `CUDA_VISIBLE_DEVICES=''` and
 `PYTHONNOUSERSITE=1`. It validates source/config/R3 metadata without importing
 the model framework, creating CUDA objects, constructing a dataset or model,
@@ -33,20 +38,26 @@ reading images, creating output directories, or requesting a network.
 
 `smoke` requires explicit authorization via
 `P3_RTDETR_BASELINE_SMOKE_AUTHORIZED=1`, exactly `CUDA_VISIBLE_DEVICES=0`, one
-available CUDA device, and `PYTHONNOUSERSITE=1`. The launcher owns only the
-process-evidence directory. The child owns the entry output directory and
-creates it only after the launcher has established the process evidence.
+available CUDA device, and `PYTHONNOUSERSITE=1`. The launcher owns the
+process-evidence directory. Before spawning the child it atomically writes a
+single-use `handoff_prepared.json`. The child must consume that handoff before
+importing torch or creating entry output, then atomically writes the only
+child-owned process file, `handoff_receipt.json`. The launcher cross-checks the
+receipt against the child PID/PPID, argv SHA, nonce, paths, and prepared-handoff
+SHA. The child owns the entry output directory and creates it only after the
+launcher has established the process evidence.
 
 ## Evidence
 
 The child writes `config.json` atomically before any model, dataset, dataloader,
-image, or CUDA object. It then records invocation, source and data binding,
+image, or CUDA object. It then records invocation, source and portable data binding,
 runtime identity, model and tensor audits, call counters, input selection,
 postprocessing, and RNG restoration. Successful entry evidence must contain a
 complete artifact inventory that binds every other entry file. A child exit code
 of zero is insufficient: the launcher also requires `completion.json` with all
 frozen smoke counters and flags, a complete inventory, and the non-reportable
-qualification fields. Failure evidence preserves the original exception and
+qualification fields, including strict integer counters and complete
+inference-only flags. Failure evidence preserves the original exception and
 partial inventories.
 
 Tensor logical SHA-256 values describe the particular smoke invocation. They are
