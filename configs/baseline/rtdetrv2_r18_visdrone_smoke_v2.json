@@ -93,6 +93,8 @@
     "outer_launch_evidence_relative_path": "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2",
     "output_relative_path": "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2",
     "process_evidence_relative_path": "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2",
+    "tmux_client_timeout_seconds": 10,
+    "tmux_session_name": "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2",
     "visible_devices": "0"
   },
   "schema_version": 1,

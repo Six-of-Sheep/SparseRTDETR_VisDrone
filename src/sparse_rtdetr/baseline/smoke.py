@@ -36,6 +36,8 @@ SMOKE_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_basel
 SMOKE_V2_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
 SMOKE_V2_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"
 SMOKE_V2_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"
+SMOKE_V2_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
+SMOKE_V2_TMUX_TIMEOUT_SECONDS = 10
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
 
@@ -201,7 +203,11 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
         runtime_expected.update({
             "config_relative_path": SMOKE_V2_CONFIG_RELATIVE,
             "outer_launch_evidence_relative_path": SMOKE_V2_OUTER_RELATIVE,
+            "tmux_session_name": SMOKE_V2_TMUX_SESSION,
+            "tmux_client_timeout_seconds": SMOKE_V2_TMUX_TIMEOUT_SECONDS,
         })
+    if smoke_id == SMOKE_V2_ID and (type(runtime_expected["tmux_client_timeout_seconds"]) is not int or runtime_expected["tmux_client_timeout_seconds"] <= 0):
+        raise SmokeContractError("smoke tmux timeout contract is invalid")
     if runtime != runtime_expected:
         raise SmokeContractError("smoke runtime contract drift")
     _strict_int(runtime["device_count"], "runtime.device_count", 1)
