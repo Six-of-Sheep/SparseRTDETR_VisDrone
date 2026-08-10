@@ -185,6 +185,7 @@ def _validate_entry_invocation(
     expected_smoke_id = config_value.get("smoke_id", "rtdetrv2_r18_visdrone_baseline_smoke_v1")
     if invocation.get("mode") not in {"synthetic", "real"} or invocation.get("smoke_id") != expected_smoke_id:
         raise SmokeEvidenceError("entry invocation identity is invalid")
+    _strict_sha(invocation.get("config_sha256"), "entry invocation config_sha256")
     if invocation.get("config_sha256") != config_sha256:
         raise SmokeEvidenceError("entry invocation config SHA mismatch")
     if expected_identity is not None:
@@ -200,14 +201,35 @@ def _validate_entry_invocation(
             if invocation.get(field) != expected_identity.get(field):
                 raise SmokeEvidenceError(f"entry invocation identity mismatch: {field}")
         _strict_sha(invocation.get("handoff_receipt_sha256"), "entry invocation handoff_receipt_sha256")
-    if config_value.get("smoke_id") == "rtdetrv2_r18_visdrone_baseline_smoke_v2":
+    if invocation.get("mode") == "real":
+        if type(config_value.get("smoke_id")) is not str or not config_value["smoke_id"]:
+            raise SmokeEvidenceError("real entry smoke_id is invalid")
         runtime = config_value.get("runtime")
         if not isinstance(runtime, dict):
-            raise SmokeEvidenceError("R2 entry runtime binding is missing")
+            raise SmokeEvidenceError("real entry runtime binding is missing")
+        if type(runtime.get("config_relative_path")) is not str or not runtime["config_relative_path"]:
+            raise SmokeEvidenceError("real entry config relative path is invalid")
+        if type(invocation.get("config_relative_path")) is not str or not invocation["config_relative_path"]:
+            raise SmokeEvidenceError("real entry invocation config relative path is invalid")
         if invocation.get("config_relative_path") != runtime.get("config_relative_path"):
-            raise SmokeEvidenceError("R2 entry config relative path mismatch")
+            raise SmokeEvidenceError("real entry config relative path mismatch")
         if type(invocation.get("config_size_bytes")) is not int or invocation["config_size_bytes"] != root.joinpath("config.json").stat().st_size:
-            raise SmokeEvidenceError("R2 entry config size binding mismatch")
+            raise SmokeEvidenceError("real entry config size binding mismatch")
+        if expected_identity is not None:
+            required_identity = {"smoke_id", "config_relative_path", "config_canonical_sha256"}
+            if not required_identity.issubset(expected_identity):
+                raise SmokeEvidenceError("real entry expected config identity is incomplete")
+            if type(expected_identity.get("smoke_id")) is not str or not expected_identity["smoke_id"]:
+                raise SmokeEvidenceError("real entry expected smoke_id is invalid")
+            if type(expected_identity.get("config_relative_path")) is not str or not expected_identity["config_relative_path"]:
+                raise SmokeEvidenceError("real entry expected config relative path is invalid")
+            _strict_sha(expected_identity.get("config_canonical_sha256"), "real entry expected config_canonical_sha256")
+            if invocation.get("smoke_id") != expected_identity["smoke_id"]:
+                raise SmokeEvidenceError("real entry smoke_id binding mismatch")
+            if invocation.get("config_relative_path") != expected_identity["config_relative_path"]:
+                raise SmokeEvidenceError("real entry config relative path binding mismatch")
+            if invocation.get("config_sha256") != expected_identity["config_canonical_sha256"]:
+                raise SmokeEvidenceError("real entry canonical config SHA binding mismatch")
     return invocation
 
 

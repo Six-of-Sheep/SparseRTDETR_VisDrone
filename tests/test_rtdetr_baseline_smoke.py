@@ -41,8 +41,10 @@ from sparse_rtdetr.baseline.smoke import (
     validate_real_smoke_environment,
 )
 from sparse_rtdetr.baseline.smoke_evidence import (
+    ENTRY_INVENTORY_EXCLUDED,
     argv_sha256,
     canonical_json_bytes,
+    inventory,
     SmokeEvidence,
     SmokeEvidenceError,
     _read_object,
@@ -189,6 +191,55 @@ def _write_unconsuming_child(path: Path) -> None:
         ]) + "\n",
         encoding="utf-8",
     )
+
+
+def _write_real_entry(output: Path, config_path: Path) -> dict[str, object]:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    evidence = SmokeEvidence(output)
+    config_sha = evidence.write_config(config)
+    receipt = {
+        "nonce": "a" * 32,
+        "launcher_pid": 11,
+        "child_pid": 22,
+        "child_ppid": 33,
+        "child_argv_sha256": "1" * 64,
+        "handoff_receipt_sha256": "2" * 64,
+        "handoff_receipt_relative_path": "handoff_receipt.json",
+    }
+    invocation = {
+        "schema_version": 1,
+        "mode": "real",
+        "smoke_id": config["smoke_id"],
+        "config_sha256": config_sha,
+        "config_relative_path": config_path.relative_to(ROOT).as_posix(),
+        "config_size_bytes": (output / "config.json").stat().st_size,
+        **receipt,
+    }
+    evidence.write_json("invocation.json", invocation)
+    for name in (
+        "source_identity.json", "data_binding_audit.json", "image_selection_audit.json",
+        "cuda_runtime_identity.json", "model_identity.json", "call_audit.json",
+        "input_batch_audit.json", "model_output_audit.json", "postprocess_audit.json", "rng_audit.json",
+    ):
+        evidence.write_json(name, {})
+    completion = _entry_completion()
+    completion["config_sha256"] = config_sha
+    evidence.finalize_success(completion)
+    return {
+        **receipt,
+        "smoke_id": config["smoke_id"],
+        "config_relative_path": invocation["config_relative_path"],
+        "config_canonical_sha256": hashlib.sha256(canonical_json_bytes(config)).hexdigest(),
+    }
+
+
+def _repack_entry(output: Path) -> None:
+    value = inventory(output, ENTRY_INVENTORY_EXCLUDED)
+    payload = canonical_json_bytes(value)
+    (output / "artifact_inventory.json").write_bytes(payload)
+    completion = _read_object(output / "completion.json")
+    completion["artifact_inventory_sha256"] = hashlib.sha256(payload).hexdigest()
+    (output / "completion.json").write_bytes(canonical_json_bytes(completion))
 
 
 def test_smoke_config_and_manifest_are_strict_and_frozen():
@@ -599,6 +650,91 @@ def test_config_can_only_be_written_once(tmp_path):
     evidence.write_config({"once": True})
     with pytest.raises(SmokeEvidenceError):
         evidence.write_config({"twice": True})
+
+
+@pytest.mark.parametrize("config_path", [V2_CONFIG, V3_CONFIG])
+def test_real_entry_v2_and_v3_share_canonical_config_binding(tmp_path, config_path):
+    output = tmp_path / config_path.stem
+    expected = _write_real_entry(output, config_path)
+    result = validate_entry_output(output, expected_identity=expected)
+    assert result["entry_success_accepted"] is True
+    invocation = _read_object(output / "invocation.json")
+    assert invocation["config_sha256"] == expected["config_canonical_sha256"]
+    assert invocation["config_size_bytes"] == (output / "config.json").stat().st_size
+
+
+@pytest.mark.parametrize("mutation", [
+    "delete_relative",
+    "v2_relative",
+    "arbitrary_relative",
+    "delete_size",
+    "bool_size",
+    "increment_size",
+    "delete_sha",
+    "source_file_sha",
+    "other_sha",
+    "v2_smoke_id",
+    "config_smoke_id_v2",
+    "config_content",
+    "expected_canonical",
+    "expected_smoke_id",
+    "expected_relative",
+])
+def test_v3_real_entry_config_binding_mutations_fail_closed(tmp_path, mutation):
+    output = tmp_path / "entry"
+    expected = _write_real_entry(output, V3_CONFIG)
+    invocation_path = output / "invocation.json"
+    invocation = _read_object(invocation_path)
+    if mutation == "delete_relative":
+        invocation.pop("config_relative_path")
+    elif mutation == "v2_relative":
+        invocation["config_relative_path"] = V2_CONFIG.relative_to(ROOT).as_posix()
+    elif mutation == "arbitrary_relative":
+        invocation["config_relative_path"] = "configs/other.json"
+    elif mutation == "delete_size":
+        invocation.pop("config_size_bytes")
+    elif mutation == "bool_size":
+        invocation["config_size_bytes"] = True
+    elif mutation == "increment_size":
+        invocation["config_size_bytes"] += 1
+    elif mutation == "delete_sha":
+        invocation.pop("config_sha256")
+    elif mutation == "source_file_sha":
+        invocation["config_sha256"] = hashlib.sha256(V3_CONFIG.read_bytes()).hexdigest()
+    elif mutation == "other_sha":
+        invocation["config_sha256"] = "0" * 64
+    elif mutation == "v2_smoke_id":
+        invocation["smoke_id"] = SMOKE_V2_ID
+    elif mutation in {"config_smoke_id_v2", "config_content"}:
+        config = json.loads((output / "config.json").read_text(encoding="utf-8"))
+        if mutation == "config_smoke_id_v2":
+            config["smoke_id"] = SMOKE_V2_ID
+        else:
+            config["runtime"]["config_relative_path"] = "configs/changed.json"
+        (output / "config.json").write_bytes(canonical_json_bytes(config))
+        config_sha = hashlib.sha256((output / "config.json").read_bytes()).hexdigest()
+        invocation["config_sha256"] = config_sha
+        completion = _read_object(output / "completion.json")
+        completion["config_sha256"] = config_sha
+        (output / "completion.json").write_bytes(canonical_json_bytes(completion))
+    elif mutation == "expected_canonical":
+        expected["config_canonical_sha256"] = "0" * 64
+    elif mutation == "expected_smoke_id":
+        expected["smoke_id"] = SMOKE_V2_ID
+    elif mutation == "expected_relative":
+        expected["config_relative_path"] = V2_CONFIG.relative_to(ROOT).as_posix()
+    invocation_path.write_bytes(canonical_json_bytes(invocation))
+    _repack_entry(output)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output, expected_identity=expected)
+
+
+def test_real_entry_requires_complete_expected_config_identity(tmp_path):
+    output = tmp_path / "entry"
+    expected = _write_real_entry(output, V3_CONFIG)
+    expected.pop("config_canonical_sha256")
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output, expected_identity=expected)
 
 
 @pytest.mark.parametrize("mutation", [

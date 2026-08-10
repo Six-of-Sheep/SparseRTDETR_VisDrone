@@ -6,6 +6,7 @@ import os
 import signal
 import shutil
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -13,8 +14,9 @@ from unittest import mock
 
 import pytest
 
-from sparse_rtdetr.baseline.smoke import SMOKE_V3_ID, load_smoke_config
+from sparse_rtdetr.baseline.smoke import SMOKE_V2_ID, SMOKE_V3_ID, load_smoke_config
 from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, inventory, sha256_bytes, sha256_file
+from sparse_rtdetr.baseline.smoke_launcher import launch_smoke
 from sparse_rtdetr.baseline.smoke_outer_launcher import (
     OUTER_EXCLUDED,
     PANE_EXCLUDED,
@@ -37,6 +39,7 @@ V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
 V3_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r3"
+PYTHON = Path(sys.executable).resolve()
 
 
 def _script(path: Path, body: str) -> Path:
@@ -84,6 +87,111 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
         "tmux_session": SESSION if version == 2 else V3_SESSION,
     }
     return args, child_count, tmux_count
+
+
+def _entry_completion() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "status": "COMPLETED",
+        "mode": "smoke",
+        "smoke_pass_candidate": True,
+        "non_training": True,
+        "inference_only": True,
+        "model_eval": True,
+        "torch_no_grad": True,
+        "non_selection": True,
+        "non_reportable": True,
+        "formal_resume_eligible": False,
+        "formal_training_eligible": False,
+        "baseline_training_ready": False,
+        "confirmatory_metrics_accessed": False,
+        "dataset_test_accessed_by_this_process": False,
+        "speed_measurement": False,
+        "config_sha256": "",
+        "total_predictions": 600,
+        "images_requested": 2,
+        "images_loaded": 2,
+        "batches_requested": 1,
+        "batches_processed": 1,
+        "dataset_next_calls": 1,
+        "model_forward_calls": 1,
+        "postprocessor_calls": 1,
+        "evaluator_calls": 0,
+        "criterion_calls": 0,
+        "backward_calls": 0,
+        "optimizer_steps": 0,
+        "scheduler_steps": 0,
+        "checkpoint_loads": 0,
+        "network_calls": 0,
+    }
+
+
+def _write_real_child(path: Path) -> None:
+    completion = repr(_entry_completion())
+    path.write_text(
+        "\n".join([
+            "import json, os",
+            "from pathlib import Path",
+            "from sparse_rtdetr.baseline.smoke_evidence import SmokeEvidence",
+            "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff",
+            "output = Path(os.environ['P3_SMOKE_OUTPUT_DIR'])",
+            "receipt, receipt_sha = _consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))",
+            "config = json.loads(Path(receipt['config_path']).read_text(encoding='utf-8'))",
+            "evidence = SmokeEvidence(output)",
+            "config_sha = evidence.write_config(config)",
+            "invocation = {'schema_version': 1, 'mode': 'real', 'smoke_id': receipt['smoke_id'], 'config_sha256': config_sha, 'config_relative_path': receipt['config_relative_path'], 'config_size_bytes': (output / 'config.json').stat().st_size, 'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'}",
+            "evidence.write_json('invocation.json', invocation)",
+            "[evidence.write_json(name, {}) for name in ('source_identity.json', 'data_binding_audit.json', 'image_selection_audit.json', 'cuda_runtime_identity.json', 'model_identity.json', 'call_audit.json', 'input_batch_audit.json', 'model_output_audit.json', 'postprocess_audit.json', 'rng_audit.json')]",
+            "completion = " + completion,
+            "completion['config_sha256'] = config_sha",
+            "evidence.finalize_success(completion)",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _repack_process(process: Path) -> None:
+    excluded = frozenset({"process_inventory.json", "process_completion.json", "process_partial_inventory.json"})
+    value = inventory(process, excluded)
+    payload = canonical_json_bytes(value)
+    inventory_path = process / "process_inventory.json"
+    inventory_path.write_bytes(payload)
+    completion_path = process / "process_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["process_inventory"] = {"relative_path": "process_inventory.json", "size_bytes": inventory_path.stat().st_size, "sha256": sha256_file(inventory_path)}
+    completion_path.write_bytes(canonical_json_bytes(completion))
+
+
+def _complete_v3_chain(tmp_path: Path, monkeypatch) -> dict[str, Path | str]:
+    args, _child_count, _tmux_count = _repo(tmp_path, version=3)
+    assert run_outer_launch(**args)["status"] == "TMUX_ACCEPTED"
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "real-entry-child.py"
+    _write_real_child(child)
+    env = {
+        **os.environ,
+        "CUDA_VISIBLE_DEVICES": "0",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED": "1",
+        "PYTHONPATH": str(ROOT / "src"),
+    }
+    pane = args["outer_evidence_dir"] / "pane"
+    pane_receipt = json.loads((pane / "pane_receipt.json").read_text(encoding="utf-8"))
+    assert launch_smoke(
+        [str(PYTHON), str(child)],
+        args["output_dir"],
+        args["process_evidence_dir"],
+        data_root=args["data_root"],
+        child_python=PYTHON,
+        repo_root=args["repo_root"],
+        env=env,
+        nonce=pane_receipt["nonce"],
+        config_path=args["config_path"],
+    ) == 0
+    return args
 
 
 def _digests(root: Path) -> dict[str, str]:
@@ -155,6 +263,84 @@ def test_v3_outer_synthetic_full_path_uses_only_v3_identity(tmp_path):
     assert outer["invocation"]["output_dir"] == str(args["output_dir"])
     assert outer["invocation"]["process_evidence_dir"] == str(args["process_evidence_dir"])
     assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "INNER_STARTED_PROCESS_EVIDENCE_ABSENT"
+
+
+def test_v3_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, monkeypatch):
+    args = _complete_v3_chain(tmp_path, monkeypatch)
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "TERMINAL_COMPLETE"
+
+
+@pytest.mark.parametrize("mutation", [
+    "prepared_canonical",
+    "receipt_canonical",
+    "invocation_canonical",
+    "completion_canonical",
+    "prepared_smoke_id",
+    "receipt_smoke_id",
+    "invocation_smoke_id",
+    "completion_smoke_id",
+    "prepared_relative",
+    "receipt_relative",
+    "invocation_relative",
+    "completion_relative",
+    "swap_source_and_canonical",
+    "prepared_bool_size",
+    "completion_invalid_sha",
+])
+def test_v3_process_config_binding_mutations_never_complete(tmp_path, monkeypatch, mutation):
+    args = _complete_v3_chain(tmp_path, monkeypatch)
+    process = args["process_evidence_dir"]
+    if mutation == "completion_canonical":
+        path = process / "process_completion.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["config_canonical_sha256"] = "0" * 64
+        path.write_bytes(canonical_json_bytes(value))
+    elif mutation == "completion_invalid_sha":
+        path = process / "process_completion.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["config_file_sha256"] = "invalid"
+        path.write_bytes(canonical_json_bytes(value))
+    elif mutation == "swap_source_and_canonical":
+        path = process / "handoff_receipt.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["config_file_sha256"], value["config_canonical_sha256"] = value["config_canonical_sha256"], value["config_file_sha256"]
+        path.write_bytes(canonical_json_bytes(value))
+        _repack_process(process)
+    elif mutation == "prepared_bool_size":
+        path = process / "handoff_prepared.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["config_size_bytes"] = True
+        path.write_bytes(canonical_json_bytes(value))
+        _repack_process(process)
+    else:
+        layer, field = mutation.split("_", 1)
+        filename = {
+            "prepared": "handoff_prepared.json",
+            "receipt": "handoff_receipt.json",
+            "invocation": "process_invocation.json",
+            "completion": "process_completion.json",
+        }[layer]
+        path = process / filename
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if field == "canonical":
+            value["config_canonical_sha256"] = "0" * 64
+        elif field == "smoke_id":
+            value["smoke_id"] = SMOKE_V2_ID
+        elif field == "relative":
+            value["config_relative_path"] = V2_CONFIG.relative_to(ROOT).as_posix()
+        path.write_bytes(canonical_json_bytes(value))
+        if layer != "completion":
+            _repack_process(process)
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], process) == "TERMINAL_FAILED"
+
+
+def test_process_expected_identity_requires_pane_config_fields(tmp_path, monkeypatch):
+    args = _complete_v3_chain(tmp_path, monkeypatch)
+    process = args["process_evidence_dir"]
+    pane_receipt = json.loads((args["outer_evidence_dir"] / "pane/pane_receipt.json").read_text(encoding="utf-8"))
+    pane_receipt.pop("config_canonical_sha256")
+    with pytest.raises(OuterLaunchError):
+        validate_process_evidence(process, pane_receipt)
 
 
 @pytest.mark.parametrize("version,wrong_version", [(2, 3), (3, 2)])

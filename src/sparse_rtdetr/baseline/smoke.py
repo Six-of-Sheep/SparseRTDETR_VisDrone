@@ -692,6 +692,11 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _strict_sha256(value: Any, field: str) -> None:
+    if type(value) is not str or len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise SmokeContractError(f"{field} must be a lowercase SHA-256 string")
+
+
 def validate_real_smoke_environment() -> dict[str, Any]:
     if os.environ.get(SMOKE_AUTH_ENV) != "1":
         raise SmokeContractError(f"{SMOKE_AUTH_ENV}=1 is required")
@@ -722,23 +727,32 @@ def run_authorized_smoke(
 ) -> dict[str, Any]:
     """Run the future real one-batch smoke entrypoint under its exact gates."""
 
+    if not isinstance(handoff_receipt, dict):
+        raise SmokeContractError("real smoke handoff receipt is invalid")
+    _strict_sha256(handoff_receipt_sha256, "real smoke handoff receipt SHA")
     config = load_smoke_config(repo_root, config_path)
     spec = get_smoke_runtime_spec(config["smoke_id"])
     if spec.allow_outer_launch:
         if config_path is None:
             raise SmokeContractError("versioned outer smoke requires an explicit config path")
         bound_config_path = Path(config_path).resolve()
-        if handoff_receipt.get("config_path") != str(bound_config_path):
-            raise SmokeContractError("versioned handoff config path binding mismatch")
-        if type(handoff_receipt.get("config_size_bytes")) is not int or handoff_receipt["config_size_bytes"] != bound_config_path.stat().st_size:
-            raise SmokeContractError("versioned handoff config size mismatch")
-        if handoff_receipt.get("config_file_sha256") != _sha256_file(bound_config_path):
-            raise SmokeContractError("versioned handoff config SHA mismatch")
-    paths = resolve_runtime_paths(repo_root, data_root, "train_core")
-    if not isinstance(handoff_receipt, dict) or type(handoff_receipt.get("child_pid")) is not int or type(handoff_receipt.get("child_ppid")) is not int:
+        canonical_sha = hashlib.sha256(canonical_json_bytes(config)).hexdigest()
+        expected_receipt = {
+            "smoke_id": config["smoke_id"],
+            "config_relative_path": spec.config_relative_path,
+            "config_path": str(bound_config_path),
+            "config_size_bytes": bound_config_path.stat().st_size,
+            "config_file_sha256": _sha256_file(bound_config_path),
+            "config_canonical_sha256": canonical_sha,
+        }
+        for field, expected in expected_receipt.items():
+            if handoff_receipt.get(field) != expected:
+                raise SmokeContractError(f"versioned handoff {field} binding mismatch")
+        _strict_sha256(handoff_receipt.get("config_file_sha256"), "versioned handoff config_file_sha256")
+        _strict_sha256(handoff_receipt.get("config_canonical_sha256"), "versioned handoff config_canonical_sha256")
+    if type(handoff_receipt.get("child_pid")) is not int or type(handoff_receipt.get("child_ppid")) is not int:
         raise SmokeContractError("real smoke handoff receipt is invalid")
-    if type(handoff_receipt_sha256) is not str or len(handoff_receipt_sha256) != 64:
-        raise SmokeContractError("real smoke handoff receipt SHA is invalid")
+    paths = resolve_runtime_paths(repo_root, data_root, "train_core")
     if output_dir.exists() or output_dir.is_symlink():
         raise SmokeContractError("real smoke output directory already exists")
     evidence = SmokeEvidence(output_dir)

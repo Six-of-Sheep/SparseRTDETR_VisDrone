@@ -1770,13 +1770,14 @@ def validate_process_evidence(process_dir: Path, expected_identity: dict[str, An
     _strict_file(exit_path)
     if exit_path.read_bytes() != b"0\n":
         raise OuterLaunchError("process exit code bytes are not exactly zero")
-    for field in ("nonce", "smoke_id", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256", "runtime_data_root"):
+    config_fields = ("smoke_id", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256", "config_canonical_sha256")
+    for field in ("nonce", *config_fields, "runtime_data_root"):
         if field not in completion:
             raise OuterLaunchError(f"process completion field missing: {field}")
     _strict_nonce(completion.get("nonce"), "process completion nonce")
     _strict_int(completion.get("config_size_bytes"), "process completion config_size_bytes", 1)
-    if expected_identity is not None and completion.get("nonce") != expected_identity.get("nonce"):
-        raise OuterLaunchError("process nonce does not bind pane")
+    for field in ("config_file_sha256", "config_canonical_sha256"):
+        _strict_sha(completion.get(field), f"process completion {field}")
     prepared = _read_json_object(process / "handoff_prepared.json")
     receipt = _read_json_object(process / "handoff_receipt.json")
     invocation = _read_json_object(process / "process_invocation.json")
@@ -1803,14 +1804,57 @@ def validate_process_evidence(process_dir: Path, expected_identity: dict[str, An
     expected_process_exit_ref = {"present": True, "relative_path": "process_exit_code.txt", "size_bytes": 2, "sha256": sha256_file(exit_path)}
     if process_exit_ref != expected_process_exit_ref:
         raise OuterLaunchError("process exit reference mismatch")
-    for field in ("nonce", "runtime_data_root", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256"):
-        if invocation.get(field) != completion.get(field):
-            raise OuterLaunchError(f"process invocation binding mismatch: {field}")
-    for field in ("runtime_data_root", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256"):
-        if receipt.get(field) != completion.get(field):
-            raise OuterLaunchError(f"process receipt binding mismatch: {field}")
+    for name, value in (("prepared", prepared), ("receipt", receipt), ("invocation", invocation)):
+        for field in config_fields:
+            if field not in value:
+                raise OuterLaunchError(f"process {name} config field missing: {field}")
+        if name != "prepared" and value.get("nonce") != completion.get("nonce"):
+            raise OuterLaunchError(f"process {name} nonce binding mismatch")
+        for field in config_fields:
+            if value.get(field) != completion.get(field):
+                raise OuterLaunchError(f"process {name} config binding mismatch: {field}")
+    for field in ("runtime_data_root", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256", "config_canonical_sha256"):
+        if prepared.get(field) != completion.get(field):
+            raise OuterLaunchError(f"prepared handoff binding mismatch: {field}")
     if prepared.get("runtime_data_root") != completion.get("runtime_data_root") or prepared.get("output_dir") != invocation.get("output_dir") or prepared.get("process_evidence_dir") != invocation.get("process_evidence_dir"):
         raise OuterLaunchError("prepared handoff path binding mismatch")
+    try:
+        spec = get_smoke_runtime_spec(completion["smoke_id"])
+    except Exception as exc:
+        raise OuterLaunchError("process smoke identity is unknown") from exc
+    if not spec.allow_outer_launch or completion["config_relative_path"] != spec.config_relative_path:
+        raise OuterLaunchError("process config identity is not bound to the runtime spec")
+    repo_root = Path(invocation.get("repo_root", ""))
+    if not repo_root.is_absolute():
+        raise OuterLaunchError("process repository binding is invalid")
+    config = Path(completion["config_path"])
+    if config != repo_root.resolve() / spec.config_relative_path:
+        raise OuterLaunchError("process config path is not bound to the runtime spec")
+    _strict_file(config)
+    try:
+        loaded_config = load_smoke_config(repo_root, config)
+    except Exception as exc:
+        raise OuterLaunchError("process config cannot be revalidated") from exc
+    if loaded_config.get("smoke_id") != completion["smoke_id"]:
+        raise OuterLaunchError("process config smoke identity mismatch")
+    if completion["config_size_bytes"] != config.stat().st_size or completion["config_file_sha256"] != sha256_file(config):
+        raise OuterLaunchError("process source config file binding mismatch")
+    if completion["config_canonical_sha256"] != sha256_bytes(canonical_json_bytes(loaded_config)):
+        raise OuterLaunchError("process canonical config binding mismatch")
+    if expected_identity is not None:
+        expected_config_path = expected_identity.get("config_path", expected_identity.get("config_absolute_path"))
+        expected_fields = {
+            "nonce": expected_identity.get("nonce"),
+            "smoke_id": expected_identity.get("smoke_id"),
+            "config_relative_path": expected_identity.get("config_relative_path"),
+            "config_path": expected_config_path,
+            "config_size_bytes": expected_identity.get("config_size_bytes"),
+            "config_file_sha256": expected_identity.get("config_file_sha256"),
+            "config_canonical_sha256": expected_identity.get("config_canonical_sha256"),
+        }
+        for field, expected in expected_fields.items():
+            if expected is None or completion.get(field) != expected:
+                raise OuterLaunchError(f"process expected identity mismatch: {field}")
     entry = completion.get("entry")
     if not isinstance(entry, dict) or entry.get("entry_success_accepted") is not True:
         raise OuterLaunchError("process entry acceptance is not proven")
@@ -1866,7 +1910,18 @@ def classify_outer_evidence(outer_evidence_dir: Path, output_dir: Path, process_
     try:
         process_value = validate_process_evidence(Path(process_evidence_dir), pane_value["receipt"])
         receipt = process_value["receipt"]
-        expected = {"nonce": receipt.get("nonce"), "launcher_pid": receipt.get("launcher_pid"), "child_pid": receipt.get("child_pid"), "child_ppid": receipt.get("child_ppid"), "child_argv_sha256": receipt.get("child_argv_sha256"), "handoff_receipt_sha256": sha256_file(Path(process_evidence_dir) / "handoff_receipt.json"), "handoff_receipt_relative_path": "handoff_receipt.json"}
+        expected = {
+            "nonce": receipt.get("nonce"),
+            "launcher_pid": receipt.get("launcher_pid"),
+            "child_pid": receipt.get("child_pid"),
+            "child_ppid": receipt.get("child_ppid"),
+            "child_argv_sha256": receipt.get("child_argv_sha256"),
+            "handoff_receipt_sha256": sha256_file(Path(process_evidence_dir) / "handoff_receipt.json"),
+            "handoff_receipt_relative_path": "handoff_receipt.json",
+            "smoke_id": receipt.get("smoke_id"),
+            "config_relative_path": receipt.get("config_relative_path"),
+            "config_canonical_sha256": receipt.get("config_canonical_sha256"),
+        }
         validate_entry_evidence(Path(output_dir), expected)
     except (OSError, OuterLaunchError, SmokeEvidenceError, ValueError):
         return "TERMINAL_FAILED"

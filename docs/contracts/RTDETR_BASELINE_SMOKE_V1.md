@@ -75,6 +75,17 @@ qualification fields, including strict integer counters and complete
 inference-only flags. Failure evidence preserves the original exception and
 partial inventories.
 
+For outer-enabled versioned smokes, source configuration identity and portable
+entry identity are separate bindings. The handoff, receipt, process invocation,
+and process completion records carry the source config relative path, absolute
+path, source file size, source file SHA-256, canonical JSON SHA-256, and
+`smoke_id`. The portable entry `config.json` is canonical JSON; its actual size
+and SHA-256 are recorded in the entry invocation and completion records. The
+entry SHA-256 must equal the source canonical JSON SHA-256, while the source
+file SHA-256 and source file size may differ from the portable entry file's
+values. All four nonportable process layers must agree field-for-field before
+the launcher accepts the portable entry.
+
 Tensor logical SHA-256 values describe the particular smoke invocation. They are
 diagnostic evidence for that run, not cross-GPU acceptance thresholds.
 

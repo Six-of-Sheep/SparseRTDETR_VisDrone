@@ -74,6 +74,17 @@ identity, and pane evidence Python identity. Validation rebuilds both products
 and compares their canonical bytes; inventory and self-reported hashes are not
 trusted expected values.
 
+The V2 and V3 outer paths use the same configuration evidence binding. The
+source config's relative path, absolute path, source size, source file SHA-256,
+canonical JSON SHA-256, and `smoke_id` are copied into the prepared handoff,
+receipt, process invocation, and process completion records and are checked
+against the selected runtime spec. The entry's portable `config.json` has its
+own actual size and file SHA-256; its SHA-256 is required to equal the source
+canonical JSON SHA-256, not the source file SHA-256. The classifier passes the
+validated smoke ID, relative path, and canonical SHA to entry validation, so a
+valid V2 or V3 entry follows one real-entry contract and any cross-version or
+cross-layer drift is terminally rejected.
+
 An executable identity has exactly `canonical_path`, `size_bytes`, `sha256`,
 `mode`, `regular_file`, and `executable`. The canonical target is a regular,
 executable file. A final Conda Python symlink may resolve to that target, while

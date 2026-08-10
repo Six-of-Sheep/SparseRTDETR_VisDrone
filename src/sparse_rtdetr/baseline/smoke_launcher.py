@@ -340,6 +340,9 @@ def _validate_handoff_receipt(
     if receipt["config_size_bytes"] != config_path.stat().st_size or receipt["config_file_sha256"] != sha256_file(config_path):
         raise SmokeLauncherError("handoff receipt config file binding mismatch")
     loaded_config = load_smoke_config(Path(invocation["repo_root"]), config_path)
+    spec = get_smoke_runtime_spec(loaded_config.get("smoke_id"))
+    if receipt["smoke_id"] != loaded_config["smoke_id"] or receipt["config_relative_path"] != spec.config_relative_path:
+        raise SmokeLauncherError("handoff receipt config identity mismatch")
     if receipt["config_canonical_sha256"] != sha256_bytes(canonical_json_bytes(loaded_config)):
         raise SmokeLauncherError("handoff receipt canonical config SHA mismatch")
     receipt_sha256 = sha256_file(receipt_path)
@@ -470,6 +473,9 @@ def _finalize_process(
         "child_argv_sha256": invocation["child_argv_sha256"],
         "handoff_receipt_sha256": handoff_receipt_sha256,
         "handoff_receipt_relative_path": HANDOFF_RECEIPT_NAME,
+        "smoke_id": handoff_receipt["smoke_id"],
+        "config_relative_path": handoff_receipt["config_relative_path"],
+        "config_canonical_sha256": handoff_receipt["config_canonical_sha256"],
     }
     if output_dir.is_dir():
         entry = _entry_summary(output_dir, expected_identity=expected_identity)
