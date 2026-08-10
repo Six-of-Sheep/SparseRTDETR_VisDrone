@@ -39,6 +39,7 @@ return never certifies a pane, inner launcher, entry, or scientific result.
 validates outer, pane, process, and entry layers. It can report
 `OUTER_PREPARED`, `PREFLIGHT_FAILED`, `TMUX_REJECTED`,
 `TMUX_ACCEPTED_PANE_NOT_STARTED`, `PANE_STARTED_NOT_TERMINAL`,
+`PANE_FINALIZATION_FAILED`,
 `INNER_STARTED_PROCESS_EVIDENCE_ABSENT`, `INNER_PROCESS_EVIDENCE_PRESENT`,
 `ENTRY_PRESENT`, `TERMINAL_COMPLETE`, `TERMINAL_FAILED`, or `UNKNOWN`.
 Contradictory or incomplete evidence is `UNKNOWN`; the classifier never fills
@@ -63,6 +64,47 @@ return code, and the original exception. A timeout never retries tmux or
 claims that a pane or child started. Outer and pane finalization failures keep
 the original exception in a separate secondary record and never synthesize a
 successful terminal state.
+
+## Pane integrity
+
+The pane plan and wrapper are deterministic products of the frozen V2 config
+bytes and canonical SHA, repository/data/output/process/outer paths, the fixed
+Smoke ID and tmux session, nonce, creation timestamp, inner argv, child Python
+identity, and pane evidence Python identity. Validation rebuilds both products
+and compares their canonical bytes; inventory and self-reported hashes are not
+trusted expected values.
+
+An executable identity has exactly `canonical_path`, `size_bytes`, `sha256`,
+`mode`, `regular_file`, and `executable`. The canonical target is a regular,
+executable file. A final Conda Python symlink may resolve to that target, while
+symlinked parent components and canonical escapes are rejected. The bound
+`PANE_EVIDENCE_PYTHON` value is exactly the finalizer identity's canonical path.
+
+Pane start, receipt, completion, and failure evidence bind the positive pane
+shell PID (`$$`). `PANE_FAILED` requires an exact `pane_error.json` schema with
+`failure_class` equal to `PREINNER_BINDING_FAILURE`, `INNER_NONZERO_EXIT`, or
+`PANE_FINALIZATION_FAILURE`; its console reference is checked against the
+current console bytes. A completed pane must have no error file.
+
+`pane_timing.json` has exactly `schema_version`, `started_at_utc`,
+`finished_at_utc`, `elapsed_seconds`, `inner_started`, `inner_returncode`, and
+`signal_name`. Timestamps require an explicit `Z` or `+00:00` UTC offset,
+finished time cannot precede start/consume, and elapsed time must equal the UTC
+delta within `1e-6` seconds. Booleans, NaN, infinity, negative values, and
+unknown fields are rejected.
+
+Before the exclusive consume lock, the wrapper checks every runtime evidence
+path. A pre-existing receipt, console, start, exit, timing, error, inventory,
+completion, secondary, or finalizer-exit file causes status 73 without any
+write, truncation, deletion, or inner invocation.
+
+If finalization cannot complete, the original start marker, console, exit bytes,
+and inner state remain available and an exclusive
+`pane_secondary_finalization_failure.json` is written. Its
+`finalizer_executable_identity` records the executable bound by the plan and
+its `original_inner_returncode` is never replaced by the finalizer return code.
+No `PANE_COMPLETED` record is created; classification reports
+`PANE_FINALIZATION_FAILED`.
 
 Outer and process evidence are nonportable and may contain absolute runtime
 paths. Entry evidence remains portable and contains no host data root, repo

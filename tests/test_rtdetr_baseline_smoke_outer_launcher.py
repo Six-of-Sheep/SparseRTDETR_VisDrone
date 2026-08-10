@@ -18,6 +18,7 @@ from sparse_rtdetr.baseline.smoke_outer_launcher import (
     OUTER_EXCLUDED,
     PANE_EXCLUDED,
     OuterLaunchError,
+    executable_identity,
     _finish_outer,
     _run_tmux,
     classify_outer_evidence,
@@ -412,3 +413,224 @@ def test_outer_secondary_finalization_preserves_original_exception(tmp_path):
     value = json.loads(secondary.read_text(encoding="utf-8"))
     assert value["original_exception_type"] == "ValueError"
     assert value["original_exception_message"] == "inventory sentinel"
+
+
+def test_inner_failures_write_strict_pane_error_and_bind_console(tmp_path):
+    for child_rc in (1, 99):
+        args, _child_count, _tmux_count = _repo(tmp_path / str(child_rc), child_rc=child_rc)
+        run_outer_launch(**args)
+        pane = args["outer_evidence_dir"] / "pane"
+        value = validate_pane_evidence(pane)
+        error = json.loads((pane / "pane_error.json").read_text(encoding="utf-8"))
+        assert value["completion"]["status"] == "PANE_FAILED"
+        assert error["status"] == "PANE_FAILED"
+        assert error["failure_class"] == "INNER_NONZERO_EXIT"
+        assert error["message"] == "inner command exited with a nonzero return code."
+        assert error["console"] == _ref(pane, "pane_console.log")
+        assert type(error["inner_returncode"]) is int
+        assert error["inner_returncode"] == child_rc
+        assert error["pane_pid"] == value["receipt"]["pane_pid"]
+
+
+def test_pane_failed_requires_present_error_and_completed_forbids_it(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, child_rc=99)
+    run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    error_path = pane / "pane_error.json"
+    completion_path = pane / "pane_completion.json"
+    error = json.loads(error_path.read_text(encoding="utf-8"))
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    error_path.unlink()
+    completion["error"] = {"present": False, "relative_path": "pane_error.json"}
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    _repack_pane(pane)
+    with pytest.raises(OuterLaunchError):
+        validate_pane_evidence(pane)
+
+    error_path.write_bytes(canonical_json_bytes(error))
+    completion["status"] = "PANE_COMPLETED"
+    completion["inner_started"] = True
+    completion["inner_returncode"] = 0
+    (pane / "pane_exit_code.txt").write_bytes(b"0\n")
+    completion["error"] = _ref(pane, "pane_error.json")
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    _repack_pane(pane)
+    with pytest.raises(OuterLaunchError):
+        validate_pane_evidence(pane)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda value: {**value, "elapsed_seconds": -1.0},
+        lambda value: {**value, "elapsed_seconds": True},
+        lambda value: {**value, "elapsed_seconds": float("nan")},
+        lambda value: {**value, "elapsed_seconds": float("inf")},
+        lambda value: {**value, "finished_at_utc": "2020-01-01T00:00:00+00:00"},
+        lambda value: {**value, "started_at_utc": "2020-01-01T00:00:00"},
+        lambda value: {**value, "extra": True},
+    ],
+)
+def test_pane_timing_semantics_are_strict(tmp_path, mutation):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    timing_path = pane / "pane_timing.json"
+    timing = json.loads(timing_path.read_text(encoding="utf-8"))
+    timing_path.write_bytes(canonical_json_bytes(mutation(timing)))
+    _repack_pane(pane)
+    with pytest.raises(OuterLaunchError):
+        validate_pane_evidence(pane)
+
+
+@pytest.mark.parametrize("filename", ["pane_start.json", "pane_receipt.json", "pane_completion.json"])
+def test_pane_pid_binding_rejects_each_layer_drift(tmp_path, filename):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    path = pane / filename
+    value = json.loads(path.read_text(encoding="utf-8"))
+    value["pane_pid"] += 1
+    path.write_bytes(canonical_json_bytes(value))
+    _repack_pane(pane)
+    with pytest.raises(OuterLaunchError):
+        validate_pane_evidence(pane)
+
+
+def test_executable_identity_rechecks_bytes_mode_and_canonical_path(tmp_path):
+    executable = _script(tmp_path / "python", "exit 0")
+    identity = executable_identity(executable)
+    assert identity["canonical_path"] == str(executable)
+    assert identity["regular_file"] is True
+    assert identity["executable"] is True
+    executable.write_text("#!/bin/sh\nexit 99\n", encoding="ascii")
+    executable.chmod(0o755)
+    assert executable_identity(executable)["sha256"] != identity["sha256"]
+    executable.chmod(0o644)
+    with pytest.raises(OuterLaunchError):
+        executable_identity(executable)
+
+
+def test_child_and_finalizer_identity_drift_is_rejected_after_inventory_repack(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    root = args["outer_evidence_dir"]
+    invocation_path = root / "launcher/outer_invocation.json"
+    invocation = json.loads(invocation_path.read_text(encoding="utf-8"))
+    invocation["environment"]["PANE_EVIDENCE_PYTHON"] = "/tmp/other-python"
+    invocation_path.write_bytes(canonical_json_bytes(invocation))
+    _repack_outer(root)
+    with pytest.raises(OuterLaunchError):
+        validate_outer_evidence(root, args["output_dir"], args["process_evidence_dir"])
+
+
+def test_plan_and_wrapper_rebuild_reject_repacked_semantic_drift(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    root = args["outer_evidence_dir"]
+    pane = root / "pane"
+    plan_path = pane / "pane_plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["inner_argv"] = [*plan["inner_argv"], "--forged"]
+    plan["inner_argv_sha256"] = sha256_bytes(canonical_json_bytes(plan["inner_argv"]))
+    plan_path.write_bytes(canonical_json_bytes(plan))
+    wrapper = pane / "pane_wrapper.sh"
+    wrapper.write_bytes(wrapper.read_bytes() + b"\n# forged\n")
+    _repack_pane(pane)
+    _repack_outer(root)
+    with pytest.raises(OuterLaunchError):
+        validate_outer_evidence(root, args["output_dir"], args["process_evidence_dir"])
+
+
+def test_preexisting_runtime_evidence_is_not_overwritten_or_consumed(tmp_path):
+    args, child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    before = b"preexisting receipt\n"
+    receipt = pane / "pane_receipt.json"
+    receipt.write_bytes(before)
+    replay = subprocess.run([str(pane / "pane_wrapper.sh")], cwd=args["repo_root"], capture_output=True, check=False)
+    assert replay.returncode == 73
+    assert receipt.read_bytes() == before
+    assert child_count.read_text(encoding="ascii").splitlines() == ["child"]
+
+
+def test_finalizer_internal_failure_keeps_original_exit_and_secondary_evidence(tmp_path):
+    from sparse_rtdetr.baseline import smoke_outer_launcher as launcher
+
+    args, child_count, _tmux_count = _repo(tmp_path, child_rc=99)
+    finalizer = _script(tmp_path / "synthetic-finalizer", f'exec {launcher.sys.executable} -c "raise RuntimeError(\\"synthetic finalizer failure\\")"')
+    with mock.patch.object(launcher.sys, "executable", str(finalizer)):
+        run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    secondary = json.loads((pane / "pane_secondary_finalization_failure.json").read_text(encoding="utf-8"))
+    assert (pane / "pane_exit_code.txt").read_bytes() == b"99\n"
+    assert (pane / "pane_error.json").is_file()
+    assert secondary["status"] == "FAILED_FINALIZATION"
+    assert secondary["failure_class"] == "PANE_FINALIZATION_FAILURE"
+    assert secondary["original_inner_returncode"] == 99
+    assert not (pane / "pane_completion.json").exists()
+    assert child_count.read_text(encoding="ascii").splitlines() == ["child"]
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "PANE_FINALIZATION_FAILED"
+
+
+def test_missing_finalizer_executable_keeps_original_exit_and_secondary_evidence(tmp_path):
+    from sparse_rtdetr.baseline import smoke_outer_launcher as launcher
+
+    args, child_count, _tmux_count = _repo(tmp_path, child_rc=99)
+    finalizer = _script(tmp_path / "synthetic-finalizer", "exit 0")
+    tmux = args["tmux_executable"]
+    tmux.write_text(
+        "#!/bin/sh\n"
+        f"echo tmux >> {tmp_path / 'tmux-missing.count'}\n"
+        f"mv {finalizer} {finalizer}.missing\n"
+        '"$7"\n'
+        "exit 0\n",
+        encoding="ascii",
+    )
+    tmux.chmod(0o755)
+    with mock.patch.object(launcher.sys, "executable", str(finalizer)):
+        run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    secondary = json.loads((pane / "pane_secondary_finalization_failure.json").read_text(encoding="utf-8"))
+    assert secondary["finalizer_returncode"] == 127
+    assert secondary["original_inner_returncode"] == 99
+    assert (pane / "pane_error.json").is_file()
+    assert (pane / "pane_exit_code.txt").read_bytes() == b"99\n"
+    assert not (pane / "pane_completion.json").exists()
+    assert child_count.read_text(encoding="ascii").splitlines() == ["child"]
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "PANE_FINALIZATION_FAILED"
+
+
+def test_preinner_binding_failure_and_finalizer_failure_are_both_durable(tmp_path):
+    from sparse_rtdetr.baseline import smoke_outer_launcher as launcher
+
+    args, child_count, _tmux_count = _repo(tmp_path, child_rc=99)
+    finalizer = _script(tmp_path / "synthetic-finalizer", f'exec {launcher.sys.executable} -c "raise RuntimeError(\\"synthetic finalizer failure\\")"')
+    tmux = args["tmux_executable"]
+    tmux.write_text(
+        "#!/bin/sh\n"
+        'PANE_DIR=$(dirname "$7")\n'
+        'PLAN_MODE=$(stat -c %a "$PANE_DIR/pane_plan.json")\n'
+        'chmod 000 "$PANE_DIR/pane_plan.json"\n'
+        '"$7"\n'
+        'RC=$?\n'
+        'chmod "$PLAN_MODE" "$PANE_DIR/pane_plan.json"\n'
+        "exit 0\n",
+        encoding="ascii",
+    )
+    tmux.chmod(0o755)
+    with mock.patch.object(launcher.sys, "executable", str(finalizer)):
+        run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    error = json.loads((pane / "pane_error.json").read_text(encoding="utf-8"))
+    secondary = json.loads((pane / "pane_secondary_finalization_failure.json").read_text(encoding="utf-8"))
+    assert error["failure_class"] == "PREINNER_BINDING_FAILURE"
+    assert error["inner_started"] is False
+    assert error["inner_returncode"] == 125
+    assert secondary["original_inner_returncode"] == 125
+    assert secondary["inner_started"] is False
+    assert (pane / "pane_exit_code.txt").read_bytes() == b"125\n"
+    assert not (pane / "pane_completion.json").exists()
+    assert not child_count.exists()
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "PANE_FINALIZATION_FAILED"
