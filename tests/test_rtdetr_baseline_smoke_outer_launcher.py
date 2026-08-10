@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -12,8 +13,10 @@ from unittest import mock
 import pytest
 
 from sparse_rtdetr.baseline.smoke import load_smoke_config
-from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, sha256_bytes
+from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, inventory, sha256_bytes, sha256_file
 from sparse_rtdetr.baseline.smoke_outer_launcher import (
+    OUTER_EXCLUDED,
+    PANE_EXCLUDED,
     OuterLaunchError,
     _finish_outer,
     _run_tmux,
@@ -83,6 +86,36 @@ def _digests(root: Path) -> dict[str, str]:
     }
 
 
+def _ref(root: Path, name: str) -> dict[str, object]:
+    path = root / name
+    return {"present": True, "relative_path": name, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)}
+
+
+def _repack_pane(pane: Path) -> None:
+    inventory_path = pane / "pane_inventory.json"
+    inventory_path.write_bytes(canonical_json_bytes(inventory(pane, PANE_EXCLUDED)))
+    completion_path = pane / "pane_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["pane_inventory"] = _ref(pane, "pane_inventory.json")
+    completion_path.write_bytes(canonical_json_bytes(completion))
+
+
+def _repack_outer(root: Path) -> None:
+    launcher = root / "launcher"
+    outer_inventory = launcher / "outer_inventory.json"
+    outer_partial = launcher / "outer_partial_inventory.json"
+    value = inventory(launcher, OUTER_EXCLUDED)
+    payload = canonical_json_bytes(value)
+    outer_inventory.write_bytes(payload)
+    outer_partial.write_bytes(payload)
+    completion_path = launcher / "outer_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["invocation"] = _ref(launcher, "outer_invocation.json")
+    completion["outer_inventory"] = _ref(launcher, "outer_inventory.json")
+    completion["outer_partial_inventory"] = _ref(launcher, "outer_partial_inventory.json")
+    completion_path.write_bytes(canonical_json_bytes(completion))
+
+
 def test_v1_config_is_preserved_and_scientific_contract_matches_v2():
     assert hashlib.sha256(V1_CONFIG.read_bytes()).hexdigest() == "76562afe145a7ec1049497176da6a91f6513eb4244a737335c1c12ea7c5f55d2"
     v1 = load_smoke_config(ROOT, V1_CONFIG)
@@ -101,6 +134,114 @@ def test_contract_check_is_data_free_and_does_not_create_outer_evidence(tmp_path
     assert result["status"] == "PASS"
     assert result["tmux_called"] is False
     assert not args["outer_evidence_dir"].exists()
+
+
+@pytest.mark.parametrize("status", ["COMPLETED", "FAILED", "SUCCESS", "", None, True, 1, "PANE_FAILED"])
+def test_pane_completion_status_is_strict_after_inventory_repack(tmp_path, status):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    completion_path = pane / "pane_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["status"] = status
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    _repack_pane(pane)
+    with pytest.raises(OuterLaunchError):
+        validate_pane_evidence(pane)
+
+
+def test_pane_failed_status_requires_failure_evidence(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, child_rc=99)
+    run_outer_launch(**args)
+    pane = args["outer_evidence_dir"] / "pane"
+    completion_path = pane / "pane_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    assert completion["status"] == "PANE_FAILED"
+    completion["inner_returncode"] = 0
+    (pane / "pane_exit_code.txt").write_bytes(b"0\n")
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    _repack_pane(pane)
+    with pytest.raises(OuterLaunchError):
+        validate_pane_evidence(pane)
+
+
+def _signal_event() -> dict[str, object]:
+    return {
+        "signal_number": signal.SIGHUP,
+        "signal_name": "SIGHUP",
+        "received_at_utc": "2026-08-10T12:00:00+00:00",
+        "forwarded_to_tmux_client": True,
+        "forwarding_result": "forwarded",
+    }
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda event, runner: {},
+    lambda event, runner: {key: value for key, value in event.items() if key != "signal_number"},
+    lambda event, runner: {key: value for key, value in event.items() if key != "signal_name"},
+    lambda event, runner: {key: value for key, value in event.items() if key != "received_at_utc"},
+    lambda event, runner: {key: value for key, value in event.items() if key != "forwarded_to_tmux_client"},
+    lambda event, runner: {key: value for key, value in event.items() if key != "forwarding_result"},
+    lambda event, runner: {**event, "extra": True},
+    lambda event, runner: {**event, "signal_number": True},
+    lambda event, runner: {**event, "signal_number": signal.SIGKILL},
+    lambda event, runner: {**event, "signal_name": "SIGTERM"},
+    lambda event, runner: {**event, "received_at_utc": "bad"},
+    lambda event, runner: {**event, "received_at_utc": "2026-08-10T12:00:00"},
+    lambda event, runner: {**event, "received_at_utc": "2026-08-10T12:00:00+01:00"},
+    lambda event, runner: {**event, "forwarded_to_tmux_client": "true"},
+    lambda event, runner: {**event, "forwarding_result": "failed:Nope"},
+    lambda event, runner: {**event, "forwarded_to_tmux_client": False, "forwarding_result": "forwarded"},
+    lambda event, runner: {**event, "forwarded_to_tmux_client": False, "forwarding_result": "free text"},
+    lambda event, runner: event,
+])
+def test_outer_signal_event_mutations_are_rejected_after_inventory_repack(tmp_path, mutation):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    root = args["outer_evidence_dir"]
+    completion_path = root / "launcher/outer_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    event = _signal_event()
+    runner = completion["runner"]
+    runner["signal_events"] = [mutation(dict(event), runner)]
+    runner["observed_signal_count"] = 1
+    if mutation(event, runner) == event:
+        runner["observed_signal_count"] = True
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    _repack_outer(root)
+    with pytest.raises(OuterLaunchError):
+        validate_outer_evidence(root)
+
+
+def test_outer_signal_event_timestamp_order_is_rejected_after_repack(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    root = args["outer_evidence_dir"]
+    completion_path = root / "launcher/outer_completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    first = _signal_event()
+    second = dict(first)
+    second["received_at_utc"] = "2026-08-10T11:59:59+00:00"
+    completion["runner"]["signal_events"] = [first, second]
+    completion["runner"]["observed_signal_count"] = 2
+    completion_path.write_bytes(canonical_json_bytes(completion))
+    _repack_outer(root)
+    with pytest.raises(OuterLaunchError):
+        validate_outer_evidence(root)
+
+
+@pytest.mark.parametrize("field", ["repo_root", "data_root", "config_path", "output_dir", "process_evidence_dir", "outer_evidence_dir", "child_python", "tmux_executable", "tmux_session"])
+def test_outer_invocation_path_and_identity_drift_is_rejected_after_repack(tmp_path, field):
+    args, _child_count, _tmux_count = _repo(tmp_path)
+    run_outer_launch(**args)
+    root = args["outer_evidence_dir"]
+    invocation_path = root / "launcher/outer_invocation.json"
+    invocation = json.loads(invocation_path.read_text(encoding="utf-8"))
+    invocation[field] = "other" if field == "tmux_session" else "/tmp/forged-" + field
+    invocation_path.write_bytes(canonical_json_bytes(invocation))
+    _repack_outer(root)
+    with pytest.raises(OuterLaunchError):
+        validate_outer_evidence(root, args["output_dir"], args["process_evidence_dir"])
 
 
 def test_exact_session_rejects_all_variants_before_fake_tmux(tmp_path):

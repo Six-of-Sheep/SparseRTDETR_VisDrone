@@ -44,6 +44,19 @@ validates outer, pane, process, and entry layers. It can report
 Contradictory or incomplete evidence is `UNKNOWN`; the classifier never fills
 missing files or infers an execution stage from an exit code alone.
 
+Pane completion is a closed state machine: only `PANE_COMPLETED` and
+`PANE_FAILED` are valid. `PANE_COMPLETED` requires a started inner command,
+zero integer exit bytes, no error reference, and consistent timing and
+inventory evidence. `PANE_FAILED` requires non-success evidence.
+
+Outer signal events have a fixed schema with monitored signal number/name,
+UTC timestamp, forwarding boolean, and constrained forwarding result. Events
+are timestamp ordered and their count is bound to the strict integer counter.
+The outer invocation is also a fixed schema. Its repository, data, config,
+output, process, outer, Python, tmux, environment, plan, and wrapper
+identities are cross-checked against the V2 configuration and all available
+outer/pane evidence before any terminal classification.
+
 The outer client records installed signal handlers for HUP, TERM, INT, and
 QUIT, observed events, forwarding results, timeout, TERM/KILL escalation,
 return code, and the original exception. A timeout never retries tmux or

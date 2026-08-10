@@ -15,7 +15,7 @@ import signal
 import stat
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +66,10 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _NONCE_RE = re.compile(r"^[0-9a-f]{32}$")
 _MONITORED_SIGNALS = tuple(value for value in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT, signal.SIGQUIT) if value is not None)
 _MONITORED_SIGNAL_NAMES = ["SIGHUP", "SIGTERM", "SIGINT", "SIGQUIT"]
+_PLAN_KEYS = {"schema_version", "state", "single_use", "nonce", "smoke_id", "repo_root", "data_root", "output_dir", "process_evidence_dir", "outer_evidence_dir", "config_binding", "child_python", "inner_argv", "inner_argv_sha256", "tmux_session", "created_at_utc", "nonportable"}
+_INVOCATION_KEYS = {"schema_version", "mode", "status", "nonportable", "created_at_utc", "smoke_id", "repo_root", "data_root", "config_path", "output_dir", "process_evidence_dir", "outer_evidence_dir", "child_python", "tmux_executable", "tmux_session", "environment"}
+_SIGNAL_EVENT_KEYS = {"signal_number", "signal_name", "received_at_utc", "forwarded_to_tmux_client", "forwarding_result"}
+_FORWARD_FAILURE_RE = re.compile(r"^failed:[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _utc_now() -> str:
@@ -85,6 +89,115 @@ def _strict_nonce(value: Any, field: str = "nonce") -> None:
 def _strict_int(value: Any, field: str, minimum: int | None = None) -> None:
     if type(value) is not int or (minimum is not None and value < minimum):
         raise OuterLaunchError(f"{field} must be an integer")
+
+
+def _parse_utc(value: Any, field: str) -> datetime:
+    if type(value) is not str or not value:
+        raise OuterLaunchError(f"{field} must be a non-empty UTC ISO-8601 string")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise OuterLaunchError(f"{field} is not valid ISO-8601") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise OuterLaunchError(f"{field} must contain a UTC timezone")
+    return parsed
+
+
+def _validate_signal_events(runner: dict[str, Any], status: str) -> None:
+    handlers = runner.get("signal_handlers_installed")
+    if type(handlers) is not bool:
+        raise OuterLaunchError("signal_handlers_installed must be a bool")
+    events = runner.get("signal_events")
+    if not isinstance(events, list):
+        raise OuterLaunchError("signal_events must be a list")
+    count = runner.get("observed_signal_count")
+    if type(count) is not int or count < 0 or count != len(events):
+        raise OuterLaunchError("observed_signal_count does not bind signal_events")
+    if runner.get("monitored_signals") != _MONITORED_SIGNAL_NAMES:
+        raise OuterLaunchError("monitored_signals drift")
+    if status == "PREFLIGHT_FAILED" and not handlers:
+        if events or count != 0:
+            raise OuterLaunchError("uninstalled preflight runner contains signal events")
+    elif not handlers:
+        raise OuterLaunchError("tmux runner signal handlers were not installed")
+    previous_time: datetime | None = None
+    for event in events:
+        if not isinstance(event, dict) or set(event) != _SIGNAL_EVENT_KEYS:
+            raise OuterLaunchError("signal event schema is invalid")
+        number = event.get("signal_number")
+        if type(number) is not int or number not in _MONITORED_SIGNALS:
+            raise OuterLaunchError("signal event number is invalid")
+        if event.get("signal_name") != signal.Signals(number).name or type(event.get("signal_name")) is not str:
+            raise OuterLaunchError("signal event name is invalid")
+        timestamp = _parse_utc(event.get("received_at_utc"), "signal event received_at_utc")
+        if previous_time is not None and timestamp < previous_time:
+            raise OuterLaunchError("signal event timestamps are not non-decreasing")
+        previous_time = timestamp
+        forwarded = event.get("forwarded_to_tmux_client")
+        if type(forwarded) is not bool:
+            raise OuterLaunchError("signal event forwarded flag is invalid")
+        forwarding_result = event.get("forwarding_result")
+        if type(forwarding_result) is not str or not forwarding_result:
+            raise OuterLaunchError("signal event forwarding result is invalid")
+        if forwarded and forwarding_result != "forwarded":
+            raise OuterLaunchError("forwarded signal event result is invalid")
+        if not forwarded and forwarding_result != "not_running" and _FORWARD_FAILURE_RE.fullmatch(forwarding_result) is None:
+            raise OuterLaunchError("non-forwarded signal event result is invalid")
+    for field in ("timeout_triggered", "term_sent", "kill_sent"):
+        if type(runner.get(field)) is not bool:
+            raise OuterLaunchError(f"{field} must be a bool")
+    original = runner.get("original_exception")
+    if original is not None:
+        if not isinstance(original, dict) or set(original) != {"type", "message"} or type(original.get("type")) is not str or not original["type"] or type(original.get("message")) is not str:
+            raise OuterLaunchError("original_exception schema is invalid")
+
+
+def _validate_outer_invocation(invocation: dict[str, Any], root: Path) -> None:
+    if set(invocation) != _INVOCATION_KEYS:
+        raise OuterLaunchError("outer invocation schema fields are invalid")
+    if invocation.get("schema_version") != 1 or invocation.get("mode") != "outer_launch" or invocation.get("status") != "OUTER_PREPARED" or invocation.get("nonportable") is not True or invocation.get("smoke_id") != SMOKE_V2_ID:
+        raise OuterLaunchError("outer invocation identity is invalid")
+    if invocation.get("outer_evidence_dir") != str(root):
+        raise OuterLaunchError("outer invocation root binding is invalid")
+    for field in ("created_at_utc", "repo_root", "data_root", "config_path", "output_dir", "process_evidence_dir", "outer_evidence_dir", "child_python", "tmux_executable"):
+        if type(invocation.get(field)) is not str or not invocation[field]:
+            raise OuterLaunchError(f"outer invocation string field is invalid: {field}")
+    _parse_utc(invocation["created_at_utc"], "outer invocation created_at_utc")
+    environment = invocation.get("environment")
+    if not isinstance(environment, dict) or set(environment) != {"CUDA_VISIBLE_DEVICES", "PYTHONDONTWRITEBYTECODE", "PYTHONNOUSERSITE", "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "PYTHONPATH", "P3_SMOKE_TMUX_SESSION", "PANE_EVIDENCE_PYTHON"}:
+        raise OuterLaunchError("outer invocation environment schema is invalid")
+    expected_environment = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED": "1",
+        "PYTHONPATH": str(Path(invocation["repo_root"]) / "src"),
+        "P3_SMOKE_TMUX_SESSION": SMOKE_V2_TMUX_SESSION,
+    }
+    for field, expected in expected_environment.items():
+        if type(environment.get(field)) is not str or environment[field] != expected:
+            raise OuterLaunchError(f"outer invocation environment drift: {field}")
+    if type(environment.get("PANE_EVIDENCE_PYTHON")) is not str or not environment["PANE_EVIDENCE_PYTHON"]:
+        raise OuterLaunchError("outer invocation evidence Python is invalid")
+
+
+def _validate_pane_plan_identity(pane: Path) -> tuple[dict[str, Any], str, str]:
+    plan_path = pane / "pane_plan.json"
+    wrapper_path = pane / PANE_WRAPPER
+    plan = _read_json_object(plan_path)
+    if plan is None or set(plan) != _PLAN_KEYS or plan.get("schema_version") != 1 or plan.get("state") != "PREPARED" or plan.get("single_use") is not True:
+        raise OuterLaunchError("pane plan schema is invalid")
+    _strict_nonce(plan.get("nonce"))
+    _validate_exact_session(plan.get("tmux_session"))
+    if plan.get("smoke_id") != SMOKE_V2_ID or plan.get("nonportable") is not True or plan.get("inner_argv_sha256") != argv_sha256(plan.get("inner_argv")):
+        raise OuterLaunchError("pane plan identity or argv binding is invalid")
+    config_binding = plan.get("config_binding")
+    if not isinstance(config_binding, dict) or config_binding.get("config_relative_path") != SMOKE_V2_CONFIG_RELATIVE:
+        raise OuterLaunchError("pane plan config binding is invalid")
+    _strict_sha(config_binding.get("config_file_sha256"), "pane plan config_file_sha256")
+    _strict_sha(config_binding.get("config_canonical_sha256"), "pane plan config_canonical_sha256")
+    _strict_file(wrapper_path, executable=True)
+    return plan, sha256_file(plan_path), sha256_file(wrapper_path)
 
 
 def _validate_path_components(path: Path, *, final_kind: str, allow_missing_final: bool = False) -> None:
@@ -741,6 +854,7 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
     invocation = _read_json_object(launcher / "outer_invocation.json")
     if completion is None or invocation is None or completion.get("schema_version") != 1 or invocation.get("schema_version") != 1 or invocation.get("smoke_id") != SMOKE_V2_ID:
         raise OuterLaunchError("outer invocation/completion schema is invalid")
+    _validate_outer_invocation(invocation, root)
     _verify_ref(launcher, completion.get("invocation"), "outer_invocation.json")
     status = completion.get("status")
     if status not in {"PREFLIGHT_FAILED", "TMUX_REJECTED", "TMUX_ACCEPTED", "INTERRUPTED_WITH_EVIDENCE", "FINALIZATION_FAILED"}:
@@ -748,9 +862,7 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
     runner = completion.get("runner")
     if not isinstance(runner, dict):
         raise OuterLaunchError("outer runner evidence is missing")
-    handlers_ok = runner.get("signal_handlers_installed") is True or (status == "PREFLIGHT_FAILED" and runner.get("signal_handlers_installed") is False)
-    if not isinstance(runner.get("signal_events"), list) or not handlers_ok or runner.get("monitored_signals") != _MONITORED_SIGNAL_NAMES or type(runner.get("observed_signal_count")) is not int or runner["observed_signal_count"] != len(runner.get("signal_events", [])):
-        raise OuterLaunchError("outer runner evidence is incomplete")
+    _validate_signal_events(runner, status)
     if completion.get("tmux_returncode") != runner.get("actual_returncode"):
         raise OuterLaunchError("outer return code binding mismatch")
     if completion.get("tmux_session") != invocation.get("tmux_session"):
@@ -770,6 +882,41 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
         tmux_invocation = _read_json_object(launcher / "tmux_invocation.json")
         if preflight is None or tmux_invocation is None:
             raise OuterLaunchError("outer launch binding files are invalid")
+        plan, plan_sha, wrapper_sha = _validate_pane_plan_identity(pane)
+        config_root = Path(invocation["repo_root"])
+        config_path = Path(invocation["config_path"])
+        _validate_path_components(config_root, final_kind="dir")
+        _validate_path_components(Path(invocation["data_root"]), final_kind="dir")
+        config, actual_binding = _bind_config(config_root, config_path)
+        if config_binding != actual_binding:
+            raise OuterLaunchError("outer config binding does not match config bytes")
+        if plan["config_binding"] != actual_binding:
+            raise OuterLaunchError("outer config binding does not match pane plan")
+        expected_runtime_paths = {
+            "output_dir": str(config_root / config["runtime"]["output_relative_path"]),
+            "process_evidence_dir": str(config_root / config["runtime"]["process_evidence_relative_path"]),
+            "outer_evidence_dir": str(config_root / config["runtime"]["outer_launch_evidence_relative_path"]),
+        }
+        for field, expected_path in expected_runtime_paths.items():
+            if invocation[field] != expected_path or plan[field] != expected_path:
+                raise OuterLaunchError(f"outer runtime path binding mismatch: {field}")
+        _validate_path_components(Path(expected_runtime_paths["output_dir"]).parent, final_kind="dir")
+        _validate_path_components(Path(expected_runtime_paths["process_evidence_dir"]).parent, final_kind="dir")
+        if output_dir is not None and str(output_dir) != expected_runtime_paths["output_dir"]:
+            raise OuterLaunchError("expected output path binding mismatch")
+        if process_evidence_dir is not None and str(process_evidence_dir) != expected_runtime_paths["process_evidence_dir"]:
+            raise OuterLaunchError("expected process path binding mismatch")
+        if invocation["repo_root"] != plan["repo_root"] or invocation["data_root"] != plan["data_root"] or invocation["outer_evidence_dir"] != str(root) or plan["outer_evidence_dir"] != str(root):
+            raise OuterLaunchError("outer repo/data/root binding mismatch")
+        if invocation["child_python"] != plan["child_python"] or plan["inner_argv"][0] != plan["child_python"]:
+            raise OuterLaunchError("outer child Python binding mismatch")
+        _strict_file(Path(plan["child_python"]), executable=True)
+        if invocation["config_path"] != actual_binding["config_path"] or plan["config_binding"] != actual_binding:
+            raise OuterLaunchError("outer config path binding mismatch")
+        if preflight.get("pane_plan_sha256") != plan_sha or preflight.get("wrapper_sha256") != wrapper_sha:
+            raise OuterLaunchError("preflight does not bind actual pane files")
+        if preflight.get("pane_plan_relative_path") != "../pane/pane_plan.json" or preflight.get("wrapper_relative_path") != "../pane/pane_wrapper.sh":
+            raise OuterLaunchError("preflight pane paths are invalid")
         for value, field in ((preflight.get("nonce"), "preflight nonce"), (tmux_invocation.get("nonce"), "tmux invocation nonce")):
             _strict_nonce(value, field)
             if value != completion["nonce"]:
@@ -780,8 +927,16 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
         _validate_timeout(tmux_invocation.get("timeout_seconds"))
         if tmux_invocation.get("argv_sha256") != argv_sha256(tmux_invocation.get("argv")):
             raise OuterLaunchError("tmux argv SHA mismatch")
-        if preflight.get("pane_plan_sha256") != tmux_invocation.get("pane_plan_sha256") or preflight.get("wrapper_sha256") != tmux_invocation.get("wrapper_sha256"):
+        if preflight.get("pane_plan_sha256") != tmux_invocation.get("pane_plan_sha256") or preflight.get("wrapper_sha256") != tmux_invocation.get("wrapper_sha256") or tmux_invocation.get("pane_plan_sha256") != plan_sha or tmux_invocation.get("wrapper_sha256") != wrapper_sha:
             raise OuterLaunchError("outer plan/wrapper binding mismatch")
+        tmux_path = Path(invocation["tmux_executable"])
+        _strict_file(tmux_path, executable=True)
+        tmux_identity = {"path": str(tmux_path), "size_bytes": tmux_path.stat().st_size, "sha256": sha256_file(tmux_path), "mode": stat.S_IMODE(tmux_path.stat().st_mode)}
+        if invocation["tmux_executable"] != tmux_invocation.get("argv", [None])[0] or tmux_invocation.get("tmux_executable_identity") != tmux_identity or preflight.get("tmux_executable_identity") != tmux_identity:
+            raise OuterLaunchError("tmux executable identity binding mismatch")
+        expected_tmux_argv = [str(tmux_path), "new-session", "-d", "-s", invocation["tmux_session"], "-c", invocation["repo_root"], str(pane / PANE_WRAPPER)]
+        if tmux_invocation.get("argv") != expected_tmux_argv or tmux_invocation.get("argv_sha256") != argv_sha256(expected_tmux_argv):
+            raise OuterLaunchError("tmux invocation argv binding mismatch")
     _verify_ref(launcher, completion.get("outer_timing"), "outer_timing.json")
     _verify_ref(launcher, completion.get("outer_partial_inventory"), OUTER_PARTIAL_INVENTORY)
     if status != "FINALIZATION_FAILED":
@@ -911,6 +1066,8 @@ def validate_pane_evidence(pane_dir: Path, expected_outer: dict[str, Any] | None
     required_completion = {"schema_version", "status", "inner_started", "inner_returncode", "inner_argv_sha256", "plan_sha256", "nonce", "tmux_session", "pane_receipt", "consume_lock", "pane_inventory", "pane_timing", "error"}
     if completion is None or set(completion) != required_completion or completion.get("schema_version") != 1:
         raise OuterLaunchError("pane completion schema is invalid")
+    if type(completion.get("status")) is not str or completion["status"] not in {"PANE_COMPLETED", "PANE_FAILED"}:
+        raise OuterLaunchError("pane completion status is invalid")
     if completion.get("inner_argv_sha256") != plan["inner_argv_sha256"] or completion.get("plan_sha256") != plan_sha or completion.get("nonce") != plan["nonce"] or completion.get("tmux_session") != plan["tmux_session"]:
         raise OuterLaunchError("pane completion binding mismatch")
     if type(completion.get("inner_started")) is not bool or type(completion.get("inner_returncode")) is not int:
@@ -928,8 +1085,17 @@ def validate_pane_evidence(pane_dir: Path, expected_outer: dict[str, Any] | None
     _verify_ref(pane, completion.get("consume_lock"), PANE_LOCK)
     _verify_ref(pane, completion.get("pane_inventory"), PANE_INVENTORY)
     _verify_ref(pane, completion.get("pane_timing"), PANE_TIMING)
-    if completion.get("error") != _file_ref_strict(pane, PANE_ERROR):
+    error_ref = completion.get("error")
+    if error_ref != _file_ref_strict(pane, PANE_ERROR):
         raise OuterLaunchError("pane completion error binding mismatch")
+    error_present = error_ref.get("present") is True
+    inner_started = completion["inner_started"]
+    inner_returncode = completion["inner_returncode"]
+    if completion["status"] == "PANE_COMPLETED":
+        if inner_started is not True or inner_returncode != 0 or (pane / PANE_EXIT).read_bytes() != b"0\n" or error_present:
+            raise OuterLaunchError("PANE_COMPLETED status semantics are invalid")
+    elif inner_started is True and inner_returncode == 0 and not error_present:
+        raise OuterLaunchError("PANE_FAILED status has no failure evidence")
     return {"plan": plan, "receipt": receipt, "completion": completion}
 
 
