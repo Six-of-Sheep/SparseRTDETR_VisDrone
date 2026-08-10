@@ -41,6 +41,7 @@ from sparse_rtdetr.baseline.smoke import (
     validate_real_smoke_environment,
 )
 from sparse_rtdetr.baseline.smoke_evidence import (
+    argv_sha256,
     canonical_json_bytes,
     SmokeEvidence,
     SmokeEvidenceError,
@@ -371,6 +372,7 @@ def test_v2_v3_scientific_fields_differ_only_by_versioned_runtime_identity():
 @pytest.mark.parametrize(
     ("config_path", "output_relative", "process_relative"),
     [
+        (V1_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
         (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
         (V3_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
     ],
@@ -391,7 +393,7 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     process = ROOT / process_relative
     assert not output.exists()
     assert not process.exists()
-    assert launcher.main([
+    smoke_argv = [
         "smoke",
         "--repo-root", str(ROOT),
         "--data-root", str(data_root),
@@ -399,11 +401,107 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
         "--process-evidence-dir", str(process),
         "--config", str(config_path),
         "--child-python", str(PYTHON),
-    ]) == 0
+    ]
+    assert launcher.main(smoke_argv) == 0
     assert captured["output"] == output
     assert captured["process"] == process
     assert captured["config_path"] == config_path.resolve()
-    assert captured["argv"][-1] == "--config" or str(config_path.resolve()) in captured["argv"]
+    assert "--config" in smoke_argv
+    assert "--config" not in captured["argv"]
+    parsed = launcher._parser().parse_args(captured["argv"][3:])
+    assert parsed.mode == "_child"
+    assert parsed.repo_root == ROOT
+    assert not output.exists()
+    assert not process.exists()
+
+
+def test_old_child_argv_with_config_remains_argparse_failure():
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    with pytest.raises(SystemExit) as raised:
+        launcher._parser().parse_args([
+            "_child",
+            "--repo-root", str(ROOT),
+            "--config", str(V3_CONFIG),
+        ])
+    assert raised.value.code == 2
+
+
+def test_real_child_argv_roundtrip_dispatches_from_v3_receipt(monkeypatch, tmp_path):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    captured = {}
+    monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"stub": True})
+
+    def fake_launch(child_argv, output_dir, process_dir, **kwargs):
+        captured.update({"argv": list(child_argv), "output": output_dir, "process": process_dir, "kwargs": kwargs})
+        return 0
+
+    monkeypatch.setattr(launcher, "launch_smoke", fake_launch)
+    data_root = _runtime_data_root(tmp_path)
+    output = ROOT / SMOKE_V3_OUTPUT_RELATIVE
+    process = ROOT / SMOKE_V3_PROCESS_RELATIVE
+    smoke_argv = [
+        "smoke",
+        "--repo-root", str(ROOT),
+        "--data-root", str(data_root),
+        "--output-dir", str(output),
+        "--process-evidence-dir", str(process),
+        "--config", str(V3_CONFIG),
+        "--child-python", str(PYTHON),
+    ]
+    assert launcher.main(smoke_argv) == 0
+    child_argv = captured["argv"]
+    assert "--config" not in child_argv
+    parsed = launcher._parser().parse_args(child_argv[3:])
+    assert parsed.mode == "_child"
+    assert parsed.repo_root == ROOT
+
+    receipt = {
+        "schema_version": 1,
+        "consumed": True,
+        "nonce": "a" * 32,
+        "launcher_pid": 1,
+        "child_pid": 2,
+        "child_ppid": 1,
+        "child_argv_sha256": "0" * 64,
+        "prepared_relative_path": "handoff_prepared.json",
+        "prepared_sha256": "1" * 64,
+        "output_dir": str(output),
+        "process_evidence_dir": str(process),
+        "runtime_data_root": str(data_root),
+        "smoke_id": SMOKE_V3_ID,
+        "config_relative_path": V3_CONFIG.relative_to(ROOT).as_posix(),
+        "config_path": str(V3_CONFIG),
+        "config_size_bytes": V3_CONFIG.stat().st_size,
+        "config_file_sha256": hashlib.sha256(V3_CONFIG.read_bytes()).hexdigest(),
+        "config_canonical_sha256": hashlib.sha256(canonical_json_bytes(json.loads(V3_CONFIG.read_text(encoding="utf-8")))).hexdigest(),
+        "consumed_at_utc": "2026-08-10T00:00:00+00:00",
+    }
+    consume_calls = []
+    entry_calls = []
+
+    def fake_consume(repo_root):
+        consume_calls.append(repo_root)
+        return receipt, "2" * 64
+
+    def fake_entry(repo_root, actual_data_root, actual_output, *, handoff_receipt, handoff_receipt_sha256, config_path=None):
+        entry_calls.append({
+            "repo_root": repo_root,
+            "data_root": actual_data_root,
+            "output": actual_output,
+            "config_path": config_path,
+            "receipt": handoff_receipt,
+        })
+        return {}
+
+    monkeypatch.setattr(launcher, "_consume_handoff", fake_consume)
+    monkeypatch.setattr(launcher, "run_authorized_smoke", fake_entry)
+    monkeypatch.setenv("P3_SMOKE_OUTPUT_DIR", str(output))
+    assert launcher.main(child_argv[3:]) == 0
+    assert consume_calls == [ROOT]
+    assert len(entry_calls) == 1
+    assert entry_calls[0]["config_path"] == V3_CONFIG
+    assert entry_calls[0]["data_root"] == data_root
+    assert entry_calls[0]["output"] == output
     assert not output.exists()
     assert not process.exists()
 
@@ -530,6 +628,7 @@ def test_launcher_rejects_entry_identity_drift(tmp_path, monkeypatch, mutation):
     {"child_argv_sha256": "0" * 64},
     {"output_dir": "/wrong/output"},
     {"process_evidence_dir": "/wrong/process"},
+    {"config_canonical_sha256": "0" * 64},
 ])
 def test_launcher_rejects_receipt_identity_drift(tmp_path, monkeypatch, mutation):
     monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
@@ -540,6 +639,37 @@ def test_launcher_rejects_receipt_identity_drift(tmp_path, monkeypatch, mutation
     output = tmp_path / "entry"
     process = tmp_path / "process"
     result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="9" * 32)
+    assert result == 2
+    assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"smoke_id": SMOKE_V2_ID},
+        {"config_relative_path": V2_CONFIG.relative_to(ROOT).as_posix()},
+        {"config_path": str(V2_CONFIG)},
+    ],
+)
+def test_v3_receipt_cannot_bind_v2_identity(tmp_path, monkeypatch, mutation):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "v3_receipt_cross_version_child.py"
+    _write_success_child(child, receipt_mutation=mutation)
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=_runtime_data_root(tmp_path),
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=_base_env(),
+        config_path=V3_CONFIG,
+        nonce="c" * 32,
+    )
     assert result == 2
     assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
 
