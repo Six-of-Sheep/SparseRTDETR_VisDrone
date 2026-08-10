@@ -18,7 +18,16 @@ torch = importlib.import_module("torch")
 
 from sparse_rtdetr.baseline.smoke import (
     FROZEN_IMAGE_RECORDS,
+    SMOKE_ID,
+    SMOKE_V2_ID,
+    SMOKE_V3_ID,
+    SMOKE_V3_CONFIG_RELATIVE,
+    SMOKE_V3_OUTPUT_RELATIVE,
+    SMOKE_V3_PROCESS_RELATIVE,
+    SMOKE_V3_OUTER_RELATIVE,
+    SMOKE_V3_TMUX_SESSION,
     SmokeContractError,
+    get_smoke_runtime_spec,
     SyntheticOneBatchLoader,
     SyntheticSmokeModel,
     SyntheticSmokePostProcessor,
@@ -42,13 +51,18 @@ from sparse_rtdetr.baseline.config import canonical_config_bytes
 from sparse_rtdetr.baseline.smoke_launcher import (
     SmokeLauncherError,
     _consume_handoff,
+    _config_binding,
     _validate_frozen_runtime_paths,
     launch_smoke,
+    main as launcher_main,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = Path(sys.executable).resolve()
+V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
+V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
+V3_CONFIG = ROOT / SMOKE_V3_CONFIG_RELATIVE
 
 
 def _base_env() -> dict[str, str]:
@@ -280,6 +294,161 @@ def test_real_smoke_environment_rejects_hidden_cuda(monkeypatch):
 def test_launcher_rejects_frozen_path_drift(tmp_path):
     with pytest.raises(SmokeLauncherError):
         _validate_frozen_runtime_paths(ROOT, tmp_path / "entry", tmp_path / "process")
+
+
+@pytest.mark.parametrize(
+    ("config_path", "output_relative", "process_relative"),
+    [
+        (V1_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
+        (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
+        (V3_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
+    ],
+)
+def test_versioned_runtime_registry_accepts_only_matching_inner_paths(config_path, output_relative, process_relative):
+    config = load_smoke_config(ROOT, config_path)
+    _validate_frozen_runtime_paths(
+        ROOT,
+        ROOT / output_relative,
+        ROOT / process_relative,
+        config=config,
+        config_path=config_path,
+    )
+
+
+@pytest.mark.parametrize(
+    ("config_path", "wrong_output", "wrong_process"),
+    [
+        (V1_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
+        (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
+        (V2_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
+        (V3_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
+        (V3_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
+    ],
+)
+def test_versioned_runtime_registry_rejects_cross_version_inner_paths(config_path, wrong_output, wrong_process):
+    config = load_smoke_config(ROOT, config_path)
+    with pytest.raises(SmokeLauncherError):
+        _validate_frozen_runtime_paths(
+            ROOT,
+            ROOT / wrong_output,
+            ROOT / wrong_process,
+            config=config,
+            config_path=config_path,
+        )
+
+
+def test_runtime_registry_is_explicit_and_unknown_ids_fail_closed():
+    assert tuple(get_smoke_runtime_spec(value).smoke_id for value in (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID)) == (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID)
+    with pytest.raises(SmokeContractError):
+        get_smoke_runtime_spec("rtdetrv2_r18_visdrone_baseline_smoke_v99")
+
+
+@pytest.mark.parametrize("config_path, forged_id", [(V2_CONFIG, SMOKE_V3_ID), (V3_CONFIG, SMOKE_V2_ID)])
+def test_config_identity_forgery_is_rejected(config_path, forged_id):
+    forged = json.loads(config_path.read_text(encoding="utf-8"))
+    forged["smoke_id"] = forged_id
+    with pytest.raises(SmokeContractError):
+        importlib.import_module("sparse_rtdetr.baseline.smoke").validate_smoke_config(forged)
+
+
+def test_v2_v3_scientific_fields_differ_only_by_versioned_runtime_identity():
+    v2 = json.loads(V2_CONFIG.read_text(encoding="utf-8"))
+    v3 = json.loads(V3_CONFIG.read_text(encoding="utf-8"))
+    assert v2["smoke_id"] != v3["smoke_id"]
+    allowed_runtime = {
+        "config_relative_path",
+        "output_relative_path",
+        "process_evidence_relative_path",
+        "outer_launch_evidence_relative_path",
+        "tmux_session_name",
+    }
+    assert {key for key in v2["runtime"] if v2["runtime"].get(key) != v3["runtime"].get(key)} == allowed_runtime
+    for field in ("execution", "model", "image_selection", "evidence", "mode", "split_role"):
+        assert v2[field] == v3[field]
+    assert v2["runtime"]["tmux_client_timeout_seconds"] == v3["runtime"]["tmux_client_timeout_seconds"] == 10
+
+
+@pytest.mark.parametrize(
+    ("config_path", "output_relative", "process_relative"),
+    [
+        (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
+        (V3_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
+    ],
+)
+def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifacts(monkeypatch, tmp_path, config_path, output_relative, process_relative):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    captured = {}
+    monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"cpu_fallback": False})
+
+    def fake_launch(child_argv, output_dir, process_dir, **kwargs):
+        captured.update({"argv": child_argv, "output": output_dir, "process": process_dir, **kwargs})
+        return 0
+
+    monkeypatch.setattr(launcher, "launch_smoke", fake_launch)
+    data_root = tmp_path / "synthetic-data"
+    data_root.mkdir()
+    output = ROOT / output_relative
+    process = ROOT / process_relative
+    assert not output.exists()
+    assert not process.exists()
+    assert launcher.main([
+        "smoke",
+        "--repo-root", str(ROOT),
+        "--data-root", str(data_root),
+        "--output-dir", str(output),
+        "--process-evidence-dir", str(process),
+        "--config", str(config_path),
+        "--child-python", str(PYTHON),
+    ]) == 0
+    assert captured["output"] == output
+    assert captured["process"] == process
+    assert captured["config_path"] == config_path.resolve()
+    assert captured["argv"][-1] == "--config" or str(config_path.resolve()) in captured["argv"]
+    assert not output.exists()
+    assert not process.exists()
+
+
+def test_v3_child_passes_receipt_config_and_ignores_environment_override(monkeypatch, tmp_path):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    data_root = _runtime_data_root(tmp_path)
+    output = tmp_path / "v3-entry"
+    process = tmp_path / "v3-process"
+    capture = tmp_path / "captured-config"
+    child = tmp_path / "v3-child.py"
+    child.write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "import sparse_rtdetr.baseline.smoke_launcher as launcher\n"
+        "def sentinel(repo_root, data_root, output_dir, *, handoff_receipt, handoff_receipt_sha256, config_path=None):\n"
+        "    Path(os.environ['P3_SMOKE_CAPTURE']).write_text(str(config_path), encoding='utf-8')\n"
+        "    return {}\n"
+        "launcher.run_authorized_smoke = sentinel\n"
+        "os.environ['P3_SMOKE_CONFIG_OVERRIDE'] = os.environ['P3_SMOKE_V2_CONFIG']\n"
+        "raise SystemExit(launcher.main(['_child', '--repo-root', os.environ['P3_SMOKE_REPO_ROOT']]))\n",
+        encoding="utf-8",
+    )
+    env = _base_env()
+    env.update({
+        "P3_SMOKE_CAPTURE": str(capture),
+        "P3_SMOKE_V2_CONFIG": str(V2_CONFIG),
+    })
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=data_root,
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=env,
+        config_path=V3_CONFIG,
+        nonce="b" * 32,
+    )
+    assert result == 2
+    assert capture.read_text(encoding="utf-8") == str(V3_CONFIG.resolve())
+    assert not output.exists()
 
 
 def test_synthetic_smoke_has_exact_one_batch_and_complete_evidence(tmp_path):

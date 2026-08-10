@@ -13,7 +13,7 @@ from unittest import mock
 
 import pytest
 
-from sparse_rtdetr.baseline.smoke import load_smoke_config
+from sparse_rtdetr.baseline.smoke import SMOKE_V3_ID, load_smoke_config
 from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, inventory, sha256_bytes, sha256_file
 from sparse_rtdetr.baseline.smoke_outer_launcher import (
     OUTER_EXCLUDED,
@@ -34,7 +34,9 @@ from sparse_rtdetr.baseline.smoke_outer_launcher import (
 ROOT = Path(__file__).resolve().parents[1]
 V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
+V3_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
+V3_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r3"
 
 
 def _script(path: Path, body: str) -> Path:
@@ -43,13 +45,15 @@ def _script(path: Path, body: str) -> Path:
     return path
 
 
-def _repo(tmp_path: Path, *, child_rc: int = 0) -> tuple[dict[str, Path | str], Path, Path]:
+def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[str, Path | str], Path, Path]:
     root = tmp_path / "repo"
     shutil.copytree(ROOT / "src", root / "src")
     (root / "configs/baseline").mkdir(parents=True)
     (root / "artifacts/data/visdrone_protocol_v2_conversion_r3").mkdir(parents=True)
-    shutil.copyfile(V2_CONFIG, root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json")
-    config = json.loads(V2_CONFIG.read_text(encoding="utf-8"))
+    config_source = V2_CONFIG if version == 2 else V3_CONFIG
+    config_name = config_source.name
+    shutil.copyfile(config_source, root / "configs/baseline" / config_name)
+    config = json.loads(config_source.read_text(encoding="utf-8"))
     (root / "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json").write_text(
         json.dumps({"records": config["image_selection"]["records"]}), encoding="utf-8"
     )
@@ -64,19 +68,20 @@ def _repo(tmp_path: Path, *, child_rc: int = 0) -> tuple[dict[str, Path | str], 
     child = _script(tmp_path / "child", f"echo child >> {child_count}\nexit {child_rc}")
     tmux_count = tmp_path / "tmux.count"
     tmux = _script(tmp_path / "fake-tmux", f"echo tmux >> {tmux_count}\n\"$7\"\nexit 0")
-    output = root / "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
-    process = root / "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"
-    outer = outer_parent / "rtdetrv2_r18_visdrone_baseline_smoke_r2"
+    suffix = "r2" if version == 2 else "r3"
+    output = root / f"artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
+    process = root / f"artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
+    outer = outer_parent / f"rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     args: dict[str, Path | str] = {
         "repo_root": root,
         "data_root": data,
-        "config_path": root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json",
+        "config_path": root / "configs/baseline" / config_name,
         "output_dir": output,
         "process_evidence_dir": process,
         "outer_evidence_dir": outer,
         "child_python": child,
         "tmux_executable": tmux,
-        "tmux_session": SESSION,
+        "tmux_session": SESSION if version == 2 else V3_SESSION,
     }
     return args, child_count, tmux_count
 
@@ -137,6 +142,32 @@ def test_contract_check_is_data_free_and_does_not_create_outer_evidence(tmp_path
     assert result["status"] == "PASS"
     assert result["tmux_called"] is False
     assert not args["outer_evidence_dir"].exists()
+
+
+def test_v3_outer_synthetic_full_path_uses_only_v3_identity(tmp_path):
+    args, _child_count, tmux_count = _repo(tmp_path, version=3)
+    result = run_outer_launch(**args)
+    assert result["status"] == "TMUX_ACCEPTED"
+    assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
+    outer = validate_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    assert outer["invocation"]["smoke_id"] == SMOKE_V3_ID
+    assert outer["invocation"]["tmux_session"] == V3_SESSION
+    assert outer["invocation"]["output_dir"] == str(args["output_dir"])
+    assert outer["invocation"]["process_evidence_dir"] == str(args["process_evidence_dir"])
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "INNER_STARTED_PROCESS_EVIDENCE_ABSENT"
+
+
+@pytest.mark.parametrize("version,wrong_version", [(2, 3), (3, 2)])
+def test_outer_cross_version_paths_fail_before_fake_tmux(tmp_path, version, wrong_version):
+    args, _child_count, tmux_count = _repo(tmp_path, version=version)
+    root = args["repo_root"]
+    wrong_suffix = f"r{wrong_version}"
+    args["output_dir"] = root / f"artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_{wrong_suffix}"
+    args["process_evidence_dir"] = root / f"artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_{wrong_suffix}"
+    args["outer_evidence_dir"] = root / f"artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_{wrong_suffix}"
+    result = run_outer_launch(**args)
+    assert result["status"] == "PREFLIGHT_FAILED"
+    assert not tmux_count.exists()
 
 
 @pytest.mark.parametrize("status", ["COMPLETED", "FAILED", "SUCCESS", "", None, True, 1, "PANE_FAILED"])

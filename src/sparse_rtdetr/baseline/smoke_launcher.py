@@ -18,12 +18,9 @@ from .smoke import (
     SMOKE_AUTH_ENV,
     SMOKE_CONFIG_RELATIVE,
     SMOKE_NONCE_ENV,
-    SMOKE_PROCESS_RELATIVE,
-    SMOKE_V2_CONFIG_RELATIVE,
-    SMOKE_V2_ID,
-    SMOKE_OUTPUT_RELATIVE,
     SmokeContractError,
     contract_check,
+    get_smoke_runtime_spec,
     load_smoke_config,
     run_authorized_smoke,
     validate_real_smoke_environment,
@@ -87,7 +84,7 @@ def _config_binding(repo_root: Path, config_path: Path | None) -> tuple[dict[str
     resolved = requested.resolve()
     config = load_smoke_config(root, resolved)
     relative = resolved.relative_to(root).as_posix()
-    expected_relative = SMOKE_V2_CONFIG_RELATIVE if config["smoke_id"] == SMOKE_V2_ID else SMOKE_CONFIG_RELATIVE
+    expected_relative = get_smoke_runtime_spec(config["smoke_id"]).config_relative_path
     if relative != expected_relative:
         raise SmokeLauncherError("smoke config relative path is not bound to its identity")
     binding = {
@@ -116,9 +113,30 @@ def _canonical_runtime_data_root(data_root: Path) -> Path:
     return canonical
 
 
-def _validate_frozen_runtime_paths(repo_root: Path, output_dir: Path, process_evidence_dir: Path) -> None:
-    expected_output = repo_root.resolve() / SMOKE_OUTPUT_RELATIVE
-    expected_process = repo_root.resolve() / SMOKE_PROCESS_RELATIVE
+def _validate_frozen_runtime_paths(
+    repo_root: Path,
+    output_dir: Path,
+    process_evidence_dir: Path,
+    *,
+    config: dict[str, Any] | None = None,
+    config_path: Path | None = None,
+) -> None:
+    """Validate paths against the already-bound versioned config identity."""
+
+    root = repo_root.resolve()
+    if config is None:
+        config = load_smoke_config(root, config_path)
+    try:
+        spec = get_smoke_runtime_spec(config["smoke_id"])
+    except (KeyError, SmokeContractError) as exc:
+        raise SmokeLauncherError("smoke runtime identity is unknown") from exc
+    if config_path is None:
+        config_path = root / spec.config_relative_path
+    resolved_config = Path(config_path).resolve()
+    if resolved_config != root / spec.config_relative_path:
+        raise SmokeLauncherError("smoke config path drift from the frozen identity")
+    expected_output = root / spec.output_relative_path
+    expected_process = root / spec.process_relative_path
     if output_dir.resolve() != expected_output or process_evidence_dir.resolve() != expected_process:
         raise SmokeLauncherError("smoke output/evidence paths drift from the frozen contract")
 
@@ -644,7 +662,8 @@ def main(argv: list[str] | None = None) -> int:
                 "handoff_receipt": handoff_receipt,
                 "handoff_receipt_sha256": handoff_receipt_sha256,
             }
-            if handoff_receipt.get("smoke_id") == "rtdetrv2_r18_visdrone_baseline_smoke_v2":
+            spec = get_smoke_runtime_spec(handoff_receipt.get("smoke_id"))
+            if spec.allow_outer_launch:
                 child_kwargs["config_path"] = Path(handoff_receipt["config_path"])
             run_authorized_smoke(
                 args.repo_root,
@@ -658,7 +677,13 @@ def main(argv: list[str] | None = None) -> int:
         _config, config_path, _binding = _config_binding(repo_root, args.config)
         if args.data_root is None or any(part.casefold() == "test" for part in args.data_root.parts):
             raise SmokeLauncherError("real smoke data root is invalid")
-        _validate_frozen_runtime_paths(repo_root, args.output_dir, args.process_evidence_dir)
+        _validate_frozen_runtime_paths(
+            repo_root,
+            args.output_dir,
+            args.process_evidence_dir,
+            config=_config,
+            config_path=config_path,
+        )
         child_argv = [
             str(args.child_python), "-m", "sparse_rtdetr.baseline.smoke_launcher", "_child",
             "--repo-root", str(repo_root),

@@ -94,6 +94,7 @@ BASELINE_FILES = {
     "src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json",
+    "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json",
     "docs/contracts/RTDETR_BASELINE_SMOKE_V1.md",
     "docs/contracts/RTDETR_BASELINE_SMOKE_OUTER_LAUNCH_V2.md",
     "tests/test_rtdetr_baseline_smoke_outer_launcher.py",

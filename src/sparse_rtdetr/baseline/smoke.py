@@ -9,6 +9,7 @@ import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Iterable
 
 from .artifacts import resolve_runtime_image_path, resolve_runtime_paths, verify_r3_binding
@@ -29,8 +30,10 @@ class SmokeContractError(BaselineContractError):
 SMOKE_SCHEMA_VERSION = 1
 SMOKE_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v1"
 SMOKE_V2_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v2"
+SMOKE_V3_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v3"
 SMOKE_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 SMOKE_V2_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
+SMOKE_V3_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 SMOKE_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_V2_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
@@ -38,8 +41,93 @@ SMOKE_V2_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_ba
 SMOKE_V2_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"
 SMOKE_V2_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
 SMOKE_V2_TMUX_TIMEOUT_SECONDS = 10
+SMOKE_V3_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r3"
+SMOKE_V3_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r3"
+SMOKE_V3_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r3"
+SMOKE_V3_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r3"
+SMOKE_V3_TMUX_TIMEOUT_SECONDS = 10
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
+
+
+@dataclass(frozen=True)
+class SmokeRuntimeSpec:
+    """Immutable runtime identity for one versioned smoke contract."""
+
+    smoke_id: str
+    config_relative_path: str
+    output_relative_path: str
+    process_relative_path: str
+    outer_relative_path: str | None
+    tmux_session: str | None
+    tmux_timeout_seconds: int | None
+    allow_outer_launch: bool
+
+
+SMOKE_RUNTIME_SPECS = MappingProxyType({
+    SMOKE_ID: SmokeRuntimeSpec(
+        smoke_id=SMOKE_ID,
+        config_relative_path=SMOKE_CONFIG_RELATIVE,
+        output_relative_path=SMOKE_OUTPUT_RELATIVE,
+        process_relative_path=SMOKE_PROCESS_RELATIVE,
+        outer_relative_path=None,
+        tmux_session=None,
+        tmux_timeout_seconds=None,
+        allow_outer_launch=False,
+    ),
+    SMOKE_V2_ID: SmokeRuntimeSpec(
+        smoke_id=SMOKE_V2_ID,
+        config_relative_path=SMOKE_V2_CONFIG_RELATIVE,
+        output_relative_path=SMOKE_V2_OUTPUT_RELATIVE,
+        process_relative_path=SMOKE_V2_PROCESS_RELATIVE,
+        outer_relative_path=SMOKE_V2_OUTER_RELATIVE,
+        tmux_session=SMOKE_V2_TMUX_SESSION,
+        tmux_timeout_seconds=SMOKE_V2_TMUX_TIMEOUT_SECONDS,
+        allow_outer_launch=True,
+    ),
+    SMOKE_V3_ID: SmokeRuntimeSpec(
+        smoke_id=SMOKE_V3_ID,
+        config_relative_path=SMOKE_V3_CONFIG_RELATIVE,
+        output_relative_path=SMOKE_V3_OUTPUT_RELATIVE,
+        process_relative_path=SMOKE_V3_PROCESS_RELATIVE,
+        outer_relative_path=SMOKE_V3_OUTER_RELATIVE,
+        tmux_session=SMOKE_V3_TMUX_SESSION,
+        tmux_timeout_seconds=SMOKE_V3_TMUX_TIMEOUT_SECONDS,
+        allow_outer_launch=True,
+    ),
+})
+
+
+def get_smoke_runtime_spec(smoke_id: Any) -> SmokeRuntimeSpec:
+    """Return exactly one frozen runtime spec, rejecting unknown identities."""
+
+    if type(smoke_id) is not str:
+        raise SmokeContractError("smoke_id must be a string")
+    try:
+        return SMOKE_RUNTIME_SPECS[smoke_id]
+    except KeyError as exc:
+        raise SmokeContractError("unknown smoke_id") from exc
+
+
+def _runtime_schema(spec: SmokeRuntimeSpec) -> dict[str, Any]:
+    runtime = {
+        "authorized_env": "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED=1",
+        "visible_devices": "0",
+        "device_count": 1,
+        "cpu_fallback": False,
+        "output_relative_path": spec.output_relative_path,
+        "process_evidence_relative_path": spec.process_relative_path,
+    }
+    if spec.allow_outer_launch:
+        if spec.outer_relative_path is None or spec.tmux_session is None or spec.tmux_timeout_seconds is None:
+            raise SmokeContractError("outer-enabled runtime spec is incomplete")
+        runtime.update({
+            "config_relative_path": spec.config_relative_path,
+            "outer_launch_evidence_relative_path": spec.outer_relative_path,
+            "tmux_session_name": spec.tmux_session,
+            "tmux_client_timeout_seconds": spec.tmux_timeout_seconds,
+        })
+    return runtime
 
 FROZEN_IMAGE_RECORDS = (
     {
@@ -151,8 +239,9 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
     if set(config) != expected_top:
         raise SmokeContractError("smoke config top-level schema drift")
     smoke_id = config.get("smoke_id")
-    if config["schema_version"] != SMOKE_SCHEMA_VERSION or smoke_id not in {SMOKE_ID, SMOKE_V2_ID}:
+    if config["schema_version"] != SMOKE_SCHEMA_VERSION:
         raise SmokeContractError("smoke config identity drift")
+    spec = get_smoke_runtime_spec(smoke_id)
     if config["mode"] != "smoke" or config["split_role"] != "train_core":
         raise SmokeContractError("smoke mode or split role drift")
     execution = config["execution"]
@@ -191,23 +280,7 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
     }:
         raise SmokeContractError("smoke image selection contract drift")
     runtime = config["runtime"]
-    runtime_expected = {
-        "authorized_env": "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED=1",
-        "visible_devices": "0",
-        "device_count": 1,
-        "cpu_fallback": False,
-        "output_relative_path": SMOKE_OUTPUT_RELATIVE if smoke_id == SMOKE_ID else SMOKE_V2_OUTPUT_RELATIVE,
-        "process_evidence_relative_path": SMOKE_PROCESS_RELATIVE if smoke_id == SMOKE_ID else SMOKE_V2_PROCESS_RELATIVE,
-    }
-    if smoke_id == SMOKE_V2_ID:
-        runtime_expected.update({
-            "config_relative_path": SMOKE_V2_CONFIG_RELATIVE,
-            "outer_launch_evidence_relative_path": SMOKE_V2_OUTER_RELATIVE,
-            "tmux_session_name": SMOKE_V2_TMUX_SESSION,
-            "tmux_client_timeout_seconds": SMOKE_V2_TMUX_TIMEOUT_SECONDS,
-        })
-    if smoke_id == SMOKE_V2_ID and (type(runtime_expected["tmux_client_timeout_seconds"]) is not int or runtime_expected["tmux_client_timeout_seconds"] <= 0):
-        raise SmokeContractError("smoke tmux timeout contract is invalid")
+    runtime_expected = _runtime_schema(spec)
     if runtime != runtime_expected:
         raise SmokeContractError("smoke runtime contract drift")
     _strict_int(runtime["device_count"], "runtime.device_count", 1)
@@ -238,8 +311,8 @@ def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = No
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise SmokeContractError("smoke config is invalid") from exc
     validate_smoke_config(config)
-    expected_relative = SMOKE_CONFIG_RELATIVE if config["smoke_id"] == SMOKE_ID else SMOKE_V2_CONFIG_RELATIVE
-    if path != root / expected_relative:
+    spec = get_smoke_runtime_spec(config["smoke_id"])
+    if path != root / spec.config_relative_path:
         raise SmokeContractError("smoke config path is not bound to its config identity")
     selected = load_frozen_image_selection(repo_root)
     if list(selected) != config["image_selection"]["records"]:
@@ -650,16 +723,17 @@ def run_authorized_smoke(
     """Run the future real one-batch smoke entrypoint under its exact gates."""
 
     config = load_smoke_config(repo_root, config_path)
-    if config["smoke_id"] == SMOKE_V2_ID:
+    spec = get_smoke_runtime_spec(config["smoke_id"])
+    if spec.allow_outer_launch:
         if config_path is None:
-            raise SmokeContractError("R2 smoke requires an explicit config path")
+            raise SmokeContractError("versioned outer smoke requires an explicit config path")
         bound_config_path = Path(config_path).resolve()
         if handoff_receipt.get("config_path") != str(bound_config_path):
-            raise SmokeContractError("R2 handoff config path binding mismatch")
+            raise SmokeContractError("versioned handoff config path binding mismatch")
         if type(handoff_receipt.get("config_size_bytes")) is not int or handoff_receipt["config_size_bytes"] != bound_config_path.stat().st_size:
-            raise SmokeContractError("R2 handoff config size mismatch")
+            raise SmokeContractError("versioned handoff config size mismatch")
         if handoff_receipt.get("config_file_sha256") != _sha256_file(bound_config_path):
-            raise SmokeContractError("R2 handoff config SHA mismatch")
+            raise SmokeContractError("versioned handoff config SHA mismatch")
     paths = resolve_runtime_paths(repo_root, data_root, "train_core")
     if not isinstance(handoff_receipt, dict) or type(handoff_receipt.get("child_pid")) is not int or type(handoff_receipt.get("child_ppid")) is not int:
         raise SmokeContractError("real smoke handoff receipt is invalid")
@@ -684,7 +758,7 @@ def run_authorized_smoke(
         "handoff_receipt_sha256": handoff_receipt_sha256,
         "handoff_receipt_relative_path": "handoff_receipt.json",
     }
-    if config["smoke_id"] == SMOKE_V2_ID:
+    if spec.allow_outer_launch:
         entry_invocation.update({
             "config_relative_path": config["runtime"]["config_relative_path"],
             "config_size_bytes": len(canonical_config_bytes(config)),

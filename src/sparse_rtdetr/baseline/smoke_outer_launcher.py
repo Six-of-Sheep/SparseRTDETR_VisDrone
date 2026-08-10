@@ -20,13 +20,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .smoke import (
-    SMOKE_V2_CONFIG_RELATIVE,
-    SMOKE_V2_ID,
-    SMOKE_V2_TMUX_SESSION,
-    SMOKE_V2_TMUX_TIMEOUT_SECONDS,
-    load_smoke_config,
-)
+from .smoke import SmokeRuntimeSpec, get_smoke_runtime_spec, load_smoke_config
 from .smoke_evidence import (
     SmokeEvidenceError,
     _read_object,
@@ -337,7 +331,13 @@ def _validate_signal_events(runner: dict[str, Any], status: str) -> None:
 def _validate_outer_invocation(invocation: dict[str, Any], root: Path) -> None:
     if set(invocation) != _INVOCATION_KEYS:
         raise OuterLaunchError("outer invocation schema fields are invalid")
-    if invocation.get("schema_version") != 1 or invocation.get("mode") != "outer_launch" or invocation.get("status") != "OUTER_PREPARED" or invocation.get("nonportable") is not True or invocation.get("smoke_id") != SMOKE_V2_ID:
+    try:
+        spec = get_smoke_runtime_spec(invocation.get("smoke_id"))
+    except Exception as exc:
+        raise OuterLaunchError("outer invocation smoke identity is unknown") from exc
+    if not spec.allow_outer_launch:
+        raise OuterLaunchError("outer invocation smoke identity is not outer-enabled")
+    if invocation.get("schema_version") != 1 or invocation.get("mode") != "outer_launch" or invocation.get("status") != "OUTER_PREPARED" or invocation.get("nonportable") is not True:
         raise OuterLaunchError("outer invocation identity is invalid")
     if invocation.get("outer_evidence_dir") != str(root):
         raise OuterLaunchError("outer invocation root binding is invalid")
@@ -362,7 +362,7 @@ def _validate_outer_invocation(invocation: dict[str, Any], root: Path) -> None:
         "PYTHONNOUSERSITE": "1",
         "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED": "1",
         "PYTHONPATH": str(Path(invocation["repo_root"]) / "src"),
-        "P3_SMOKE_TMUX_SESSION": SMOKE_V2_TMUX_SESSION,
+        "P3_SMOKE_TMUX_SESSION": spec.tmux_session,
     }
     for field, expected in expected_environment.items():
         if type(environment.get(field)) is not str or environment[field] != expected:
@@ -382,16 +382,20 @@ def _validate_pane_plan_identity(
     if plan is None or set(plan) != _PLAN_KEYS or plan.get("schema_version") != 1 or plan.get("state") != "PREPARED" or plan.get("single_use") is not True:
         raise OuterLaunchError("pane plan schema is invalid")
     _strict_nonce(plan.get("nonce"))
-    _validate_exact_session(plan.get("tmux_session"))
-    if plan.get("smoke_id") != SMOKE_V2_ID or plan.get("nonportable") is not True or plan.get("inner_argv_sha256") != argv_sha256(plan.get("inner_argv")):
+    try:
+        spec = get_smoke_runtime_spec(plan.get("smoke_id"))
+    except Exception as exc:
+        raise OuterLaunchError("pane plan smoke identity is unknown") from exc
+    if not spec.allow_outer_launch or plan.get("nonportable") is not True or plan.get("inner_argv_sha256") != argv_sha256(plan.get("inner_argv")):
         raise OuterLaunchError("pane plan identity or argv binding is invalid")
+    _validate_exact_session(plan.get("tmux_session"), spec)
     _validate_executable_identity(plan.get("child_python_identity"), "pane child Python identity")
     _validate_executable_identity(plan.get("pane_evidence_python_identity"), "pane evidence Python identity")
     if plan.get("child_python") != plan["child_python_identity"]["canonical_path"] or plan.get("pane_evidence_python") != plan["pane_evidence_python_identity"]["canonical_path"]:
         raise OuterLaunchError("pane plan executable path binding is invalid")
     _parse_utc(plan.get("created_at_utc"), "pane plan created_at_utc")
     config_binding = plan.get("config_binding")
-    if not isinstance(config_binding, dict) or set(config_binding) != {"smoke_id", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256", "config_canonical_sha256"} or config_binding.get("config_relative_path") != SMOKE_V2_CONFIG_RELATIVE:
+    if not isinstance(config_binding, dict) or set(config_binding) != {"smoke_id", "config_relative_path", "config_path", "config_size_bytes", "config_file_sha256", "config_canonical_sha256"} or config_binding.get("smoke_id") != spec.smoke_id or config_binding.get("config_relative_path") != spec.config_relative_path:
         raise OuterLaunchError("pane plan config binding is invalid")
     _strict_sha(config_binding.get("config_file_sha256"), "pane plan config_file_sha256")
     _strict_sha(config_binding.get("config_canonical_sha256"), "pane plan config_canonical_sha256")
@@ -465,14 +469,14 @@ def _validate_outer_parent(outer_root: Path) -> None:
         raise OuterLaunchError("outer evidence root already exists")
 
 
-def _validate_exact_session(value: Any) -> None:
-    if type(value) is not str or value != SMOKE_V2_TMUX_SESSION:
-        raise OuterLaunchError("tmux session identity is not the frozen R2 value")
+def _validate_exact_session(value: Any, spec: SmokeRuntimeSpec | None = None) -> None:
+    if spec is None or not spec.allow_outer_launch or type(value) is not str or value != spec.tmux_session:
+        raise OuterLaunchError("tmux session identity is not the frozen runtime value")
 
 
-def _validate_timeout(value: Any) -> None:
-    if type(value) is not int or value != SMOKE_V2_TMUX_TIMEOUT_SECONDS:
-        raise OuterLaunchError("tmux client timeout is not the frozen R2 value")
+def _validate_timeout(value: Any, spec: SmokeRuntimeSpec | None = None) -> None:
+    if spec is None or not spec.allow_outer_launch or type(value) is not int or value != spec.tmux_timeout_seconds:
+        raise OuterLaunchError("tmux client timeout is not the frozen runtime value")
 
 
 def _bind_config(repo_root: Path, config_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -480,17 +484,21 @@ def _bind_config(repo_root: Path, config_path: Path) -> tuple[dict[str, Any], di
     requested = Path(config_path)
     if not requested.is_absolute():
         requested = root / requested
-    if requested != root / SMOKE_V2_CONFIG_RELATIVE:
-        raise OuterLaunchError("outer launcher requires the frozen R2 config path")
     _strict_file(requested)
     config = load_smoke_config(root, requested)
-    if config.get("smoke_id") != SMOKE_V2_ID:
-        raise OuterLaunchError("outer launcher requires explicit R2 config")
-    _validate_exact_session(config.get("runtime", {}).get("tmux_session_name"))
-    _validate_timeout(config.get("runtime", {}).get("tmux_client_timeout_seconds"))
+    try:
+        spec = get_smoke_runtime_spec(config.get("smoke_id"))
+    except Exception as exc:
+        raise OuterLaunchError("outer config smoke identity is unknown") from exc
+    if not spec.allow_outer_launch:
+        raise OuterLaunchError("outer launcher requires an outer-enabled runtime spec")
+    if requested != root / spec.config_relative_path:
+        raise OuterLaunchError("outer config path is not bound to its smoke identity")
+    _validate_exact_session(config.get("runtime", {}).get("tmux_session_name"), spec)
+    _validate_timeout(config.get("runtime", {}).get("tmux_client_timeout_seconds"), spec)
     payload = canonical_json_bytes(config)
     return config, {
-        "smoke_id": SMOKE_V2_ID,
+        "smoke_id": spec.smoke_id,
         "config_relative_path": requested.relative_to(root).as_posix(),
         "config_path": str(requested),
         "config_size_bytes": requested.stat().st_size,
@@ -502,9 +510,19 @@ def _bind_config(repo_root: Path, config_path: Path) -> tuple[dict[str, Any], di
 def _validate_runtime_paths(repo_root: Path, config: dict[str, Any], data_root: Path, output: Path, process: Path, outer: Path) -> None:
     root = Path(repo_root)
     _validate_path_components(root, final_kind="dir")
-    runtime = config["runtime"]
-    if output != root / runtime["output_relative_path"] or process != root / runtime["process_evidence_relative_path"] or outer != root / runtime["outer_launch_evidence_relative_path"]:
-        raise OuterLaunchError("R2 runtime path drift")
+    try:
+        spec = get_smoke_runtime_spec(config.get("smoke_id"))
+    except Exception as exc:
+        raise OuterLaunchError("runtime path smoke identity is unknown") from exc
+    if not spec.allow_outer_launch or spec.outer_relative_path is None:
+        raise OuterLaunchError("runtime path spec is not outer-enabled")
+    expected = {
+        "output": root / spec.output_relative_path,
+        "process": root / spec.process_relative_path,
+        "outer": root / spec.outer_relative_path,
+    }
+    if output != expected["output"] or process != expected["process"] or outer != expected["outer"]:
+        raise OuterLaunchError("versioned runtime path drift")
     _validate_path_components(data_root, final_kind="dir")
     if any(part.casefold() == "test" for part in data_root.parts):
         raise OuterLaunchError("runtime data root may not contain a test component")
@@ -589,6 +607,12 @@ def _build_pane_plan(
 ) -> dict[str, Any]:
     """Build the sole pane plan representation used by production and validation."""
     _strict_nonce(nonce)
+    try:
+        spec = get_smoke_runtime_spec(config_binding.get("smoke_id"))
+    except Exception as exc:
+        raise OuterLaunchError("pane plan config identity is unknown") from exc
+    if not spec.allow_outer_launch:
+        raise OuterLaunchError("pane plan requires an outer-enabled runtime spec")
     _validate_executable_identity(child_python_identity, "child Python identity")
     _validate_executable_identity(pane_evidence_python_identity, "pane evidence Python identity")
     inner = _inner_argv(
@@ -604,7 +628,7 @@ def _build_pane_plan(
         "state": "PREPARED",
         "single_use": True,
         "nonce": nonce,
-        "smoke_id": SMOKE_V2_ID,
+        "smoke_id": spec.smoke_id,
         "repo_root": str(repo_root),
         "data_root": str(data_root),
         "output_dir": str(output_dir),
@@ -617,7 +641,7 @@ def _build_pane_plan(
         "pane_evidence_python_identity": pane_evidence_python_identity,
         "inner_argv": inner,
         "inner_argv_sha256": argv_sha256(inner),
-        "tmux_session": SMOKE_V2_TMUX_SESSION,
+        "tmux_session": spec.tmux_session,
         "created_at_utc": created_at_utc,
         "nonportable": True,
     }
@@ -1118,6 +1142,11 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
     outer = Path(outer_evidence_dir)
     child = Path(child_python)
     tmux = Path(tmux_executable)
+    config_arg = Path(config_path)
+    if not config_arg.is_absolute():
+        config_arg = repo_root / config_arg
+    provisional_config, _provisional_binding = _bind_config(repo_root, config_arg)
+    spec = get_smoke_runtime_spec(provisional_config["smoke_id"])
     _validate_outer_parent(outer)
     outer.mkdir(mode=0o775)
     outer.chmod(0o775)
@@ -1127,9 +1156,6 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
     pane.mkdir(mode=0o775)
     _pane_preexisting_evidence_gate(pane)
     created_at = _utc_now()
-    config_arg = Path(config_path)
-    if not config_arg.is_absolute():
-        config_arg = repo_root / config_arg
     try:
         pane_evidence_identity = executable_identity(Path(sys.executable))
     except BaseException:
@@ -1154,7 +1180,7 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
         "nonportable": True,
         "created_at_utc": created_at,
         "nonce": nonce,
-        "smoke_id": SMOKE_V2_ID,
+        "smoke_id": spec.smoke_id,
         "repo_root": str(repo_root),
         "data_root": str(data_root),
         "config_path": str(config_arg),
@@ -1173,16 +1199,18 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
             "PYTHONDONTWRITEBYTECODE": "1",
             "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED": "1",
             "PYTHONPATH": str(repo_root / "src"),
-            "P3_SMOKE_TMUX_SESSION": SMOKE_V2_TMUX_SESSION,
+            "P3_SMOKE_TMUX_SESSION": spec.tmux_session,
             "PANE_EVIDENCE_PYTHON": pane_evidence_path,
         },
     }
     _write_json(launcher / "outer_invocation.json", invocation)
     runner: dict[str, Any] = {"stdout": b"", "stderr": b"", "returncode": None, "signal_events": [], "signal_handlers_installed": False, "monitored_signals": list(_MONITORED_SIGNAL_NAMES), "observed_signal_count": 0, "timeout_triggered": False, "term_sent": False, "kill_sent": False, "original_exception": None}
     try:
-        _validate_exact_session(tmux_session)
+        _validate_exact_session(tmux_session, spec)
         _validate_path_components(repo_root, final_kind="dir")
         config, binding = _bind_config(repo_root, config_arg)
+        if config.get("smoke_id") != spec.smoke_id:
+            raise OuterLaunchError("outer config identity changed during binding")
         _validate_runtime_paths(repo_root, config, data_root, output, process, outer)
         if child_identity is None or pane_evidence_identity is None or tmux_identity is None:
             raise OuterLaunchError("executable identity preflight failed")
@@ -1260,8 +1288,14 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
     _validate_path_components(pane, final_kind="dir")
     completion = _read_json_object(launcher / OUTER_COMPLETION)
     invocation = _read_json_object(launcher / "outer_invocation.json")
-    if completion is None or invocation is None or completion.get("schema_version") != 1 or invocation.get("schema_version") != 1 or invocation.get("smoke_id") != SMOKE_V2_ID:
+    if completion is None or invocation is None or completion.get("schema_version") != 1 or invocation.get("schema_version") != 1:
         raise OuterLaunchError("outer invocation/completion schema is invalid")
+    try:
+        spec = get_smoke_runtime_spec(invocation.get("smoke_id"))
+    except Exception as exc:
+        raise OuterLaunchError("outer evidence smoke identity is unknown") from exc
+    if not spec.allow_outer_launch:
+        raise OuterLaunchError("outer evidence smoke identity is not outer-enabled")
     _validate_outer_invocation(invocation, root)
     _verify_ref(launcher, completion.get("invocation"), "outer_invocation.json")
     status = completion.get("status")
@@ -1276,13 +1310,13 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
     if completion.get("tmux_session") != invocation.get("tmux_session"):
         raise OuterLaunchError("outer session binding mismatch")
     if status != "PREFLIGHT_FAILED":
-        _validate_exact_session(invocation.get("tmux_session"))
+        _validate_exact_session(invocation.get("tmux_session"), spec)
         if completion.get("nonce") is None:
             raise OuterLaunchError("outer nonce is missing")
         _strict_nonce(completion.get("nonce"))
         _verify_ref(launcher, completion.get("config_binding"), "outer_config_binding.json")
         config_binding = _read_json_object(launcher / "outer_config_binding.json")
-        if config_binding is None or config_binding.get("smoke_id") != SMOKE_V2_ID or config_binding.get("config_relative_path") != SMOKE_V2_CONFIG_RELATIVE:
+        if config_binding is None or config_binding.get("smoke_id") != spec.smoke_id or config_binding.get("config_relative_path") != spec.config_relative_path:
             raise OuterLaunchError("outer config binding is invalid")
         _verify_ref(launcher, completion.get("preflight"), "preflight_audit.json")
         preflight = _read_json_object(launcher / "preflight_audit.json")
@@ -1295,12 +1329,14 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
         _validate_path_components(config_root, final_kind="dir")
         _validate_path_components(Path(invocation["data_root"]), final_kind="dir")
         config, actual_binding = _bind_config(config_root, config_path)
+        if config.get("smoke_id") != spec.smoke_id:
+            raise OuterLaunchError("outer invocation and config identity mismatch")
         if config_binding != actual_binding:
             raise OuterLaunchError("outer config binding does not match config bytes")
         expected_runtime_paths = {
-            "output_dir": str(config_root / config["runtime"]["output_relative_path"]),
-            "process_evidence_dir": str(config_root / config["runtime"]["process_evidence_relative_path"]),
-            "outer_evidence_dir": str(config_root / config["runtime"]["outer_launch_evidence_relative_path"]),
+            "output_dir": str(config_root / spec.output_relative_path),
+            "process_evidence_dir": str(config_root / spec.process_relative_path),
+            "outer_evidence_dir": str(config_root / spec.outer_relative_path),
         }
         for field, expected_path in expected_runtime_paths.items():
             if invocation[field] != expected_path:
@@ -1364,8 +1400,8 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
             raise OuterLaunchError("preflight executable identity binding mismatch")
         if tmux_invocation.get("child_python_identity") != child_identity or tmux_invocation.get("pane_evidence_python_identity") != pane_evidence_identity:
             raise OuterLaunchError("tmux executable identity binding mismatch")
-        _validate_timeout(preflight.get("tmux_client_timeout_seconds"))
-        _validate_timeout(tmux_invocation.get("timeout_seconds"))
+        _validate_timeout(preflight.get("tmux_client_timeout_seconds"), spec)
+        _validate_timeout(tmux_invocation.get("timeout_seconds"), spec)
         if tmux_invocation.get("argv_sha256") != argv_sha256(tmux_invocation.get("argv")):
             raise OuterLaunchError("tmux argv SHA mismatch")
         if preflight.get("pane_plan_sha256") != tmux_invocation.get("pane_plan_sha256") or preflight.get("wrapper_sha256") != tmux_invocation.get("wrapper_sha256") or tmux_invocation.get("pane_plan_sha256") != plan_sha or tmux_invocation.get("wrapper_sha256") != wrapper_sha:
@@ -1403,7 +1439,7 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
     return {"status": status, "invocation": invocation, "completion": completion}
 
 
-def _parse_lock(path: Path) -> dict[str, str]:
+def _parse_lock(path: Path, spec: SmokeRuntimeSpec | None = None) -> dict[str, str]:
     _strict_file(path)
     text = path.read_text(encoding="ascii")
     if not text or not text.endswith("\n"):
@@ -1414,7 +1450,7 @@ def _parse_lock(path: Path) -> dict[str, str]:
     _strict_nonce(result["nonce"])
     _strict_sha(result["plan_sha256"], "pane lock plan_sha256")
     _strict_sha(result["wrapper_sha256"], "pane lock wrapper_sha256")
-    _validate_exact_session(result["tmux_session"])
+    _validate_exact_session(result["tmux_session"], spec)
     return result
 
 
@@ -1566,12 +1602,13 @@ def _expected_pane_context(pane: Path, expected_outer: dict[str, Any] | None) ->
     config_root = Path(invocation["repo_root"])
     data_root = Path(invocation["data_root"])
     config, binding = _bind_config(config_root, Path(invocation["config_path"]))
+    spec = get_smoke_runtime_spec(config["smoke_id"])
     if config_root != Path(invocation["repo_root"]):
         raise OuterLaunchError("pane repo binding is invalid")
     expected_paths = {
-        "output_dir": config_root / config["runtime"]["output_relative_path"],
-        "process_evidence_dir": config_root / config["runtime"]["process_evidence_relative_path"],
-        "outer_evidence_dir": root,
+        "output_dir": config_root / spec.output_relative_path,
+        "process_evidence_dir": config_root / spec.process_relative_path,
+        "outer_evidence_dir": config_root / spec.outer_relative_path,
     }
     for field, expected in expected_paths.items():
         if Path(invocation[field]) != expected:
@@ -1618,7 +1655,8 @@ def validate_pane_evidence(pane_dir: Path, expected_outer: dict[str, Any] | None
     wrapper_path = pane / PANE_WRAPPER
     expected_plan, expected_wrapper = _expected_pane_context(pane, expected_outer)
     plan, plan_sha, wrapper_sha = _validate_pane_plan_identity(pane, expected_plan, expected_wrapper)
-    lock = _parse_lock(pane / PANE_LOCK)
+    spec = get_smoke_runtime_spec(plan["smoke_id"])
+    lock = _parse_lock(pane / PANE_LOCK, spec)
     if lock["nonce"] != plan["nonce"] or lock["plan_sha256"] != plan_sha or lock["wrapper_sha256"] != wrapper_sha or lock["tmux_session"] != plan["tmux_session"]:
         raise OuterLaunchError("pane consume lock binding mismatch")
     receipt = _read_json_object(pane / PANE_RECEIPT)
