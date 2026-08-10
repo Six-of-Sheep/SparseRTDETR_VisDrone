@@ -177,11 +177,13 @@ def _validate_entry_invocation(
     root: Path,
     config_sha256: str,
     expected_identity: dict[str, Any] | None,
+    config_value: dict[str, Any],
 ) -> dict[str, Any]:
     invocation = _read_object(root / "invocation.json")
     if type(invocation.get("schema_version")) is not int or invocation["schema_version"] != 1:
         raise SmokeEvidenceError("entry invocation schema version is invalid")
-    if invocation.get("mode") not in {"synthetic", "real"} or invocation.get("smoke_id") != "rtdetrv2_r18_visdrone_baseline_smoke_v1":
+    expected_smoke_id = config_value.get("smoke_id", "rtdetrv2_r18_visdrone_baseline_smoke_v1")
+    if invocation.get("mode") not in {"synthetic", "real"} or invocation.get("smoke_id") != expected_smoke_id:
         raise SmokeEvidenceError("entry invocation identity is invalid")
     if invocation.get("config_sha256") != config_sha256:
         raise SmokeEvidenceError("entry invocation config SHA mismatch")
@@ -198,6 +200,14 @@ def _validate_entry_invocation(
             if invocation.get(field) != expected_identity.get(field):
                 raise SmokeEvidenceError(f"entry invocation identity mismatch: {field}")
         _strict_sha(invocation.get("handoff_receipt_sha256"), "entry invocation handoff_receipt_sha256")
+    if config_value.get("smoke_id") == "rtdetrv2_r18_visdrone_baseline_smoke_v2":
+        runtime = config_value.get("runtime")
+        if not isinstance(runtime, dict):
+            raise SmokeEvidenceError("R2 entry runtime binding is missing")
+        if invocation.get("config_relative_path") != runtime.get("config_relative_path"):
+            raise SmokeEvidenceError("R2 entry config relative path mismatch")
+        if type(invocation.get("config_size_bytes")) is not int or invocation["config_size_bytes"] != root.joinpath("config.json").stat().st_size:
+            raise SmokeEvidenceError("R2 entry config size binding mismatch")
     return invocation
 
 
@@ -226,10 +236,11 @@ def validate_entry_output(root: Path, expected_identity: dict[str, Any] | None =
     config_path = root / "config.json"
     if config_path.is_symlink() or not config_path.is_file():
         raise SmokeEvidenceError("entry config is missing or not regular")
+    config_value = _read_object(config_path)
     config_sha256 = sha256_file(config_path)
     if completion["config_sha256"] != config_sha256:
         raise SmokeEvidenceError("completion config SHA mismatch")
-    invocation = _validate_entry_invocation(root, config_sha256, expected_identity)
+    invocation = _validate_entry_invocation(root, config_sha256, expected_identity, config_value)
     if completion.get("artifact_inventory_sha256") != sha256_file(inventory_path):
         raise SmokeEvidenceError("completion inventory SHA mismatch")
     if inventory_value.get("schema_version") != 1 or inventory_value.get("excluded_from_inventory") != sorted(ENTRY_INVENTORY_EXCLUDED):

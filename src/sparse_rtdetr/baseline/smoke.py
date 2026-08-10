@@ -19,7 +19,7 @@ from .contract import (
     R3_ARTIFACT_RELATIVE,
     R3_ENTRY_CANONICAL_INVENTORY_SHA256,
 )
-from .smoke_evidence import SmokeEvidence
+from .smoke_evidence import SmokeEvidence, canonical_json_bytes
 
 
 class SmokeContractError(BaselineContractError):
@@ -28,8 +28,14 @@ class SmokeContractError(BaselineContractError):
 
 SMOKE_SCHEMA_VERSION = 1
 SMOKE_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v1"
+SMOKE_V2_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v2"
+SMOKE_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
+SMOKE_V2_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 SMOKE_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"
+SMOKE_V2_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
+SMOKE_V2_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"
+SMOKE_V2_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
 
@@ -142,7 +148,8 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
     expected_top = {"schema_version", "smoke_id", "mode", "split_role", "execution", "model", "image_selection", "runtime", "evidence"}
     if set(config) != expected_top:
         raise SmokeContractError("smoke config top-level schema drift")
-    if config["schema_version"] != SMOKE_SCHEMA_VERSION or config["smoke_id"] != SMOKE_ID:
+    smoke_id = config.get("smoke_id")
+    if config["schema_version"] != SMOKE_SCHEMA_VERSION or smoke_id not in {SMOKE_ID, SMOKE_V2_ID}:
         raise SmokeContractError("smoke config identity drift")
     if config["mode"] != "smoke" or config["split_role"] != "train_core":
         raise SmokeContractError("smoke mode or split role drift")
@@ -155,7 +162,7 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
     if not isinstance(model, dict):
         raise SmokeContractError("smoke model contract is missing")
     model_expected = {
-        "baseline_id": SMOKE_ID.replace("_baseline_smoke_v1", "_baseline_v1"),
+        "baseline_id": "rtdetrv2_r18_visdrone_baseline_v1",
         "num_classes": 10,
         "parameters": 20094584,
         "input_size": [640, 640],
@@ -187,9 +194,14 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
         "visible_devices": "0",
         "device_count": 1,
         "cpu_fallback": False,
-        "output_relative_path": SMOKE_OUTPUT_RELATIVE,
-        "process_evidence_relative_path": SMOKE_PROCESS_RELATIVE,
+        "output_relative_path": SMOKE_OUTPUT_RELATIVE if smoke_id == SMOKE_ID else SMOKE_V2_OUTPUT_RELATIVE,
+        "process_evidence_relative_path": SMOKE_PROCESS_RELATIVE if smoke_id == SMOKE_ID else SMOKE_V2_PROCESS_RELATIVE,
     }
+    if smoke_id == SMOKE_V2_ID:
+        runtime_expected.update({
+            "config_relative_path": SMOKE_V2_CONFIG_RELATIVE,
+            "outer_launch_evidence_relative_path": SMOKE_V2_OUTER_RELATIVE,
+        })
     if runtime != runtime_expected:
         raise SmokeContractError("smoke runtime contract drift")
     _strict_int(runtime["device_count"], "runtime.device_count", 1)
@@ -207,15 +219,22 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
         raise SmokeContractError("portable smoke config contains data_root")
 
 
-def load_smoke_config(repo_root: str | Path) -> dict[str, Any]:
-    path = Path(repo_root).resolve() / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
+def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = None) -> dict[str, Any]:
+    root = Path(repo_root).resolve()
+    path = root / SMOKE_CONFIG_RELATIVE if config_path is None else Path(config_path)
+    if not path.is_absolute():
+        path = root / path
     if path.is_symlink() or not path.is_file():
         raise SmokeContractError("smoke config is missing or not regular")
+    path = path.resolve()
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise SmokeContractError("smoke config is invalid") from exc
     validate_smoke_config(config)
+    expected_relative = SMOKE_CONFIG_RELATIVE if config["smoke_id"] == SMOKE_ID else SMOKE_V2_CONFIG_RELATIVE
+    if path != root / expected_relative:
+        raise SmokeContractError("smoke config path is not bound to its config identity")
     selected = load_frozen_image_selection(repo_root)
     if list(selected) != config["image_selection"]["records"]:
         raise SmokeContractError("smoke config and manifest selection differ")
@@ -620,10 +639,21 @@ def run_authorized_smoke(
     *,
     handoff_receipt: dict[str, Any],
     handoff_receipt_sha256: str,
+    config_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the future real one-batch smoke entrypoint under its exact gates."""
 
-    config = load_smoke_config(repo_root)
+    config = load_smoke_config(repo_root, config_path)
+    if config["smoke_id"] == SMOKE_V2_ID:
+        if config_path is None:
+            raise SmokeContractError("R2 smoke requires an explicit config path")
+        bound_config_path = Path(config_path).resolve()
+        if handoff_receipt.get("config_path") != str(bound_config_path):
+            raise SmokeContractError("R2 handoff config path binding mismatch")
+        if type(handoff_receipt.get("config_size_bytes")) is not int or handoff_receipt["config_size_bytes"] != bound_config_path.stat().st_size:
+            raise SmokeContractError("R2 handoff config size mismatch")
+        if handoff_receipt.get("config_file_sha256") != _sha256_file(bound_config_path):
+            raise SmokeContractError("R2 handoff config SHA mismatch")
     paths = resolve_runtime_paths(repo_root, data_root, "train_core")
     if not isinstance(handoff_receipt, dict) or type(handoff_receipt.get("child_pid")) is not int or type(handoff_receipt.get("child_ppid")) is not int:
         raise SmokeContractError("real smoke handoff receipt is invalid")
@@ -633,10 +663,10 @@ def run_authorized_smoke(
         raise SmokeContractError("real smoke output directory already exists")
     evidence = SmokeEvidence(output_dir)
     config_sha = evidence.write_config(config)
-    evidence.write_json("invocation.json", {
+    entry_invocation = {
         "schema_version": 1,
         "mode": "real",
-        "smoke_id": SMOKE_ID,
+        "smoke_id": config["smoke_id"],
         "config_sha256": config_sha,
         "data_role": "train_core",
         "cuda_visible_devices": "0",
@@ -647,7 +677,13 @@ def run_authorized_smoke(
         "child_argv_sha256": handoff_receipt["child_argv_sha256"],
         "handoff_receipt_sha256": handoff_receipt_sha256,
         "handoff_receipt_relative_path": "handoff_receipt.json",
-    })
+    }
+    if config["smoke_id"] == SMOKE_V2_ID:
+        entry_invocation.update({
+            "config_relative_path": config["runtime"]["config_relative_path"],
+            "config_size_bytes": len(canonical_config_bytes(config)),
+        })
+    evidence.write_json("invocation.json", entry_invocation)
     try:
         selected = load_frozen_image_selection(repo_root)
         for record in selected:
