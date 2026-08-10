@@ -531,6 +531,31 @@ def _file_ref_strict(root: Path, name: str, *, required: bool = False) -> dict[s
     return {"present": True, "relative_path": name, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
+_FINALIZER_EXIT_BYTES_RE = re.compile(r"^(0|[1-9][0-9]*)\n$")
+
+
+def _validate_pane_finalizer_exit(pane: Path) -> int:
+    """Read and strictly validate the shell-captured finalizer return code."""
+    marker = pane / PANE_FINALIZER_EXIT
+    _strict_file(marker)
+    try:
+        raw = marker.read_bytes()
+        decoded = raw.decode("ascii")
+    except (OSError, UnicodeError) as exc:
+        raise OuterLaunchError("pane finalizer exit code bytes are invalid") from exc
+    if _FINALIZER_EXIT_BYTES_RE.fullmatch(decoded) is None:
+        raise OuterLaunchError("pane finalizer exit code bytes are invalid")
+    try:
+        parsed = int(decoded[:-1], 10)
+    except ValueError as exc:
+        raise OuterLaunchError("pane finalizer exit code bytes are invalid") from exc
+    if type(parsed) is not int or parsed < 0 or parsed > 255:
+        raise OuterLaunchError("pane finalizer exit code is outside the process range")
+    if raw != (str(parsed) + "\n").encode("ascii"):
+        raise OuterLaunchError("pane finalizer exit code is not canonical")
+    return parsed
+
+
 def _inventory_value(root: Path, excluded: frozenset[str]) -> dict[str, Any]:
     value = inventory(root, excluded)
     rows = value.get("artifacts")
@@ -691,9 +716,6 @@ try:
     if lock.get("nonce") != receipt["nonce"] or lock.get("plan_sha256") != receipt["plan_sha256"] or lock.get("wrapper_sha256") != receipt["wrapper_sha256"] or lock.get("tmux_session") != receipt["tmux_session"]:
         raise RuntimeError("pane consume lock binding mismatch")
     atomic_write(receipt_path, canonical_json_bytes(receipt))
-    finished_at = datetime.now(timezone.utc).isoformat()
-    timing = _pane_timing_payload(started_at_utc=started_at, finished_at_utc=finished_at, inner_started=inner_started, inner_returncode=inner_rc, signal_name=None)
-    atomic_write(pane / "pane_timing.json", canonical_json_bytes(timing))
     if not failure_class:
         failure_class = "PREINNER_BINDING_FAILURE" if not inner_started else "INNER_NONZERO_EXIT" if inner_rc != 0 else ""
         failure_message = "pane binding failed before the inner command." if not inner_started else "inner command exited with a nonzero return code."
@@ -706,6 +728,9 @@ try:
                 raise RuntimeError("pane error evidence binding mismatch")
         else:
             atomic_write(error_path, canonical_json_bytes(error))
+    finished_at = datetime.now(timezone.utc).isoformat()
+    timing = _pane_timing_payload(started_at_utc=started_at, finished_at_utc=finished_at, inner_started=inner_started, inner_returncode=inner_rc, signal_name=None)
+    atomic_write(pane / "pane_timing.json", canonical_json_bytes(timing))
     pane_inventory = inventory(pane, frozenset({"pane_completion.json", "pane_inventory.json", "pane_partial_inventory.json", "pane_secondary_finalization_failure.json", "pane_finalizer_exit_code.txt"}))
     atomic_write(pane / "pane_inventory.json", canonical_json_bytes(pane_inventory))
     status = "PANE_COMPLETED" if inner_started and inner_rc == 0 and not failure_class else "PANE_FAILED"
@@ -766,11 +791,13 @@ START="$PANE/{PANE_START}"
 EXIT="$PANE/{PANE_EXIT}"
 ERROR="$PANE/{PANE_ERROR}"
 SECONDARY="$PANE/{PANE_SECONDARY_FAILURE}"
+FINALIZER_EXIT="$PANE/{PANE_FINALIZER_EXIT}"
 INNER_STARTED=false
 INNER_RC=125
 FAILURE_CLASS=''
 FAILURE_MESSAGE=''
-STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf '%s' unknown)
+STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.%N 2>/dev/null)
+STARTED_AT="${{STARTED_AT%???}}Z"
 {env_lines}
 export P3_PANE_DIR="$PANE"
 export P3_PANE_CONFIG="$CONFIG"
@@ -833,12 +860,18 @@ export P3_PANE_FAILURE_MESSAGE="$FAILURE_MESSAGE"
 if test -n "$FAILURE_CLASS"; then
   CONSOLE_SIZE=$(wc -c < "$CONSOLE" 2>/dev/null || printf '0')
   CONSOLE_SHA=$(sha256sum "$CONSOLE" 2>/dev/null | awk '{{print $1}}' || printf '%s' '')
-  printf '{{"schema_version":1,"status":"PANE_FAILED","failure_class":"%s","message":"%s","inner_started":%s,"inner_returncode":%s,"original_error_preserved":true,"console":{{"present":true,"relative_path":"pane_console.log","size_bytes":%s,"sha256":"%s"}},"nonce":"%s","pane_pid":%s,"plan_sha256":"%s","wrapper_sha256":"%s","created_at_utc":"%s"}}\n' "$FAILURE_CLASS" "$FAILURE_MESSAGE" "$INNER_STARTED" "$INNER_RC" "$CONSOLE_SIZE" "$CONSOLE_SHA" "$P3_PANE_NONCE" "$$" "$PLAN_SHA" "$(sha256sum "$0" 2>/dev/null | awk '{{print $1}}')" "$STARTED_AT" > "$ERROR"
+  ERROR_NOW=$(date -u +%Y-%m-%dT%H:%M:%S.%N 2>/dev/null)
+  ERROR_NOW="${{ERROR_NOW%???}}Z"
+  printf '{{"schema_version":1,"status":"PANE_FAILED","failure_class":"%s","message":"%s","inner_started":%s,"inner_returncode":%s,"original_error_preserved":true,"console":{{"present":true,"relative_path":"pane_console.log","size_bytes":%s,"sha256":"%s"}},"nonce":"%s","pane_pid":%s,"plan_sha256":"%s","wrapper_sha256":"%s","created_at_utc":"%s"}}\n' "$FAILURE_CLASS" "$FAILURE_MESSAGE" "$INNER_STARTED" "$INNER_RC" "$CONSOLE_SIZE" "$CONSOLE_SHA" "$P3_PANE_NONCE" "$$" "$PLAN_SHA" "$(sha256sum "$0" 2>/dev/null | awk '{{print $1}}')" "$ERROR_NOW" > "$ERROR"
 fi
 printf '%s\n' "$INNER_RC" > "$EXIT"
 set +e
 {shlex.quote(environment["PANE_EVIDENCE_PYTHON"])} -c {shlex.quote(_PANE_FINALIZER_CODE)} >/dev/null 2>&1
 FINALIZER_RC=$?
+if ! (umask 022; set -C; printf '%s\n' "$FINALIZER_RC" > "$FINALIZER_EXIT") 2>/dev/null; then
+  set -u
+  exit 74
+fi
 set -u
 if test "$FINALIZER_RC" -ne 0; then
   if test ! -e "$SECONDARY" && test ! -L "$SECONDARY"; then
@@ -1400,7 +1433,17 @@ def _validate_inventory(root: Path, name: str, excluded: frozenset[str]) -> dict
     return value
 
 
-def _validate_pane_error(pane: Path, value: Any, plan: dict[str, Any], plan_sha: str, wrapper_sha: str, pane_pid: int, completion: dict[str, Any] | None = None) -> None:
+def _validate_pane_error(
+    pane: Path,
+    value: Any,
+    plan: dict[str, Any],
+    plan_sha: str,
+    wrapper_sha: str,
+    pane_pid: int,
+    start: dict[str, Any],
+    timing: dict[str, Any],
+    completion: dict[str, Any] | None = None,
+) -> None:
     if not isinstance(value, dict) or set(value) != _PANE_ERROR_KEYS:
         raise OuterLaunchError("pane error schema is invalid")
     if value.get("schema_version") != 1 or value.get("status") != "PANE_FAILED" or value.get("failure_class") not in PANE_FAILURE_MESSAGES:
@@ -1415,7 +1458,12 @@ def _validate_pane_error(pane: Path, value: Any, plan: dict[str, Any], plan_sha:
     _strict_int(value.get("pane_pid"), "pane error pane_pid", 1)
     _strict_sha(value.get("plan_sha256"), "pane error plan_sha256")
     _strict_sha(value.get("wrapper_sha256"), "pane error wrapper_sha256")
-    _parse_utc(value.get("created_at_utc"), "pane error created_at_utc")
+    created_at = _parse_utc(value.get("created_at_utc"), "pane error created_at_utc")
+    plan_created_at = _parse_utc(plan["created_at_utc"], "pane plan created_at_utc")
+    started_at = _parse_utc(start["started_at_utc"], "pane start started_at_utc")
+    finished_at = _parse_utc(timing["finished_at_utc"], "pane timing finished_at_utc")
+    if created_at < plan_created_at or created_at < started_at or created_at > finished_at:
+        raise OuterLaunchError("pane error chronology is invalid")
     if value["nonce"] != plan["nonce"] or value["plan_sha256"] != plan_sha or value["wrapper_sha256"] != wrapper_sha or value["pane_pid"] != pane_pid:
         raise OuterLaunchError("pane error identity binding mismatch")
     expected_console = _file_ref_strict(pane, PANE_CONSOLE, required=True)
@@ -1454,7 +1502,15 @@ def _validate_pane_timing(pane: Path, value: Any, start: dict[str, Any], receipt
         raise OuterLaunchError("pane timing signal_name is invalid")
 
 
-def _validate_pane_secondary(pane: Path, value: Any, plan: dict[str, Any], plan_sha: str, wrapper_sha: str, pane_pid: int | None = None) -> None:
+def _validate_pane_secondary(
+    pane: Path,
+    value: Any,
+    plan: dict[str, Any],
+    plan_sha: str,
+    wrapper_sha: str,
+    pane_pid: int | None = None,
+    finalizer_exit_code: int | None = None,
+) -> None:
     if not isinstance(value, dict) or set(value) != _PANE_SECONDARY_KEYS or value.get("schema_version") != 1 or value.get("status") != "FAILED_FINALIZATION" or value.get("failure_class") != "PANE_FINALIZATION_FAILURE":
         raise OuterLaunchError("pane secondary finalization schema is invalid")
     _strict_int(value.get("pane_pid"), "pane secondary pane_pid", 1)
@@ -1463,7 +1519,9 @@ def _validate_pane_secondary(pane: Path, value: Any, plan: dict[str, Any], plan_
     _strict_sha(value.get("wrapper_sha256"), "pane secondary wrapper_sha256")
     _strict_bool(value.get("inner_started"), "pane secondary inner_started")
     _strict_int(value.get("original_inner_returncode"), "pane secondary original_inner_returncode")
-    _strict_int(value.get("finalizer_returncode"), "pane secondary finalizer_returncode")
+    _strict_int(value.get("finalizer_returncode"), "pane secondary finalizer_returncode", 0)
+    if finalizer_exit_code is None or value["finalizer_returncode"] != finalizer_exit_code or finalizer_exit_code == 0:
+        raise OuterLaunchError("pane secondary finalizer return code does not bind raw marker")
     _validate_executable_identity(value.get("finalizer_executable_identity"), "pane secondary finalizer identity")
     if value.get("original_error_preserved") is not True:
         raise OuterLaunchError("pane secondary original_error_preserved is invalid")
@@ -1615,6 +1673,7 @@ def validate_pane_evidence(pane_dir: Path, expected_outer: dict[str, Any] | None
     _parse_utc(start.get("started_at_utc"), "pane start started_at_utc")
     if start["pane_pid"] != receipt["pane_pid"]:
         raise OuterLaunchError("pane start PID binding mismatch")
+    finalizer_exit_code = _validate_pane_finalizer_exit(pane)
     _validate_inventory(pane, PANE_INVENTORY, PANE_EXCLUDED)
     completion = _read_json_object(pane / PANE_COMPLETION)
     required_completion = {"schema_version", "status", "inner_started", "inner_returncode", "pane_pid", "inner_argv_sha256", "plan_sha256", "wrapper_sha256", "nonce", "tmux_session", "child_python_identity", "pane_evidence_python_identity", "pane_receipt", "consume_lock", "pane_inventory", "pane_timing", "error"}
@@ -1651,14 +1710,14 @@ def validate_pane_evidence(pane_dir: Path, expected_outer: dict[str, Any] | None
     inner_started = completion["inner_started"]
     inner_returncode = completion["inner_returncode"]
     if completion["status"] == "PANE_COMPLETED":
-        if inner_started is not True or inner_returncode != 0 or (pane / PANE_EXIT).read_bytes() != b"0\n" or error_present:
+        if finalizer_exit_code != 0 or inner_started is not True or inner_returncode != 0 or (pane / PANE_EXIT).read_bytes() != b"0\n" or error_present or (pane / PANE_SECONDARY_FAILURE).exists() or (pane / PANE_SECONDARY_FAILURE).is_symlink():
             raise OuterLaunchError("PANE_COMPLETED status semantics are invalid")
     else:
-        if not error_present:
+        if finalizer_exit_code != 0 or not error_present or (pane / PANE_SECONDARY_FAILURE).exists() or (pane / PANE_SECONDARY_FAILURE).is_symlink():
             raise OuterLaunchError("PANE_FAILED status has no failure evidence")
         error = _read_json_object(pane / PANE_ERROR)
-        _validate_pane_error(pane, error, plan, plan_sha, wrapper_sha, receipt["pane_pid"], completion)
-    return {"plan": plan, "receipt": receipt, "completion": completion}
+        _validate_pane_error(pane, error, plan, plan_sha, wrapper_sha, receipt["pane_pid"], start, timing, completion)
+    return {"plan": plan, "receipt": receipt, "completion": completion, "finalizer_returncode": finalizer_exit_code}
 
 
 def validate_process_evidence(process_dir: Path, expected_identity: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1749,7 +1808,8 @@ def classify_outer_evidence(outer_evidence_dir: Path, output_dir: Path, process_
             start = _read_json_object(pane / PANE_START)
             if start is None or type(start.get("pane_pid")) is not int:
                 raise OuterLaunchError("pane secondary start binding is missing")
-            _validate_pane_secondary(pane, secondary, plan, plan_sha, wrapper_sha, start["pane_pid"])
+            finalizer_exit_code = _validate_pane_finalizer_exit(pane)
+            _validate_pane_secondary(pane, secondary, plan, plan_sha, wrapper_sha, start["pane_pid"], finalizer_exit_code)
         except (OSError, OuterLaunchError, SmokeEvidenceError, ValueError):
             return "UNKNOWN"
         return "PANE_FINALIZATION_FAILED"

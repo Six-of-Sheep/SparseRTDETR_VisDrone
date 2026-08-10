@@ -93,6 +93,33 @@ finished time cannot precede start/consume, and elapsed time must equal the UTC
 delta within `1e-6` seconds. Booleans, NaN, infinity, negative values, and
 unknown fields are rejected.
 
+The shell wrapper captures the Python finalizer's actual process return code
+immediately after that process exits and exclusively creates
+`pane_finalizer_exit_code.txt`. Its bytes are strict ASCII canonical decimal
+process status in the range `0..255`, followed by exactly one LF. The marker is
+owned by the wrapper and cannot overwrite pre-existing evidence. The marker is
+created after Python finalizer inventory generation, so it is intentionally
+excluded from `pane_inventory.json`; this is a post-inventory ownership
+exception, not a direct pane-inventory binding. Pane validation independently
+reads and validates the marker, requires zero for both `PANE_COMPLETED` and
+ordinary `PANE_FAILED`, and requires a nonzero marker for
+`PANE_FINALIZATION_FAILED`. A finalization secondary record is accepted only
+when its `finalizer_returncode` exactly equals the raw marker.
+
+The inner return code remains independently stored in `pane_exit_code.txt`.
+The finalizer return code is never reconstructed from JSON and never replaces
+the inner return code. Missing, malformed, inconsistent, symlinked, or
+non-regular marker evidence is incomplete/unknown and cannot produce a terminal
+classification.
+
+For `PANE_FAILED`, `pane_error.created_at_utc` must be explicit UTC and satisfy
+`pane_start.started_at_utc <= pane_error.created_at_utc <=
+pane_timing.finished_at_utc`, as well as not preceding the plan creation time.
+The validator applies this check using the already validated start and timing
+records. Shell writers obtain a fresh UTC timestamp when pre-inner binding or
+inner execution failure is established; the Python finalizer likewise obtains
+the error timestamp before it records timing completion.
+
 Before the exclusive consume lock, the wrapper checks every runtime evidence
 path. A pre-existing receipt, console, start, exit, timing, error, inventory,
 completion, secondary, or finalizer-exit file causes status 73 without any
