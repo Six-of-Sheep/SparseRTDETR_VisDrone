@@ -85,6 +85,17 @@ validated smoke ID, relative path, and canonical SHA to entry validation, so a
 valid V2 or V3 entry follows one real-entry contract and any cross-version or
 cross-layer drift is terminally rejected.
 
+The child handoff has one canonical argv schema shared by the parent and child:
+the bound executable path, `-m`, `sparse_rtdetr.baseline.smoke_launcher`,
+`_child`, `--repo-root`, and the canonical repository root. It never contains
+`--config`. The executable identity is recorded beside the argv and the
+canonical argv SHA. On Linux the child cross-checks bounded, strict UTF-8
+`/proc/self/cmdline` bytes against `sys.orig_argv` and the module/subcommand
+view in `sys.argv`; it then verifies the executable identity and compares the
+complete argv and SHA with the prepared handoff. Missing, extra, reordered,
+script-style, forged, or interpreter-drifted argv evidence is rejected before
+the receipt is created.
+
 An executable identity has exactly `canonical_path`, `size_bytes`, `sha256`,
 `mode`, `regular_file`, and `executable`. The canonical target is a regular,
 executable file. A final Conda Python symlink may resolve to that target, while

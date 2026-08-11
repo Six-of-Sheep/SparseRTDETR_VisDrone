@@ -79,6 +79,56 @@ def _base_env() -> dict[str, str]:
     }
 
 
+def _write_module_child_sitecustomize(path: Path) -> None:
+    path.write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "mutation = os.environ.get('P3_SMOKE_TEST_MUTATION', '')\n"
+        "handoff_path = Path(os.environ.get('P3_SMOKE_HANDOFF_PATH', '/missing'))\n"
+        "if mutation:\n"
+        "    value = json.loads(handoff_path.read_text(encoding='utf-8'))\n"
+        "    if mutation == 'extra': value['child_argv'].append('--extra')\n"
+        "    elif mutation == 'missing': value['child_argv'].pop()\n"
+        "    elif mutation == 'reordered': value['child_argv'][2], value['child_argv'][3] = value['child_argv'][3], value['child_argv'][2]\n"
+        "    elif mutation == 'duplicate': value['child_argv'].insert(4, '--repo-root')\n"
+        "    elif mutation == 'config': value['child_argv'].insert(3, '--config')\n"
+        "    elif mutation == 'module': value['child_argv'][2] = 'wrong.module'\n"
+        "    elif mutation == 'subcommand': value['child_argv'][3] = 'smoke'\n"
+        "    elif mutation == 'repo': value['child_argv'][-1] = '.'\n"
+        "    elif mutation == 'sha': value['child_argv_sha256'] = '0' * 64\n"
+        "    elif mutation == 'identity': value['child_executable_identity']['sha256'] = '0' * 64\n"
+        "    handoff_path.write_text(json.dumps(value), encoding='utf-8')\n"
+        "if mutation == 'orig_argv': __import__('sys').orig_argv = list(__import__('sys').orig_argv) + ['forged']\n"
+        "if os.environ.get('P3_SMOKE_TEST_STUB') == '1':\n"
+        "    import sparse_rtdetr.baseline.smoke as smoke\n"
+        "    def stub(repo_root, data_root, output_dir, **kwargs):\n"
+        "        Path(os.environ['P3_SMOKE_TEST_MARKER']).write_text('called\\n', encoding='utf-8')\n"
+        "        completion = smoke.run_synthetic_smoke(repo_root, output_dir)\n"
+        "        receipt = kwargs['handoff_receipt']\n"
+        "        invocation_path = Path(output_dir, 'invocation.json')\n"
+        "        invocation = json.loads(invocation_path.read_text(encoding='utf-8'))\n"
+        "        invocation.update({'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': kwargs['handoff_receipt_sha256'], 'handoff_receipt_relative_path': 'handoff_receipt.json'})\n"
+        "        from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes\n"
+        "        invocation_path.write_bytes(canonical_json_bytes(invocation))\n"
+        "        from sparse_rtdetr.baseline.smoke_evidence import ENTRY_INVENTORY_EXCLUDED, inventory, sha256_file\n"
+        "        inventory_path = Path(output_dir, 'artifact_inventory.json')\n"
+        "        inventory_path.write_bytes(canonical_json_bytes(inventory(Path(output_dir), ENTRY_INVENTORY_EXCLUDED)))\n"
+        "        completion_path = Path(output_dir, 'completion.json')\n"
+        "        completion_value = json.loads(completion_path.read_text(encoding='utf-8'))\n"
+        "        completion_value['artifact_inventory_sha256'] = sha256_file(inventory_path)\n"
+        "        completion_path.write_bytes(canonical_json_bytes(completion_value))\n"
+        "        return completion\n"
+        "    smoke.run_authorized_smoke = stub\n",
+        encoding="utf-8",
+    )
+
+
+def _module_child_env(tmp_path: Path, sitecustomize: Path) -> dict[str, str]:
+    env = _base_env()
+    env["PYTHONPATH"] = f"{sitecustomize.parent}:{ROOT / 'src'}"
+    return env
+
+
 def _runtime_data_root(tmp_path: Path, name: str = "data") -> Path:
     path = tmp_path / name
     path.mkdir()
@@ -443,7 +493,7 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     output = ROOT / output_relative
     process = ROOT / process_relative
     assert not output.exists()
-    assert not process.exists()
+    assert process.exists() is (config_path == V3_CONFIG)
     smoke_argv = [
         "smoke",
         "--repo-root", str(ROOT),
@@ -463,7 +513,7 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     assert parsed.mode == "_child"
     assert parsed.repo_root == ROOT
     assert not output.exists()
-    assert not process.exists()
+    assert process.exists() is (config_path == V3_CONFIG)
 
 
 def test_old_child_argv_with_config_remains_argparse_failure():
@@ -475,6 +525,83 @@ def test_old_child_argv_with_config_remains_argparse_failure():
             "--config", str(V3_CONFIG),
         ])
     assert raised.value.code == 2
+
+
+def test_real_module_child_handoff_consumes_and_calls_cpu_stub_once(tmp_path, monkeypatch):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    sitecustomize = tmp_path / "sitecustomize.py"
+    _write_module_child_sitecustomize(sitecustomize)
+    marker = tmp_path / "stub_calls"
+    env = _module_child_env(tmp_path, sitecustomize)
+    env.update({"P3_SMOKE_TEST_STUB": "1", "P3_SMOKE_TEST_MARKER": str(marker)})
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke(
+        launcher._canonical_child_argv(PYTHON, ROOT),
+        output,
+        process,
+        data_root=_runtime_data_root(tmp_path),
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=env,
+        nonce="6" * 32,
+    )
+    assert result == 0
+    assert marker.read_text(encoding="utf-8") == "called\n"
+    prepared = _read_object(process / "handoff_prepared.json")
+    receipt = _read_object(process / "handoff_receipt.json")
+    expected = launcher._canonical_child_argv(PYTHON, ROOT)
+    assert prepared["child_argv_schema"] == "module-v1"
+    assert prepared["child_argv"] == expected
+    assert prepared["child_argv_sha256"] == launcher._child_argv_sha256(expected)
+    assert receipt["child_argv"] == expected
+    assert receipt["child_argv_sha256"] == prepared["child_argv_sha256"]
+    assert receipt["child_executable_identity"] == prepared["child_executable_identity"]
+    assert receipt["child_pid"] == _read_object(process / "process_completion.json")["child_pid"]
+
+
+@pytest.mark.parametrize("mutation", [
+    "extra", "missing", "reordered", "duplicate", "config", "module", "subcommand", "repo", "sha", "identity", "orig_argv",
+])
+def test_real_module_child_handoff_rejects_argv_binding_matrix(tmp_path, monkeypatch, mutation):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    sitecustomize = tmp_path / "sitecustomize.py"
+    _write_module_child_sitecustomize(sitecustomize)
+    env = _module_child_env(tmp_path, sitecustomize)
+    env["P3_SMOKE_TEST_MUTATION"] = mutation
+    process = tmp_path / "process"
+    output = tmp_path / "entry"
+    result = launch_smoke(
+        launcher._canonical_child_argv(PYTHON, ROOT),
+        output,
+        process,
+        data_root=_runtime_data_root(tmp_path),
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=env,
+        nonce="7" * 32,
+    )
+    assert result == 2
+    assert not (process / "handoff_receipt.json").exists()
+    assert not output.exists()
+    assert _read_object(process / "handoff_prepared.json")["consumed"] is False
+    assert "SmokeLauncherError" in (process / "process_console.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("raw", [b"one", b"one\x00\x00", b"\xff\x00", b""])
+def test_proc_cmdline_parser_rejects_corrupt_bytes(tmp_path, monkeypatch, raw):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    path = tmp_path / "cmdline"
+    path.write_bytes(raw)
+    monkeypatch.setattr(launcher, "_PROC_CMDLINE_PATH", path)
+    with pytest.raises(SmokeLauncherError):
+        launcher._read_proc_cmdline()
 
 
 def test_real_child_argv_roundtrip_dispatches_from_v3_receipt(monkeypatch, tmp_path):
@@ -554,7 +681,7 @@ def test_real_child_argv_roundtrip_dispatches_from_v3_receipt(monkeypatch, tmp_p
     assert entry_calls[0]["data_root"] == data_root
     assert entry_calls[0]["output"] == output
     assert not output.exists()
-    assert not process.exists()
+    assert process.is_dir()
 
 
 def test_v3_child_passes_receipt_config_and_ignores_environment_override(monkeypatch, tmp_path):
@@ -594,6 +721,7 @@ def test_v3_child_passes_receipt_config_and_ignores_environment_override(monkeyp
         env=env,
         config_path=V3_CONFIG,
         nonce="b" * 32,
+        allow_noncanonical_child=True,
     )
     assert result == 2
     assert capture.read_text(encoding="utf-8") == str(V3_CONFIG.resolve())
@@ -753,7 +881,7 @@ def test_launcher_rejects_entry_identity_drift(tmp_path, monkeypatch, mutation):
     _write_success_child(child, mutation)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="a" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="a" * 32, allow_noncanonical_child=True)
     assert result == 2
     assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
 
@@ -774,7 +902,7 @@ def test_launcher_rejects_receipt_identity_drift(tmp_path, monkeypatch, mutation
     _write_success_child(child, receipt_mutation=mutation)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="9" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="9" * 32, allow_noncanonical_child=True)
     assert result == 2
     assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
 
@@ -805,6 +933,7 @@ def test_v3_receipt_cannot_bind_v2_identity(tmp_path, monkeypatch, mutation):
         env=_base_env(),
         config_path=V3_CONFIG,
         nonce="c" * 32,
+        allow_noncanonical_child=True,
     )
     assert result == 2
     assert _read_object(process / "process_completion.json")["status"] == "FAILED_ENTRY_CONTRACT"
@@ -818,7 +947,7 @@ def test_unconsuming_success_child_is_rejected(tmp_path, monkeypatch):
     _write_unconsuming_child(child)
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="1" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="1" * 32, allow_noncanonical_child=True)
     assert result == 2
     completion = _read_object(process / "process_completion.json")
     assert completion["status"] == "FAILED_ENTRY_CONTRACT"
@@ -839,7 +968,7 @@ def test_prepared_handoff_is_single_use(tmp_path, monkeypatch):
     )
     output = tmp_path / "entry"
     process = tmp_path / "process"
-    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="2" * 32)
+    result = launch_smoke([str(PYTHON), str(child)], output, process, data_root=_runtime_data_root(tmp_path), child_python=PYTHON, repo_root=ROOT, env=_base_env(), nonce="2" * 32, allow_noncanonical_child=True)
     assert result == 2
     assert _read_object(process / "handoff_receipt.json")["consumed"] is True
     assert not output.exists()
@@ -1170,6 +1299,7 @@ def test_child_rejects_runtime_data_root_drift_before_receipt_or_output(tmp_path
         repo_root=ROOT,
         env=env,
         nonce="f" * 32,
+        allow_noncanonical_child=True,
     )
     assert result != 0
     assert not output.exists()
@@ -1201,6 +1331,7 @@ def test_child_rejects_missing_runtime_data_root_before_output(tmp_path, monkeyp
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
+        allow_noncanonical_child=True,
     )
     assert result != 0
     assert not output.exists()
@@ -1238,6 +1369,7 @@ def test_child_rejects_modified_prepared_runtime_data_root(tmp_path, monkeypatch
         child_python=PYTHON,
         repo_root=ROOT,
         env=env,
+        allow_noncanonical_child=True,
     )
     assert result != 0
     assert not output.exists()
@@ -1259,6 +1391,7 @@ def test_launcher_requires_entry_contract_even_when_child_exits_zero(tmp_path, m
         repo_root=ROOT,
         env=_base_env(),
         nonce="b" * 32,
+        allow_noncanonical_child=True,
     )
     assert result == 2
     completion = _read_object(process / "process_completion.json")
@@ -1286,6 +1419,7 @@ def test_launcher_success_owns_process_evidence_and_handoffs_nonce(tmp_path, mon
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
+        allow_noncanonical_child=True,
     )
     assert result == 0
     completion = _read_object(process / "process_completion.json")
@@ -1341,6 +1475,7 @@ def test_launcher_rejects_receipt_runtime_data_root_drift(tmp_path, monkeypatch)
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
+        allow_noncanonical_child=True,
     )
     assert result == 2
     completion = _read_object(process / "process_completion.json")
@@ -1367,6 +1502,7 @@ def test_launcher_rejects_process_invocation_runtime_data_root_drift(tmp_path, m
         child_python=PYTHON,
         repo_root=ROOT,
         env=_base_env(),
+        allow_noncanonical_child=True,
     )
     assert result == 2
     completion = _read_object(process / "process_completion.json")
@@ -1412,6 +1548,7 @@ def test_child_uses_receipt_runtime_data_root_after_environment_drift(tmp_path, 
         child_python=PYTHON,
         repo_root=ROOT,
         env=env,
+        allow_noncanonical_child=True,
     )
     assert result == 2
     assert capture.read_text(encoding="utf-8") == str(root_a)
@@ -1447,7 +1584,7 @@ def test_launcher_forwards_signal_and_escalates_to_sigkill(tmp_path):
         "Path(os.environ['P3_SMOKE_OUTPUT']), Path(os.environ['P3_SMOKE_PROCESS']), "
         "data_root=Path(os.environ['P3_SMOKE_DATA_ROOT_FOR_TEST']), "
         "child_python=Path(sys.executable), repo_root=Path(" + repr(str(ROOT)) + "), "
-        "env=dict(os.environ), nonce='d'*32))\n"
+        "env=dict(os.environ), nonce='d'*32, allow_noncanonical_child=True))\n"
     )
     runner = subprocess.Popen([str(PYTHON), "-c", wrapper], cwd=ROOT, env=env)
     try:
@@ -1486,6 +1623,7 @@ def test_process_inventory_binds_all_launcher_files(tmp_path, monkeypatch):
         repo_root=ROOT,
         env=_base_env(),
         nonce="e" * 32,
+        allow_noncanonical_child=True,
     )
     completion = _read_object(process / "process_completion.json")
     inventory = _read_object(process / "process_inventory.json")

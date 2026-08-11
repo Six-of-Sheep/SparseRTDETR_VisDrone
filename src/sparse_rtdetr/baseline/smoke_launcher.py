@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -28,7 +30,6 @@ from .smoke import (
 from .smoke_evidence import (
     SmokeEvidenceError,
     atomic_write,
-    argv_sha256,
     canonical_json_bytes,
     file_ref,
     inventory,
@@ -48,6 +49,14 @@ HANDOFF_PREPARED_NAME = "handoff_prepared.json"
 HANDOFF_RECEIPT_NAME = "handoff_receipt.json"
 SIGNAL_GRACE_SECONDS = 2.0
 _SIGNALS = tuple(value for value in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT, signal.SIGQUIT) if value is not None)
+_CHILD_MODULE = "sparse_rtdetr.baseline.smoke_launcher"
+_CHILD_SUBCOMMAND = "_child"
+_CHILD_REPO_FLAG = "--repo-root"
+_PROC_CMDLINE_PATH = Path("/proc/self/cmdline")
+_PROC_EXE_PATH = Path("/proc/self/exe")
+_MAX_PROC_CMDLINE_BYTES = 64 * 1024
+_MAX_PROC_CMDLINE_TOKENS = 64
+_EXECUTABLE_IDENTITY_KEYS = frozenset({"canonical_path", "size_bytes", "sha256", "mode", "regular_file", "executable"})
 
 
 def _utc_now() -> str:
@@ -158,8 +167,135 @@ def _validate_sha(value: Any, field: str) -> None:
         raise SmokeLauncherError(f"{field} must be a lowercase SHA-256 string")
 
 
-def _actual_child_argv() -> list[str]:
-    return [str(Path(sys.executable).resolve()), *sys.argv]
+def _canonical_repo_root(repo_root: Path) -> Path:
+    if not isinstance(repo_root, Path) or not repo_root.is_absolute() or any(part == ".." for part in repo_root.parts):
+        raise SmokeLauncherError("child repo root must be an absolute canonical path")
+    try:
+        canonical = repo_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SmokeLauncherError("child repo root cannot be resolved") from exc
+    if canonical != repo_root or not canonical.is_dir() or canonical.is_symlink():
+        raise SmokeLauncherError("child repo root is not a canonical regular directory")
+    return canonical
+
+
+def _executable_identity(path: Path) -> dict[str, Any]:
+    if not isinstance(path, Path) or not path.is_absolute() or any(part == ".." for part in path.parts):
+        raise SmokeLauncherError("child executable path is not absolute and canonical")
+    if path.is_symlink():
+        raise SmokeLauncherError("child executable may not be a symlink")
+    try:
+        canonical = path.resolve(strict=True)
+        info = canonical.lstat()
+    except (OSError, RuntimeError) as exc:
+        raise SmokeLauncherError("child executable cannot be resolved") from exc
+    if canonical != path or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not os.access(canonical, os.X_OK):
+        raise SmokeLauncherError("child executable must be a regular executable file")
+    return {
+        "canonical_path": str(canonical),
+        "size_bytes": info.st_size,
+        "sha256": sha256_file(canonical),
+        "mode": stat.S_IMODE(info.st_mode),
+        "regular_file": True,
+        "executable": True,
+    }
+
+
+def _validate_executable_identity(value: Any, field: str = "child executable identity") -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != _EXECUTABLE_IDENTITY_KEYS:
+        raise SmokeLauncherError(f"{field} schema is invalid")
+    path = value.get("canonical_path")
+    if type(path) is not str or not path or not Path(path).is_absolute():
+        raise SmokeLauncherError(f"{field} path is invalid")
+    if type(value.get("size_bytes")) is not int or value["size_bytes"] < 1:
+        raise SmokeLauncherError(f"{field} size is invalid")
+    _validate_sha(value.get("sha256"), f"{field} sha256")
+    if type(value.get("mode")) is not int or value["mode"] < 0 or value["mode"] > 0o7777:
+        raise SmokeLauncherError(f"{field} mode is invalid")
+    if value.get("regular_file") is not True or value.get("executable") is not True:
+        raise SmokeLauncherError(f"{field} type flags are invalid")
+    actual = _executable_identity(Path(path))
+    if actual != value:
+        raise SmokeLauncherError(f"{field} does not match the executable")
+    return value
+
+
+def _canonical_child_argv(child_python: Path, repo_root: Path) -> list[str]:
+    executable = _executable_identity(child_python)
+    root = _canonical_repo_root(repo_root)
+    return [executable["canonical_path"], "-m", _CHILD_MODULE, _CHILD_SUBCOMMAND, _CHILD_REPO_FLAG, str(root)]
+
+
+def _child_argv_sha256(argv: list[str]) -> str:
+    if not isinstance(argv, list) or not argv or any(type(token) is not str or not token or "\x00" in token for token in argv):
+        raise SmokeLauncherError("child argv must be a non-empty list of non-empty strings")
+    return hashlib.sha256(canonical_json_bytes(argv)).hexdigest()
+
+
+def _read_proc_cmdline() -> list[str]:
+    if sys.platform != "linux":
+        raise SmokeLauncherError("Linux /proc child argv evidence is required")
+    try:
+        info = _PROC_CMDLINE_PATH.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            raise SmokeLauncherError("/proc/self/cmdline is not a regular file")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(str(_PROC_CMDLINE_PATH), flags)
+    except SmokeLauncherError:
+        raise
+    except OSError as exc:
+        raise SmokeLauncherError("cannot open /proc/self/cmdline") from exc
+    try:
+        raw = bytearray()
+        while True:
+            chunk = os.read(fd, min(4096, _MAX_PROC_CMDLINE_BYTES + 1 - len(raw)))
+            if not chunk:
+                break
+            raw.extend(chunk)
+            if len(raw) > _MAX_PROC_CMDLINE_BYTES:
+                raise SmokeLauncherError("/proc/self/cmdline is too long")
+    finally:
+        os.close(fd)
+    if not raw or raw[-1] != 0:
+        raise SmokeLauncherError("/proc/self/cmdline must end with one NUL")
+    content = bytes(raw[:-1])
+    if not content:
+        raise SmokeLauncherError("/proc/self/cmdline contains no tokens")
+    encoded_tokens = content.split(b"\x00")
+    if len(encoded_tokens) > _MAX_PROC_CMDLINE_TOKENS or any(not token for token in encoded_tokens):
+        raise SmokeLauncherError("/proc/self/cmdline token schema is invalid")
+    try:
+        tokens = [token.decode("utf-8", errors="strict") for token in encoded_tokens]
+    except UnicodeDecodeError as exc:
+        raise SmokeLauncherError("/proc/self/cmdline is not valid UTF-8") from exc
+    if any(not token or "\x00" in token for token in tokens):
+        raise SmokeLauncherError("child argv contains an empty token")
+    return tokens
+
+
+def _actual_child_executable_identity() -> dict[str, Any]:
+    if sys.platform != "linux":
+        raise SmokeLauncherError("Linux /proc executable evidence is required")
+    try:
+        proc_executable = Path(os.readlink(_PROC_EXE_PATH)).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SmokeLauncherError("cannot resolve /proc/self/exe") from exc
+    return _executable_identity(proc_executable)
+
+
+def _actual_child_argv(*, require_module: bool = True) -> list[str]:
+    actual = _read_proc_cmdline()
+    original = getattr(sys, "orig_argv", None)
+    if not isinstance(original, list) or actual != original:
+        raise SmokeLauncherError("sys.orig_argv does not match /proc/self/cmdline")
+    if not isinstance(sys.executable, str) or not sys.executable or actual[0] != sys.executable:
+        raise SmokeLauncherError("sys.executable does not match process argv0")
+    if not isinstance(sys.argv, list) or not sys.argv:
+        raise SmokeLauncherError("sys.argv is invalid")
+    if require_module:
+        if len(actual) < 4 or actual[1] != "-m" or actual[2] != _CHILD_MODULE or actual[3:] != sys.argv[1:]:
+            raise SmokeLauncherError("sys.argv and module process argv are inconsistent")
+    return actual
 
 
 def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
@@ -208,6 +344,8 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         "config_canonical_sha256",
         "child_argv",
         "child_argv_sha256",
+        "child_executable_identity",
+        "child_argv_schema",
         "created_at_utc",
     }
     if set(prepared) != required or prepared.get("schema_version") != 1 or prepared.get("state") != "PREPARED":
@@ -238,9 +376,29 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         raise SmokeLauncherError("prepared handoff runtime data root mismatch")
     if type(prepared.get("launcher_pid")) is not int or prepared["launcher_pid"] != os.getppid():
         raise SmokeLauncherError("prepared handoff launcher PID mismatch")
-    actual_argv = _actual_child_argv()
-    if prepared.get("child_argv") != actual_argv or prepared.get("child_argv_sha256") != argv_sha256(actual_argv):
+    child_argv = prepared.get("child_argv")
+    if not isinstance(child_argv, list) or not child_argv or any(type(token) is not str or not token or "\x00" in token for token in child_argv):
+        raise SmokeLauncherError("prepared handoff child argv is invalid")
+    if prepared.get("child_argv_schema") == "module-v1":
+        expected_child_argv = _canonical_child_argv(Path(child_argv[0]), repo_root)
+    elif prepared.get("child_argv_schema") == "synthetic-test-v1" and os.environ.get("P3_SMOKE_SYNTHETIC_CHILD") == "1":
+        expected_child_argv = [str(Path(child_argv[0]).resolve()), *child_argv[1:]]
+    else:
+        raise SmokeLauncherError("prepared handoff child argv schema is invalid")
+    if child_argv != expected_child_argv:
+        raise SmokeLauncherError("prepared handoff child argv schema mismatch")
+    _validate_executable_identity(prepared.get("child_executable_identity"))
+    expected_identity = _executable_identity(Path(expected_child_argv[0]))
+    if prepared.get("child_executable_identity") != expected_identity:
+        raise SmokeLauncherError("prepared handoff executable identity mismatch")
+    actual_argv = _actual_child_argv(require_module=prepared["child_argv_schema"] == "module-v1")
+    actual_identity = _actual_child_executable_identity()
+    if actual_identity != expected_identity:
+        raise SmokeLauncherError("actual child executable identity mismatch")
+    if prepared.get("child_argv") != actual_argv or prepared.get("child_argv_sha256") != _child_argv_sha256(actual_argv):
         raise SmokeLauncherError("prepared handoff child argv mismatch")
+    if prepared.get("child_argv_sha256") != _child_argv_sha256(prepared["child_argv"]):
+        raise SmokeLauncherError("prepared handoff child argv SHA mismatch")
     prepared_sha256 = sha256_file(handoff_path)
     receipt = {
         "schema_version": 1,
@@ -249,7 +407,10 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         "launcher_pid": prepared["launcher_pid"],
         "child_pid": os.getpid(),
         "child_ppid": os.getppid(),
+        "child_argv": prepared["child_argv"],
         "child_argv_sha256": prepared["child_argv_sha256"],
+        "child_executable_identity": prepared["child_executable_identity"],
+        "child_argv_schema": prepared["child_argv_schema"],
         "prepared_relative_path": HANDOFF_PREPARED_NAME,
         "prepared_sha256": prepared_sha256,
         "output_dir": str(output_dir),
@@ -284,7 +445,10 @@ def _validate_handoff_receipt(
         "launcher_pid",
         "child_pid",
         "child_ppid",
+        "child_argv",
         "child_argv_sha256",
+        "child_executable_identity",
+        "child_argv_schema",
         "prepared_relative_path",
         "prepared_sha256",
         "output_dir",
@@ -306,7 +470,12 @@ def _validate_handoff_receipt(
         if type(receipt.get(field)) is not int:
             raise SmokeLauncherError(f"handoff receipt PID field is invalid: {field}")
     _validate_nonce(receipt.get("nonce"))
+    if not isinstance(receipt.get("child_argv"), list) or any(type(token) is not str or not token or "\x00" in token for token in receipt["child_argv"]):
+        raise SmokeLauncherError("handoff receipt child argv is invalid")
     _validate_sha(receipt.get("child_argv_sha256"), "handoff receipt child_argv_sha256")
+    if receipt.get("child_argv_sha256") != _child_argv_sha256(receipt["child_argv"]):
+        raise SmokeLauncherError("handoff receipt child argv SHA mismatch")
+    _validate_executable_identity(receipt.get("child_executable_identity"), "handoff receipt executable identity")
     _validate_sha(receipt.get("prepared_sha256"), "handoff receipt prepared_sha256")
     if not all(type(receipt.get(field)) is str and receipt[field] for field in ("output_dir", "process_evidence_dir", "runtime_data_root", "consumed_at_utc")):
         raise SmokeLauncherError("handoff receipt string field is invalid")
@@ -322,6 +491,10 @@ def _validate_handoff_receipt(
         raise SmokeLauncherError("handoff receipt child PID or PPID mismatch")
     if receipt.get("child_argv_sha256") != invocation["child_argv_sha256"]:
         raise SmokeLauncherError("handoff receipt argv SHA mismatch")
+    if receipt.get("child_argv") != invocation["child_argv"] or receipt.get("child_executable_identity") != invocation["child_executable_identity"]:
+        raise SmokeLauncherError("handoff receipt argv identity mismatch")
+    if receipt.get("child_argv_schema") != invocation["child_argv_schema"]:
+        raise SmokeLauncherError("handoff receipt argv schema mismatch")
     if receipt.get("output_dir") != invocation["output_dir"] or receipt.get("process_evidence_dir") != invocation["process_evidence_dir"]:
         raise SmokeLauncherError("handoff receipt path mismatch")
     if receipt.get("runtime_data_root") != invocation["runtime_data_root"]:
@@ -332,8 +505,14 @@ def _validate_handoff_receipt(
     prepared = _read_object(prepared_path)
     if prepared.get("runtime_data_root") != receipt.get("runtime_data_root"):
         raise SmokeLauncherError("prepared and receipt runtime data root mismatch")
+    if (prepared.get("child_argv") != receipt.get("child_argv")
+            or prepared.get("child_executable_identity") != receipt.get("child_executable_identity")
+            or prepared.get("child_argv_schema") != receipt.get("child_argv_schema")):
+        raise SmokeLauncherError("prepared and receipt argv identity mismatch")
     if receipt.get("prepared_sha256") != sha256_file(prepared_path):
         raise SmokeLauncherError("handoff prepared SHA mismatch")
+    if receipt.get("prepared_sha256") != invocation.get("handoff_prepared_sha256"):
+        raise SmokeLauncherError("handoff prepared SHA binding mismatch")
     config_path = Path(receipt["config_path"])
     if config_path.is_symlink() or not config_path.is_file() or config_path.stat().st_nlink != 1:
         raise SmokeLauncherError("handoff receipt config is not a regular file")
@@ -551,29 +730,41 @@ def launch_smoke(
     env: dict[str, str] | None = None,
     nonce: str | None = None,
     config_path: Path | None = None,
+    allow_noncanonical_child: bool = True,
 ) -> int:
-    """Launch a child without creating or reserving its output directory."""
+    """Launch a child without creating or reserving its output directory.
 
-    _config, _resolved_config_path, config_binding = _config_binding(repo_root, config_path)
+    The production CLI always supplies the frozen module argv. The optional
+    synthetic schema preserves the lower-level CPU harness used by historical
+    tests; it is explicitly marked in the handoff and is never produced by
+    ``main``.
+    """
+
+    canonical_repo_root = _canonical_repo_root(repo_root)
+    _config, _resolved_config_path, config_binding = _config_binding(canonical_repo_root, config_path)
     canonical_data_root = _canonical_runtime_data_root(data_root)
     _validate_launch_paths(output_dir, process_evidence_dir, child_python)
     if os.environ.get(SMOKE_AUTH_ENV) != "1" or os.environ.get("CUDA_VISIBLE_DEVICES") != "0" or os.environ.get("PYTHONNOUSERSITE") != "1":
         raise SmokeLauncherError("authorized smoke environment is not exact")
-    process_evidence_dir.parent.mkdir(parents=True, exist_ok=True)
-    process_evidence_dir.mkdir()
     actual_nonce = nonce or secrets.token_hex(16)
     _validate_nonce(actual_nonce)
-    try:
+    child_executable_identity = _executable_identity(child_python)
+    module_child_argv = _canonical_child_argv(child_python, canonical_repo_root)
+    if child_argv == module_child_argv:
+        canonical_child_argv = module_child_argv
+        child_argv_schema = "module-v1"
+    elif allow_noncanonical_child and isinstance(child_argv, list) and child_argv and child_argv[0] == child_executable_identity["canonical_path"]:
         canonical_child_argv = [str(Path(child_argv[0]).resolve()), *child_argv[1:]]
-        if argv_sha256(canonical_child_argv) != argv_sha256(child_argv):
-            raise SmokeLauncherError("child argv canonicalization failed")
-    except (IndexError, SmokeEvidenceError, TypeError) as exc:
-        raise SmokeLauncherError("child argv is invalid") from exc
-    if canonical_child_argv[0] != str(child_python.resolve()):
-        raise SmokeLauncherError("child argv Python does not match child_python")
+        if any(type(token) is not str or not token or "\x00" in token for token in canonical_child_argv):
+            raise SmokeLauncherError("synthetic child argv is invalid")
+        child_argv_schema = "synthetic-test-v1"
+    else:
+        raise SmokeLauncherError("child argv is not the frozen module handoff")
+    process_evidence_dir.parent.mkdir(parents=True, exist_ok=True)
+    process_evidence_dir.mkdir()
     child_env = dict(os.environ if env is None else env)
     child_env.update({
-        "P3_SMOKE_REPO_ROOT": str(repo_root),
+        "P3_SMOKE_REPO_ROOT": str(canonical_repo_root),
         "P3_SMOKE_OUTPUT_DIR": str(output_dir),
         "P3_SMOKE_PROCESS_EVIDENCE_DIR": str(process_evidence_dir),
         "P3_SMOKE_HANDOFF_PATH": str(process_evidence_dir / HANDOFF_PREPARED_NAME),
@@ -581,6 +772,7 @@ def launch_smoke(
         SMOKE_NONCE_ENV: actual_nonce,
         "PYTHONNOUSERSITE": "1",
         "CUDA_VISIBLE_DEVICES": "0",
+        "P3_SMOKE_SYNTHETIC_CHILD": "1" if child_argv_schema == "synthetic-test-v1" else "0",
     })
     handoff = {
         "schema_version": 1,
@@ -589,13 +781,15 @@ def launch_smoke(
         "consumed": False,
         "nonce": actual_nonce,
         "launcher_pid": os.getpid(),
-        "repo_root": str(repo_root.resolve()),
+        "repo_root": str(canonical_repo_root),
         "output_dir": str(output_dir),
         "process_evidence_dir": str(process_evidence_dir),
         "runtime_data_root": str(canonical_data_root),
         **config_binding,
         "child_argv": canonical_child_argv,
-        "child_argv_sha256": argv_sha256(canonical_child_argv),
+        "child_argv_sha256": _child_argv_sha256(canonical_child_argv),
+        "child_executable_identity": child_executable_identity,
+        "child_argv_schema": child_argv_schema,
         "created_at_utc": _utc_now(),
     }
     handoff_path = process_evidence_dir / HANDOFF_PREPARED_NAME
@@ -606,9 +800,11 @@ def launch_smoke(
         "nonce": actual_nonce,
         "launcher_pid": os.getpid(),
         "child_argv": canonical_child_argv,
-        "child_argv_sha256": argv_sha256(canonical_child_argv),
-        "child_python": str(child_python),
-        "repo_root": str(repo_root),
+        "child_argv_sha256": _child_argv_sha256(canonical_child_argv),
+        "child_executable_identity": child_executable_identity,
+        "child_argv_schema": child_argv_schema,
+        "child_python": child_executable_identity["canonical_path"],
+        "repo_root": str(canonical_repo_root),
         "output_dir": str(output_dir),
         "process_evidence_dir": str(process_evidence_dir),
         "runtime_data_root": str(canonical_data_root),
@@ -691,7 +887,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         validate_real_smoke_environment()
-        repo_root = args.repo_root.resolve()
+        repo_root = _canonical_repo_root(args.repo_root)
         _config, config_path, _binding = _config_binding(repo_root, args.config)
         if args.data_root is None or any(part.casefold() == "test" for part in args.data_root.parts):
             raise SmokeLauncherError("real smoke data root is invalid")
@@ -702,10 +898,7 @@ def main(argv: list[str] | None = None) -> int:
             config=_config,
             config_path=config_path,
         )
-        child_argv = [
-            str(args.child_python), "-m", "sparse_rtdetr.baseline.smoke_launcher", "_child",
-            "--repo-root", str(repo_root),
-        ]
+        child_argv = _canonical_child_argv(args.child_python, repo_root)
         env = dict(os.environ)
         env["P3_SMOKE_OUTPUT_DIR"] = str(args.output_dir)
         return launch_smoke(
