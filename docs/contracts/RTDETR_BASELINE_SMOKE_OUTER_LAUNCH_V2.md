@@ -152,6 +152,46 @@ process-evidence, outer-evidence, and tmux session paths differ. V4 must use
 the same handoff, receipt, entry, process, pane, and outer contracts and must
 not reuse any R1, R2, or R3 runtime identity.
 
+Smoke V5 is the frozen R5 contract identity. Its exact values are:
+
+- smoke ID: `rtdetrv2_r18_visdrone_baseline_smoke_v5`
+- config: `configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json`
+- output: `artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r5`
+- process evidence: `artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r5`
+- outer evidence: `artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r5`
+- tmux session: `p3_rtdetrv2_r18_visdrone_baseline_smoke_r5`
+- tmux client timeout: `10` seconds
+
+R4 is permanently failed with failure class
+`ENTRY_CONFIG_CANONICAL_SIZE_HELPER_NAMEERROR`; retry, resume, repair,
+replacement, or reuse of the R4 launch is forbidden. V5 is a new frozen
+runtime identity and does not alter that conclusion. V5 scientific fields are
+field-for-field identical to V4. The only differences are the six explicit
+identity pointers: `smoke_id`, config relative path, output relative path,
+process-evidence relative path, outer-evidence relative path, and tmux session
+name. V5 therefore changes the successor runtime identity only; it does not
+change image selection, data bindings, model fields, seeds, input or batch
+sizes, query or postprocessor settings, or any reportability rule.
+
+The V5 source config is `3631` bytes with SHA-256
+`18c425805f33726d0bbe1834e295366a4aa39e5ad830f1f1f3cf92b3d1509716`.
+The canonical entry serialization is `2922` bytes with SHA-256
+`ed39e40602b716fcc7e94bb521dbcf66ce6f57436b9cbc99ed7ed778462f672b`.
+The source size and source-file SHA remain the handoff and process bindings;
+the canonical size and canonical SHA remain the portable entry bindings.
+This distinction is part of the V5 contract and is not a size-helper
+substitution.
+
+V5 retains the existing nonce equality and exclusive durable receipt
+semantics. The child-owned receipt remains the one-time filesystem claim, and
+process child return code, process launcher result, pane/finalizer status, and
+outer classification retain their existing independent meanings. No V5
+production output, process-evidence, or outer-evidence directory is created by
+this contract. The V5 registry and CPU/synthetic checks make the contract
+available for independent audit only; they do not authorize filesystem
+provisioning, tmux, Smoke, GPU, CUDA, data, model, training, evaluation, or
+metrics execution.
+
 The child handoff has one canonical argv schema shared by the parent and child:
 the bound executable path, `-m`, `sparse_rtdetr.baseline.smoke_launcher`,
 `_child`, `--repo-root`, and the canonical repository root. It never contains

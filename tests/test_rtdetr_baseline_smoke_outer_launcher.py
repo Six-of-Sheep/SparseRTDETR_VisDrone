@@ -18,6 +18,7 @@ from sparse_rtdetr.baseline.smoke import (
     SMOKE_V2_ID,
     SMOKE_V3_ID,
     SMOKE_V4_ID,
+    SMOKE_V5_ID,
     load_smoke_config,
 )
 from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, inventory, sha256_bytes, sha256_file
@@ -44,6 +45,7 @@ V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 V4_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
+V5_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
 SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
 V3_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r3"
 V4_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"
@@ -61,7 +63,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     shutil.copytree(ROOT / "src", root / "src")
     (root / "configs/baseline").mkdir(parents=True)
     (root / "artifacts/data/visdrone_protocol_v2_conversion_r3").mkdir(parents=True)
-    config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG}[version]
+    config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG, 5: V5_CONFIG}[version]
     config_name = config_source.name
     shutil.copyfile(config_source, root / "configs/baseline" / config_name)
     config = json.loads(config_source.read_text(encoding="utf-8"))
@@ -79,7 +81,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     child = _script(tmp_path / "child", f"echo child >> {child_count}\nexit {child_rc}")
     tmux_count = tmp_path / "tmux.count"
     tmux = _script(tmp_path / "fake-tmux", f"echo tmux >> {tmux_count}\n\"$7\"\nexit 0")
-    suffix = {2: "r2", 3: "r3", 4: "r4"}[version]
+    suffix = {2: "r2", 3: "r3", 4: "r4", 5: "r5"}[version]
     output = root / f"artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     process = root / f"artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     outer = outer_parent / f"rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
@@ -92,7 +94,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
         "outer_evidence_dir": outer,
         "child_python": child,
         "tmux_executable": tmux,
-        "tmux_session": {2: SESSION, 3: V3_SESSION, 4: V4_SESSION}[version],
+        "tmux_session": {2: SESSION, 3: V3_SESSION, 4: V4_SESSION, 5: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5"}[version],
     }
     return args, child_count, tmux_count
 
@@ -206,6 +208,10 @@ def _complete_v4_chain(tmp_path: Path, monkeypatch) -> dict[str, Path | str]:
     return _complete_v3_chain(tmp_path, monkeypatch, version=4)
 
 
+def _complete_v5_chain(tmp_path: Path, monkeypatch) -> dict[str, Path | str]:
+    return _complete_v3_chain(tmp_path, monkeypatch, version=5)
+
+
 def _digests(root: Path) -> dict[str, str]:
     return {
         str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -287,6 +293,17 @@ def test_v4_outer_contract_check_is_data_free_and_uses_only_v4_identity(tmp_path
     assert not args["outer_evidence_dir"].exists()
 
 
+def test_v5_outer_contract_check_is_data_free_and_uses_only_v5_identity(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=5)
+    result = contract_check(args["repo_root"], args["config_path"])
+    assert result["status"] == "PASS"
+    assert result["smoke_id"] == SMOKE_V5_ID
+    assert result["config_binding"]["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
+    assert result["tmux_called"] is False
+    assert result["torch_imported"] is False
+    assert not args["outer_evidence_dir"].exists()
+
+
 def test_v4_outer_synthetic_full_path_uses_only_v4_identity(tmp_path):
     args, _child_count, tmux_count = _repo(tmp_path, version=4)
     result = run_outer_launch(**args)
@@ -297,6 +314,19 @@ def test_v4_outer_synthetic_full_path_uses_only_v4_identity(tmp_path):
     assert outer["invocation"]["tmux_session"] == V4_SESSION
     assert outer["invocation"]["output_dir"] == str(args["output_dir"])
     assert outer["invocation"]["process_evidence_dir"] == str(args["process_evidence_dir"])
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "INNER_STARTED_PROCESS_EVIDENCE_ABSENT"
+
+
+def test_v5_outer_synthetic_full_path_uses_only_v5_identity(tmp_path):
+    args, _child_count, tmux_count = _repo(tmp_path, version=5)
+    result = run_outer_launch(**args)
+    assert result["status"] == "TMUX_ACCEPTED"
+    assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
+    outer = validate_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    assert outer["invocation"]["smoke_id"] == SMOKE_V5_ID
+    assert outer["invocation"]["tmux_session"] == "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5"
+    binding = json.loads((args["outer_evidence_dir"] / "launcher/outer_config_binding.json").read_text(encoding="utf-8"))
+    assert binding["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
     assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "INNER_STARTED_PROCESS_EVIDENCE_ABSENT"
 
 
@@ -311,6 +341,14 @@ def test_v4_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, mo
     completion = json.loads((args["process_evidence_dir"] / "process_completion.json").read_text(encoding="utf-8"))
     assert completion["smoke_id"] == SMOKE_V4_ID
     assert completion["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
+
+
+def test_v5_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, monkeypatch):
+    args = _complete_v5_chain(tmp_path, monkeypatch)
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "TERMINAL_COMPLETE"
+    completion = json.loads((args["process_evidence_dir"] / "process_completion.json").read_text(encoding="utf-8"))
+    assert completion["smoke_id"] == SMOKE_V5_ID
+    assert completion["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
 
 
 def test_v4_main_propagates_pane_nonce_through_complete_synthetic_chain(tmp_path, monkeypatch):
@@ -392,6 +430,60 @@ def test_v4_identity_drift_is_terminal_failure(tmp_path, monkeypatch):
     assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "TERMINAL_FAILED"
 
 
+def _repack_entry(output: Path) -> None:
+    excluded = frozenset({"artifact_inventory.json", "completion.json"})
+    inventory_path = output / "artifact_inventory.json"
+    payload = canonical_json_bytes(inventory(output, excluded))
+    inventory_path.write_bytes(payload)
+    completion_path = output / "completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["artifact_inventory_sha256"] = sha256_bytes(payload)
+    completion_path.write_bytes(canonical_json_bytes(completion))
+
+
+@pytest.mark.parametrize("field", [
+    "outer_smoke_id", "pane_smoke_id", "process_smoke_id", "entry_smoke_id",
+    "config_relative_path", "outer_path", "process_path", "tmux_session",
+    "source_config_sha", "canonical_config_sha", "nonce", "receipt_sha",
+])
+def test_v5_identity_drift_never_reaches_terminal_complete(tmp_path, monkeypatch, field):
+    args = _complete_v5_chain(tmp_path, monkeypatch)
+    if field == "outer_smoke_id":
+        path = args["outer_evidence_dir"] / "launcher/outer_invocation.json"
+        value = json.loads(path.read_text(encoding="utf-8")); value["smoke_id"] = SMOKE_V4_ID; path.write_bytes(canonical_json_bytes(value)); _repack_outer(args["outer_evidence_dir"])
+    elif field == "pane_smoke_id":
+        path = args["outer_evidence_dir"] / "pane/pane_receipt.json"
+        value = json.loads(path.read_text(encoding="utf-8")); value["smoke_id"] = SMOKE_V4_ID; path.write_bytes(canonical_json_bytes(value)); _repack_pane(args["outer_evidence_dir"] / "pane")
+    elif field == "entry_smoke_id":
+        path = args["output_dir"] / "invocation.json"
+        value = json.loads(path.read_text(encoding="utf-8")); value["smoke_id"] = SMOKE_V4_ID; path.write_bytes(canonical_json_bytes(value)); _repack_entry(args["output_dir"])
+    elif field in {"outer_path", "process_path", "tmux_session"}:
+        path = args["outer_evidence_dir"] / "launcher/outer_invocation.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        mutations = {
+            "outer_path": ("outer_evidence_dir", "/tmp/forged-outer"),
+            "process_path": ("process_evidence_dir", "/tmp/forged-process"),
+            "tmux_session": ("tmux_session", "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"),
+        }
+        key, forged = mutations[field]; value[key] = forged; path.write_bytes(canonical_json_bytes(value)); _repack_outer(args["outer_evidence_dir"])
+    else:
+        path = args["process_evidence_dir"] / "process_completion.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        mutations = {
+            "process_smoke_id": ("smoke_id", SMOKE_V4_ID),
+            "config_relative_path": ("config_relative_path", "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"),
+            "outer_path": ("outer_evidence_dir", "/tmp/forged-outer"),
+            "process_path": ("process_evidence_dir", "/tmp/forged-process"),
+            "tmux_session": ("tmux_session", "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"),
+            "source_config_sha": ("config_file_sha256", "0" * 64),
+            "canonical_config_sha": ("config_canonical_sha256", "0" * 64),
+            "nonce": ("nonce", "0" * 32),
+            "receipt_sha": ("handoff_receipt_sha256", "0" * 64),
+        }
+        key, forged = mutations[field]; value[key] = forged; path.write_bytes(canonical_json_bytes(value)); _repack_process(args["process_evidence_dir"])
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) != "TERMINAL_COMPLETE"
+
+
 def test_v4_preexisting_output_is_rejected_before_outer_creation(tmp_path):
     args, _child_count, _tmux_count = _repo(tmp_path, version=4)
     args["output_dir"].mkdir()
@@ -400,6 +492,30 @@ def test_v4_preexisting_output_is_rejected_before_outer_creation(tmp_path):
     assert args["outer_evidence_dir"].is_dir()
     assert not args["process_evidence_dir"].exists()
     assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "PREFLIGHT_FAILED"
+
+
+@pytest.mark.parametrize("kind", ["output", "process", "outer", "symlink", "file", "directory"])
+def test_v5_preexisting_targets_are_rejected_before_fake_tmux(tmp_path, kind):
+    args, _child_count, tmux_count = _repo(tmp_path, version=5)
+    target = {"output": args["output_dir"], "process": args["process_evidence_dir"], "outer": args["outer_evidence_dir"]}.get(kind, args["output_dir"])
+    if kind == "symlink":
+        real = tmp_path / "existing-output"
+        real.mkdir()
+        target.symlink_to(real, target_is_directory=True)
+    elif kind == "file":
+        target.write_text("existing", encoding="ascii")
+    elif kind == "directory":
+        target.mkdir()
+    else:
+        target.mkdir()
+    if kind == "outer":
+        with pytest.raises(OuterLaunchError):
+            run_outer_launch(**args)
+        assert not tmux_count.exists()
+        return
+    result = run_outer_launch(**args)
+    assert result["status"] == "PREFLIGHT_FAILED"
+    assert not tmux_count.exists()
 
 
 @pytest.mark.parametrize("mutation", [

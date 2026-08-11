@@ -32,10 +32,12 @@ SMOKE_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v1"
 SMOKE_V2_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v2"
 SMOKE_V3_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v3"
 SMOKE_V4_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v4"
+SMOKE_V5_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v5"
 SMOKE_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 SMOKE_V2_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 SMOKE_V3_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 SMOKE_V4_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
+SMOKE_V5_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
 SMOKE_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_V2_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
@@ -53,6 +55,11 @@ SMOKE_V4_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_ba
 SMOKE_V4_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r4"
 SMOKE_V4_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"
 SMOKE_V4_TMUX_TIMEOUT_SECONDS = 10
+SMOKE_V5_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r5"
+SMOKE_V5_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r5"
+SMOKE_V5_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r5"
+SMOKE_V5_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5"
+SMOKE_V5_TMUX_TIMEOUT_SECONDS = 10
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
 
@@ -112,6 +119,16 @@ SMOKE_RUNTIME_SPECS = MappingProxyType({
         tmux_timeout_seconds=SMOKE_V4_TMUX_TIMEOUT_SECONDS,
         allow_outer_launch=True,
     ),
+    SMOKE_V5_ID: SmokeRuntimeSpec(
+        smoke_id=SMOKE_V5_ID,
+        config_relative_path=SMOKE_V5_CONFIG_RELATIVE,
+        output_relative_path=SMOKE_V5_OUTPUT_RELATIVE,
+        process_relative_path=SMOKE_V5_PROCESS_RELATIVE,
+        outer_relative_path=SMOKE_V5_OUTER_RELATIVE,
+        tmux_session=SMOKE_V5_TMUX_SESSION,
+        tmux_timeout_seconds=SMOKE_V5_TMUX_TIMEOUT_SECONDS,
+        allow_outer_launch=True,
+    ),
 })
 
 
@@ -124,6 +141,15 @@ def get_smoke_runtime_spec(smoke_id: Any) -> SmokeRuntimeSpec:
         return SMOKE_RUNTIME_SPECS[smoke_id]
     except KeyError as exc:
         raise SmokeContractError("unknown smoke_id") from exc
+
+
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = child
+    return value
 
 
 def _runtime_schema(spec: SmokeRuntimeSpec) -> dict[str, Any]:
@@ -303,6 +329,8 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
         raise SmokeContractError("smoke runtime contract drift")
     _strict_int(runtime["device_count"], "runtime.device_count", 1)
     _strict_bool(runtime["cpu_fallback"], "runtime.cpu_fallback")
+    if spec.allow_outer_launch:
+        _strict_int(runtime["tmux_client_timeout_seconds"], "runtime.tmux_client_timeout_seconds", 1)
     evidence = config["evidence"]
     if evidence != {
         "completion_status": "COMPLETED",
@@ -325,8 +353,8 @@ def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = No
         raise SmokeContractError("smoke config is missing or not regular")
     path = path.resolve()
     try:
-        config = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        config = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_strict_json_object)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise SmokeContractError("smoke config is invalid") from exc
     validate_smoke_config(config)
     spec = get_smoke_runtime_spec(config["smoke_id"])
@@ -338,14 +366,14 @@ def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = No
     return config
 
 
-def contract_check(repo_root: str | Path) -> dict[str, Any]:
+def contract_check(repo_root: str | Path, config_path: str | Path | None = None) -> dict[str, Any]:
     """Data-free smoke contract check. This function must not import torch."""
 
     if os.environ.get("CUDA_VISIBLE_DEVICES") != "":
         raise SmokeContractError("contract-check requires CUDA_VISIBLE_DEVICES=''")
     if os.environ.get("PYTHONNOUSERSITE") != "1":
         raise SmokeContractError("contract-check requires PYTHONNOUSERSITE=1")
-    config = load_smoke_config(repo_root)
+    config = load_smoke_config(repo_root, config_path)
     binding = verify_r3_binding(repo_root)
     return {
         "status": "PASS",

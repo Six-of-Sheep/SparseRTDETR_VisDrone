@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,16 +28,22 @@ from sparse_rtdetr.baseline.smoke import (
     SMOKE_V2_PROCESS_RELATIVE,
     SMOKE_V3_ID,
     SMOKE_V4_ID,
+    SMOKE_V5_ID,
     SMOKE_V3_CONFIG_RELATIVE,
     SMOKE_V3_OUTPUT_RELATIVE,
     SMOKE_V3_PROCESS_RELATIVE,
     SMOKE_V3_OUTER_RELATIVE,
     SMOKE_V3_TMUX_SESSION,
     SMOKE_V4_CONFIG_RELATIVE,
+    SMOKE_V5_CONFIG_RELATIVE,
     SMOKE_V4_OUTPUT_RELATIVE,
     SMOKE_V4_PROCESS_RELATIVE,
     SMOKE_V4_OUTER_RELATIVE,
     SMOKE_V4_TMUX_SESSION,
+    SMOKE_V5_OUTPUT_RELATIVE,
+    SMOKE_V5_PROCESS_RELATIVE,
+    SMOKE_V5_OUTER_RELATIVE,
+    SMOKE_V5_TMUX_SESSION,
     SmokeContractError,
     get_smoke_runtime_spec,
     SyntheticOneBatchLoader,
@@ -79,6 +86,7 @@ V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / SMOKE_V3_CONFIG_RELATIVE
 V4_CONFIG = ROOT / SMOKE_V4_CONFIG_RELATIVE
+V5_CONFIG = ROOT / SMOKE_V5_CONFIG_RELATIVE
 
 
 class _PreCudaSentinel(RuntimeError):
@@ -404,7 +412,7 @@ def test_smoke_config_and_manifest_are_strict_and_frozen():
         importlib.import_module("sparse_rtdetr.baseline.smoke").validate_smoke_config(drifted)
 
 
-@pytest.mark.parametrize("config_path", [V1_CONFIG, V2_CONFIG, V3_CONFIG, V4_CONFIG])
+@pytest.mark.parametrize("config_path", [V1_CONFIG, V2_CONFIG, V3_CONFIG, V4_CONFIG, V5_CONFIG])
 def test_schema_version_accepts_only_builtin_int_one(config_path):
     smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -467,6 +475,34 @@ def test_contract_check_is_data_free_and_does_not_import_torch():
     assert evidence["torch_imported"] is False
     assert evidence["output_directory_created"] is False
     assert evidence["dataset_or_dataloader_constructed"] is False
+
+
+def test_v5_inner_contract_check_is_explicit_and_data_free(monkeypatch):
+    smoke = _patch_synthetic_selection(monkeypatch)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    monkeypatch.setattr(smoke, "verify_r3_binding", lambda *_args: SimpleNamespace(artifact_root=ROOT / "synthetic-r3"))
+    result = contract_check(ROOT, V5_CONFIG)
+    assert result["status"] == "PASS"
+    assert result["smoke_id"] == SMOKE_V5_ID
+    assert result["real_data_accessed"] is False
+    assert result["dataset_or_dataloader_constructed"] is False
+    assert result["model_constructed"] is False
+    assert result["output_directory_created"] is False
+    assert result["process_evidence_created"] is False
+    code = (
+        "import json, types\n"
+        "import sparse_rtdetr.baseline.smoke as smoke\n"
+        "smoke.load_frozen_image_selection = lambda _root: smoke.FROZEN_IMAGE_RECORDS\n"
+        "smoke.verify_r3_binding = lambda *_args: types.SimpleNamespace(artifact_root='synthetic-r3')\n"
+        f"result = smoke.contract_check({str(ROOT)!r}, {str(V5_CONFIG)!r})\n"
+        "assert result['status'] == 'PASS' and result['smoke_id'] == 'rtdetrv2_r18_visdrone_baseline_smoke_v5'\n"
+        "assert result['torch_imported'] is False\n"
+        "print(json.dumps(result, sort_keys=True))\n"
+    )
+    env = {**os.environ, "CUDA_VISIBLE_DEVICES": "", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(ROOT / "src")}
+    completed = subprocess.run([str(PYTHON), "-c", code], cwd=ROOT, env=env, capture_output=True, text=True, check=False)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def test_real_smoke_prehash_uses_shared_resolver_before_cuda(monkeypatch, tmp_path):
@@ -533,6 +569,7 @@ def test_launcher_rejects_frozen_path_drift(tmp_path):
         (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
         (V3_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
         (V4_CONFIG, SMOKE_V4_OUTPUT_RELATIVE, SMOKE_V4_PROCESS_RELATIVE),
+        (V5_CONFIG, SMOKE_V5_OUTPUT_RELATIVE, SMOKE_V5_PROCESS_RELATIVE),
     ],
 )
 def test_versioned_runtime_registry_accepts_only_matching_inner_paths(config_path, output_relative, process_relative):
@@ -557,6 +594,8 @@ def test_versioned_runtime_registry_accepts_only_matching_inner_paths(config_pat
         (V3_CONFIG, SMOKE_V4_OUTPUT_RELATIVE, SMOKE_V4_PROCESS_RELATIVE),
         (V4_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
         (V4_CONFIG, SMOKE_V2_OUTPUT_RELATIVE, SMOKE_V2_PROCESS_RELATIVE),
+        (V5_CONFIG, SMOKE_V4_OUTPUT_RELATIVE, SMOKE_V4_PROCESS_RELATIVE),
+        (V4_CONFIG, SMOKE_V5_OUTPUT_RELATIVE, SMOKE_V5_PROCESS_RELATIVE),
     ],
 )
 def test_versioned_runtime_registry_rejects_cross_version_inner_paths(config_path, wrong_output, wrong_process):
@@ -572,9 +611,14 @@ def test_versioned_runtime_registry_rejects_cross_version_inner_paths(config_pat
 
 
 def test_runtime_registry_is_explicit_and_unknown_ids_fail_closed():
-    assert tuple(get_smoke_runtime_spec(value).smoke_id for value in (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID)) == (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID)
-    with pytest.raises(SmokeContractError):
-        get_smoke_runtime_spec("rtdetrv2_r18_visdrone_baseline_smoke_v99")
+    ids = (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID, SMOKE_V5_ID)
+    assert tuple(get_smoke_runtime_spec(value).smoke_id for value in ids) == ids
+    assert len({get_smoke_runtime_spec(value).config_relative_path for value in ids}) == 5
+    assert get_smoke_runtime_spec(SMOKE_V4_ID).output_relative_path.endswith("_r4")
+    assert get_smoke_runtime_spec(SMOKE_V5_ID).output_relative_path.endswith("_r5")
+    for value in ("rtdetrv2_r18_visdrone_baseline_smoke_v6", "", True, None):
+        with pytest.raises(SmokeContractError):
+            get_smoke_runtime_spec(value)
 
 
 @pytest.mark.parametrize("config_path, forged_id", [(V2_CONFIG, SMOKE_V3_ID), (V3_CONFIG, SMOKE_V2_ID), (V3_CONFIG, SMOKE_V4_ID), (V4_CONFIG, SMOKE_V3_ID)])
@@ -624,6 +668,117 @@ def test_v4_config_is_frozen_identity_variant_of_v3():
     assert config["smoke_id"] == SMOKE_V4_ID
     assert binding["config_file_sha256"] == hashlib.sha256(V4_CONFIG.read_bytes()).hexdigest()
     assert binding["config_canonical_sha256"] == hashlib.sha256(canonical_json_bytes(v4)).hexdigest()
+
+
+def _json_pointer_diffs(left, right, path=""):
+    if isinstance(left, dict) and isinstance(right, dict):
+        differences = []
+        for key in sorted(set(left) | set(right)):
+            child_path = f"{path}/{key}"
+            if key not in left or key not in right:
+                differences.append(child_path)
+            else:
+                differences.extend(_json_pointer_diffs(left[key], right[key], child_path))
+        return differences
+    if isinstance(left, list) and isinstance(right, list):
+        differences = []
+        if len(left) != len(right):
+            differences.append(path)
+        for index, (left_value, right_value) in enumerate(zip(left, right)):
+            differences.extend(_json_pointer_diffs(left_value, right_value, f"{path}/{index}"))
+        return differences
+    return [] if type(left) is type(right) and left == right else [path]
+
+
+def test_v5_scientific_identity_matches_v4_at_exactly_six_pointers():
+    v4 = json.loads(V4_CONFIG.read_text(encoding="utf-8"))
+    v5 = json.loads(V5_CONFIG.read_text(encoding="utf-8"))
+    expected = {
+        "/smoke_id",
+        "/runtime/config_relative_path",
+        "/runtime/output_relative_path",
+        "/runtime/process_evidence_relative_path",
+        "/runtime/outer_launch_evidence_relative_path",
+        "/runtime/tmux_session_name",
+    }
+    assert set(_json_pointer_diffs(v4, v5)) == expected
+    assert v5["smoke_id"] == SMOKE_V5_ID
+    assert v5["runtime"] == {
+        **v4["runtime"],
+        "config_relative_path": SMOKE_V5_CONFIG_RELATIVE,
+        "output_relative_path": SMOKE_V5_OUTPUT_RELATIVE,
+        "process_evidence_relative_path": SMOKE_V5_PROCESS_RELATIVE,
+        "outer_launch_evidence_relative_path": SMOKE_V5_OUTER_RELATIVE,
+        "tmux_session_name": SMOKE_V5_TMUX_SESSION,
+    }
+    assert v5["runtime"]["tmux_client_timeout_seconds"] == 10
+
+    seventh = copy.deepcopy(v5)
+    seventh["model"]["seed"] = 1
+    assert "/model/seed" in _json_pointer_diffs(v4, seventh)
+    typed = copy.deepcopy(v5)
+    typed["runtime"]["tmux_client_timeout_seconds"] = 10.0
+    assert "/runtime/tmux_client_timeout_seconds" in _json_pointer_diffs(v4, typed)
+
+
+def test_v5_raw_and_canonical_config_identity_is_frozen_from_bytes():
+    raw = V5_CONFIG.read_bytes()
+    value = json.loads(raw)
+    canonical = canonical_json_bytes(value)
+    assert len(raw) == 3631
+    assert hashlib.sha256(raw).hexdigest() == "18c425805f33726d0bbe1834e295366a4aa39e5ad830f1f1f3cf92b3d1509716"
+    assert len(canonical) == 2922
+    assert hashlib.sha256(canonical).hexdigest() == "ed39e40602b716fcc7e94bb521dbcf66ce6f57436b9cbc99ed7ed778462f672b"
+
+
+@pytest.mark.parametrize("mutation", [
+    "v5_id_v4_path",
+    "v4_id_v5_path",
+    "relative_path",
+    "output_path",
+    "process_path",
+    "outer_path",
+    "session",
+    "timeout_bool",
+    "timeout_float",
+    "timeout_string",
+])
+def test_v5_config_mutation_matrix_fails_closed(mutation):
+    smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
+    config = json.loads(V5_CONFIG.read_text(encoding="utf-8"))
+    if mutation == "v5_id_v4_path":
+        config["runtime"]["config_relative_path"] = SMOKE_V4_CONFIG_RELATIVE
+    elif mutation == "v4_id_v5_path":
+        config["smoke_id"] = SMOKE_V4_ID
+    elif mutation == "relative_path":
+        config["runtime"]["config_relative_path"] = "configs/baseline/changed.json"
+    elif mutation == "output_path":
+        config["runtime"]["output_relative_path"] = SMOKE_V4_OUTPUT_RELATIVE
+    elif mutation == "process_path":
+        config["runtime"]["process_evidence_relative_path"] = SMOKE_V4_PROCESS_RELATIVE
+    elif mutation == "outer_path":
+        config["runtime"]["outer_launch_evidence_relative_path"] = SMOKE_V4_OUTER_RELATIVE
+    elif mutation == "session":
+        config["runtime"]["tmux_session_name"] = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"
+    elif mutation == "timeout_bool":
+        config["runtime"]["tmux_client_timeout_seconds"] = True
+    elif mutation == "timeout_float":
+        config["runtime"]["tmux_client_timeout_seconds"] = 10.0
+    else:
+        config["runtime"]["tmux_client_timeout_seconds"] = "10"
+    with pytest.raises(SmokeContractError):
+        smoke.validate_smoke_config(config)
+
+
+def test_v5_duplicate_and_symlink_config_files_fail_closed(tmp_path):
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text('{"schema_version":1,"schema_version":1}', encoding="utf-8")
+    with pytest.raises(SmokeContractError):
+        load_smoke_config(ROOT, duplicate)
+    link = tmp_path / "v5-link.json"
+    link.symlink_to(V5_CONFIG)
+    with pytest.raises(SmokeContractError):
+        load_smoke_config(ROOT, link)
 
 
 @pytest.mark.parametrize(
@@ -1079,12 +1234,22 @@ def test_real_v4_entry_precuda_config_invocation_path(tmp_path, monkeypatch):
     assert (output / "config.json").stat().st_size == 2922
 
 
+def test_real_v5_entry_precuda_config_invocation_path(tmp_path, monkeypatch):
+    config, output, invocation = _run_real_entry_precuda_path(tmp_path, monkeypatch, V5_CONFIG)
+    assert config["smoke_id"] == SMOKE_V5_ID
+    assert invocation["config_relative_path"] == SMOKE_V5_CONFIG_RELATIVE
+    assert invocation["config_size_bytes"] == 2922
+    assert invocation["config_sha256"] == "ed39e40602b716fcc7e94bb521dbcf66ce6f57436b9cbc99ed7ed778462f672b"
+    assert (output / "config.json").stat().st_size == 2922
+
+
 @pytest.mark.parametrize(
     "config_path, expected_id, expected_relative",
     [
         (V2_CONFIG, SMOKE_V2_ID, "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"),
         (V3_CONFIG, SMOKE_V3_ID, SMOKE_V3_CONFIG_RELATIVE),
         (V4_CONFIG, SMOKE_V4_ID, SMOKE_V4_CONFIG_RELATIVE),
+        (V5_CONFIG, SMOKE_V5_ID, SMOKE_V5_CONFIG_RELATIVE),
     ],
 )
 def test_real_versioned_entry_precuda_path_v2_v3_v4(
