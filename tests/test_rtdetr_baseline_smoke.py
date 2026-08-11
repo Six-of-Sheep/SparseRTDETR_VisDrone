@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import copy
+import builtins
 import hashlib
 import importlib
+import inspect
 import json
 import os
 import signal
@@ -77,6 +79,59 @@ V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / SMOKE_V3_CONFIG_RELATIVE
 V4_CONFIG = ROOT / SMOKE_V4_CONFIG_RELATIVE
+
+
+class _PreCudaSentinel(RuntimeError):
+    pass
+
+
+def _real_entry_handoff(config_path: Path, output: Path, data_root: Path) -> tuple[dict[str, object], str]:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    child_argv = [
+        str(PYTHON),
+        "-m",
+        "sparse_rtdetr.baseline.smoke_launcher",
+        "_child",
+        "--repo-root",
+        str(ROOT),
+    ]
+    python_stat = PYTHON.stat()
+    receipt = {
+        "schema_version": 1,
+        "state": "CONSUMED",
+        "single_use": True,
+        "consumed": True,
+        "nonce": "a" * 32,
+        "launcher_pid": 101,
+        "child_pid": 202,
+        "child_ppid": 303,
+        "repo_root": str(ROOT),
+        "output_dir": str(output),
+        "process_evidence_dir": str(output.parent / "process"),
+        "runtime_data_root": str(data_root),
+        "smoke_id": config["smoke_id"],
+        "config_relative_path": config_path.relative_to(ROOT).as_posix(),
+        "config_path": str(config_path.resolve()),
+        "config_size_bytes": config_path.stat().st_size,
+        "config_file_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+        "config_canonical_sha256": hashlib.sha256(canonical_json_bytes(config)).hexdigest(),
+        "child_argv": child_argv,
+        "child_argv_schema": "module-v1",
+        "child_argv_sha256": argv_sha256(child_argv),
+        "child_executable_identity": {
+            "canonical_path": str(PYTHON),
+            "size_bytes": python_stat.st_size,
+            "sha256": hashlib.sha256(PYTHON.read_bytes()).hexdigest(),
+            "mode": stat.S_IMODE(python_stat.st_mode),
+            "regular_file": True,
+            "executable": True,
+        },
+        "prepared_relative_path": "handoff_prepared.json",
+        "prepared_sha256": "2" * 64,
+        "created_at_utc": "2026-08-11T00:00:00+00:00",
+        "consumed_at_utc": "2026-08-11T00:00:01+00:00",
+    }
+    return receipt, hashlib.sha256(canonical_json_bytes(receipt)).hexdigest()
 
 
 def _base_env() -> dict[str, str]:
@@ -592,8 +647,10 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     data_root.mkdir()
     output = ROOT / output_relative
     process = ROOT / process_relative
-    assert not output.exists()
-    assert process.exists() is (config_path == V3_CONFIG)
+    frozen_r4 = config_path == V4_CONFIG
+    frozen_r4_config = (output / "config.json").read_bytes() if frozen_r4 else None
+    assert output.exists() is frozen_r4
+    assert process.exists() is (config_path in {V3_CONFIG, V4_CONFIG})
     smoke_argv = [
         "smoke",
         "--repo-root", str(ROOT),
@@ -614,8 +671,10 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     parsed = launcher._parser().parse_args(captured["argv"][3:])
     assert parsed.mode == "_child"
     assert parsed.repo_root == ROOT
-    assert not output.exists()
-    assert process.exists() is (config_path == V3_CONFIG)
+    assert output.exists() is frozen_r4
+    assert process.exists() is (config_path in {V3_CONFIG, V4_CONFIG})
+    if frozen_r4:
+        assert (output / "config.json").read_bytes() == frozen_r4_config
 
 
 @pytest.mark.parametrize("pane_nonce", [None, "", "a" * 31, "a" * 33, "A" * 32, "g" * 32, "a" * 31 + "!", "a" * 31 + " ", "a" * 31 + "\n"])
@@ -633,6 +692,7 @@ def test_outer_enabled_main_rejects_missing_or_invalid_pane_nonce_before_launch(
     data_root.mkdir()
     output = ROOT / SMOKE_V4_OUTPUT_RELATIVE
     process = ROOT / SMOKE_V4_PROCESS_RELATIVE
+    frozen_r4_config = (output / "config.json").read_bytes()
     result = launcher.main([
         "smoke",
         "--repo-root", str(ROOT),
@@ -644,8 +704,9 @@ def test_outer_enabled_main_rejects_missing_or_invalid_pane_nonce_before_launch(
     ])
     assert result == 2
     assert launch_calls == []
-    assert not output.exists()
-    assert not process.exists()
+    assert output.is_dir()
+    assert process.is_dir()
+    assert (output / "config.json").read_bytes() == frozen_r4_config
 
 
 def test_old_child_argv_with_config_remains_argparse_failure():
@@ -923,6 +984,143 @@ def test_real_entry_v2_and_v3_share_canonical_config_binding(tmp_path, config_pa
     invocation = _read_object(output / "invocation.json")
     assert invocation["config_sha256"] == expected["config_canonical_sha256"]
     assert invocation["config_size_bytes"] == (output / "config.json").stat().st_size
+
+
+def _run_real_entry_precuda_path(tmp_path, monkeypatch, config_path):
+    smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    data_root = tmp_path / "synthetic_train_core"
+    data_root.mkdir()
+    output = tmp_path / config_path.stem
+    receipt, receipt_sha = _real_entry_handoff(config_path, output, data_root)
+    selection_calls = []
+
+    def selection_sentinel(_repo_root):
+        selection_calls.append(True)
+        if len(selection_calls) == 1:
+            return config["image_selection"]["records"]
+        assert (output / "config.json").is_file()
+        assert (output / "invocation.json").is_file()
+        assert not (output / "completion.json").exists()
+        raise _PreCudaSentinel("pre-CUDA entry boundary")
+
+    def forbidden_runtime_access(*_args, **_kwargs):
+        raise AssertionError("pre-CUDA regression reached forbidden runtime access")
+
+    monkeypatch.setattr(smoke, "load_frozen_image_selection", selection_sentinel)
+    monkeypatch.setattr(smoke, "resolve_runtime_image_path", forbidden_runtime_access)
+    monkeypatch.setattr(smoke, "validate_real_smoke_environment", forbidden_runtime_access)
+    monkeypatch.setattr(smoke, "build_r18_cpu_model", forbidden_runtime_access)
+
+    imported = []
+    original_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        imported.append(name)
+        if name == "torch" or name.startswith("torch."):
+            raise AssertionError("pre-CUDA regression imported torch")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    with pytest.raises(_PreCudaSentinel, match="pre-CUDA entry boundary"):
+        run_authorized_smoke(
+            ROOT,
+            data_root,
+            output,
+            handoff_receipt=receipt,
+            handoff_receipt_sha256=receipt_sha,
+            config_path=config_path,
+        )
+
+    assert selection_calls == [True, True]
+    assert all(name != "torch" and not name.startswith("torch.") for name in imported)
+    config_bytes = (output / "config.json").read_bytes()
+    expected_bytes = canonical_json_bytes(config)
+    assert config_bytes == expected_bytes
+    assert config_bytes == canonical_config_bytes(config)
+    assert len(config_bytes) == (output / "config.json").stat().st_size
+    config_sha = hashlib.sha256(config_bytes).hexdigest()
+    assert config_sha == hashlib.sha256(expected_bytes).hexdigest()
+    invocation = _read_object(output / "invocation.json")
+    assert invocation["smoke_id"] == config["smoke_id"]
+    assert invocation["config_relative_path"] == config["runtime"]["config_relative_path"]
+    assert invocation["config_size_bytes"] == len(expected_bytes)
+    assert invocation["config_sha256"] == config_sha
+    for field in (
+        "nonce",
+        "launcher_pid",
+        "child_pid",
+        "child_ppid",
+        "child_argv_sha256",
+    ):
+        assert invocation[field] == receipt[field]
+    assert invocation["handoff_receipt_sha256"] == receipt_sha
+    assert invocation["handoff_receipt_relative_path"] == "handoff_receipt.json"
+    assert receipt["config_size_bytes"] == config_path.stat().st_size
+    assert receipt["config_size_bytes"] != invocation["config_size_bytes"]
+    completion = _read_object(output / "completion.json")
+    assert completion["status"] == "FAILED"
+    assert _read_object(output / "error.json")["exception_type"] == "_PreCudaSentinel"
+    assert (output / "partial_inventory.json").is_file()
+    return config, output, invocation
+
+
+def test_real_v4_entry_precuda_config_invocation_path(tmp_path, monkeypatch):
+    config, output, invocation = _run_real_entry_precuda_path(tmp_path, monkeypatch, V4_CONFIG)
+    assert config["smoke_id"] == SMOKE_V4_ID
+    assert invocation["config_relative_path"] == SMOKE_V4_CONFIG_RELATIVE
+    assert invocation["config_size_bytes"] == 2922
+    assert invocation["config_sha256"] == "9a0d8a304b35b955bec24ab13940002a2660b2c9653c567526bd1d0addc47d5e"
+    assert (output / "config.json").stat().st_size == 2922
+
+
+@pytest.mark.parametrize(
+    "config_path, expected_id, expected_relative",
+    [
+        (V2_CONFIG, SMOKE_V2_ID, "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"),
+        (V3_CONFIG, SMOKE_V3_ID, SMOKE_V3_CONFIG_RELATIVE),
+        (V4_CONFIG, SMOKE_V4_ID, SMOKE_V4_CONFIG_RELATIVE),
+    ],
+)
+def test_real_versioned_entry_precuda_path_v2_v3_v4(
+    tmp_path, monkeypatch, config_path, expected_id, expected_relative
+):
+    _config, _output, invocation = _run_real_entry_precuda_path(tmp_path, monkeypatch, config_path)
+    assert invocation["smoke_id"] == expected_id
+    assert invocation["config_relative_path"] == expected_relative
+
+
+def test_real_entry_canonical_helper_has_no_unresolved_global():
+    closure = inspect.getclosurevars(run_authorized_smoke)
+    assert "canonical_config_bytes" not in closure.unbound
+    assert callable(closure.globals["canonical_json_bytes"])
+
+
+def test_process_failure_keeps_child_marker_and_launcher_exit_semantics(tmp_path, monkeypatch):
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    child = tmp_path / "return_one_child.py"
+    child.write_text("raise SystemExit(1)\n", encoding="utf-8")
+    output = tmp_path / "entry"
+    process = tmp_path / "process"
+    result = launch_smoke(
+        [str(PYTHON), str(child)],
+        output,
+        process,
+        data_root=_runtime_data_root(tmp_path),
+        child_python=PYTHON,
+        repo_root=ROOT,
+        env=_base_env(),
+        nonce="c" * 32,
+        allow_noncanonical_child=True,
+    )
+    assert result == 2
+    assert (process / "process_exit_code.txt").read_bytes() == b"1\n"
+    completion = _read_object(process / "process_completion.json")
+    assert completion["child_returncode"] == 1
+    assert completion["launcher_exit_code"] == 2
+    assert completion["status"] == "FAILED_CHILD"
 
 
 @pytest.mark.parametrize("mutation", [

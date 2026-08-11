@@ -47,6 +47,27 @@ directories are created. The prepared handoff remains immutable with
 authoritative consumption claim. Validators and the classifier retain strict
 nonce equality and are not relaxed for compatibility.
 
+## Entry pre-CUDA binding
+
+The versioned V2, V3, and V4 entry writes `config.json` and then
+`invocation.json` before frozen-image, CUDA, dataset, or model access. The
+entry config is the canonical JSON serialization of the loaded config
+(`ensure_ascii=true`, sorted keys, compact separators, UTF-8). Its byte size
+and SHA-256 are the values bound by `invocation.json` and completion evidence.
+
+This entry `config_size_bytes` is intentionally distinct from the process and
+handoff `config_size_bytes`, which remains the original source config file
+size. The entry SHA is the canonical source-config SHA, while the handoff and
+process layers also retain the source file SHA. A failure after invocation has
+been persisted must preserve the config and invocation, finalize `FAILED`
+entry evidence, and leave CUDA and data execution unstarted.
+
+Process failure status has separate layers: `process_exit_code.txt` records
+the child return code, `process_completion.json.child_returncode` records that
+same value, and `launcher_exit_code` is the launcher's external contract
+result. For a child return code of `1`, the marker is exactly `1\n` and the
+launcher result is `2`.
+
 ## Process Handoff Durability
 
 `handoff_prepared.json` is an immutable `PREPARED` event. It remains

@@ -793,7 +793,7 @@ def run_authorized_smoke(
     if spec.allow_outer_launch:
         entry_invocation.update({
             "config_relative_path": config["runtime"]["config_relative_path"],
-            "config_size_bytes": len(canonical_config_bytes(config)),
+            "config_size_bytes": len(canonical_json_bytes(config)),
         })
     evidence.write_json("invocation.json", entry_invocation)
     try:
