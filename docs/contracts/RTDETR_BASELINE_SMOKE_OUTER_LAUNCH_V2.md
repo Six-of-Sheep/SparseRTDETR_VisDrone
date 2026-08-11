@@ -11,6 +11,14 @@ The pane wrapper owns `artifacts/outer_launch_evidence/.../pane`.
 The inner launcher owns process evidence, and the Smoke entry owns output.
 The outer launcher never creates either child directory.
 
+For outer-enabled Smoke V2, V3, and V4, the outer nonce is the sole
+cross-layer nonce. The pane wrapper exports it as `P3_PANE_NONCE`, and the
+inner launcher must strictly validate and pass that value to the process
+launcher. The process launcher must not generate a replacement nonce; process
+and entry evidence inherit the pane nonce. V1 is not outer-enabled and keeps
+its existing nonce-generation behavior. The nonce is intentionally not added
+to the inner argv, so the deterministic argv hash remains unchanged.
+
 ## Launch protocol
 
 The outer evidence root is created only after its existing parent has passed the
@@ -32,6 +40,12 @@ runtime path, PID, nonce, and argv bindings are revalidated before completion.
 Outer statuses are limited to `PREFLIGHT_FAILED`, `TMUX_REJECTED`,
 `TMUX_ACCEPTED`, and `INTERRUPTED_WITH_EVIDENCE`. A successful tmux client
 return never certifies a pane, inner launcher, entry, or scientific result.
+
+Missing or malformed `P3_PANE_NONCE` is rejected before process or output
+directories are created. The prepared handoff remains immutable with
+`state=PREPARED` and `consumed=false`; the durable exclusive receipt is the
+authoritative consumption claim. Validators and the classifier retain strict
+nonce equality and are not relaxed for compatibility.
 
 ## Process Handoff Durability
 

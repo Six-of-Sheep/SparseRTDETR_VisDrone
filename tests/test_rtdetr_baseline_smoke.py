@@ -578,6 +578,10 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
     captured = {}
     monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"cpu_fallback": False})
+    if config_path == V1_CONFIG:
+        monkeypatch.delenv("P3_PANE_NONCE", raising=False)
+    else:
+        monkeypatch.setenv("P3_PANE_NONCE", "a" * 32)
 
     def fake_launch(child_argv, output_dir, process_dir, **kwargs):
         captured.update({"argv": child_argv, "output": output_dir, "process": process_dir, **kwargs})
@@ -603,13 +607,45 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     assert captured["output"] == output
     assert captured["process"] == process
     assert captured["config_path"] == config_path.resolve()
+    assert captured["nonce"] == (None if config_path == V1_CONFIG else "a" * 32)
     assert "--config" in smoke_argv
     assert "--config" not in captured["argv"]
+    assert "P3_PANE_NONCE" not in captured["argv"]
     parsed = launcher._parser().parse_args(captured["argv"][3:])
     assert parsed.mode == "_child"
     assert parsed.repo_root == ROOT
     assert not output.exists()
     assert process.exists() is (config_path == V3_CONFIG)
+
+
+@pytest.mark.parametrize("pane_nonce", [None, "", "a" * 31, "a" * 33, "A" * 32, "g" * 32, "a" * 31 + "!", "a" * 31 + " ", "a" * 31 + "\n"])
+def test_outer_enabled_main_rejects_missing_or_invalid_pane_nonce_before_launch(monkeypatch, tmp_path, pane_nonce):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"cpu_fallback": False})
+    monkeypatch.setattr(launcher.secrets, "token_hex", lambda _size: pytest.fail("outer-enabled smoke used nonce fallback"))
+    launch_calls = []
+    monkeypatch.setattr(launcher, "launch_smoke", lambda *args, **kwargs: launch_calls.append((args, kwargs)) or 0)
+    if pane_nonce is None:
+        monkeypatch.delenv("P3_PANE_NONCE", raising=False)
+    else:
+        monkeypatch.setenv("P3_PANE_NONCE", pane_nonce)
+    data_root = tmp_path / "synthetic-data"
+    data_root.mkdir()
+    output = ROOT / SMOKE_V4_OUTPUT_RELATIVE
+    process = ROOT / SMOKE_V4_PROCESS_RELATIVE
+    result = launcher.main([
+        "smoke",
+        "--repo-root", str(ROOT),
+        "--data-root", str(data_root),
+        "--output-dir", str(output),
+        "--process-evidence-dir", str(process),
+        "--config", str(V4_CONFIG),
+        "--child-python", str(PYTHON),
+    ])
+    assert result == 2
+    assert launch_calls == []
+    assert not output.exists()
+    assert not process.exists()
 
 
 def test_old_child_argv_with_config_remains_argparse_failure():
@@ -704,6 +740,7 @@ def test_real_child_argv_roundtrip_dispatches_from_v3_receipt(monkeypatch, tmp_p
     launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
     captured = {}
     monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"stub": True})
+    monkeypatch.setenv("P3_PANE_NONCE", "a" * 32)
 
     def fake_launch(child_argv, output_dir, process_dir, **kwargs):
         captured.update({"argv": list(child_argv), "output": output_dir, "process": process_dir, "kwargs": kwargs})
@@ -728,6 +765,7 @@ def test_real_child_argv_roundtrip_dispatches_from_v3_receipt(monkeypatch, tmp_p
     parsed = launcher._parser().parse_args(child_argv[3:])
     assert parsed.mode == "_child"
     assert parsed.repo_root == ROOT
+    assert captured["kwargs"]["nonce"] == "a" * 32
 
     receipt = {
         "schema_version": 1,

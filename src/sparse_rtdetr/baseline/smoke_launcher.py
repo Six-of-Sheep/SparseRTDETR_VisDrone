@@ -1051,6 +1051,10 @@ def main(argv: list[str] | None = None) -> int:
         validate_real_smoke_environment()
         repo_root = _canonical_repo_root(args.repo_root)
         _config, config_path, _binding = _config_binding(repo_root, args.config)
+        pane_nonce = None
+        if get_smoke_runtime_spec(_config["smoke_id"]).allow_outer_launch:
+            pane_nonce = os.environ.get("P3_PANE_NONCE")
+            _validate_nonce(pane_nonce)
         if args.data_root is None or any(part.casefold() == "test" for part in args.data_root.parts):
             raise SmokeLauncherError("real smoke data root is invalid")
         _validate_frozen_runtime_paths(
@@ -1071,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:
             child_python=args.child_python,
             repo_root=repo_root,
             env=env,
+            nonce=pane_nonce,
             config_path=config_path,
         )
     except (SmokeContractError, SmokeEvidenceError, SmokeLauncherError) as error:

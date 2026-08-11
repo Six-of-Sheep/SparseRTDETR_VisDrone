@@ -313,6 +313,76 @@ def test_v4_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, mo
     assert completion["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
 
 
+def test_v4_main_propagates_pane_nonce_through_complete_synthetic_chain(tmp_path, monkeypatch):
+    from sparse_rtdetr.baseline import smoke_launcher as launcher
+
+    args, _child_count, _tmux_count = _repo(tmp_path, version=4)
+    assert run_outer_launch(**args)["status"] == "TMUX_ACCEPTED"
+    pane_receipt = json.loads((args["outer_evidence_dir"] / "pane/pane_receipt.json").read_text(encoding="utf-8"))
+    child = tmp_path / "real-entry-child.py"
+    _write_real_child(child)
+    env = {
+        **os.environ,
+        "CUDA_VISIBLE_DEVICES": "0",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED": "1",
+        "PYTHONPATH": str(ROOT / "src"),
+    }
+    monkeypatch.setenv("P3_PANE_NONCE", pane_receipt["nonce"])
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"cpu_fallback": False})
+    real_launch = launcher.launch_smoke
+    captured = {}
+
+    def launch_with_real_entry(child_argv, output_dir, process_dir, **kwargs):
+        captured["nonce"] = kwargs["nonce"]
+        return real_launch(
+            [str(PYTHON), str(child)],
+            output_dir,
+            process_dir,
+            data_root=args["data_root"],
+            child_python=PYTHON,
+            repo_root=args["repo_root"],
+            env=env,
+            nonce=kwargs["nonce"],
+            config_path=args["config_path"],
+        )
+
+    monkeypatch.setattr(launcher, "launch_smoke", launch_with_real_entry)
+    assert launcher.main([
+        "smoke",
+        "--repo-root", str(args["repo_root"]),
+        "--data-root", str(args["data_root"]),
+        "--output-dir", str(args["output_dir"]),
+        "--process-evidence-dir", str(args["process_evidence_dir"]),
+        "--config", str(args["config_path"]),
+        "--child-python", str(PYTHON),
+    ]) == 0
+    outer = validate_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    pane = validate_pane_evidence(args["outer_evidence_dir"] / "pane", outer)
+    process = validate_process_evidence(args["process_evidence_dir"], pane["receipt"])
+    entry_invocation = json.loads((args["output_dir"] / "invocation.json").read_text(encoding="utf-8"))
+    prepared = json.loads((args["process_evidence_dir"] / "handoff_prepared.json").read_text(encoding="utf-8"))
+    nonces = {
+        outer["invocation"]["nonce"],
+        outer["completion"]["nonce"],
+        pane["plan"]["nonce"],
+        pane["receipt"]["nonce"],
+        pane["completion"]["nonce"],
+        prepared["nonce"],
+        process["receipt"]["nonce"],
+        process["invocation"]["nonce"],
+        process["completion"]["nonce"],
+        entry_invocation["nonce"],
+        captured["nonce"],
+    }
+    assert nonces == {pane_receipt["nonce"]}
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "TERMINAL_COMPLETE"
+
+
 def test_v4_identity_drift_is_terminal_failure(tmp_path, monkeypatch):
     args = _complete_v4_chain(tmp_path, monkeypatch)
     completion_path = args["process_evidence_dir"] / "process_completion.json"
