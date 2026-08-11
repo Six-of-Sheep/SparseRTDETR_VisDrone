@@ -6,6 +6,7 @@ import importlib
 import json
 import os
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -53,6 +54,7 @@ from sparse_rtdetr.baseline.smoke_evidence import (
 from sparse_rtdetr.baseline.config import canonical_config_bytes
 from sparse_rtdetr.baseline.smoke_launcher import (
     SmokeLauncherError,
+    _create_exclusive_durable_handoff_receipt,
     _consume_handoff,
     _config_binding,
     _validate_frozen_runtime_paths,
@@ -83,6 +85,26 @@ def _write_module_child_sitecustomize(path: Path) -> None:
     path.write_text(
         "import json, os\n"
         "from pathlib import Path\n"
+        "if os.environ.get('P3_SMOKE_TEST_EXCLUSIVE_STUB') == '1':\n"
+        "    import time\n"
+        "    _barrier_root = Path(os.environ['P3_SMOKE_EXCLUSIVE_BARRIER_DIR'])\n"
+        "    _barrier_count = int(os.environ['P3_SMOKE_EXCLUSIVE_BARRIER_COUNT'])\n"
+        "    _original_open = os.open\n"
+        "    def _barrier_open(path, flags, mode=0o777, *args, **kwargs):\n"
+        "        if Path(path).name == 'handoff_receipt.json' and flags & os.O_EXCL:\n"
+        "            marker = _barrier_root / ('ready.' + str(os.getpid()))\n"
+        "            try:\n"
+        "                fd = _original_open(str(marker), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n"
+        "                os.close(fd)\n"
+        "            except FileExistsError:\n"
+        "                pass\n"
+        "            deadline = time.monotonic() + 10\n"
+        "            while len(list(_barrier_root.glob('ready.*'))) < _barrier_count:\n"
+        "                if time.monotonic() >= deadline:\n"
+        "                    raise RuntimeError('exclusive receipt barrier timeout')\n"
+        "                time.sleep(0.001)\n"
+        "        return _original_open(path, flags, mode, *args, **kwargs)\n"
+        "    os.open = _barrier_open\n"
         "mutation = os.environ.get('P3_SMOKE_TEST_MUTATION', '')\n"
         "handoff_path = Path(os.environ.get('P3_SMOKE_HANDOFF_PATH', '/missing'))\n"
         "if mutation:\n"
@@ -118,7 +140,15 @@ def _write_module_child_sitecustomize(path: Path) -> None:
         "        completion_value['artifact_inventory_sha256'] = sha256_file(inventory_path)\n"
         "        completion_path.write_bytes(canonical_json_bytes(completion_value))\n"
         "        return completion\n"
-        "    smoke.run_authorized_smoke = stub\n",
+        "    smoke.run_authorized_smoke = stub\n"
+        "if os.environ.get('P3_SMOKE_TEST_EXCLUSIVE_STUB') == '1':\n"
+        "    import sparse_rtdetr.baseline.smoke as smoke\n"
+        "    def exclusive_stub(repo_root, data_root, output_dir, **kwargs):\n"
+        "        marker = Path(os.environ['P3_SMOKE_EXCLUSIVE_ENTRY_DIR']) / ('entry.' + str(os.getpid()))\n"
+        "        fd = os.open(str(marker), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n"
+        "        os.write(fd, b'ENTRY\\n')\n"
+        "        os.close(fd)\n"
+        "    smoke.run_authorized_smoke = exclusive_stub\n",
         encoding="utf-8",
     )
 
@@ -972,6 +1002,243 @@ def test_prepared_handoff_is_single_use(tmp_path, monkeypatch):
     assert result == 2
     assert _read_object(process / "handoff_receipt.json")["consumed"] is True
     assert not output.exists()
+
+
+def _receipt_test_value() -> dict[str, object]:
+    return {"schema_version": 1, "consumed": True, "nonce": "a" * 32}
+
+
+def test_exclusive_receipt_writer_uses_final_path_and_readback(tmp_path, monkeypatch):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    process = tmp_path / "process"
+    process.mkdir()
+    receipt_path = process / "handoff_receipt.json"
+    observed = {}
+    original_open = launcher.os.open
+
+    def capture_open(path, flags, mode=0o777, *args, **kwargs):
+        if Path(path) == receipt_path and flags & os.O_EXCL:
+            observed.update({"flags": flags, "mode": mode})
+        return original_open(path, flags, mode, *args, **kwargs)
+
+    monkeypatch.setattr(launcher.os, "open", capture_open)
+    value = _receipt_test_value()
+    receipt_sha = launcher._create_exclusive_durable_handoff_receipt(receipt_path, value)
+    payload = canonical_json_bytes(value)
+    assert receipt_sha == hashlib.sha256(payload).hexdigest()
+    assert receipt_path.read_bytes() == payload
+    assert stat.S_IMODE(receipt_path.stat().st_mode) == 0o600
+    assert receipt_path.stat().st_nlink == 1
+    assert observed["flags"] & os.O_WRONLY
+    assert observed["flags"] & os.O_CREAT
+    assert observed["flags"] & os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        assert observed["flags"] & os.O_NOFOLLOW
+    assert observed["mode"] == 0o600
+    with pytest.raises(SmokeLauncherError, match="already been consumed"):
+        launcher._create_exclusive_durable_handoff_receipt(receipt_path, value)
+    assert receipt_path.read_bytes() == payload
+
+
+def test_exclusive_receipt_writer_handles_partial_write_and_eintr(tmp_path, monkeypatch):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    process = tmp_path / "process"
+    process.mkdir()
+    receipt_path = process / "handoff_receipt.json"
+    original_open = launcher.os.open
+    original_write = launcher.os.write
+    state = {"receipt_fd": None, "writes": 0}
+
+    def capture_open(path, flags, mode=0o777, *args, **kwargs):
+        fd = original_open(path, flags, mode, *args, **kwargs)
+        if Path(path) == receipt_path and flags & os.O_EXCL:
+            state["receipt_fd"] = fd
+        return fd
+
+    def partial_write(fd, payload):
+        if fd != state["receipt_fd"]:
+            return original_write(fd, payload)
+        state["writes"] += 1
+        if state["writes"] == 1:
+            raise InterruptedError()
+        if state["writes"] == 2:
+            partial = payload[:max(1, len(payload) // 2)]
+            original_write(fd, partial)
+            return len(partial)
+        return original_write(fd, payload)
+
+    monkeypatch.setattr(launcher.os, "open", capture_open)
+    monkeypatch.setattr(launcher.os, "write", partial_write)
+    value = _receipt_test_value()
+    launcher._create_exclusive_durable_handoff_receipt(receipt_path, value)
+    assert receipt_path.read_bytes() == canonical_json_bytes(value)
+    assert state["writes"] >= 3
+
+
+@pytest.mark.parametrize("fault", ["open", "zero", "write", "file_fsync", "directory_open", "directory_fsync", "readback"])
+def test_exclusive_receipt_claim_failures_are_fail_closed(tmp_path, monkeypatch, fault):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    process = tmp_path / "process"
+    process.mkdir()
+    receipt_path = process / "handoff_receipt.json"
+    original_open = launcher.os.open
+    original_write = launcher.os.write
+    original_fsync = launcher.os.fsync
+    original_read = launcher.os.read
+    state = {"receipt_fd": None, "directory_fd": None, "readback_fd": None}
+
+    def capture_open(path, flags, mode=0o777, *args, **kwargs):
+        if fault == "open" and Path(path) == receipt_path and flags & os.O_EXCL:
+            raise PermissionError("injected claim open failure")
+        if fault == "directory_open" and Path(path) == process and not flags & os.O_WRONLY:
+            raise PermissionError("injected directory open failure")
+        fd = original_open(path, flags, mode, *args, **kwargs)
+        if Path(path) == receipt_path and flags & os.O_EXCL:
+            state["receipt_fd"] = fd
+        elif Path(path) == receipt_path and not flags & os.O_WRONLY:
+            state["readback_fd"] = fd
+        elif Path(path) == process:
+            state["directory_fd"] = fd
+        return fd
+
+    def injected_write(fd, payload):
+        if fd != state["receipt_fd"]:
+            return original_write(fd, payload)
+        if fault == "zero":
+            return 0
+        if fault == "write":
+            raise OSError("injected write failure")
+        return original_write(fd, payload)
+
+    def injected_fsync(fd):
+        if fault in {"file_fsync", "directory_fsync"} and (fd == state["receipt_fd"] or fd == state["directory_fd"]):
+            raise OSError("injected fsync failure")
+        return original_fsync(fd)
+
+    def injected_read(fd, size):
+        if fault == "readback" and fd == state["readback_fd"]:
+            return b"x"
+        return original_read(fd, size)
+
+    monkeypatch.setattr(launcher.os, "open", capture_open)
+    monkeypatch.setattr(launcher.os, "write", injected_write)
+    monkeypatch.setattr(launcher.os, "fsync", injected_fsync)
+    monkeypatch.setattr(launcher.os, "read", injected_read)
+    value = _receipt_test_value()
+    with pytest.raises(SmokeLauncherError):
+        launcher._create_exclusive_durable_handoff_receipt(receipt_path, value)
+    if fault == "open":
+        assert not receipt_path.exists()
+    else:
+        assert receipt_path.exists()
+        with pytest.raises(SmokeLauncherError, match="already been consumed"):
+            launcher._create_exclusive_durable_handoff_receipt(receipt_path, value)
+
+
+@pytest.mark.parametrize("kind", ["file", "directory", "symlink", "hardlink", "fifo", "parent_symlink", "escape"])
+def test_preexisting_receipt_objects_are_never_repaired(tmp_path, kind):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    process = tmp_path / "process"
+    process.mkdir()
+    receipt_path = process / "handoff_receipt.json"
+    target = tmp_path / "target"
+    if kind == "file":
+        receipt_path.write_bytes(b"PREEXISTING\n")
+    elif kind == "directory":
+        receipt_path.mkdir()
+    elif kind == "symlink":
+        target.write_bytes(b"TARGET\n")
+        receipt_path.symlink_to(target)
+    elif kind == "hardlink":
+        target.write_bytes(b"HARDLINK\n")
+        os.link(target, receipt_path)
+    elif kind == "fifo":
+        os.mkfifo(receipt_path)
+    elif kind == "parent_symlink":
+        alias = tmp_path / "alias"
+        alias.symlink_to(process, target_is_directory=True)
+        receipt_path = alias / "handoff_receipt.json"
+    else:
+        receipt_path = process / ".." / "escape" / "handoff_receipt.json"
+    with pytest.raises(SmokeLauncherError):
+        launcher._create_exclusive_durable_handoff_receipt(receipt_path, _receipt_test_value())
+    if kind == "file":
+        assert receipt_path.read_bytes() == b"PREEXISTING\n"
+    elif kind == "symlink":
+        assert receipt_path.is_symlink() and target.read_bytes() == b"TARGET\n"
+    elif kind == "hardlink":
+        assert receipt_path.stat().st_nlink == 2 and target.read_bytes() == b"HARDLINK\n"
+    elif kind == "fifo":
+        assert stat.S_ISFIFO(receipt_path.lstat().st_mode)
+    elif kind == "directory":
+        assert receipt_path.is_dir() and not any(receipt_path.iterdir())
+    elif kind == "parent_symlink":
+        assert not (process / "handoff_receipt.json").exists()
+
+
+@pytest.mark.parametrize("child_count", [2, 4])
+def test_exclusive_receipt_claim_is_cross_process_exactly_once(tmp_path, monkeypatch, child_count):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    for round_index in range(2):
+        root = tmp_path / f"competition_{child_count}_{round_index}"
+        root.mkdir()
+        barrier = root / "barrier"
+        entries = root / "entries"
+        data = root / "data"
+        barrier.mkdir()
+        entries.mkdir()
+        data.mkdir()
+        sitecustomize = root / "sitecustomize.py"
+        _write_module_child_sitecustomize(sitecustomize)
+        env = _module_child_env(root, sitecustomize)
+        env.update({
+            "P3_SMOKE_TEST_EXCLUSIVE_STUB": "1",
+            "P3_SMOKE_EXCLUSIVE_BARRIER_DIR": str(barrier),
+            "P3_SMOKE_EXCLUSIVE_BARRIER_COUNT": str(child_count),
+            "P3_SMOKE_EXCLUSIVE_ENTRY_DIR": str(entries),
+        })
+        output = root / "output"
+        process = root / "process"
+        statuses = []
+        pids = []
+        snapshots = {}
+
+        def run_children(child_argv, child_env, console):
+            prepared = process / "handoff_prepared.json"
+            before = prepared.read_bytes()
+            snapshots["before"] = hashlib.sha256(before).hexdigest()
+            children = [subprocess.Popen(child_argv, cwd=ROOT, env=child_env) for _ in range(child_count)]
+            pids.extend(child.pid for child in children)
+            child_identity = {"pid": children[0].pid, "sid": os.getsid(children[0].pid), "pgid": os.getpgid(children[0].pid), "parent_pid": os.getpid()}
+            statuses.extend(child.wait() for child in children)
+            snapshots["after"] = hashlib.sha256(prepared.read_bytes()).hexdigest()
+            return max(statuses), [], False, child_identity
+
+        monkeypatch.setattr(launcher, "_run_child", run_children)
+        result = launcher.launch_smoke(
+            launcher._canonical_child_argv(PYTHON, ROOT),
+            output,
+            process,
+            data_root=data,
+            child_python=PYTHON,
+            repo_root=ROOT,
+            env=env,
+            nonce=("a" * 31) + str(round_index),
+        )
+        assert result == 2
+        assert statuses.count(0) == 1
+        assert statuses.count(2) == child_count - 1
+        entry_files = sorted(entries.glob("entry.*"))
+        assert len(entry_files) == 1
+        receipt = _read_object(process / "handoff_receipt.json")
+        assert receipt["child_pid"] == pids[statuses.index(0)]
+        assert receipt["consumed"] is True
+        assert snapshots["before"] == snapshots["after"]
+        assert _read_object(process / "handoff_prepared.json")["consumed"] is False
+        assert not list(process.glob(".handoff_receipt.*.tmp"))
 
 
 def test_direct_child_without_handoff_fails_before_output(tmp_path):

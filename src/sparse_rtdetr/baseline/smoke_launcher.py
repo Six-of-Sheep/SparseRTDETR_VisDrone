@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -47,6 +48,7 @@ class SmokeLauncherError(SmokeContractError):
 PROCESS_INVENTORY_EXCLUDED = frozenset({"process_inventory.json", "process_completion.json", "process_partial_inventory.json"})
 HANDOFF_PREPARED_NAME = "handoff_prepared.json"
 HANDOFF_RECEIPT_NAME = "handoff_receipt.json"
+_MAX_HANDOFF_RECEIPT_BYTES = 64 * 1024
 SIGNAL_GRACE_SECONDS = 2.0
 _SIGNALS = tuple(value for value in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT, signal.SIGQUIT) if value is not None)
 _CHILD_MODULE = "sparse_rtdetr.baseline.smoke_launcher"
@@ -155,6 +157,166 @@ def _atomic_json(path: Path, value: Any) -> str:
     payload = canonical_json_bytes(value)
     atomic_write(path, payload)
     return sha256_bytes(payload)
+
+
+def _handoff_receipt_path(process_dir: Path) -> Path:
+    if not isinstance(process_dir, Path) or not process_dir.is_absolute() or any(part == ".." for part in process_dir.parts):
+        raise SmokeLauncherError("handoff receipt process directory is not canonical")
+    try:
+        info = process_dir.lstat()
+        canonical = process_dir.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SmokeLauncherError("handoff receipt process directory cannot be resolved") from exc
+    if canonical != process_dir or not stat.S_ISDIR(info.st_mode) or process_dir.is_symlink():
+        raise SmokeLauncherError("handoff receipt process directory is not a regular directory")
+    if hasattr(os, "getuid") and info.st_uid != os.getuid():
+        raise SmokeLauncherError("handoff receipt process directory owner mismatch")
+    receipt_path = process_dir / HANDOFF_RECEIPT_NAME
+    try:
+        if receipt_path.resolve(strict=False).parent != process_dir:
+            raise SmokeLauncherError("handoff receipt path escapes process directory")
+    except (OSError, RuntimeError) as exc:
+        raise SmokeLauncherError("handoff receipt path cannot be resolved") from exc
+    if receipt_path.exists() or receipt_path.is_symlink():
+        raise SmokeLauncherError("prepared handoff has already been consumed")
+    return receipt_path
+
+
+def _receipt_stat_is_valid(info: os.stat_result, expected_size: int | None, field: str) -> None:
+    if not stat.S_ISREG(info.st_mode):
+        raise SmokeLauncherError(f"handoff receipt {field} is not a regular file")
+    if info.st_nlink != 1:
+        raise SmokeLauncherError(f"handoff receipt {field} has unexpected hardlinks")
+    if hasattr(os, "getuid") and info.st_uid != os.getuid():
+        raise SmokeLauncherError(f"handoff receipt {field} owner mismatch")
+    if stat.S_IMODE(info.st_mode) != 0o600:
+        raise SmokeLauncherError(f"handoff receipt {field} mode mismatch")
+    if expected_size is not None and info.st_size != expected_size:
+        raise SmokeLauncherError(f"handoff receipt {field} size mismatch")
+
+
+def _read_exact_receipt(path: Path, expected: bytes) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(path), flags)
+    except OSError as exc:
+        raise SmokeLauncherError("handoff receipt readback open failed") from exc
+    close_error: OSError | None = None
+    try:
+        info = os.fstat(fd)
+        _receipt_stat_is_valid(info, len(expected), "readback")
+        data = bytearray()
+        while len(data) <= len(expected):
+            try:
+                chunk = os.read(fd, len(expected) + 1 - len(data))
+            except InterruptedError:
+                continue
+            if not chunk:
+                break
+            data.extend(chunk)
+        if bytes(data) != expected:
+            raise SmokeLauncherError("handoff receipt readback bytes mismatch")
+        if sha256_bytes(bytes(data)) != sha256_bytes(expected):
+            raise SmokeLauncherError("handoff receipt readback SHA mismatch")
+        try:
+            value = json.loads(bytes(data).decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise SmokeLauncherError("handoff receipt readback JSON is invalid") from exc
+        if not isinstance(value, dict):
+            raise SmokeLauncherError("handoff receipt readback JSON is not an object")
+    finally:
+        try:
+            os.close(fd)
+        except OSError as exc:
+            close_error = exc
+    if close_error is not None:
+        raise SmokeLauncherError("handoff receipt readback close failed") from close_error
+
+
+def _fsync_receipt_directory(process_dir: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(process_dir), flags)
+    except OSError as exc:
+        raise SmokeLauncherError("handoff receipt parent directory open failed") from exc
+    close_error: OSError | None = None
+    try:
+        try:
+            os.fsync(fd)
+        except OSError as exc:
+            raise SmokeLauncherError("handoff receipt parent directory fsync failed") from exc
+    finally:
+        try:
+            os.close(fd)
+        except OSError as exc:
+            close_error = exc
+    if close_error is not None:
+        raise SmokeLauncherError("handoff receipt parent directory close failed") from close_error
+
+
+def _create_exclusive_durable_handoff_receipt(path: Path, receipt: dict[str, Any]) -> str:
+    """Create the child receipt as a fail-closed, filesystem-exclusive claim."""
+
+    receipt_path = _handoff_receipt_path(path.parent)
+    if receipt_path != path:
+        raise SmokeLauncherError("handoff receipt path is not owned by process directory")
+    payload = canonical_json_bytes(receipt)
+    if not isinstance(payload, bytes) or not payload or len(payload) > _MAX_HANDOFF_RECEIPT_BYTES:
+        raise SmokeLauncherError("handoff receipt payload size is invalid")
+    expected_sha256 = sha256_bytes(payload)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(receipt_path), flags, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST:
+            raise SmokeLauncherError("prepared handoff has already been consumed") from exc
+        raise SmokeLauncherError("handoff receipt exclusive create failed") from exc
+
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+            _receipt_stat_is_valid(os.fstat(fd), None, "claim")
+            offset = 0
+            while offset < len(payload):
+                try:
+                    written = os.write(fd, payload[offset:])
+                except InterruptedError:
+                    continue
+                if written <= 0:
+                    raise SmokeLauncherError("handoff receipt write made no progress")
+                offset += written
+            if offset != len(payload):
+                raise SmokeLauncherError("handoff receipt write size mismatch")
+            try:
+                os.fsync(fd)
+            except OSError as exc:
+                raise SmokeLauncherError("handoff receipt file fsync failed") from exc
+        except OSError as exc:
+            raise SmokeLauncherError("handoff receipt write failed") from exc
+        try:
+            os.close(fd)
+        except OSError as exc:
+            fd = -1
+            raise SmokeLauncherError("handoff receipt close failed") from exc
+        fd = -1
+    finally:
+        if fd != -1:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+    _fsync_receipt_directory(path.parent)
+    _read_exact_receipt(receipt_path, payload)
+    try:
+        value = json.loads(payload.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise SmokeLauncherError("handoff receipt schema validation failed") from exc
+    if value != receipt:
+        raise SmokeLauncherError("handoff receipt schema binding mismatch")
+    if receipt.get("consumed") is not True:
+        raise SmokeLauncherError("handoff receipt consumed state is invalid")
+    return expected_sha256
 
 
 def _validate_nonce(value: Any) -> None:
@@ -424,7 +586,7 @@ def _consume_handoff(repo_root: Path) -> tuple[dict[str, Any], str]:
         "config_canonical_sha256": prepared["config_canonical_sha256"],
         "consumed_at_utc": _utc_now(),
     }
-    receipt_sha256 = _atomic_json(receipt_path, receipt)
+    receipt_sha256 = _create_exclusive_durable_handoff_receipt(receipt_path, receipt)
     return receipt, receipt_sha256
 
 

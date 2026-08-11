@@ -33,6 +33,32 @@ Outer statuses are limited to `PREFLIGHT_FAILED`, `TMUX_REJECTED`,
 `TMUX_ACCEPTED`, and `INTERRUPTED_WITH_EVIDENCE`. A successful tmux client
 return never certifies a pane, inner launcher, entry, or scientific result.
 
+## Process Handoff Durability
+
+`handoff_prepared.json` is an immutable `PREPARED` event. It remains
+`single_use=true` and `consumed=false` for its entire lifetime. The child-owned
+`handoff_receipt.json` is the authoritative consumption claim; it is schema
+version 1 with `consumed=true` and binds the complete prepared relative path,
+size, and SHA-256 together with the child PID/PPID, argv, executable identity,
+nonce, configuration, and runtime paths.
+
+The receipt has a dedicated filesystem claim writer. It constructs the complete
+canonical JSON bytes before opening the final path with `O_WRONLY|O_CREAT|O_EXCL`
+and `O_NOFOLLOW` when available, mode `0600`. The writer handles partial writes,
+fsyncs the receipt file, closes it, fsyncs the process-evidence directory, then
+reopens the receipt read-only and verifies its type, owner, mode, link count,
+size, bytes, SHA-256, and JSON binding before entry invocation. It never uses a
+temporary receipt file or `os.replace()` and never changes the prepared event.
+
+An `EEXIST` result or any failure after exclusive creation is fail-closed. The
+receipt is never deleted, repaired, overwritten, or retried by that consumer, and
+entry is not called. This deliberately preserves a possible zero-byte or partial
+receipt after a crash between claim and durability. A crash after receipt
+durability but before entry, or after entry but before process completion, also
+permanently blocks retry; the receipt cannot be used to infer that entry is safe
+to repeat. Only the filesystem `O_EXCL` operation arbitrates concurrent
+consumers.
+
 ## Read-only classification
 
 `classify_outer_evidence` only reads existing evidence and independently
