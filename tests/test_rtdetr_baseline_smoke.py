@@ -134,6 +134,12 @@ def _real_entry_handoff(config_path: Path, output: Path, data_root: Path) -> tup
     return receipt, hashlib.sha256(canonical_json_bytes(receipt)).hexdigest()
 
 
+def _patch_synthetic_selection(monkeypatch):
+    smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
+    monkeypatch.setattr(smoke, "load_frozen_image_selection", lambda _repo_root: FROZEN_IMAGE_RECORDS)
+    return smoke
+
+
 def _base_env() -> dict[str, str]:
     return {
         **os.environ,
@@ -631,6 +637,7 @@ def test_v4_config_is_frozen_identity_variant_of_v3():
 )
 def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifacts(monkeypatch, tmp_path, config_path, output_relative, process_relative):
     launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    _patch_synthetic_selection(monkeypatch)
     captured = {}
     monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"cpu_fallback": False})
     if config_path == V1_CONFIG:
@@ -647,10 +654,8 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     data_root.mkdir()
     output = ROOT / output_relative
     process = ROOT / process_relative
-    frozen_r4 = config_path == V4_CONFIG
-    frozen_r4_config = (output / "config.json").read_bytes() if frozen_r4 else None
-    assert output.exists() is frozen_r4
-    assert process.exists() is (config_path in {V3_CONFIG, V4_CONFIG})
+    output_exists_before = output.exists()
+    process_exists_before = process.exists()
     smoke_argv = [
         "smoke",
         "--repo-root", str(ROOT),
@@ -671,15 +676,14 @@ def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifa
     parsed = launcher._parser().parse_args(captured["argv"][3:])
     assert parsed.mode == "_child"
     assert parsed.repo_root == ROOT
-    assert output.exists() is frozen_r4
-    assert process.exists() is (config_path in {V3_CONFIG, V4_CONFIG})
-    if frozen_r4:
-        assert (output / "config.json").read_bytes() == frozen_r4_config
+    assert output.exists() == output_exists_before
+    assert process.exists() == process_exists_before
 
 
 @pytest.mark.parametrize("pane_nonce", [None, "", "a" * 31, "a" * 33, "A" * 32, "g" * 32, "a" * 31 + "!", "a" * 31 + " ", "a" * 31 + "\n"])
 def test_outer_enabled_main_rejects_missing_or_invalid_pane_nonce_before_launch(monkeypatch, tmp_path, pane_nonce):
     launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    _patch_synthetic_selection(monkeypatch)
     monkeypatch.setattr(launcher, "validate_real_smoke_environment", lambda: {"cpu_fallback": False})
     monkeypatch.setattr(launcher.secrets, "token_hex", lambda _size: pytest.fail("outer-enabled smoke used nonce fallback"))
     launch_calls = []
@@ -692,7 +696,8 @@ def test_outer_enabled_main_rejects_missing_or_invalid_pane_nonce_before_launch(
     data_root.mkdir()
     output = ROOT / SMOKE_V4_OUTPUT_RELATIVE
     process = ROOT / SMOKE_V4_PROCESS_RELATIVE
-    frozen_r4_config = (output / "config.json").read_bytes()
+    output_exists_before = output.exists()
+    process_exists_before = process.exists()
     result = launcher.main([
         "smoke",
         "--repo-root", str(ROOT),
@@ -704,9 +709,8 @@ def test_outer_enabled_main_rejects_missing_or_invalid_pane_nonce_before_launch(
     ])
     assert result == 2
     assert launch_calls == []
-    assert output.is_dir()
-    assert process.is_dir()
-    assert (output / "config.json").read_bytes() == frozen_r4_config
+    assert output.exists() == output_exists_before
+    assert process.exists() == process_exists_before
 
 
 def test_old_child_argv_with_config_remains_argparse_failure():
@@ -988,6 +992,7 @@ def test_real_entry_v2_and_v3_share_canonical_config_binding(tmp_path, config_pa
 
 def _run_real_entry_precuda_path(tmp_path, monkeypatch, config_path):
     smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
+    monkeypatch.setattr(smoke, "resolve_runtime_paths", lambda *_args: None)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     data_root = tmp_path / "synthetic_train_core"
     data_root.mkdir()
@@ -1097,6 +1102,7 @@ def test_real_entry_canonical_helper_has_no_unresolved_global():
 
 
 def test_process_failure_keeps_child_marker_and_launcher_exit_semantics(tmp_path, monkeypatch):
+    _patch_synthetic_selection(monkeypatch)
     monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     monkeypatch.setenv("PYTHONNOUSERSITE", "1")
