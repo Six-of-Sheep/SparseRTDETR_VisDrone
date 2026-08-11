@@ -343,6 +343,34 @@ def test_smoke_config_and_manifest_are_strict_and_frozen():
         importlib.import_module("sparse_rtdetr.baseline.smoke").validate_smoke_config(drifted)
 
 
+@pytest.mark.parametrize("config_path", [V1_CONFIG, V2_CONFIG, V3_CONFIG, V4_CONFIG])
+def test_schema_version_accepts_only_builtin_int_one(config_path):
+    smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    smoke.validate_smoke_config(config)
+    invalid_values = [True, False, 1.0, "1", None, [], {}, 0, -1, 2]
+    try:
+        import numpy as np
+    except ImportError:
+        np = None
+
+    class IntSubclass(int):
+        pass
+
+    invalid_values.extend([IntSubclass(1)])
+    if np is not None:
+        invalid_values.append(np.int64(1))
+    for value in invalid_values:
+        drifted = copy.deepcopy(config)
+        drifted["schema_version"] = value
+        with pytest.raises(SmokeContractError):
+            smoke.validate_smoke_config(drifted)
+    missing = copy.deepcopy(config)
+    del missing["schema_version"]
+    with pytest.raises(SmokeContractError):
+        smoke.validate_smoke_config(missing)
+
+
 def test_manifest_field_drift_fails_closed(monkeypatch, tmp_path):
     manifest = {
         "records": [dict(record) for record in FROZEN_IMAGE_RECORDS],

@@ -256,7 +256,8 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
     if set(config) != expected_top:
         raise SmokeContractError("smoke config top-level schema drift")
     smoke_id = config.get("smoke_id")
-    if config["schema_version"] != SMOKE_SCHEMA_VERSION:
+    schema_version = config.get("schema_version")
+    if type(schema_version) is not int or schema_version != SMOKE_SCHEMA_VERSION:
         raise SmokeContractError("smoke config identity drift")
     spec = get_smoke_runtime_spec(smoke_id)
     if config["mode"] != "smoke" or config["split_role"] != "train_core":
