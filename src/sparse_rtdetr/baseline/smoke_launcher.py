@@ -61,6 +61,15 @@ _MAX_PROC_CMDLINE_TOKENS = 64
 _EXECUTABLE_IDENTITY_KEYS = frozenset({"canonical_path", "size_bytes", "sha256", "mode", "regular_file", "executable"})
 
 
+class _SingleOccurrenceAction(argparse.Action):
+    """Reject repeated values for an identity-bearing CLI option."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if getattr(namespace, self.dest, None) is not None:
+            parser.error(f"{option_string or self.dest} may be specified only once")
+        setattr(namespace, self.dest, values)
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1015,7 +1024,7 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="mode", required=True)
     check = sub.add_parser("contract-check")
     check.add_argument("--repo-root", type=Path, required=True)
-    check.add_argument("--config", type=Path, default=None)
+    check.add_argument("--config", action=_SingleOccurrenceAction, type=Path, default=None)
     smoke = sub.add_parser("smoke")
     smoke.add_argument("--repo-root", type=Path, required=True)
     smoke.add_argument("--data-root", type=Path, required=True)

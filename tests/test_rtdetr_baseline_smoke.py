@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import builtins
+import argparse
 import hashlib
 import importlib
 import inspect
@@ -73,6 +74,7 @@ from sparse_rtdetr.baseline.smoke_evidence import (
 from sparse_rtdetr.baseline.config import canonical_config_bytes
 from sparse_rtdetr.baseline.smoke_launcher import (
     SmokeLauncherError,
+    _SingleOccurrenceAction,
     _create_exclusive_durable_handoff_receipt,
     _consume_handoff,
     _config_binding,
@@ -612,7 +614,18 @@ def test_contract_check_cli_rejects_mutated_v5_unknown_identity_and_cross_versio
         assert "PASS" not in result.stdout
 
 
-def test_contract_check_cli_rejects_duplicate_config_without_v1_fallback():
+@pytest.mark.parametrize(
+    "config_tokens",
+    [
+        ["--config", str(V5_CONFIG), "--config", str(V1_CONFIG)],
+        ["--config", str(V1_CONFIG), "--config", str(V5_CONFIG)],
+        ["--config", str(V5_CONFIG), "--config", str(V5_CONFIG)],
+        ["--config", str(V4_CONFIG), "--config", str(V5_CONFIG)],
+        ["--config=" + str(V5_CONFIG), "--config=" + str(V1_CONFIG)],
+        ["--config", str(V5_CONFIG), "--config=" + str(V1_CONFIG)],
+    ],
+)
+def test_contract_check_cli_rejects_duplicate_config_without_v1_fallback(config_tokens):
     env = {
         **os.environ,
         "CUDA_VISIBLE_DEVICES": "",
@@ -623,14 +636,41 @@ def test_contract_check_cli_rejects_duplicate_config_without_v1_fallback():
     result = subprocess.run(
         [
             str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", "contract-check",
-            "--repo-root", str(ROOT), "--config", str(V5_CONFIG), "--config", str(V1_CONFIG),
+            "--repo-root", str(ROOT), *config_tokens,
         ],
         cwd=ROOT, env=env, capture_output=True, text=True, check=False,
     )
-    assert result.returncode == 0
-    evidence = json.loads(result.stdout)
-    assert evidence["smoke_id"] == SMOKE_ID
-    assert evidence["torch_imported"] is False
+    assert result.returncode == 2
+    assert "PASS" not in result.stdout
+    assert all(not path.exists() and not path.is_symlink() for path in (
+        ROOT / SMOKE_V5_OUTPUT_RELATIVE,
+        ROOT / SMOKE_V5_PROCESS_RELATIVE,
+        ROOT / SMOKE_V5_OUTER_RELATIVE,
+    ))
+
+
+def test_contract_check_parser_rejects_duplicate_config_and_defaults_to_none(monkeypatch):
+    launcher = importlib.import_module("sparse_rtdetr.baseline.smoke_launcher")
+    parser = _parser()
+    default_args = parser.parse_args(["contract-check", "--repo-root", str(ROOT)])
+    assert default_args.config is None
+    single_args = parser.parse_args(["contract-check", "--repo-root", str(ROOT), "--config", str(V5_CONFIG)])
+    assert single_args.config == V5_CONFIG
+    subparsers = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    check_parser = subparsers.choices["contract-check"]
+    config_action = next(action for action in check_parser._actions if "--config" in action.option_strings)
+    assert type(config_action) is _SingleOccurrenceAction
+    assert config_action.type is Path
+    assert config_action.default is None
+    calls = []
+    monkeypatch.setattr(launcher, "contract_check", lambda *args: calls.append(args))
+    with pytest.raises(SystemExit) as raised:
+        launcher.main([
+            "contract-check", "--repo-root", str(ROOT),
+            "--config", str(V5_CONFIG), "--config", str(V1_CONFIG),
+        ])
+    assert raised.value.code == 2
+    assert calls == []
 
 
 def test_contract_check_parser_and_child_argv_static_guards():
@@ -663,6 +703,14 @@ def test_contract_check_parser_and_child_argv_static_guards():
         and node.args[1].attr == "config"
         for node in contract_calls
     )
+    check_config_call = next(
+        node for node in config_calls
+        if any(isinstance(arg, ast.Constant) and arg.value == "--config" for arg in node.args)
+        and any(keyword.arg == "action" for keyword in node.keywords)
+    )
+    action_keyword = next(keyword for keyword in check_config_call.keywords if keyword.arg == "action")
+    assert isinstance(action_keyword.value, ast.Name)
+    assert action_keyword.value.id == "_SingleOccurrenceAction"
 
 
 def test_real_contract_check_cli_preserves_r5_absence(tmp_path):
@@ -707,6 +755,27 @@ def test_clean_archive_real_contract_cli_matrix():
         for config_path, smoke_id in ((None, SMOKE_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json", SMOKE_V2_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json", SMOKE_V3_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json", SMOKE_V4_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json", SMOKE_V5_ID)):
             _, result = _real_contract_cli(config_path, repo_root=archive_root)
             _assert_contract_cli_pass(result, smoke_id)
+        duplicate = subprocess.run(
+            [
+                str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", "contract-check",
+                "--repo-root", str(archive_root),
+                "--config", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"),
+                "--config", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"),
+            ],
+            cwd=archive_root,
+            env={
+                **os.environ,
+                "CUDA_VISIBLE_DEVICES": "",
+                "PYTHONNOUSERSITE": "1",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONPATH": str(archive_root / "src"),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert duplicate.returncode == 2
+        assert "PASS" not in duplicate.stdout
     finally:
         shutil.rmtree(export)
 

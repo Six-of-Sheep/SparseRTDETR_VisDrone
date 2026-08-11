@@ -21,10 +21,11 @@ accepted by `_child`, and it is never copied into the canonical child argv.
 Contract-check remains data-free and creates no output, process, or outer
 evidence directory. Invalid, unregistered, symlinked, or path-drifted configs
 fail closed rather than falling back to V1.
-Argparse accepts a repeated `--config` by retaining its final value; this
-behavior is frozen and callers must provide the option once. The selected
-final value is still validated normally and cannot cause an invalid config to
-fall back to V1.
+`contract-check --config` is a single-occurrence argument. Repeating it creates
+an ambiguous command identity and is rejected by the argument parser with exit
+code `2`, before contract validation, torch, data, or artifact behavior. No
+first-value or last-value selection is permitted, and the parser never falls
+back to V1 for a repeated or invalid configuration.
 
 The outer launcher owns `artifacts/outer_launch_evidence/.../launcher`.
 The pane wrapper owns `artifacts/outer_launch_evidence/.../pane`.
