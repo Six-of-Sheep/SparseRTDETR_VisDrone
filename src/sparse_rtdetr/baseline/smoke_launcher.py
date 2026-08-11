@@ -1015,6 +1015,7 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="mode", required=True)
     check = sub.add_parser("contract-check")
     check.add_argument("--repo-root", type=Path, required=True)
+    check.add_argument("--config", type=Path, default=None)
     smoke = sub.add_parser("smoke")
     smoke.add_argument("--repo-root", type=Path, required=True)
     smoke.add_argument("--data-root", type=Path, required=True)
@@ -1030,7 +1031,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.mode == "contract-check":
-            print(canonical_json_bytes(contract_check(args.repo_root)).decode("utf-8"))
+            print(canonical_json_bytes(contract_check(args.repo_root, args.config)).decode("utf-8"))
             return 0
         if args.mode == "_child":
             handoff_receipt, handoff_receipt_sha256 = _consume_handoff(args.repo_root)

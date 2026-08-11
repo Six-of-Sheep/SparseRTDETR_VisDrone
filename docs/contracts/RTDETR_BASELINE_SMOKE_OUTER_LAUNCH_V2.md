@@ -6,6 +6,26 @@ frozen and are never selected by the V2 production launcher.
 
 ## Ownership
 
+The production inner CLI exposes the data-free contract check as:
+
+```text
+python -m sparse_rtdetr.baseline.smoke_launcher contract-check \
+  --repo-root <canonical-repository-root> [--config <registered-config>]
+```
+
+Without `--config`, the historical V1 configuration remains the default. An
+explicit configuration is resolved and validated against the registry identity;
+its `smoke_id` must bind to the registered config and runtime paths. The
+`--config` option belongs only to the `contract-check` subparser. It is not
+accepted by `_child`, and it is never copied into the canonical child argv.
+Contract-check remains data-free and creates no output, process, or outer
+evidence directory. Invalid, unregistered, symlinked, or path-drifted configs
+fail closed rather than falling back to V1.
+Argparse accepts a repeated `--config` by retaining its final value; this
+behavior is frozen and callers must provide the option once. The selected
+final value is still validated normally and cannot cause an invalid config to
+fall back to V1.
+
 The outer launcher owns `artifacts/outer_launch_evidence/.../launcher`.
 The pane wrapper owns `artifacts/outer_launch_evidence/.../pane`.
 The inner launcher owns process evidence, and the Smoke entry owns output.

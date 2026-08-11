@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import ast
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -74,6 +76,7 @@ from sparse_rtdetr.baseline.smoke_launcher import (
     _create_exclusive_durable_handoff_receipt,
     _consume_handoff,
     _config_binding,
+    _parser,
     _validate_frozen_runtime_paths,
     launch_smoke,
     main as launcher_main,
@@ -475,6 +478,237 @@ def test_contract_check_is_data_free_and_does_not_import_torch():
     assert evidence["torch_imported"] is False
     assert evidence["output_directory_created"] is False
     assert evidence["dataset_or_dataloader_constructed"] is False
+
+
+def _real_contract_cli(
+    config_path: Path | None = None,
+    *,
+    repo_root: Path = ROOT,
+    python: Path = PYTHON,
+    canonicalize_config: bool = True,
+):
+    argv = [
+        str(python),
+        "-m",
+        "sparse_rtdetr.baseline.smoke_launcher",
+        "contract-check",
+        "--repo-root",
+        str(repo_root.resolve()),
+    ]
+    if config_path is not None:
+        config_token = config_path.resolve() if canonicalize_config else config_path
+        argv.extend(("--config", str(config_token)))
+    env = {
+        **os.environ,
+        "CUDA_VISIBLE_DEVICES": "",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": str(repo_root.resolve() / "src"),
+    }
+    result = subprocess.run(argv, cwd=repo_root, env=env, capture_output=True, text=True, check=False)
+    return argv, result
+
+
+def _assert_contract_cli_pass(result, smoke_id):
+    assert result.returncode == 0, result.stdout + result.stderr
+    evidence = json.loads(result.stdout)
+    assert evidence["status"] == "PASS"
+    assert evidence["smoke_id"] == smoke_id
+    assert evidence["torch_imported"] is False
+    assert evidence["real_data_accessed"] is False
+    assert evidence["real_image_accessed"] is False
+    assert evidence["model_constructed"] is False
+    assert evidence["dataset_or_dataloader_constructed"] is False
+    assert evidence["cuda_object_created"] is False
+    assert evidence["network_requested"] is False
+    assert evidence["output_directory_created"] is False
+    assert evidence["process_evidence_created"] is False
+    assert evidence["confirmatory_metrics_accessed"] is False
+    assert evidence["dataset_test_accessed_by_this_process"] is False
+    return evidence
+
+
+@pytest.mark.parametrize(
+    ("config_path", "smoke_id"),
+    [
+        (None, SMOKE_ID),
+        (V1_CONFIG, SMOKE_ID),
+        (V2_CONFIG, SMOKE_V2_ID),
+        (V3_CONFIG, SMOKE_V3_ID),
+        (V4_CONFIG, SMOKE_V4_ID),
+        (V5_CONFIG, SMOKE_V5_ID),
+    ],
+)
+def test_real_contract_check_cli_binds_explicit_config_across_versions(config_path, smoke_id):
+    argv, result = _real_contract_cli(config_path)
+    _assert_contract_cli_pass(result, smoke_id)
+    if config_path is None:
+        assert "--config" not in argv
+    else:
+        assert argv[-2:] == ["--config", str(config_path.resolve())]
+        assert argv[0] == str(PYTHON)
+        assert len(argv) == 8
+        assert argv_sha256(argv) == hashlib.sha256(canonical_json_bytes(argv)).hexdigest()
+        assert "P3_SMOKE_CONFIG" not in os.environ
+
+
+@pytest.mark.parametrize(
+    "argv_tail",
+    [
+        ["contract-check"],
+        ["contract-check", "--repo-root", str(ROOT), "--config"],
+        ["contract-check", "--repo-root", str(ROOT), "--unknown"],
+        ["contract-check", "--repo-root", str(ROOT), "--config", str(ROOT / "missing.json")],
+        ["contract-check", "--repo-root", str(ROOT), "--config", str(ROOT / "configs")],
+    ],
+)
+def test_real_contract_check_cli_rejects_invalid_arguments(argv_tail):
+    env = {
+        **os.environ,
+        "CUDA_VISIBLE_DEVICES": "",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": str(ROOT / "src"),
+    }
+    result = subprocess.run(
+        [str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", *argv_tail],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert '"status": "PASS"' not in result.stdout
+
+
+def test_contract_check_cli_rejects_symlink_and_unregistered_config(tmp_path):
+    symlink = tmp_path / "v5-link.json"
+    symlink.symlink_to(V5_CONFIG)
+    for config_path in (symlink, tmp_path / "v5-copy.json"):
+        if config_path.name == "v5-copy.json":
+            config_path.write_bytes(V5_CONFIG.read_bytes())
+        _, result = _real_contract_cli(config_path, canonicalize_config=False)
+        assert result.returncode == 2
+        assert "PASS" not in result.stdout
+
+
+def test_contract_check_cli_rejects_mutated_v5_unknown_identity_and_cross_version_path(tmp_path):
+    mutated = tmp_path / "mutated.json"
+    payload = json.loads(V5_CONFIG.read_text(encoding="utf-8"))
+    payload["model"]["seed"] = 1
+    mutated.write_text(json.dumps(payload), encoding="utf-8")
+    unknown = tmp_path / "unknown.json"
+    unknown_payload = json.loads(V5_CONFIG.read_text(encoding="utf-8"))
+    unknown_payload["smoke_id"] = "unknown"
+    unknown.write_text(json.dumps(unknown_payload), encoding="utf-8")
+    cross_version = tmp_path / "cross-version.json"
+    cross_payload = json.loads(V5_CONFIG.read_text(encoding="utf-8"))
+    cross_payload["runtime"]["output_relative_path"] = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r4"
+    cross_version.write_text(json.dumps(cross_payload), encoding="utf-8")
+    for config_path in (mutated, unknown, cross_version):
+        _, result = _real_contract_cli(config_path)
+        assert result.returncode == 2
+        assert "PASS" not in result.stdout
+
+
+def test_contract_check_cli_rejects_duplicate_config_without_v1_fallback():
+    env = {
+        **os.environ,
+        "CUDA_VISIBLE_DEVICES": "",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": str(ROOT / "src"),
+    }
+    result = subprocess.run(
+        [
+            str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", "contract-check",
+            "--repo-root", str(ROOT), "--config", str(V5_CONFIG), "--config", str(V1_CONFIG),
+        ],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0
+    evidence = json.loads(result.stdout)
+    assert evidence["smoke_id"] == SMOKE_ID
+    assert evidence["torch_imported"] is False
+
+
+def test_contract_check_parser_and_child_argv_static_guards():
+    launcher_path = ROOT / "src/sparse_rtdetr/baseline/smoke_launcher.py"
+    tree = ast.parse(launcher_path.read_text(encoding="utf-8"))
+    parser_calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "add_argument"]
+    config_calls = [node for node in parser_calls if any(isinstance(arg, ast.Constant) and arg.value == "--config" for arg in node.args)]
+    assert len(config_calls) == 2
+    check_source = ast.get_source_segment(launcher_path.read_text(encoding="utf-8"), config_calls[0])
+    assert check_source is not None and "type=Path" in check_source and "default=None" in check_source
+    child_parser = _parser().parse_args(["_child", "--repo-root", str(ROOT)])
+    assert child_parser.mode == "_child"
+    with pytest.raises(SystemExit) as raised:
+        _parser().parse_args(["_child", "--repo-root", str(ROOT), "--config", str(V5_CONFIG)])
+    assert raised.value.code == 2
+    child_argv = [str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", "_child", "--repo-root", str(ROOT)]
+    assert "--config" not in child_argv
+    assert "P3_SMOKE_CONFIG" not in {
+        node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    contract_calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "contract_check"
+    ]
+    assert any(
+        len(node.args) == 2
+        and isinstance(node.args[1], ast.Attribute)
+        and node.args[1].attr == "config"
+        for node in contract_calls
+    )
+
+
+def test_real_contract_check_cli_preserves_r5_absence(tmp_path):
+    before = [
+        ROOT / SMOKE_V5_OUTPUT_RELATIVE,
+        ROOT / SMOKE_V5_PROCESS_RELATIVE,
+        ROOT / SMOKE_V5_OUTER_RELATIVE,
+    ]
+    assert all(not path.exists() and not path.is_symlink() for path in before)
+    _assert_contract_cli_pass(_real_contract_cli(V5_CONFIG)[1], SMOKE_V5_ID)
+    assert all(not path.exists() and not path.is_symlink() for path in before)
+
+
+def test_clean_archive_real_contract_cli_matrix():
+    export = Path(tempfile.mkdtemp(prefix="p3_inner_cli_export_", dir="/tmp"))
+    try:
+        subprocess.run(["git", "archive", "HEAD", "-o", str(export / "repo.tar")], cwd=ROOT, check=True)
+        subprocess.run(["tar", "-xf", str(export / "repo.tar"), "-C", str(export)], check=True)
+        for relative in (
+            "src/sparse_rtdetr/baseline/smoke_launcher.py",
+            "tests/test_rtdetr_baseline_smoke.py",
+            "docs/contracts/RTDETR_BASELINE_SMOKE_OUTER_LAUNCH_V2.md",
+        ):
+            destination = export / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        r3_relative = "artifacts/data/visdrone_protocol_v2_conversion_r3"
+        for name in (
+            "train_core_manifest.json",
+            "completion.json",
+            "artifact_inventory.json",
+            "config.json",
+            "category_contract.json",
+            "source_identity.json",
+        ):
+            destination = export / r3_relative / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / r3_relative / name, destination)
+        archive_root = export
+        if (archive_root / "artifacts/runs").exists():
+            assert not any(path.name.startswith("rtdetrv2_r18_visdrone_baseline_smoke_r") for path in (archive_root / "artifacts/runs").glob("*"))
+        for config_path, smoke_id in ((None, SMOKE_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json", SMOKE_V2_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json", SMOKE_V3_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json", SMOKE_V4_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json", SMOKE_V5_ID)):
+            _, result = _real_contract_cli(config_path, repo_root=archive_root)
+            _assert_contract_cli_pass(result, smoke_id)
+    finally:
+        shutil.rmtree(export)
 
 
 def test_v5_inner_contract_check_is_explicit_and_data_free(monkeypatch):
