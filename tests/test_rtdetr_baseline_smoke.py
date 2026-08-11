@@ -21,12 +21,20 @@ from sparse_rtdetr.baseline.smoke import (
     FROZEN_IMAGE_RECORDS,
     SMOKE_ID,
     SMOKE_V2_ID,
+    SMOKE_V2_OUTPUT_RELATIVE,
+    SMOKE_V2_PROCESS_RELATIVE,
     SMOKE_V3_ID,
+    SMOKE_V4_ID,
     SMOKE_V3_CONFIG_RELATIVE,
     SMOKE_V3_OUTPUT_RELATIVE,
     SMOKE_V3_PROCESS_RELATIVE,
     SMOKE_V3_OUTER_RELATIVE,
     SMOKE_V3_TMUX_SESSION,
+    SMOKE_V4_CONFIG_RELATIVE,
+    SMOKE_V4_OUTPUT_RELATIVE,
+    SMOKE_V4_PROCESS_RELATIVE,
+    SMOKE_V4_OUTER_RELATIVE,
+    SMOKE_V4_TMUX_SESSION,
     SmokeContractError,
     get_smoke_runtime_spec,
     SyntheticOneBatchLoader,
@@ -68,6 +76,7 @@ PYTHON = Path(sys.executable).resolve()
 V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / SMOKE_V3_CONFIG_RELATIVE
+V4_CONFIG = ROOT / SMOKE_V4_CONFIG_RELATIVE
 
 
 def _base_env() -> dict[str, str]:
@@ -434,6 +443,7 @@ def test_launcher_rejects_frozen_path_drift(tmp_path):
         (V1_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
         (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
         (V3_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
+        (V4_CONFIG, SMOKE_V4_OUTPUT_RELATIVE, SMOKE_V4_PROCESS_RELATIVE),
     ],
 )
 def test_versioned_runtime_registry_accepts_only_matching_inner_paths(config_path, output_relative, process_relative):
@@ -455,6 +465,9 @@ def test_versioned_runtime_registry_accepts_only_matching_inner_paths(config_pat
         (V2_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
         (V3_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
         (V3_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
+        (V3_CONFIG, SMOKE_V4_OUTPUT_RELATIVE, SMOKE_V4_PROCESS_RELATIVE),
+        (V4_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
+        (V4_CONFIG, SMOKE_V2_OUTPUT_RELATIVE, SMOKE_V2_PROCESS_RELATIVE),
     ],
 )
 def test_versioned_runtime_registry_rejects_cross_version_inner_paths(config_path, wrong_output, wrong_process):
@@ -470,12 +483,12 @@ def test_versioned_runtime_registry_rejects_cross_version_inner_paths(config_pat
 
 
 def test_runtime_registry_is_explicit_and_unknown_ids_fail_closed():
-    assert tuple(get_smoke_runtime_spec(value).smoke_id for value in (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID)) == (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID)
+    assert tuple(get_smoke_runtime_spec(value).smoke_id for value in (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID)) == (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID)
     with pytest.raises(SmokeContractError):
         get_smoke_runtime_spec("rtdetrv2_r18_visdrone_baseline_smoke_v99")
 
 
-@pytest.mark.parametrize("config_path, forged_id", [(V2_CONFIG, SMOKE_V3_ID), (V3_CONFIG, SMOKE_V2_ID)])
+@pytest.mark.parametrize("config_path, forged_id", [(V2_CONFIG, SMOKE_V3_ID), (V3_CONFIG, SMOKE_V2_ID), (V3_CONFIG, SMOKE_V4_ID), (V4_CONFIG, SMOKE_V3_ID)])
 def test_config_identity_forgery_is_rejected(config_path, forged_id):
     forged = json.loads(config_path.read_text(encoding="utf-8"))
     forged["smoke_id"] = forged_id
@@ -500,12 +513,37 @@ def test_v2_v3_scientific_fields_differ_only_by_versioned_runtime_identity():
     assert v2["runtime"]["tmux_client_timeout_seconds"] == v3["runtime"]["tmux_client_timeout_seconds"] == 10
 
 
+def test_v4_config_is_frozen_identity_variant_of_v3():
+    v3 = json.loads(V3_CONFIG.read_text(encoding="utf-8"))
+    v4 = json.loads(V4_CONFIG.read_text(encoding="utf-8"))
+    assert hashlib.sha256(V4_CONFIG.read_bytes()).hexdigest() == "564da04b483a4bfad6f640010f49f157ee97a4bde5f5f1c7f1db926390057b47"
+    assert hashlib.sha256(canonical_json_bytes(v4)).hexdigest() == "9a0d8a304b35b955bec24ab13940002a2660b2c9653c567526bd1d0addc47d5e"
+    assert hashlib.sha256(V3_CONFIG.read_bytes()).hexdigest() == "70d181632987f63edf2d63362594549a36a7dc2ef94c4f94f02ea9f170e055f9"
+    assert hashlib.sha256(V2_CONFIG.read_bytes()).hexdigest() == "a5f751eb39e29df36972f66b52c9517c50558b075873659509b2450711cbd11c"
+    allowed_runtime = {
+        "config_relative_path",
+        "output_relative_path",
+        "process_evidence_relative_path",
+        "outer_launch_evidence_relative_path",
+        "tmux_session_name",
+    }
+    assert {key for key in v3["runtime"] if v3["runtime"].get(key) != v4["runtime"].get(key)} == allowed_runtime
+    for field in ("execution", "model", "image_selection", "evidence", "mode", "split_role"):
+        assert v3[field] == v4[field]
+    config, config_path, binding = _config_binding(ROOT, V4_CONFIG)
+    assert config_path == V4_CONFIG
+    assert config["smoke_id"] == SMOKE_V4_ID
+    assert binding["config_file_sha256"] == hashlib.sha256(V4_CONFIG.read_bytes()).hexdigest()
+    assert binding["config_canonical_sha256"] == hashlib.sha256(canonical_json_bytes(v4)).hexdigest()
+
+
 @pytest.mark.parametrize(
     ("config_path", "output_relative", "process_relative"),
     [
         (V1_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"),
         (V2_CONFIG, "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2", "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r2"),
         (V3_CONFIG, SMOKE_V3_OUTPUT_RELATIVE, SMOKE_V3_PROCESS_RELATIVE),
+        (V4_CONFIG, SMOKE_V4_OUTPUT_RELATIVE, SMOKE_V4_PROCESS_RELATIVE),
     ],
 )
 def test_main_passes_bound_version_config_to_fake_launch_without_creating_artifacts(monkeypatch, tmp_path, config_path, output_relative, process_relative):

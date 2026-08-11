@@ -100,7 +100,7 @@ identity, and pane evidence Python identity. Validation rebuilds both products
 and compares their canonical bytes; inventory and self-reported hashes are not
 trusted expected values.
 
-The V2 and V3 outer paths use the same configuration evidence binding. The
+The V2, V3, and V4 outer paths use the same configuration evidence binding. The
 source config's relative path, absolute path, source size, source file SHA-256,
 canonical JSON SHA-256, and `smoke_id` are copied into the prepared handoff,
 receipt, process invocation, and process completion records and are checked
@@ -108,8 +108,14 @@ against the selected runtime spec. The entry's portable `config.json` has its
 own actual size and file SHA-256; its SHA-256 is required to equal the source
 canonical JSON SHA-256, not the source file SHA-256. The classifier passes the
 validated smoke ID, relative path, and canonical SHA to entry validation, so a
-valid V2 or V3 entry follows one real-entry contract and any cross-version or
+valid V2, V3, or V4 entry follows one real-entry contract and any cross-version or
 cross-layer drift is terminally rejected.
+
+Smoke V4 is the frozen R4 runtime identity. Its scientific configuration is
+field-for-field identical to V3; only the V4 config/smoke identity, R4 output,
+process-evidence, outer-evidence, and tmux session paths differ. V4 must use
+the same handoff, receipt, entry, process, pane, and outer contracts and must
+not reuse any R1, R2, or R3 runtime identity.
 
 The child handoff has one canonical argv schema shared by the parent and child:
 the bound executable path, `-m`, `sparse_rtdetr.baseline.smoke_launcher`,
