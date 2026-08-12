@@ -108,6 +108,7 @@ BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/postprocessor.py",
     "src/sparse_rtdetr/baseline/smoke.py",
     "src/sparse_rtdetr/baseline/smoke_evidence.py",
+    "tests/test_rtdetr_baseline_smoke.py",
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (

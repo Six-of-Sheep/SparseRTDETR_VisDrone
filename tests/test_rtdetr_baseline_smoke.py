@@ -72,6 +72,7 @@ from sparse_rtdetr.baseline.smoke_evidence import (
     _canonical_real_state_inventory,
     _read_object,
     _state_hashes_from_inventory,
+    _validate_and_hash_state,
     _validate_model_identity,
     build_model_identity,
     validate_entry_output,
@@ -1794,6 +1795,137 @@ def test_real_cpu_model_identity_is_deterministic_without_forward():
     assert len(first[1]) == 212
 
 
+def _fresh_real_cpu_model():
+    import numpy as np
+
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+    model = build_r18_cpu_model(ROOT)
+    model.eval()
+    return model
+
+
+def _state_parent_and_leaf(model, name):
+    parent_name, leaf_name = name.rsplit(".", 1)
+    return model.get_submodule(parent_name), leaf_name
+
+
+def _delete_state_entry(model, collection, name):
+    parent, leaf_name = _state_parent_and_leaf(model, name)
+    getattr(parent, collection).pop(leaf_name)
+
+
+def _rename_state_entry(model, collection, name, new_name):
+    parent, leaf_name = _state_parent_and_leaf(model, name)
+    registry = getattr(parent, collection)
+    registry[new_name] = registry.pop(leaf_name)
+
+
+def _first_ordinary_parameter(model):
+    return next(iter(model.named_parameters()))
+
+
+def _first_ordinary_buffer(model):
+    return next(name_and_value for name_and_value in model.named_buffers() if name_and_value[0] not in {"decoder.anchors", "decoder.valid_mask"})
+
+
+def _set_first_element(model, collection, name, value):
+    _, leaf_name = _state_parent_and_leaf(model, name)
+    parent, _ = _state_parent_and_leaf(model, name)
+    getattr(parent, collection)[leaf_name].data.view(-1)[0] = value
+
+
+def _replace_buffer_with_forged_entry(model):
+    name, _ = _first_ordinary_buffer(model)
+    _delete_state_entry(model, "_buffers", name)
+    model.register_buffer("forged_finite_buffer", torch.ones(1))
+
+
+def _replace_parameter_with_forged_entry(model):
+    import torch.nn as nn
+
+    name, _ = _first_ordinary_parameter(model)
+    _delete_state_entry(model, "_parameters", name)
+    model.register_parameter("forged_parameter", nn.Parameter(torch.ones(1)))
+
+
+def _replace_buffer_same_shape(model):
+    name, old = _first_ordinary_buffer(model)
+    parent, leaf_name = _state_parent_and_leaf(model, name)
+    parent._buffers[leaf_name] = torch.ones_like(old)
+
+
+def _replace_parameter_same_shape(model):
+    import torch.nn as nn
+
+    name, old = _first_ordinary_parameter(model)
+    parent, leaf_name = _state_parent_and_leaf(model, name)
+    parent._parameters[leaf_name] = nn.Parameter(torch.ones_like(old), requires_grad=old.requires_grad)
+
+
+def _mutate_anchor(model):
+    index = int(torch.nonzero(model.decoder.valid_mask.squeeze(-1), as_tuple=False)[0, 1].item())
+    model.decoder.anchors.data[0, index, 0] = float("nan")
+
+
+def _mutate_valid_mask(model):
+    index = int(torch.nonzero(model.decoder.valid_mask.squeeze(-1), as_tuple=False)[0, 1].item())
+    model.decoder.valid_mask.data[0, index, 0] = False
+
+
+def _misalign_anchor_and_mask(model):
+    valid_index = int(torch.nonzero(model.decoder.valid_mask.squeeze(-1), as_tuple=False)[0, 1].item())
+    invalid_index = int(torch.nonzero(~model.decoder.valid_mask.squeeze(-1), as_tuple=False)[0, 1].item())
+    model.decoder.anchors.data[0, valid_index, 0] = float("inf")
+    model.decoder.anchors.data[0, invalid_index, 0] = 0.0
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda model: model.register_buffer("forged_inf_buffer", torch.tensor([float("inf")])),
+    lambda model: model.register_buffer("forged_finite_buffer", torch.tensor([1.0])),
+    lambda model: model.register_buffer("forged_nan_buffer", torch.tensor([float("nan")])),
+    lambda model: _set_first_element(model, "_parameters", _first_ordinary_parameter(model)[0], float("nan")),
+    lambda model: _set_first_element(model, "_parameters", _first_ordinary_parameter(model)[0], float("inf")),
+    lambda model: _set_first_element(model, "_parameters", _first_ordinary_parameter(model)[0], float("-inf")),
+    lambda model: _delete_state_entry(model, "_parameters", _first_ordinary_parameter(model)[0]),
+    lambda model: _delete_state_entry(model, "_buffers", _first_ordinary_buffer(model)[0]),
+    lambda model: _set_first_element(model, "_parameters", _first_ordinary_parameter(model)[0], 0.0),
+    lambda model: _set_first_element(model, "_buffers", _first_ordinary_buffer(model)[0], 1.0),
+    lambda model: _rename_state_entry(model, "_parameters", _first_ordinary_parameter(model)[0], "forged_parameter"),
+    lambda model: _rename_state_entry(model, "_buffers", _first_ordinary_buffer(model)[0], "forged_buffer"),
+    _replace_buffer_with_forged_entry,
+    _replace_parameter_with_forged_entry,
+    _replace_buffer_same_shape,
+    _replace_parameter_same_shape,
+    _mutate_anchor,
+    _mutate_valid_mask,
+    _misalign_anchor_and_mask,
+    lambda model: _delete_state_entry(model, "_buffers", "decoder.anchors"),
+    lambda model: _delete_state_entry(model, "_buffers", "decoder.valid_mask"),
+])
+def test_frozen_real_state_helper_rejects_direct_mutations(mutation):
+    model = _fresh_real_cpu_model()
+    mutation(model)
+    with pytest.raises(SmokeEvidenceError):
+        _validate_and_hash_state(model, require_frozen_real_state=True)
+
+
+def test_frozen_real_state_helper_accepts_only_frozen_identity():
+    model = _fresh_real_cpu_model()
+    rows = _validate_and_hash_state(model, require_frozen_real_state=True)
+    assert sum(row["numel"] for row in rows[0]) == 20094584
+    assert sum(row["numel"] for row in rows[0] if row["requires_grad"]) == 20094584
+    assert len(rows[0]) == 326
+    assert len(rows[1]) == 212
+    assert rows[2] is True
+    assert rows[3] is False
+    assert rows[4] == []
+    assert rows[5] == ["decoder.anchors"]
+    assert rows[6] == "97ac7e46d699f7bef247eef213307b1e5d930cf6037c2c12e1d20cd31b40d1ff"
+    assert rows[7] == "7fe2d718eea8e38e04fedc924e1b82883e07897a0635f7d1da949f8c5da6ab80"
+
+
 def test_real_model_identity_accepts_expected_anchor_sentinel_without_forward():
     import numpy as np
 
@@ -1834,8 +1966,7 @@ def test_real_model_identity_accepts_expected_anchor_sentinel_without_forward():
 
 
 def test_real_model_identity_rows_bind_complete_finiteness_and_raw_bytes():
-    model = build_r18_cpu_model(ROOT)
-    model.eval()
+    model = _fresh_real_cpu_model()
     config = json.loads(V1_CONFIG.read_text(encoding="utf-8"))
     identity = build_model_identity(
         ROOT,

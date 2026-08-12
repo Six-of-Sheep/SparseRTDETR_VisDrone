@@ -37,6 +37,16 @@ ENTRY_REQUIRED_ARTIFACTS = frozenset({
 })
 SCIENTIFIC_SCHEMA_VERSION = 4
 DATA_BINDING_SCHEMA_VERSION = 3
+FROZEN_REAL_PARAMETER_COUNT = 20094584
+FROZEN_REAL_TRAINABLE_PARAMETER_COUNT = 20094584
+FROZEN_REAL_PARAMETER_TENSOR_COUNT = 326
+FROZEN_REAL_BUFFER_COUNT = 212
+FROZEN_REAL_ALL_PARAMETERS_FINITE = True
+FROZEN_REAL_NONFINITE_PARAMETER_NAMES = []
+FROZEN_REAL_ALL_BUFFERS_FINITE = False
+FROZEN_REAL_NONFINITE_BUFFER_NAMES = ["decoder.anchors"]
+FROZEN_REAL_STATE_SCHEMA_SHA256 = "97ac7e46d699f7bef247eef213307b1e5d930cf6037c2c12e1d20cd31b40d1ff"
+FROZEN_REAL_STATE_VALUE_SHA256 = "7fe2d718eea8e38e04fedc924e1b82883e07897a0635f7d1da949f8c5da6ab80"
 EXPECTED_ANCHOR_RAW_SHA256 = "fbe13addb417ce9eeff40c344f0e6b930dc25927fb459f74747efa853060d021"
 EXPECTED_VALID_MASK_RAW_SHA256 = "e6fc2c623b214eb283567c918be21e9cebf2b23dd95c2c26f2076610d3e5f093"
 SCIENTIFIC_SOURCE_ALLOWLIST = (
@@ -515,9 +525,37 @@ def _validate_anchor_mask_relation(
         raise SmokeEvidenceError("decoder.anchors contains forbidden nonfinite values")
 
 
-def _validate_and_hash_state(model: Any, *, require_structural_buffers: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, bool, list[str], list[str], str, str]:
+def _validate_frozen_real_state_contract(
+    parameter_inventory: list[dict[str, Any]],
+    buffer_inventory: list[dict[str, Any]],
+    parameters_finite: bool,
+    buffers_finite: bool,
+    nonfinite_parameters: list[str],
+    nonfinite_buffers: list[str],
+    schema_sha: str,
+    value_sha: str,
+) -> None:
+    if sum(row["numel"] for row in parameter_inventory) != FROZEN_REAL_PARAMETER_COUNT:
+        raise SmokeEvidenceError("frozen real parameter count drift")
+    if sum(row["numel"] for row in parameter_inventory if row["requires_grad"]) != FROZEN_REAL_TRAINABLE_PARAMETER_COUNT:
+        raise SmokeEvidenceError("frozen real trainable parameter count drift")
+    if len(parameter_inventory) != FROZEN_REAL_PARAMETER_TENSOR_COUNT:
+        raise SmokeEvidenceError("frozen real parameter tensor count drift")
+    if len(buffer_inventory) != FROZEN_REAL_BUFFER_COUNT:
+        raise SmokeEvidenceError("frozen real buffer count drift")
+    if parameters_finite is not FROZEN_REAL_ALL_PARAMETERS_FINITE or nonfinite_parameters != FROZEN_REAL_NONFINITE_PARAMETER_NAMES:
+        raise SmokeEvidenceError("frozen real parameter finiteness drift")
+    if buffers_finite is not FROZEN_REAL_ALL_BUFFERS_FINITE or nonfinite_buffers != FROZEN_REAL_NONFINITE_BUFFER_NAMES:
+        raise SmokeEvidenceError("frozen real buffer finiteness drift")
+    if schema_sha != FROZEN_REAL_STATE_SCHEMA_SHA256:
+        raise SmokeEvidenceError("frozen real state schema SHA drift")
+    if value_sha != FROZEN_REAL_STATE_VALUE_SHA256:
+        raise SmokeEvidenceError("frozen real state value SHA drift")
+
+
+def _validate_and_hash_state(model: Any, *, require_frozen_real_state: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, bool, list[str], list[str], str, str]:
     parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers = _state_inventory(model)
-    if require_structural_buffers:
+    if require_frozen_real_state:
         anchor_tensor = None
         valid_mask_tensor = None
         if hasattr(model, "named_buffers"):
@@ -532,6 +570,17 @@ def _validate_and_hash_state(model: Any, *, require_structural_buffers: bool) ->
         valid_mask = next(row for row in buffer_inventory if row["name"] == "decoder.valid_mask")
         _validate_anchor_mask_relation(anchor, valid_mask, anchor_tensor, valid_mask_tensor)
     schema_sha, value_sha = _state_hashes_from_inventory(parameter_inventory, buffer_inventory)
+    if require_frozen_real_state:
+        _validate_frozen_real_state_contract(
+            parameter_inventory,
+            buffer_inventory,
+            parameters_finite,
+            buffers_finite,
+            nonfinite_parameters,
+            nonfinite_buffers,
+            schema_sha,
+            value_sha,
+        )
     return parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers, schema_sha, value_sha
 
 
@@ -552,7 +601,7 @@ def _canonical_real_state_inventory(repo_root: Path) -> tuple[list[dict[str, Any
             np.random.seed(0)
             torch.manual_seed(0)
             model = build_r18_cpu_model(repo_root)
-            parameters, buffers, *_ = _validate_and_hash_state(model, require_structural_buffers=True)
+            parameters, buffers, *_ = _validate_and_hash_state(model, require_frozen_real_state=True)
             return parameters, buffers
         finally:
             random.setstate(python_state)
@@ -1016,7 +1065,7 @@ def build_input_batch_audit(
 
 
 def _state_hashes(model: Any, *, synthetic: bool) -> tuple[int, int, int, int, bool, bool, list[str], list[str], str, str]:
-    parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers, schema_sha, value_sha = _validate_and_hash_state(model, require_structural_buffers=not synthetic)
+    parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers, schema_sha, value_sha = _validate_and_hash_state(model, require_frozen_real_state=not synthetic)
     if synthetic and (parameter_inventory or buffer_inventory):
         raise SmokeEvidenceError("synthetic model state must be empty")
     return (

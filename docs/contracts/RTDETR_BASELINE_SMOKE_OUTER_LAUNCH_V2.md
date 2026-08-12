@@ -258,6 +258,9 @@ infinity/negative-infinity counts, and a SHA-256 of complete contiguous CPU raw
 bytes. The validator compares the complete ordered parameter and buffer
 inventory with two seed-zero CPU R18 constructions; it does not accept an
 inventory merely because its internal sums and hashes are self-consistent.
+The production real-model state helper applies the same frozen count, finite-state,
+anchor/mask, and aggregate schema/value checks before returning an identity; these
+checks are v4 producer preconditions and do not alter the persisted evidence schema.
 `source_identity.json` uses
 an explicit production-source allowlist, the baseline config and upstream
 manifest hashes, the vendor inventory and R18 config/include hashes, and the
