@@ -68,7 +68,9 @@ from sparse_rtdetr.baseline.smoke_evidence import (
     inventory,
     SmokeEvidence,
     SmokeEvidenceError,
+    _canonical_real_state_inventory,
     _read_object,
+    _state_hashes_from_inventory,
     validate_entry_output,
 )
 from sparse_rtdetr.baseline.config import canonical_config_bytes
@@ -426,6 +428,32 @@ def _repack_entry(output: Path) -> None:
     completion = _read_object(output / "completion.json")
     completion["artifact_inventory_sha256"] = hashlib.sha256(payload).hexdigest()
     (output / "completion.json").write_bytes(canonical_json_bytes(completion))
+
+
+def _repack_model_identity(output: Path, mutate) -> None:
+    path = output / "model_identity.json"
+    value = _read_object(path)
+    mutate(value)
+    try:
+        schema_sha, value_sha = _state_hashes_from_inventory(value["parameter_inventory"], value["buffer_inventory"])
+    except (KeyError, TypeError):
+        schema_sha = value_sha = value["parameter_state_schema_sha256"]
+    value["parameter_state_schema_sha256"] = schema_sha
+    value["parameter_state_value_sha256"] = value_sha
+    path.write_bytes(canonical_json_bytes(value))
+    _repack_entry(output)
+
+
+def _forged_parameter_row(*, name: str = "forged.weight", numel: int = 1) -> dict[str, object]:
+    return {
+        "name": name,
+        "shape": [numel],
+        "dtype": "torch.float32",
+        "numel": numel,
+        "requires_grad": True,
+        "kind": "parameter",
+        "logical_sha256": hashlib.sha256(b"forged").hexdigest(),
+    }
 
 
 def test_smoke_config_and_manifest_are_strict_and_frozen():
@@ -1594,6 +1622,172 @@ def test_synthetic_cuda_identity_exact_matrix_rejects_drift(tmp_path, field):
     _repack_entry(output)
     with pytest.raises(SmokeEvidenceError):
         validate_entry_output(output)
+
+
+def test_model_identity_forged_parameter_rejected_after_full_repack(tmp_path):
+    output = tmp_path / "forged-parameter"
+    run_synthetic_smoke(ROOT, output)
+
+    def mutate(value):
+        row = _forged_parameter_row()
+        value["parameters"] = 1
+        value["trainable_parameters"] = 1
+        value["parameter_tensor_count"] = 1
+        value["parameter_inventory"] = [row]
+        value["buffer_count"] = 0
+        value["buffer_inventory"] = []
+
+    _repack_model_identity(output, mutate)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+@pytest.mark.parametrize("parameter_count", [20094583, 20094585])
+def test_model_identity_parameter_count_boundary_rejected_after_repack(tmp_path, parameter_count):
+    output = tmp_path / str(parameter_count)
+    run_synthetic_smoke(ROOT, output)
+
+    def mutate(value):
+        row = _forged_parameter_row(numel=parameter_count)
+        value["parameters"] = parameter_count
+        value["trainable_parameters"] = parameter_count
+        value["parameter_tensor_count"] = 1
+        value["parameter_inventory"] = [row]
+
+    _repack_model_identity(output, mutate)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_model_identity_forged_single_row_contract_size_rejected_after_repack(tmp_path):
+    output = tmp_path / "forged-contract-size"
+    run_synthetic_smoke(ROOT, output)
+
+    def mutate(value):
+        row = _forged_parameter_row(numel=20094584)
+        value["parameters"] = 20094584
+        value["trainable_parameters"] = 20094584
+        value["parameter_tensor_count"] = 1
+        value["parameter_inventory"] = [row]
+
+    _repack_model_identity(output, mutate)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda value: value["parameter_inventory"].append(_forged_parameter_row(name="added.weight")),
+    lambda value: value["parameter_inventory"].pop(),
+    lambda value: value["parameter_inventory"].reverse(),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "name": "renamed.weight"}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "logical_sha256": "0" * 64}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "requires_grad": False}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "dtype": "torch.float64"}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "shape": [1], "numel": 1}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "kind": "buffer"}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "numel": True}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "name": ""}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {key: child for key, child in value["parameter_inventory"][0].items() if key != "dtype"}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "unexpected": 1}),
+])
+def test_model_identity_inventory_mutations_rejected_after_repack(tmp_path, mutation):
+    output = tmp_path / "inventory-mutation"
+    run_synthetic_smoke(ROOT, output)
+    base_rows = [_forged_parameter_row(name="base.one"), _forged_parameter_row(name="base.two")]
+
+    def seed_inventory(value):
+        value["parameter_inventory"] = [dict(row) for row in base_rows]
+        value["parameters"] = value["trainable_parameters"] = 2
+        value["parameter_tensor_count"] = 2
+        value["buffer_inventory"] = []
+        value["buffer_count"] = 0
+
+    def apply_mutation(value):
+        seed_inventory(value)
+        mutation(value)
+
+    _repack_model_identity(output, apply_mutation)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_model_identity_duplicate_parameter_and_buffer_names_rejected_after_repack(tmp_path):
+    output = tmp_path / "duplicate-names"
+    run_synthetic_smoke(ROOT, output)
+
+    def mutate(value):
+        row = _forged_parameter_row(name="duplicate")
+        value["parameter_inventory"] = [row]
+        value["buffer_inventory"] = [{**row, "kind": "buffer", "requires_grad": False}]
+        value["parameters"] = value["trainable_parameters"] = 1
+        value["parameter_tensor_count"] = value["buffer_count"] = 1
+
+    _repack_model_identity(output, mutate)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_model_identity_duplicate_parameter_names_rejected_after_repack(tmp_path):
+    output = tmp_path / "duplicate-parameters"
+    run_synthetic_smoke(ROOT, output)
+
+    def mutate(value):
+        first = _forged_parameter_row(name="duplicate")
+        second = _forged_parameter_row(name="duplicate")
+        value["parameter_inventory"] = [first, second]
+        value["buffer_inventory"] = []
+        value["parameters"] = value["trainable_parameters"] = 2
+        value["parameter_tensor_count"] = 2
+        value["buffer_count"] = 0
+
+    _repack_model_identity(output, mutate)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+@pytest.mark.parametrize("field", ["parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count"])
+def test_synthetic_model_state_counters_cannot_be_forged_after_repack(tmp_path, field):
+    output = tmp_path / field
+    run_synthetic_smoke(ROOT, output)
+    _repack_model_identity(output, lambda value: value.update({field: 1}))
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def test_synthetic_nonempty_model_writer_fails_closed(tmp_path):
+    nn = importlib.import_module("torch.nn")
+
+    class NonemptySyntheticModel(SyntheticSmokeModel, nn.Module):
+        def __init__(self):
+            nn.Module.__init__(self)
+            SyntheticSmokeModel.__init__(self)
+            self.forged = nn.Parameter(torch.zeros(1))
+
+    with pytest.raises(SmokeEvidenceError):
+        run_synthetic_smoke(ROOT, tmp_path / "nonempty-model", model_factory=NonemptySyntheticModel)
+
+
+def test_synthetic_nonempty_buffer_writer_fails_closed(tmp_path):
+    nn = importlib.import_module("torch.nn")
+
+    class NonemptySyntheticBufferModel(SyntheticSmokeModel, nn.Module):
+        def __init__(self):
+            nn.Module.__init__(self)
+            SyntheticSmokeModel.__init__(self)
+            self.register_buffer("forged_buffer", torch.zeros(1))
+
+    with pytest.raises(SmokeEvidenceError):
+        run_synthetic_smoke(ROOT, tmp_path / "nonempty-buffer", model_factory=NonemptySyntheticBufferModel)
+
+
+def test_real_cpu_model_identity_is_deterministic_without_forward():
+    first = _canonical_real_state_inventory(ROOT)
+    second = _canonical_real_state_inventory(ROOT)
+    assert first == second
+    assert sum(row["numel"] for row in first[0]) == 20094584
+    assert len(first[0]) == 326
+    assert len(first[1]) == 212
 
 
 @pytest.mark.parametrize("artifact, mutation", [

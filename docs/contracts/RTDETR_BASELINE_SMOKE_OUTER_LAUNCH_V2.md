@@ -244,10 +244,18 @@ must record the initialized single `cuda:0` runtime from PyTorch APIs.
 
 `model_identity.json` v3 binds the frozen RT-DETRv2 R18/VisDrone contract,
 20,094,584 parameters, eval state, postprocessor settings, output tensor
-audits, and deterministic parameter/state schema and value hashes. The state
-hash rows are canonical JSON and contain only tensor names, shapes, dtypes,
-gradient flags, buffer markers, and tensor logical hashes; they contain no
-object IDs, representations, or absolute paths. `source_identity.json` uses
+audits, and deterministic parameter/state schema and value hashes. In
+synthetic mode the observed state is a strict empty state: all parameter and
+buffer counts are zero, both inventories are empty, and both state hashes are
+the canonical empty-inventory hash. In real mode the observed parameter count
+must equal `contract_parameters`, the baseline contract count, the smoke
+config count, and 20,094,584. The validator also compares the complete ordered
+parameter and buffer inventory with two seed-zero CPU R18 constructions; it
+does not accept an inventory merely because its internal sums and hashes are
+self-consistent. The state-hash rows are canonical JSON and contain only tensor
+names, shapes, dtypes, gradient flags, buffer markers, and tensor logical
+hashes; they contain no object IDs, representations, or absolute paths.
+`source_identity.json` uses
 an explicit production-source allowlist, the baseline config and upstream
 manifest hashes, the vendor inventory and R18 config/include hashes, and the
 frozen Conversion R3 binding. It does not discover the repository recursively
