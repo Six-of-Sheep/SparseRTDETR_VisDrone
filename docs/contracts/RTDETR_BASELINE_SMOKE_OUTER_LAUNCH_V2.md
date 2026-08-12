@@ -26,6 +26,11 @@ an ambiguous command identity and is rejected by the argument parser with exit
 code `2`, before contract validation, torch, data, or artifact behavior. No
 first-value or last-value selection is permitted, and the parser never falls
 back to V1 for a repeated or invalid configuration.
+The `contract-check` subparser also disables GNU-style long-option abbreviation:
+only the complete `--repo-root` and `--config` tokens are valid. Prefixes,
+look-alike options, and `--name=value` forms using an incomplete option name
+are rejected with exit code `2` before contract, torch, data, or artifact
+behavior. Single-occurrence and no-abbreviation are independent parser gates.
 
 The outer launcher owns `artifacts/outer_launch_evidence/.../launcher`.
 The pane wrapper owns `artifacts/outer_launch_evidence/.../pane`.

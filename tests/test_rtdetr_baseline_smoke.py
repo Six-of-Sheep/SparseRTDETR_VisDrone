@@ -673,6 +673,50 @@ def test_contract_check_parser_rejects_duplicate_config_and_defaults_to_none(mon
     assert calls == []
 
 
+@pytest.mark.parametrize(
+    "option_tokens",
+    [
+        ["--c", str(V5_CONFIG)],
+        ["--co", str(V5_CONFIG)],
+        ["--con", str(V5_CONFIG)],
+        ["--conf", str(V5_CONFIG)],
+        ["--confi", str(V5_CONFIG)],
+        ["--c=" + str(V5_CONFIG)],
+        ["--co=" + str(V5_CONFIG)],
+        ["--con=" + str(V5_CONFIG)],
+        ["--conf=" + str(V5_CONFIG)],
+        ["--confi=" + str(V5_CONFIG)],
+        ["--r", str(ROOT)],
+        ["--re", str(ROOT)],
+        ["--rep", str(ROOT)],
+        ["--repo", str(ROOT)],
+        ["--repo-", str(ROOT)],
+        ["--repo-r", str(ROOT)],
+        ["--repo-ro", str(ROOT)],
+        ["--repo-roo", str(ROOT)],
+        ["--configuration", str(V5_CONFIG)],
+        ["--configs", str(V5_CONFIG)],
+        ["--config-path", str(V5_CONFIG)],
+    ],
+)
+def test_contract_check_parser_rejects_abbreviated_or_lookalike_options(option_tokens):
+    parser = _parser()
+    with pytest.raises(SystemExit) as raised:
+        parser.parse_args(["contract-check", "--repo-root", str(ROOT), *option_tokens])
+    assert raised.value.code == 2
+
+
+def test_contract_check_parser_disables_abbreviation_only_for_contract_check():
+    parser = _parser()
+    subparsers = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    check_parser = subparsers.choices["contract-check"]
+    smoke_parser = subparsers.choices["smoke"]
+    child_parser = subparsers.choices["_child"]
+    assert check_parser.allow_abbrev is False
+    assert smoke_parser.allow_abbrev is True
+    assert child_parser.allow_abbrev is True
+
+
 def test_contract_check_parser_and_child_argv_static_guards():
     launcher_path = ROOT / "src/sparse_rtdetr/baseline/smoke_launcher.py"
     tree = ast.parse(launcher_path.read_text(encoding="utf-8"))
@@ -776,6 +820,48 @@ def test_clean_archive_real_contract_cli_matrix():
         )
         assert duplicate.returncode == 2
         assert "PASS" not in duplicate.stdout
+        for option_tokens in (
+            ["--c", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--co", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--con", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--conf", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--confi", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--c=" + str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--co=" + str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--con=" + str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--conf=" + str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--confi=" + str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--r", str(archive_root)],
+            ["--re", str(archive_root)],
+            ["--rep", str(archive_root)],
+            ["--repo", str(archive_root)],
+            ["--repo-", str(archive_root)],
+            ["--repo-r", str(archive_root)],
+            ["--repo-ro", str(archive_root)],
+            ["--repo-roo", str(archive_root)],
+            ["--configuration", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--configs", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+            ["--config-path", str(archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json")],
+        ):
+            abbreviated = subprocess.run(
+                [
+                    str(PYTHON), "-m", "sparse_rtdetr.baseline.smoke_launcher", "contract-check",
+                    "--repo-root", str(archive_root), *option_tokens,
+                ],
+                cwd=archive_root,
+                env={
+                    **os.environ,
+                    "CUDA_VISIBLE_DEVICES": "",
+                    "PYTHONNOUSERSITE": "1",
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONPATH": str(archive_root / "src"),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert abbreviated.returncode == 2
+            assert "PASS" not in abbreviated.stdout
     finally:
         shutil.rmtree(export)
 

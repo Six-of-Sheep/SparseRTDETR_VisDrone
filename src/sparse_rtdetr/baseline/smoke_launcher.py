@@ -1022,7 +1022,7 @@ def launch_smoke(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rtdetr-baseline-smoke")
     sub = parser.add_subparsers(dest="mode", required=True)
-    check = sub.add_parser("contract-check")
+    check = sub.add_parser("contract-check", allow_abbrev=False)
     check.add_argument("--repo-root", type=Path, required=True)
     check.add_argument("--config", action=_SingleOccurrenceAction, type=Path, default=None)
     smoke = sub.add_parser("smoke")
