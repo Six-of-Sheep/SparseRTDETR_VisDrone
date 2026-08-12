@@ -242,19 +242,22 @@ when the tensor is finite. Synthetic tests use CPU tensors and
 `cuda_runtime_identity.json` records an explicit CPU fallback; a real entry
 must record the initialized single `cuda:0` runtime from PyTorch APIs.
 
-`model_identity.json` v3 binds the frozen RT-DETRv2 R18/VisDrone contract,
-20,094,584 parameters, eval state, postprocessor settings, output tensor
-audits, and deterministic parameter/state schema and value hashes. In
-synthetic mode the observed state is a strict empty state: all parameter and
-buffer counts are zero, both inventories are empty, and both state hashes are
-the canonical empty-inventory hash. In real mode the observed parameter count
-must equal `contract_parameters`, the baseline contract count, the smoke
-config count, and 20,094,584. The validator also compares the complete ordered
-parameter and buffer inventory with two seed-zero CPU R18 constructions; it
-does not accept an inventory merely because its internal sums and hashes are
-self-consistent. The state-hash rows are canonical JSON and contain only tensor
-names, shapes, dtypes, gradient flags, buffer markers, and tensor logical
-hashes; they contain no object IDs, representations, or absolute paths.
+`model_identity.json` uses scientific schema v4 for model state. It binds the
+frozen RT-DETRv2 R18/VisDrone contract, 20,094,584 parameters, eval state,
+postprocessor settings, output tensor audits, and deterministic parameter/state
+schema and value hashes. In synthetic mode the observed state is a strict empty
+state: all parameter and buffer counts are zero, both inventories are empty,
+and both state hashes are the canonical empty-inventory hash. In real mode the
+observed parameter count must equal `contract_parameters`, the baseline contract
+count, the smoke config count, and 20,094,584. Parameters and buffers have
+separate finite flags and non-finite name lists. All parameters must be finite;
+the only allowed non-finite state is the frozen structural `decoder.anchors`
+buffer, whose positive-infinity coordinates are bound position-by-position to
+`decoder.valid_mask == false`. All state rows bind finite counts, NaN/positive-
+infinity/negative-infinity counts, and a SHA-256 of complete contiguous CPU raw
+bytes. The validator compares the complete ordered parameter and buffer
+inventory with two seed-zero CPU R18 constructions; it does not accept an
+inventory merely because its internal sums and hashes are self-consistent.
 `source_identity.json` uses
 an explicit production-source allowlist, the baseline config and upstream
 manifest hashes, the vendor inventory and R18 config/include hashes, and the

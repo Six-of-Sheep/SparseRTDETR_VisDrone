@@ -35,7 +35,10 @@ ENTRY_REQUIRED_ARTIFACTS = frozenset({
     "postprocess_audit.json",
     "rng_audit.json",
 })
-SCIENTIFIC_SCHEMA_VERSION = 3
+SCIENTIFIC_SCHEMA_VERSION = 4
+DATA_BINDING_SCHEMA_VERSION = 3
+EXPECTED_ANCHOR_RAW_SHA256 = "fbe13addb417ce9eeff40c344f0e6b930dc25927fb459f74747efa853060d021"
+EXPECTED_VALID_MASK_RAW_SHA256 = "e6fc2c623b214eb283567c918be21e9cebf2b23dd95c2c26f2076610d3e5f093"
 SCIENTIFIC_SOURCE_ALLOWLIST = (
     "src/sparse_rtdetr/__init__.py",
     "src/sparse_rtdetr/baseline/__init__.py",
@@ -198,7 +201,12 @@ def sha256_file(path: Path) -> str:
 
 def _strict_schema_version(value: Any, field: str) -> None:
     if type(value) is not int or value != SCIENTIFIC_SCHEMA_VERSION:
-        raise SmokeEvidenceError(f"{field} must be schema version 3")
+        raise SmokeEvidenceError(f"{field} must be schema version {SCIENTIFIC_SCHEMA_VERSION}")
+
+
+def _strict_data_binding_schema_version(value: Any, field: str) -> None:
+    if type(value) is not int or value != DATA_BINDING_SCHEMA_VERSION:
+        raise SmokeEvidenceError(f"{field} must be schema version {DATA_BINDING_SCHEMA_VERSION}")
 
 
 def _descriptor_sha(value: dict[str, Any]) -> str:
@@ -259,7 +267,7 @@ def _validate_data_binding(value: Any, config: dict[str, Any], repo_root: Path, 
     required = {"schema_version", "context", "role", "manifest_relative_path", "records", "metadata", "portable", "nonportable", "real_data_accessed", "runtime_artifacts_accessed", "artifact_validation_mode"}
     if not isinstance(value, dict) or set(value) != required:
         raise SmokeEvidenceError("data_binding_audit schema fields are invalid")
-    _strict_schema_version(value["schema_version"], "data_binding_audit.schema_version")
+    _strict_data_binding_schema_version(value["schema_version"], "data_binding_audit.schema_version")
     if value["context"] != context or value["role"] != "train_core":
         raise SmokeEvidenceError("data_binding_audit context drift")
     if value["records"] != config["image_selection"]["records"]:
@@ -411,43 +419,53 @@ def _empty_state_sha() -> str:
     return sha256_bytes(canonical_json_bytes([]))
 
 
-def _state_inventory(model: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+def _tensor_state_row(name: str, tensor: Any, *, kind: str, requires_grad: bool) -> dict[str, Any]:
+    import torch
+
+    detached = tensor.detach().cpu().contiguous()
+    raw_bytes = detached.numpy().tobytes()
+    finite_mask = torch.isfinite(detached)
+    return {
+        "name": name,
+        "shape": list(detached.shape),
+        "dtype": str(detached.dtype),
+        "numel": int(detached.numel()),
+        "requires_grad": requires_grad,
+        "kind": kind,
+        "finite": bool(finite_mask.all()),
+        "finite_count": int(finite_mask.sum().item()),
+        "nan_count": int(torch.isnan(detached).sum().item()),
+        "posinf_count": int(torch.isposinf(detached).sum().item()),
+        "neginf_count": int(torch.isneginf(detached).sum().item()),
+        "raw_bytes_sha256": sha256_bytes(raw_bytes),
+    }
+
+
+def _state_inventory(model: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, bool, list[str], list[str]]:
     """Return the ordered parameter/buffer inventory without running the model."""
 
     parameter_inventory: list[dict[str, Any]] = []
     buffer_inventory: list[dict[str, Any]] = []
-    all_finite = True
+    all_parameters_finite = True
+    all_buffers_finite = True
+    nonfinite_parameter_names: list[str] = []
+    nonfinite_buffer_names: list[str] = []
     if not hasattr(model, "named_parameters") and not hasattr(model, "named_buffers"):
-        return parameter_inventory, buffer_inventory, all_finite
-    import torch
+        return parameter_inventory, buffer_inventory, True, True, [], []
 
     for name, parameter in model.named_parameters() if hasattr(model, "named_parameters") else ():
-        detached = parameter.detach()
-        finite = bool(torch.isfinite(detached).all())
-        all_finite = all_finite and finite
-        parameter_inventory.append({
-            "name": name,
-            "shape": list(detached.shape),
-            "dtype": str(detached.dtype),
-            "numel": int(detached.numel()),
-            "requires_grad": bool(parameter.requires_grad),
-            "kind": "parameter",
-            "logical_sha256": sha256_bytes(detached.cpu().contiguous().numpy().tobytes()) if finite else None,
-        })
+        row = _tensor_state_row(name, parameter, kind="parameter", requires_grad=bool(parameter.requires_grad))
+        parameter_inventory.append(row)
+        if not row["finite"]:
+            all_parameters_finite = False
+            nonfinite_parameter_names.append(name)
     for name, buffer in model.named_buffers() if hasattr(model, "named_buffers") else ():
-        detached = buffer.detach()
-        finite = bool(torch.isfinite(detached).all())
-        all_finite = all_finite and finite
-        buffer_inventory.append({
-            "name": name,
-            "shape": list(detached.shape),
-            "dtype": str(detached.dtype),
-            "numel": int(detached.numel()),
-            "requires_grad": False,
-            "kind": "buffer",
-            "logical_sha256": sha256_bytes(detached.cpu().contiguous().numpy().tobytes()) if finite else None,
-        })
-    return parameter_inventory, buffer_inventory, all_finite
+        row = _tensor_state_row(name, buffer, kind="buffer", requires_grad=False)
+        buffer_inventory.append(row)
+        if not row["finite"]:
+            all_buffers_finite = False
+            nonfinite_buffer_names.append(name)
+    return parameter_inventory, buffer_inventory, all_parameters_finite, all_buffers_finite, nonfinite_parameter_names, nonfinite_buffer_names
 
 
 def _state_hashes_from_inventory(
@@ -456,17 +474,65 @@ def _state_hashes_from_inventory(
 ) -> tuple[str, str]:
     rows = parameter_inventory + buffer_inventory
     schema_rows = [
-        {key: row[key] for key in ("name", "shape", "dtype", "numel", "requires_grad", "kind")}
+        {key: row[key] for key in ("name", "shape", "dtype", "numel", "requires_grad", "kind", "finite", "finite_count", "nan_count", "posinf_count", "neginf_count")}
         for row in rows
     ]
     value_rows = [
-        {
-            **{key: row[key] for key in ("name", "shape", "dtype", "numel", "requires_grad", "kind")},
-            "logical_sha256": row["logical_sha256"],
-        }
-        for row in rows
+        {**schema, "raw_bytes_sha256": row["raw_bytes_sha256"]}
+        for schema, row in zip(schema_rows, rows)
     ]
     return sha256_bytes(canonical_json_bytes(schema_rows)), sha256_bytes(canonical_json_bytes(value_rows))
+
+
+def _validate_anchor_mask_relation(
+    anchor: dict[str, Any],
+    valid_mask: dict[str, Any],
+    anchor_tensor: Any,
+    valid_mask_tensor: Any,
+) -> None:
+    import torch
+
+    if anchor["name"] != "decoder.anchors" or valid_mask["name"] != "decoder.valid_mask":
+        raise SmokeEvidenceError("expected structural anchor buffers are missing")
+    if anchor["shape"] != [1, 8400, 4] or anchor["dtype"] != "torch.float32" or anchor["numel"] != 33600:
+        raise SmokeEvidenceError("decoder.anchors structural schema drift")
+    if anchor["finite_count"] != 32336 or anchor["nan_count"] != 0 or anchor["posinf_count"] != 1264 or anchor["neginf_count"] != 0 or anchor["raw_bytes_sha256"] != EXPECTED_ANCHOR_RAW_SHA256:
+        raise SmokeEvidenceError("decoder.anchors structural value drift")
+    if valid_mask["shape"] != [1, 8400, 1] or valid_mask["dtype"] != "torch.bool" or valid_mask["numel"] != 8400:
+        raise SmokeEvidenceError("decoder.valid_mask structural schema drift")
+    if valid_mask["finite"] is not True or valid_mask["finite_count"] != 8400 or valid_mask["nan_count"] != 0 or valid_mask["posinf_count"] != 0 or valid_mask["neginf_count"] != 0 or valid_mask["raw_bytes_sha256"] != EXPECTED_VALID_MASK_RAW_SHA256:
+        raise SmokeEvidenceError("decoder.valid_mask structural value drift")
+    if int((~valid_mask_tensor).sum().item()) * 4 != anchor["posinf_count"]:
+        raise SmokeEvidenceError("decoder anchor/mask count relation drift")
+    finite_coordinates = torch.isfinite(anchor_tensor).all(dim=-1)
+    positive_infinite_coordinates = torch.isposinf(anchor_tensor).all(dim=-1)
+    if not bool(finite_coordinates[valid_mask_tensor.squeeze(-1)].all()):
+        raise SmokeEvidenceError("valid anchors contain nonfinite coordinates")
+    invalid = ~valid_mask_tensor.squeeze(-1)
+    if not bool(positive_infinite_coordinates[invalid].all()):
+        raise SmokeEvidenceError("invalid anchors are not all positive infinity")
+    if bool(torch.isnan(anchor_tensor).any()) or bool(torch.isneginf(anchor_tensor).any()):
+        raise SmokeEvidenceError("decoder.anchors contains forbidden nonfinite values")
+
+
+def _validate_and_hash_state(model: Any, *, require_structural_buffers: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, bool, list[str], list[str], str, str]:
+    parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers = _state_inventory(model)
+    if require_structural_buffers:
+        anchor_tensor = None
+        valid_mask_tensor = None
+        if hasattr(model, "named_buffers"):
+            for name, buffer in model.named_buffers():
+                if name == "decoder.anchors":
+                    anchor_tensor = buffer.detach().cpu().contiguous()
+                elif name == "decoder.valid_mask":
+                    valid_mask_tensor = buffer.detach().cpu().contiguous()
+        if anchor_tensor is None or valid_mask_tensor is None:
+            raise SmokeEvidenceError("expected structural anchor buffers are missing")
+        anchor = next(row for row in buffer_inventory if row["name"] == "decoder.anchors")
+        valid_mask = next(row for row in buffer_inventory if row["name"] == "decoder.valid_mask")
+        _validate_anchor_mask_relation(anchor, valid_mask, anchor_tensor, valid_mask_tensor)
+    schema_sha, value_sha = _state_hashes_from_inventory(parameter_inventory, buffer_inventory)
+    return parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers, schema_sha, value_sha
 
 
 def _canonical_real_state_inventory(repo_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -486,7 +552,7 @@ def _canonical_real_state_inventory(repo_root: Path) -> tuple[list[dict[str, Any
             np.random.seed(0)
             torch.manual_seed(0)
             model = build_r18_cpu_model(repo_root)
-            parameters, buffers, _ = _state_inventory(model)
+            parameters, buffers, *_ = _validate_and_hash_state(model, require_structural_buffers=True)
             return parameters, buffers
         finally:
             random.setstate(python_state)
@@ -641,7 +707,7 @@ def _validate_model_identity(
     context: dict[str, Any],
     repo_root: Path,
 ) -> None:
-    required = {"schema_version", "context", "runtime_mode", "baseline_id", "model_type", "model_class", "model_module", "backbone", "encoder", "decoder", "decoder_layers", "num_classes", "num_queries", "num_feature_levels", "feature_strides", "hidden_dim", "deformable_sampling_points", "contract_parameters", "parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count", "parameter_inventory", "buffer_inventory", "training", "eval", "device", "pretrained", "checkpoint", "all_parameters_finite", "parameter_state_schema_sha256", "parameter_state_value_sha256", "postprocessor", "output_tensors"}
+    required = {"schema_version", "context", "runtime_mode", "baseline_id", "model_type", "model_class", "model_module", "backbone", "encoder", "decoder", "decoder_layers", "num_classes", "num_queries", "num_feature_levels", "feature_strides", "hidden_dim", "deformable_sampling_points", "contract_parameters", "parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count", "parameter_inventory", "buffer_inventory", "training", "eval", "device", "pretrained", "checkpoint", "all_parameters_finite", "all_buffers_finite", "nonfinite_parameter_names", "nonfinite_buffer_names", "parameter_state_schema_sha256", "parameter_state_value_sha256", "postprocessor", "output_tensors"}
     if not isinstance(value, dict) or set(value) != required:
         raise SmokeEvidenceError("model_identity schema fields are invalid")
     _strict_schema_version(value["schema_version"], "model_identity.schema_version")
@@ -665,7 +731,7 @@ def _validate_model_identity(
         raise SmokeEvidenceError("model identity contract parameter binding drift")
     if model_config.get("pretrained") is not False or model_config.get("checkpoint") is not None or model_config.get("nms") is not False or model_config.get("num_top_queries") != 300:
         raise SmokeEvidenceError("model identity is not bound to frozen inference config")
-    if value["feature_strides"] != [8, 16, 32] or value["deformable_sampling_points"] != [4, 4, 4] or value["training"] is not False or value["eval"] is not True or value["device"] != expected_device or value["pretrained"] is not False or value["checkpoint"] is not None or value["all_parameters_finite"] is not True:
+    if value["feature_strides"] != [8, 16, 32] or value["deformable_sampling_points"] != [4, 4, 4] or value["training"] is not False or value["eval"] is not True or value["device"] != expected_device or value["pretrained"] is not False or value["checkpoint"] is not None:
         raise SmokeEvidenceError("model_identity runtime drift")
     if value["runtime_mode"] == "real":
         if value["model_type"] != "RTDETR" or value["model_class"] != "RTDETR" or value["model_module"] != "src.zoo.rtdetr.rtdetr" or value["postprocessor"]["type"] != "VisDronePostProcessor" or value["postprocessor"]["module"] != "sparse_rtdetr.baseline.postprocessor":
@@ -679,18 +745,25 @@ def _validate_model_identity(
         *[(row, "parameter") for row in value["parameter_inventory"]],
         *[(row, "buffer") for row in value["buffer_inventory"]],
     ]:
-        if not isinstance(row, dict) or set(row) != {"name", "shape", "dtype", "numel", "requires_grad", "kind", "logical_sha256"} or row["kind"] != kind:
+        if not isinstance(row, dict) or set(row) != {"name", "shape", "dtype", "numel", "requires_grad", "kind", "finite", "finite_count", "nan_count", "posinf_count", "neginf_count", "raw_bytes_sha256"} or row["kind"] != kind:
             raise SmokeEvidenceError("model state inventory schema drift")
         if type(row["name"]) is not str or not row["name"] or type(row["shape"]) is not list or any(type(item) is not int or item < 0 for item in row["shape"]):
             raise SmokeEvidenceError("model state inventory shape drift")
         if type(row["dtype"]) is not str or type(row["numel"]) is not int or row["numel"] < 0 or type(row["requires_grad"]) is not bool:
             raise SmokeEvidenceError("model state inventory type drift")
+        _strict_bool(row["finite"], "model state finite")
+        for field in ("finite_count", "nan_count", "posinf_count", "neginf_count"):
+            _strict_int(row[field], f"model state {field}")
+            if row[field] < 0 or row[field] > row["numel"]:
+                raise SmokeEvidenceError("model state numeric count drift")
+        _strict_sha(row["raw_bytes_sha256"], "model state raw_bytes_sha256")
         product = 1
         for dimension in row["shape"]:
             product *= dimension
         if product != row["numel"]:
             raise SmokeEvidenceError("model state inventory numel drift")
-        _strict_sha(row["logical_sha256"], "model state logical_sha256")
+        if row["finite"] != (row["finite_count"] == row["numel"] and row["nan_count"] == 0 and row["posinf_count"] == 0 and row["neginf_count"] == 0):
+            raise SmokeEvidenceError("model state finite/count drift")
     if value["parameters"] != sum(row["numel"] for row in value["parameter_inventory"]):
         raise SmokeEvidenceError("model observed parameter count drift")
     if value["trainable_parameters"] != sum(row["numel"] for row in value["parameter_inventory"] if row["requires_grad"]):
@@ -702,7 +775,7 @@ def _validate_model_identity(
         raise SmokeEvidenceError("model state inventory names are not unique")
     if value["runtime_mode"] == "synthetic":
         empty_sha = _empty_state_sha()
-        if value["parameters"] != 0 or value["trainable_parameters"] != 0 or value["parameter_tensor_count"] != 0 or value["buffer_count"] != 0 or value["parameter_inventory"] != [] or value["buffer_inventory"] != []:
+        if value["parameters"] != 0 or value["trainable_parameters"] != 0 or value["parameter_tensor_count"] != 0 or value["buffer_count"] != 0 or value["parameter_inventory"] != [] or value["buffer_inventory"] != [] or value["all_parameters_finite"] is not True or value["all_buffers_finite"] is not True or value["nonfinite_parameter_names"] != [] or value["nonfinite_buffer_names"] != []:
             raise SmokeEvidenceError("synthetic model state must be empty")
         if value["parameter_state_schema_sha256"] != empty_sha or value["parameter_state_value_sha256"] != empty_sha:
             raise SmokeEvidenceError("synthetic model empty state hash drift")
@@ -723,6 +796,8 @@ def _validate_model_identity(
             raise SmokeEvidenceError("real model state inventory is not the frozen R18 identity")
         if value["parameter_tensor_count"] != len(expected_parameter_inventory) or value["buffer_count"] != len(expected_buffer_inventory):
             raise SmokeEvidenceError("real model state tensor count is not frozen")
+        if value["all_parameters_finite"] is not True or value["nonfinite_parameter_names"] != [] or value["all_buffers_finite"] is not False or value["nonfinite_buffer_names"] != ["decoder.anchors"]:
+            raise SmokeEvidenceError("real model finite-state semantics drift")
     schema_sha, value_sha = _state_hashes_from_inventory(value["parameter_inventory"], value["buffer_inventory"])
     if value["parameter_state_schema_sha256"] != schema_sha or value["parameter_state_value_sha256"] != value_sha:
         raise SmokeEvidenceError("model state inventory hash drift")
@@ -940,18 +1015,21 @@ def build_input_batch_audit(
     }
 
 
-def _state_hashes(model: Any, *, synthetic: bool) -> tuple[int, int, int, str, str, bool]:
-    parameter_inventory, buffer_inventory, all_finite = _state_inventory(model)
+def _state_hashes(model: Any, *, synthetic: bool) -> tuple[int, int, int, int, bool, bool, list[str], list[str], str, str]:
+    parameter_inventory, buffer_inventory, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers, schema_sha, value_sha = _validate_and_hash_state(model, require_structural_buffers=not synthetic)
     if synthetic and (parameter_inventory or buffer_inventory):
         raise SmokeEvidenceError("synthetic model state must be empty")
-    schema_sha, value_sha = _state_hashes_from_inventory(parameter_inventory, buffer_inventory)
     return (
         sum(row["numel"] for row in parameter_inventory),
         sum(row["numel"] for row in parameter_inventory if row["requires_grad"]),
         len(parameter_inventory),
+        len(buffer_inventory),
+        parameters_finite,
+        buffers_finite,
+        nonfinite_parameters,
+        nonfinite_buffers,
         schema_sha,
         value_sha,
-        all_finite,
     )
 
 
@@ -965,8 +1043,8 @@ def build_model_identity(repo_root: str | Path, smoke_config: dict[str, Any], mo
     baseline_path = Path(repo_root).resolve() / SCIENTIFIC_BASELINE_CONFIG
     baseline = json.loads(baseline_path.read_bytes().decode("utf-8"))
     contract = baseline["baseline_contract"]
-    parameters, trainable, parameter_tensors, schema_sha, value_sha, finite = _state_hashes(model, synthetic=runtime_mode == "synthetic")
-    parameter_inventory, buffer_inventory, _ = _state_inventory(model)
+    parameters, trainable, parameter_tensors, buffer_count, parameters_finite, buffers_finite, nonfinite_parameters, nonfinite_buffers, schema_sha, value_sha = _state_hashes(model, synthetic=runtime_mode == "synthetic")
+    parameter_inventory, buffer_inventory, *_ = _state_inventory(model)
     if runtime_mode == "synthetic" and (parameter_inventory or buffer_inventory):
         raise SmokeEvidenceError("synthetic model state must be empty")
     return {
@@ -991,13 +1069,16 @@ def build_model_identity(repo_root: str | Path, smoke_config: dict[str, Any], mo
         "parameters": parameters,
         "trainable_parameters": trainable,
         "parameter_tensor_count": parameter_tensors,
-        "buffer_count": sum(1 for _ in model.named_buffers()) if hasattr(model, "named_buffers") else 0,
+        "buffer_count": buffer_count,
         "training": bool(getattr(model, "training", False)),
         "eval": not bool(getattr(model, "training", False)),
         "device": device,
         "pretrained": contract["pretrained"],
         "checkpoint": contract["checkpoint"],
-        "all_parameters_finite": finite,
+        "all_parameters_finite": parameters_finite,
+        "all_buffers_finite": buffers_finite,
+        "nonfinite_parameter_names": nonfinite_parameters,
+        "nonfinite_buffer_names": nonfinite_buffers,
         "parameter_state_schema_sha256": schema_sha,
         "parameter_state_value_sha256": value_sha,
         "parameter_inventory": parameter_inventory,

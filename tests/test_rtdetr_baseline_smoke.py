@@ -8,6 +8,7 @@ import importlib
 import inspect
 import json
 import os
+import random
 import signal
 import stat
 import subprocess
@@ -71,9 +72,12 @@ from sparse_rtdetr.baseline.smoke_evidence import (
     _canonical_real_state_inventory,
     _read_object,
     _state_hashes_from_inventory,
+    _validate_model_identity,
+    build_model_identity,
     validate_entry_output,
 )
-from sparse_rtdetr.baseline.config import canonical_config_bytes
+from sparse_rtdetr.baseline.config import build_r18_cpu_model, canonical_config_bytes
+from sparse_rtdetr.baseline.postprocessor import VisDronePostProcessor
 from sparse_rtdetr.baseline.smoke_launcher import (
     SmokeLauncherError,
     _SingleOccurrenceAction,
@@ -1788,6 +1792,196 @@ def test_real_cpu_model_identity_is_deterministic_without_forward():
     assert sum(row["numel"] for row in first[0]) == 20094584
     assert len(first[0]) == 326
     assert len(first[1]) == 212
+
+
+def test_real_model_identity_accepts_expected_anchor_sentinel_without_forward():
+    import numpy as np
+
+    config = json.loads(V1_CONFIG.read_text(encoding="utf-8"))
+    baseline = json.loads((ROOT / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json").read_text(encoding="utf-8"))
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_state = torch.get_rng_state().clone()
+    try:
+        random.seed(0)
+        np.random.seed(0)
+        torch.manual_seed(0)
+        model = build_r18_cpu_model(ROOT)
+        model.eval()
+        identity = build_model_identity(
+            ROOT,
+            config,
+            model,
+            VisDronePostProcessor(vendor_root=ROOT / "vendor/rtdetrv2_pytorch"),
+            {},
+            runtime_mode="real",
+            device="cuda:0",
+            context={"runtime_mode": "real"},
+        )
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+        torch.set_rng_state(torch_state)
+    _validate_model_identity(identity, baseline, config, "cuda:0", {}, {"runtime_mode": "real"}, ROOT)
+    assert identity["schema_version"] == 4
+    assert identity["all_parameters_finite"] is True
+    assert identity["all_buffers_finite"] is False
+    assert identity["nonfinite_parameter_names"] == []
+    assert identity["nonfinite_buffer_names"] == ["decoder.anchors"]
+    assert identity["parameter_state_schema_sha256"] == "97ac7e46d699f7bef247eef213307b1e5d930cf6037c2c12e1d20cd31b40d1ff"
+    assert identity["parameter_state_value_sha256"] == "7fe2d718eea8e38e04fedc924e1b82883e07897a0635f7d1da949f8c5da6ab80"
+    assert torch.cuda.is_initialized() is False
+
+
+def test_real_model_identity_rows_bind_complete_finiteness_and_raw_bytes():
+    model = build_r18_cpu_model(ROOT)
+    model.eval()
+    config = json.loads(V1_CONFIG.read_text(encoding="utf-8"))
+    identity = build_model_identity(
+        ROOT,
+        config,
+        model,
+        VisDronePostProcessor(vendor_root=ROOT / "vendor/rtdetrv2_pytorch"),
+        {},
+        runtime_mode="real",
+        device="cuda:0",
+        context={"runtime_mode": "real"},
+    )
+    rows = identity["parameter_inventory"] + identity["buffer_inventory"]
+    assert all(set(row) == {"name", "shape", "dtype", "numel", "requires_grad", "kind", "finite", "finite_count", "nan_count", "posinf_count", "neginf_count", "raw_bytes_sha256"} for row in rows)
+    assert all(isinstance(row["raw_bytes_sha256"], str) and len(row["raw_bytes_sha256"]) == 64 for row in rows)
+    anchors = next(row for row in identity["buffer_inventory"] if row["name"] == "decoder.anchors")
+    mask = next(row for row in identity["buffer_inventory"] if row["name"] == "decoder.valid_mask")
+    assert anchors["finite"] is False
+    assert anchors["finite_count"] == 32336
+    assert anchors["nan_count"] == 0
+    assert anchors["posinf_count"] == 1264
+    assert anchors["neginf_count"] == 0
+    assert anchors["raw_bytes_sha256"] == "fbe13addb417ce9eeff40c344f0e6b930dc25927fb459f74747efa853060d021"
+    assert mask["finite"] is True
+    assert mask["finite_count"] == 8400
+    assert mask["raw_bytes_sha256"] == "e6fc2c623b214eb283567c918be21e9cebf2b23dd95c2c26f2076610d3e5f093"
+
+
+@pytest.mark.parametrize("field", ["all_parameters_finite", "all_buffers_finite", "finite", "finite_count", "nan_count", "posinf_count", "neginf_count", "raw_bytes_sha256"])
+def test_model_state_finiteness_mutations_rejected_after_repack(tmp_path, field):
+    output = tmp_path / field
+    run_synthetic_smoke(ROOT, output)
+    value = _read_object(output / "model_identity.json")
+    row = {
+        "name": "forged.buffer",
+        "shape": [1],
+        "dtype": "torch.float32",
+        "numel": 1,
+        "requires_grad": False,
+        "kind": "buffer",
+        "finite": False,
+        "finite_count": 0,
+        "nan_count": 1,
+        "posinf_count": 0,
+        "neginf_count": 0,
+        "raw_bytes_sha256": "0" * 64,
+    }
+    value["buffer_inventory"] = [row]
+    value["buffer_count"] = 1
+    value["all_buffers_finite"] = False
+    value["nonfinite_buffer_names"] = ["forged.buffer"]
+    if field in value:
+        value[field] = False if field in {"all_parameters_finite", "all_buffers_finite", "finite"} else ("0" * 64 if field == "raw_bytes_sha256" else 1)
+    _repack_model_identity(output, lambda current: current.update(value))
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+def _seeded_real_model_identity():
+    import numpy as np
+
+    config = json.loads(V1_CONFIG.read_text(encoding="utf-8"))
+    baseline = json.loads((ROOT / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json").read_text(encoding="utf-8"))
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_state = torch.get_rng_state().clone()
+    try:
+        random.seed(0)
+        np.random.seed(0)
+        torch.manual_seed(0)
+        model = build_r18_cpu_model(ROOT)
+        model.eval()
+        identity = build_model_identity(
+            ROOT,
+            config,
+            model,
+            VisDronePostProcessor(vendor_root=ROOT / "vendor/rtdetrv2_pytorch"),
+            {},
+            runtime_mode="real",
+            device="cuda:0",
+            context={"runtime_mode": "real"},
+        )
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+        torch.set_rng_state(torch_state)
+    return identity, baseline, config
+
+
+def _repack_real_identity_fixture(output: Path, identity: dict[str, object]) -> dict[str, object]:
+    run_synthetic_smoke(ROOT, output)
+    path = output / "model_identity.json"
+    path.write_bytes(canonical_json_bytes(identity))
+    _repack_entry(output)
+    return _read_object(path)
+
+
+def _sync_v4_identity_hashes(value: dict[str, object]) -> None:
+    value["parameter_state_schema_sha256"], value["parameter_state_value_sha256"] = _state_hashes_from_inventory(value["parameter_inventory"], value["buffer_inventory"])
+
+
+def _update_named_identity_row(value: dict[str, object], collection: str, name: str, updates: dict[str, object]) -> None:
+    rows = value[collection]
+    index = next(index for index, row in enumerate(rows) if row["name"] == name)
+    rows[index] = {**rows[index], **updates}
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda value: value.update({"all_parameters_finite": False}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "finite": False, "finite_count": 0, "nan_count": 1}),
+    lambda value: value["parameter_inventory"].__setitem__(0, {**value["parameter_inventory"][0], "finite": False, "finite_count": 0, "posinf_count": 1}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"finite": False, "finite_count": 0, "nan_count": 1}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"finite": True, "finite_count": 33600, "posinf_count": 0}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"finite_count": 32335, "posinf_count": 1265}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"raw_bytes_sha256": "0" * 64}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"posinf_count": 1263}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"posinf_count": 1265}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"nan_count": 1, "finite": False}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"neginf_count": 1, "finite": False}),
+    lambda value: value["buffer_inventory"].__setitem__(0, {**value["buffer_inventory"][0], "name": "decoder.other"}),
+    lambda value: value["buffer_inventory"].pop(),
+])
+def test_real_model_finiteness_mutations_rejected_after_full_repack(tmp_path, mutation):
+    identity, baseline, config = _seeded_real_model_identity()
+    value = copy.deepcopy(identity)
+    mutation(value)
+    _sync_v4_identity_hashes(value)
+    output = tmp_path / "real-finiteness"
+    observed = _repack_real_identity_fixture(output, value)
+    with pytest.raises(SmokeEvidenceError):
+        _validate_model_identity(observed, baseline, config, "cuda:0", {}, {"runtime_mode": "real"}, ROOT)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"raw_bytes_sha256": "0" * 64}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"finite_count": 32335, "posinf_count": 1265}),
+    lambda value: _update_named_identity_row(value, "buffer_inventory", "decoder.anchors", {"name": "decoder.valid_mask"}),
+])
+def test_anchor_mask_repack_mutations_rejected_after_aggregate_resync(tmp_path, mutation):
+    identity, baseline, config = _seeded_real_model_identity()
+    value = copy.deepcopy(identity)
+    mutation(value)
+    _sync_v4_identity_hashes(value)
+    output = tmp_path / "anchor-mask"
+    observed = _repack_real_identity_fixture(output, value)
+    with pytest.raises(SmokeEvidenceError):
+        _validate_model_identity(observed, baseline, config, "cuda:0", {}, {"runtime_mode": "real"}, ROOT)
 
 
 @pytest.mark.parametrize("artifact, mutation", [
