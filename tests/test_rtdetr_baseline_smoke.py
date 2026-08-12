@@ -84,7 +84,6 @@ from sparse_rtdetr.baseline.smoke_launcher import (
     main as launcher_main,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = Path(sys.executable).resolve()
 V1_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
@@ -92,6 +91,11 @@ V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / SMOKE_V3_CONFIG_RELATIVE
 V4_CONFIG = ROOT / SMOKE_V4_CONFIG_RELATIVE
 V5_CONFIG = ROOT / SMOKE_V5_CONFIG_RELATIVE
+CHECKER_PATH = ROOT / "tools" / "repository_contract_check.py"
+CHECKER_SPEC = importlib.util.spec_from_file_location("repository_contract_check_for_smoke", CHECKER_PATH)
+CHECKER = importlib.util.module_from_spec(CHECKER_SPEC)
+assert CHECKER_SPEC.loader is not None
+CHECKER_SPEC.loader.exec_module(CHECKER)
 
 
 def _directory_fingerprint(path: Path) -> tuple[tuple[str, int, str], ...] | None:
@@ -177,7 +181,14 @@ def _real_entry_handoff(config_path: Path, output: Path, data_root: Path) -> tup
 
 def _patch_synthetic_selection(monkeypatch):
     smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
-    monkeypatch.setattr(smoke, "load_frozen_image_selection", lambda _repo_root: FROZEN_IMAGE_RECORDS)
+    def synthetic_selection(_repo_root, *, runtime_mode="real", config_path=None):
+        assert runtime_mode in {"real", "synthetic"}
+        if runtime_mode == "real":
+            return FROZEN_IMAGE_RECORDS
+        assert config_path is not None
+        return FROZEN_IMAGE_RECORDS
+
+    monkeypatch.setattr(smoke, "load_frozen_image_selection", synthetic_selection)
     return smoke
 
 
@@ -886,7 +897,7 @@ def test_v5_inner_contract_check_is_explicit_and_data_free(monkeypatch):
     code = (
         "import json, types\n"
         "import sparse_rtdetr.baseline.smoke as smoke\n"
-        "smoke.load_frozen_image_selection = lambda _root: smoke.FROZEN_IMAGE_RECORDS\n"
+        "smoke.load_frozen_image_selection = lambda _root, **kwargs: smoke.FROZEN_IMAGE_RECORDS\n"
         "smoke.verify_r3_binding = lambda *_args: types.SimpleNamespace(artifact_root='synthetic-r3')\n"
         f"result = smoke.contract_check({str(ROOT)!r}, {str(V5_CONFIG)!r})\n"
         "assert result['status'] == 'PASS' and result['smoke_id'] == 'rtdetrv2_r18_visdrone_baseline_smoke_v5'\n"
@@ -1488,6 +1499,103 @@ def test_synthetic_smoke_has_exact_one_batch_and_complete_evidence(tmp_path):
     assert validate_entry_output(output)["entry_success_accepted"] is True
 
 
+def test_scientific_source_allowlist_is_exact_ast_dependency_closure():
+    assert CHECKER._scientific_dependency_closure(ROOT) == set(CHECKER.SCIENTIFIC_SOURCE_ALLOWLIST)
+
+
+def test_scientific_dependency_mutation_is_detected(tmp_path):
+    root = tmp_path / "repo"
+    source = root / "src/sparse_rtdetr/baseline/smoke.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("from sparse_rtdetr.data_protocol.new_semantics import value\n", encoding="utf-8")
+    dependency = root / "src/sparse_rtdetr/data_protocol/new_semantics.py"
+    dependency.parent.mkdir(parents=True)
+    dependency.write_text("value = 1\n", encoding="utf-8")
+    for relative in CHECKER.SCIENTIFIC_ENTRY_ROOTS[1:]:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    failures = CHECKER._scientific_dependency_failures(root)
+    assert "scientific source dependency missing from allowlist: src/sparse_rtdetr/data_protocol/new_semantics.py" in failures
+
+
+def test_synthetic_writer_is_independent_of_ignored_r3_artifact(tmp_path):
+    archive = tmp_path / "archive"
+    subprocess.run(["git", "archive", "HEAD", "-o", str(tmp_path / "repo.tar")], cwd=ROOT, check=True)
+    archive.mkdir()
+    subprocess.run(["tar", "-xf", str(tmp_path / "repo.tar"), "-C", str(archive)], check=True)
+    archive_root = archive
+    for relative in ("src/sparse_rtdetr/baseline/smoke.py", "src/sparse_rtdetr/baseline/smoke_evidence.py"):
+        destination = archive_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, destination)
+    output = tmp_path / "synthetic-entry"
+    env = {
+        **os.environ,
+        "CUDA_VISIBLE_DEVICES": "",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": str(archive_root / "src"),
+    }
+    script = (
+        "from pathlib import Path\n"
+        "from sparse_rtdetr.baseline.smoke import run_synthetic_smoke\n"
+        "from sparse_rtdetr.baseline.smoke_evidence import validate_entry_output\n"
+        f"root = Path({str(archive_root)!r})\n"
+        f"output = Path({str(output)!r})\n"
+        "run_synthetic_smoke(root, output)\n"
+        "assert validate_entry_output(output, repo_root=root)['entry_success_accepted']\n"
+    )
+    result = subprocess.run([str(PYTHON), "-c", script], cwd=archive_root, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    binding = json.loads((output / "data_binding_audit.json").read_text(encoding="utf-8"))
+    selection = json.loads((output / "image_selection_audit.json").read_text(encoding="utf-8"))
+    assert binding["runtime_artifacts_accessed"] is False
+    assert selection["verified_from_manifest"] is False
+
+
+def test_real_mode_cannot_use_synthetic_selection_bypass(tmp_path):
+    config = tmp_path / "smoke.json"
+    config.write_bytes(V1_CONFIG.read_bytes())
+    with pytest.raises(SmokeContractError):
+        load_smoke_config(tmp_path, config, runtime_mode="real")
+
+
+def test_v2_scientific_evidence_is_rejected(tmp_path):
+    output = tmp_path / "entry"
+    run_synthetic_smoke(ROOT, output)
+    path = output / "input_batch_audit.json"
+    value = _read_object(path)
+    value["schema_version"] = 2
+    path.write_bytes(canonical_json_bytes(value))
+    _repack_entry(output)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+@pytest.mark.parametrize("field", ["device_name", "device_capability", "torch_version", "torch_cuda_version", "current_device", "device_count", "cuda_visible_devices", "runtime_capture_after_cuda_initialization", "runtime_mode"])
+def test_synthetic_cuda_identity_exact_matrix_rejects_drift(tmp_path, field):
+    output = tmp_path / field
+    run_synthetic_smoke(ROOT, output)
+    path = output / "cuda_runtime_identity.json"
+    value = _read_object(path)
+    value[field] = {
+        "device_name": "other",
+        "device_capability": [9, 0],
+        "torch_version": "other",
+        "torch_cuda_version": "other",
+        "current_device": 0,
+        "device_count": 1,
+        "cuda_visible_devices": "0",
+        "runtime_capture_after_cuda_initialization": True,
+        "runtime_mode": "real",
+    }[field]
+    path.write_bytes(canonical_json_bytes(value))
+    _repack_entry(output)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
 @pytest.mark.parametrize("artifact, mutation", [
     ("input_batch_audit.json", lambda value: value["preprocessing"].update({"padding": {"used": True, "mode": "zero"}})),
     ("cuda_runtime_identity.json", lambda value: value.update({"cpu_fallback": False})),
@@ -1591,10 +1699,13 @@ def _run_real_entry_precuda_path(tmp_path, monkeypatch, config_path):
     receipt, receipt_sha = _real_entry_handoff(config_path, output, data_root)
     selection_calls = []
 
-    def selection_sentinel(_repo_root):
-        selection_calls.append(True)
+    def selection_sentinel(_repo_root, *, runtime_mode="real", config_path=None):
+        selection_calls.append((runtime_mode, config_path))
+        assert runtime_mode == "real"
         if len(selection_calls) == 1:
+            assert config_path == config_path_under_test
             return config["image_selection"]["records"]
+        assert config_path is None
         assert (output / "config.json").is_file()
         assert (output / "invocation.json").is_file()
         assert not (output / "completion.json").exists()
@@ -1603,6 +1714,7 @@ def _run_real_entry_precuda_path(tmp_path, monkeypatch, config_path):
     def forbidden_runtime_access(*_args, **_kwargs):
         raise AssertionError("pre-CUDA regression reached forbidden runtime access")
 
+    config_path_under_test = config_path
     monkeypatch.setattr(smoke, "load_frozen_image_selection", selection_sentinel)
     monkeypatch.setattr(smoke, "resolve_runtime_image_path", forbidden_runtime_access)
     monkeypatch.setattr(smoke, "validate_real_smoke_environment", forbidden_runtime_access)
@@ -1628,7 +1740,7 @@ def _run_real_entry_precuda_path(tmp_path, monkeypatch, config_path):
             config_path=config_path,
         )
 
-    assert selection_calls == [True, True]
+    assert selection_calls == [("real", config_path), ("real", None)]
     assert all(name != "torch" and not name.startswith("torch.") for name in imported)
     config_bytes = (output / "config.json").read_bytes()
     expected_bytes = canonical_json_bytes(config)

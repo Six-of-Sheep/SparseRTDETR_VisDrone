@@ -61,10 +61,14 @@ def _script(path: Path, body: str) -> Path:
 def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[str, Path | str], Path, Path]:
     root = tmp_path / "repo"
     shutil.copytree(ROOT / "src", root / "src")
+    (root / "environment").mkdir(parents=True)
+    for relative in ("environment/conda-packages.json", "environment/conda-linux-64.explicit.txt"):
+        shutil.copyfile(ROOT / relative, root / relative)
     (root / "configs/baseline").mkdir(parents=True)
     shutil.copyfile(ROOT / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json", root / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json")
     vendor_config = root / "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include"
     vendor_config.mkdir(parents=True)
+    shutil.copytree(ROOT / "vendor/rtdetrv2_pytorch/src", root / "vendor/rtdetrv2_pytorch/src")
     shutil.copyfile(ROOT / "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml", vendor_config.parent / "rtdetrv2_r18vd_120e_coco.yml")
     shutil.copyfile(ROOT / "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml", vendor_config / "rtdetrv2_r50vd.yml")
     (root / "manifests").mkdir(parents=True)

@@ -33,14 +33,88 @@ ENTRY_REQUIRED_ARTIFACTS = frozenset({
     "postprocess_audit.json",
     "rng_audit.json",
 })
-SCIENTIFIC_SCHEMA_VERSION = 2
+SCIENTIFIC_SCHEMA_VERSION = 3
 SCIENTIFIC_SOURCE_ALLOWLIST = (
+    "src/sparse_rtdetr/__init__.py",
+    "src/sparse_rtdetr/baseline/__init__.py",
     "src/sparse_rtdetr/baseline/artifacts.py",
+    "src/sparse_rtdetr/baseline/categories.py",
+    "src/sparse_rtdetr/baseline/config.py",
+    "src/sparse_rtdetr/baseline/contract.py",
+    "src/sparse_rtdetr/baseline/dataset.py",
+    "src/sparse_rtdetr/baseline/postprocessor.py",
     "src/sparse_rtdetr/baseline/smoke.py",
     "src/sparse_rtdetr/baseline/smoke_evidence.py",
     "src/sparse_rtdetr/baseline/smoke_launcher.py",
     "src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
+    "src/sparse_rtdetr/data_protocol/__init__.py",
+    "src/sparse_rtdetr/data_protocol/categories.py",
+    "src/sparse_rtdetr/data_protocol/converter.py",
+    "src/sparse_rtdetr/data_protocol/evaluation.py",
+    "src/sparse_rtdetr/data_protocol/lineage.py",
+    "src/sparse_rtdetr/data_protocol/parser.py",
+    "src/sparse_rtdetr/data_protocol/protocol.py",
+    "src/sparse_rtdetr/data_protocol/schema.py",
+    "src/sparse_rtdetr/data_protocol/split.py",
 )
+SCIENTIFIC_ENVIRONMENT_ALLOWLIST = (
+    "environment/conda-packages.json",
+    "environment/conda-linux-64.explicit.txt",
+)
+SCIENTIFIC_REAL_CUDA_IDENTITY = {
+    "cuda_visible_devices": "0",
+    "device_count": 1,
+    "current_device": 0,
+    "device": "cuda:0",
+    "device_name": "NVIDIA GeForce RTX 4090 D",
+    "device_capability": [8, 9],
+    "torch_version": "2.4.1",
+    "torch_cuda_version": "12.4",
+    "cpu_fallback": False,
+    "runtime_capture_after_cuda_initialization": True,
+}
+SCIENTIFIC_SYNTHETIC_CUDA_IDENTITY = {
+    "cuda_visible_devices": "",
+    "device_count": 0,
+    "current_device": None,
+    "device": "cpu",
+    "device_name": "cpu",
+    "device_capability": None,
+    "torch_version": "synthetic",
+    "torch_cuda_version": None,
+    "cpu_fallback": True,
+    "runtime_capture_after_cuda_initialization": False,
+}
+SCIENTIFIC_PREPROCESSING_EXPECTED = {
+    "compose": {"class": "Compose", "module": "src.data.transforms.container"},
+    "ordered_pipeline": [
+        {
+            "class": "Resize",
+            "module": "torchvision.transforms.v2._geometry",
+            "size": [640, 640],
+            "interpolation": "bilinear",
+            "antialias": True,
+            "max_size": None,
+        },
+        {
+            "class": "ConvertPILImage",
+            "module": "src.data.transforms._transforms",
+            "dtype": "float32",
+            "scale": True,
+        },
+    ],
+    "resize": {
+        "size": [640, 640],
+        "interpolation": "bilinear",
+        "antialias": True,
+        "max_size": None,
+    },
+    "convert_pil_image": {"dtype": "float32", "scale": True},
+    "scale_divisor": 255,
+    "normalization": {"used": False, "mean": None, "std": None},
+    "padding": {"used": False, "mode": None},
+    "color": {"mode": "RGB", "channel_order": "RGB"},
+}
 SCIENTIFIC_BASELINE_CONFIG = "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json"
 SCIENTIFIC_MANIFEST = "manifests/rtdetrv2_upstream.json"
 SCIENTIFIC_UPSTREAM_COMMIT = "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47"
@@ -122,7 +196,198 @@ def sha256_file(path: Path) -> str:
 
 def _strict_schema_version(value: Any, field: str) -> None:
     if type(value) is not int or value != SCIENTIFIC_SCHEMA_VERSION:
-        raise SmokeEvidenceError(f"{field} must be schema version 2")
+        raise SmokeEvidenceError(f"{field} must be schema version 3")
+
+
+def _descriptor_sha(value: dict[str, Any]) -> str:
+    return sha256_bytes(canonical_json_bytes(value))
+
+
+def _data_binding_sha(value: dict[str, Any]) -> str:
+    return _descriptor_sha({key: child for key, child in value.items() if key != "context"})
+
+
+def _identity_rows(root: Path, relatives: tuple[str, ...]) -> list[dict[str, Any]]:
+    rows = []
+    for relative in relatives:
+        path = root / relative
+        if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+            raise SmokeEvidenceError(f"identity file is not a regular unlinked file: {relative}")
+        rows.append({"relative_path": relative, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)})
+    return rows
+
+
+def build_scientific_context(
+    repo_root: str | Path,
+    *,
+    runtime_mode: str,
+    expected_device: str,
+    preprocessing: dict[str, Any],
+    data_binding: dict[str, Any],
+) -> dict[str, Any]:
+    root = Path(repo_root).resolve()
+    source_rows = _identity_rows(root, SCIENTIFIC_SOURCE_ALLOWLIST)
+    environment_rows = _identity_rows(root, SCIENTIFIC_ENVIRONMENT_ALLOWLIST)
+    return _context(
+        runtime_mode=runtime_mode,
+        expected_device=expected_device,
+        preprocessing=preprocessing,
+        data_binding=data_binding,
+        source_rows_sha256=sha256_bytes(canonical_json_bytes(source_rows)),
+        environment_rows_sha256=sha256_bytes(canonical_json_bytes(environment_rows)),
+    )
+
+
+def _validate_file_identity(root: Path, value: Any, field: str) -> None:
+    if not isinstance(value, dict) or set(value) != {"relative_path", "size_bytes", "sha256"}:
+        raise SmokeEvidenceError(f"{field} file identity schema drift")
+    relative = value["relative_path"]
+    if type(relative) is not str or not relative or relative.startswith("/") or ".." in Path(relative).parts:
+        raise SmokeEvidenceError(f"{field} file path drift")
+    path = root / relative
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+        raise SmokeEvidenceError(f"{field} file is not regular")
+    _strict_int(value["size_bytes"], f"{field}.size_bytes")
+    _strict_sha(value["sha256"], f"{field}.sha256")
+    if value["size_bytes"] != path.stat().st_size or value["sha256"] != sha256_file(path):
+        raise SmokeEvidenceError(f"{field} file identity mismatch")
+
+
+def _validate_data_binding(value: Any, config: dict[str, Any], repo_root: Path, context: dict[str, Any]) -> None:
+    required = {"schema_version", "context", "role", "manifest_relative_path", "records", "metadata", "portable", "nonportable", "real_data_accessed", "runtime_artifacts_accessed", "artifact_validation_mode"}
+    if not isinstance(value, dict) or set(value) != required:
+        raise SmokeEvidenceError("data_binding_audit schema fields are invalid")
+    _strict_schema_version(value["schema_version"], "data_binding_audit.schema_version")
+    if value["context"] != context or value["role"] != "train_core":
+        raise SmokeEvidenceError("data_binding_audit context drift")
+    if value["records"] != config["image_selection"]["records"]:
+        raise SmokeEvidenceError("data_binding_audit records drift")
+    if context["runtime_mode"] == "synthetic":
+        expected = {"manifest_relative_path": None, "metadata": [], "portable": True, "nonportable": False, "real_data_accessed": False, "runtime_artifacts_accessed": False, "artifact_validation_mode": "synthetic_tracked_contract_only"}
+        if any(value[key] != expected[key] for key in expected):
+            raise SmokeEvidenceError("synthetic data binding drift")
+        return
+    expected_manifest = "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json"
+    if value["manifest_relative_path"] != expected_manifest or value["portable"] is not False or value["nonportable"] is not True or value["real_data_accessed"] is not True or value["runtime_artifacts_accessed"] is not True or value["artifact_validation_mode"] != "real_r3_metadata":
+        raise SmokeEvidenceError("real data binding flags drift")
+    metadata = value["metadata"]
+    if type(metadata) is not list or len(metadata) != 6:
+        raise SmokeEvidenceError("real R3 metadata identity is incomplete")
+    for item in metadata:
+        _validate_file_identity(repo_root, item, "data_binding_audit.metadata")
+    names = [item["relative_path"] for item in metadata]
+    expected_names = [
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/completion.json",
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/artifact_inventory.json",
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/config.json",
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/category_contract.json",
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/source_identity.json",
+        expected_manifest,
+    ]
+    if names != expected_names:
+        raise SmokeEvidenceError("real R3 metadata order drift")
+    expected_r3_shas = {
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/completion.json": SCIENTIFIC_R3_BINDING["completion_sha256"],
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/artifact_inventory.json": SCIENTIFIC_R3_BINDING["artifact_inventory_sha256"],
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/config.json": SCIENTIFIC_R3_BINDING["config_sha256"],
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/category_contract.json": SCIENTIFIC_R3_BINDING["category_contract_sha256"],
+        "artifacts/data/visdrone_protocol_v2_conversion_r3/source_identity.json": SCIENTIFIC_R3_BINDING["source_identity_sha256"],
+    }
+    for item in metadata:
+        expected_sha = expected_r3_shas.get(item["relative_path"])
+        if expected_sha is not None and item["sha256"] != expected_sha:
+            raise SmokeEvidenceError("real R3 metadata is not bound to the baseline contract")
+    try:
+        from .artifacts import verify_r3_binding
+        verify_r3_binding(repo_root)
+    except Exception as exc:
+        raise SmokeEvidenceError("real R3 metadata validation failed") from exc
+    inventory_value = json.loads((repo_root / expected_names[1]).read_text(encoding="utf-8"))
+    inventory_rows = inventory_value.get("artifacts") if isinstance(inventory_value, dict) else None
+    manifest_row = next(
+        (row for row in inventory_rows if isinstance(row, dict) and row.get("relative_path") == "train_core_manifest.json"),
+        None,
+    ) if isinstance(inventory_rows, list) else None
+    manifest_item = metadata[-1]
+    if not isinstance(manifest_row, dict) or manifest_item["size_bytes"] != manifest_row.get("size_bytes") or manifest_item["sha256"] != manifest_row.get("sha256"):
+        raise SmokeEvidenceError("train_core manifest is not bound to the certified R3 inventory")
+    _validate_train_core_manifest(repo_root / expected_manifest, config["image_selection"]["records"])
+
+
+def _validate_train_core_manifest(path: Path, expected_records: list[dict[str, Any]]) -> None:
+    """Re-read the certified manifest instead of trusting entry metadata alone."""
+
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+        raise SmokeEvidenceError("train_core manifest is not a regular file")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise SmokeEvidenceError("train_core manifest is invalid") from exc
+    if not isinstance(payload, dict) or set(payload) != {"records"} or not isinstance(payload["records"], list):
+        raise SmokeEvidenceError("train_core manifest schema drift")
+    by_id: dict[int, dict[str, Any]] = {}
+    for record in payload["records"]:
+        if not isinstance(record, dict) or type(record.get("coco_image_id")) is not int:
+            raise SmokeEvidenceError("train_core manifest record schema drift")
+        if record["coco_image_id"] in by_id:
+            raise SmokeEvidenceError("train_core manifest contains duplicate image IDs")
+        by_id[record["coco_image_id"]] = record
+    for expected in expected_records:
+        image_id = expected.get("coco_image_id") if isinstance(expected, dict) else None
+        actual = by_id.get(image_id)
+        if actual != expected:
+            raise SmokeEvidenceError("train_core manifest selected record drift")
+    selected_in_manifest_order = [
+        record for record in payload["records"]
+        if isinstance(record, dict) and record.get("coco_image_id") in {item.get("coco_image_id") for item in expected_records}
+    ]
+    if selected_in_manifest_order != expected_records:
+        raise SmokeEvidenceError("train_core manifest selected record order drift")
+
+
+def describe_preprocessing_pipeline(pipeline: Any) -> dict[str, Any]:
+    """Describe the actual frozen transform instances, including enum values."""
+
+    transforms = getattr(pipeline, "transforms", None)
+    if type(transforms) is not list or len(transforms) != 2:
+        raise SmokeEvidenceError("preprocessing pipeline must contain exactly two transforms")
+    resize, convert = transforms
+    resize_descriptor = {
+        "class": type(resize).__name__,
+        "module": type(resize).__module__,
+        "size": list(getattr(resize, "size", ())),
+        "interpolation": getattr(getattr(resize, "interpolation", None), "value", getattr(resize, "interpolation", None)),
+        "antialias": getattr(resize, "antialias", None),
+        "max_size": getattr(resize, "max_size", None),
+    }
+    convert_descriptor = {
+        "class": type(convert).__name__,
+        "module": type(convert).__module__,
+        "dtype": getattr(convert, "dtype", None),
+        "scale": getattr(convert, "scale", None),
+    }
+    return {
+        "compose": {"class": type(pipeline).__name__, "module": type(pipeline).__module__},
+        "ordered_pipeline": [resize_descriptor, convert_descriptor],
+        "resize": {key: resize_descriptor[key] for key in ("size", "interpolation", "antialias", "max_size")},
+        "convert_pil_image": {key: convert_descriptor[key] for key in ("dtype", "scale")},
+        "scale_divisor": 255,
+        "normalization": {"used": False, "mean": None, "std": None},
+        "padding": {"used": False, "mode": None},
+        "color": {"mode": "RGB", "channel_order": "RGB"},
+    }
+
+
+def _context(*, runtime_mode: str, expected_device: str, preprocessing: dict[str, Any], data_binding: dict[str, Any], source_rows_sha256: str, environment_rows_sha256: str) -> dict[str, Any]:
+    return {
+        "schema_version": SCIENTIFIC_SCHEMA_VERSION,
+        "runtime_mode": runtime_mode,
+        "expected_device": expected_device,
+        "preprocessing_sha256": _descriptor_sha(preprocessing),
+        "data_binding_sha256": _data_binding_sha(data_binding),
+        "source_rows_canonical_sha256": source_rows_sha256,
+        "environment_rows_canonical_sha256": environment_rows_sha256,
+    }
 
 
 def _strict_bool(value: Any, field: str) -> None:
@@ -173,11 +438,13 @@ def _strict_finite_range(value: Any, field: str) -> None:
         raise SmokeEvidenceError(f"{field} range is not finite [0,1]")
 
 
-def _validate_input_batch_audit(value: Any, stable_ids: list[str], expected_device: str) -> None:
-    required = {"schema_version", "runtime_mode", "batch_count", "image_count", "stable_image_ids", "target_labels_model_space", "loader_images", "model_images", "loader_orig_target_sizes", "model_orig_target_sizes", "labels", "boxes", "preprocessing"}
+def _validate_input_batch_audit(value: Any, stable_ids: list[str], expected_device: str, context: dict[str, Any]) -> None:
+    required = {"schema_version", "context", "runtime_mode", "batch_count", "image_count", "stable_image_ids", "target_labels_model_space", "loader_images", "model_images", "loader_orig_target_sizes", "model_orig_target_sizes", "labels", "boxes", "preprocessing"}
     if not isinstance(value, dict) or set(value) != required:
         raise SmokeEvidenceError("input_batch_audit schema fields are invalid")
     _strict_schema_version(value["schema_version"], "input_batch_audit.schema_version")
+    if value["context"] != context or value["runtime_mode"] != context["runtime_mode"]:
+        raise SmokeEvidenceError("input_batch_audit context drift")
     if value["runtime_mode"] not in {"synthetic", "real"}:
         raise SmokeEvidenceError("input_batch_audit.runtime_mode is invalid")
     for name, expected in (("batch_count", 1), ("image_count", 2)):
@@ -188,12 +455,20 @@ def _validate_input_batch_audit(value: Any, stable_ids: list[str], expected_devi
         raise SmokeEvidenceError("input_batch_audit image identity drift")
     for name, device in (("loader_images", "cpu"), ("model_images", expected_device), ("loader_orig_target_sizes", "cpu"), ("model_orig_target_sizes", expected_device)):
         _strict_tensor_audit(value[name], f"input_batch_audit.{name}", device=device)
+        if value[name]["finite"] is not True:
+            raise SmokeEvidenceError(f"input_batch_audit.{name} must be finite")
     _strict_shape(value["loader_images"]["shape"], [2, 3, 640, 640], "input_batch_audit.loader_images")
     _strict_shape(value["model_images"]["shape"], [2, 3, 640, 640], "input_batch_audit.model_images")
+    if value["loader_images"]["dtype"] != "torch.float32" or value["model_images"]["dtype"] != "torch.float32":
+        raise SmokeEvidenceError("input_batch_audit image dtype drift")
     for name in ("loader_orig_target_sizes", "model_orig_target_sizes"):
         _strict_shape(value[name]["shape"], [2, 2], f"input_batch_audit.{name}")
         if value[name]["dtype"] != "torch.int64" or value[name]["finite"] is not True:
             raise SmokeEvidenceError(f"input_batch_audit.{name} dtype/finite drift")
+    if value["loader_images"]["logical_sha256"] != value["model_images"]["logical_sha256"]:
+        raise SmokeEvidenceError("input_batch_audit image logical identity drift")
+    if value["loader_orig_target_sizes"]["logical_sha256"] != value["model_orig_target_sizes"]["logical_sha256"]:
+        raise SmokeEvidenceError("input_batch_audit target-size logical identity drift")
     labels = value["labels"]
     boxes = value["boxes"]
     if type(labels) is not list or len(labels) != 2 or type(boxes) is not list or len(boxes) != 2:
@@ -228,82 +503,119 @@ def _validate_input_batch_audit(value: Any, stable_ids: list[str], expected_devi
         _strict_bool(row["finite"], "input_batch_audit.boxes.finite")
         _strict_sha(row["logical_sha256"], "input_batch_audit.boxes.logical_sha256")
     prep = value["preprocessing"]
-    required_prep = {"ordered_pipeline", "resize", "convert_pil_image", "scale_divisor", "normalization", "padding", "color", "value_range"}
-    if not isinstance(prep, dict) or set(prep) != required_prep or prep["ordered_pipeline"] != ["Resize", "ConvertPILImage"]:
+    required_prep = {"compose", "ordered_pipeline", "resize", "convert_pil_image", "scale_divisor", "normalization", "padding", "color", "value_range", "descriptor_sha256"}
+    if not isinstance(prep, dict) or set(prep) != required_prep:
         raise SmokeEvidenceError("input_batch_audit preprocessing schema drift")
-    if prep["resize"] != {"size": [640, 640], "interpolation": "default", "antialias": None}:
+    expected_prep = dict(SCIENTIFIC_PREPROCESSING_EXPECTED)
+    expected_prep["value_range"] = prep["value_range"]
+    expected_prep["descriptor_sha256"] = _descriptor_sha({key: prep[key] for key in expected_prep if key != "descriptor_sha256" and key != "value_range"})
+    if {key: prep[key] for key in expected_prep} != expected_prep:
+        raise SmokeEvidenceError("input_batch_audit preprocessing drift")
+    if prep["descriptor_sha256"] != context["preprocessing_sha256"]:
         raise SmokeEvidenceError("input_batch_audit resize drift")
-    if prep["convert_pil_image"] != {"dtype": "float32", "scale": True} or prep["scale_divisor"] != 255:
-        raise SmokeEvidenceError("input_batch_audit conversion drift")
-    if prep["normalization"] != {"used": False, "mean": None, "std": None} or prep["padding"] != {"used": False, "mode": None}:
-        raise SmokeEvidenceError("input_batch_audit normalization/padding drift")
-    if prep["color"] != {"mode": "RGB", "channel_order": "RGB"}:
-        raise SmokeEvidenceError("input_batch_audit color drift")
     _strict_finite_range(prep["value_range"], "input_batch_audit.value_range")
 
 
-def _validate_cuda_runtime_identity(value: Any, expected_device: str) -> None:
-    required = {"schema_version", "runtime_mode", "cuda_visible_devices", "device_count", "current_device", "device", "device_name", "device_capability", "torch_version", "torch_cuda_version", "cpu_fallback", "runtime_capture_after_cuda_initialization"}
+def _validate_cuda_runtime_identity(value: Any, expected_device: str, context: dict[str, Any]) -> None:
+    required = {"schema_version", "context", "runtime_mode", "cuda_visible_devices", "device_count", "current_device", "device", "device_name", "device_capability", "torch_version", "torch_cuda_version", "cpu_fallback", "runtime_capture_after_cuda_initialization"}
     if not isinstance(value, dict) or set(value) != required:
         raise SmokeEvidenceError("cuda_runtime_identity schema fields are invalid")
     _strict_schema_version(value["schema_version"], "cuda_runtime_identity.schema_version")
+    if value["context"] != context:
+        raise SmokeEvidenceError("cuda runtime context drift")
+    if value["runtime_mode"] != context["runtime_mode"]:
+        raise SmokeEvidenceError("cuda runtime mode cross-binding drift")
     if value["runtime_mode"] not in {"synthetic", "real"} or type(value["cuda_visible_devices"]) is not str:
         raise SmokeEvidenceError("cuda_runtime_identity mode drift")
     _strict_int(value["device_count"], "cuda_runtime_identity.device_count")
     _strict_bool(value["cpu_fallback"], "cuda_runtime_identity.cpu_fallback")
     _strict_bool(value["runtime_capture_after_cuda_initialization"], "cuda_runtime_identity.runtime_capture_after_cuda_initialization")
-    if value["runtime_mode"] == "real":
-        if value["cuda_visible_devices"] != "0" or value["device_count"] != 1 or value["current_device"] != 0 or value["device"] != "cuda:0" or value["cpu_fallback"] is not False or value["runtime_capture_after_cuda_initialization"] is not True:
-            raise SmokeEvidenceError("cuda_runtime_identity real runtime drift")
-        if type(value["device_name"]) is not str or type(value["torch_version"]) is not str or type(value["torch_cuda_version"]) is not str:
-            raise SmokeEvidenceError("cuda_runtime_identity version drift")
-        if type(value["device_capability"]) is not list or len(value["device_capability"]) != 2 or any(type(x) is not int or x < 0 for x in value["device_capability"]):
-            raise SmokeEvidenceError("cuda_runtime_identity capability drift")
-    else:
-        if value["device"] != "cpu" or value["device_count"] != 0 or value["current_device"] is not None or value["device_capability"] is not None or value["cpu_fallback"] is not True or value["runtime_capture_after_cuda_initialization"] is not False:
-            raise SmokeEvidenceError("cuda_runtime_identity synthetic runtime drift")
+    expected = SCIENTIFIC_REAL_CUDA_IDENTITY if value["runtime_mode"] == "real" else SCIENTIFIC_SYNTHETIC_CUDA_IDENTITY
+    if value["runtime_mode"] not in {"synthetic", "real"} or any(value.get(key) != expected[key] for key in expected):
+        raise SmokeEvidenceError("cuda_runtime_identity exact runtime drift")
     if expected_device != value["device"]:
         raise SmokeEvidenceError("cuda_runtime_identity device cross-binding drift")
 
 
-def _validate_model_identity(value: Any, config: dict[str, Any], smoke_config: dict[str, Any], expected_device: str, output_audit: dict[str, Any]) -> None:
-    required = {"schema_version", "runtime_mode", "baseline_id", "model_type", "backbone", "encoder", "decoder", "decoder_layers", "num_classes", "num_queries", "num_feature_levels", "feature_strides", "hidden_dim", "deformable_sampling_points", "parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count", "training", "eval", "device", "pretrained", "checkpoint", "all_parameters_finite", "parameter_state_schema_sha256", "parameter_state_value_sha256", "postprocessor", "output_tensors"}
+def _validate_model_identity(value: Any, config: dict[str, Any], smoke_config: dict[str, Any], expected_device: str, output_audit: dict[str, Any], context: dict[str, Any]) -> None:
+    required = {"schema_version", "context", "runtime_mode", "baseline_id", "model_type", "model_class", "model_module", "backbone", "encoder", "decoder", "decoder_layers", "num_classes", "num_queries", "num_feature_levels", "feature_strides", "hidden_dim", "deformable_sampling_points", "contract_parameters", "parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count", "parameter_inventory", "buffer_inventory", "training", "eval", "device", "pretrained", "checkpoint", "all_parameters_finite", "parameter_state_schema_sha256", "parameter_state_value_sha256", "postprocessor", "output_tensors"}
     if not isinstance(value, dict) or set(value) != required:
         raise SmokeEvidenceError("model_identity schema fields are invalid")
     _strict_schema_version(value["schema_version"], "model_identity.schema_version")
+    if value["context"] != context:
+        raise SmokeEvidenceError("model identity context drift")
+    if value["runtime_mode"] != context["runtime_mode"]:
+        raise SmokeEvidenceError("model runtime mode cross-binding drift")
     contract = config["baseline_contract"]
     model_config = smoke_config["model"]
-    expected = {"baseline_id": contract["baseline_id"], "backbone": contract["backbone"], "encoder": contract["encoder"], "decoder": contract["decoder"], "decoder_layers": contract["decoder_layers"], "num_classes": contract["num_classes"], "num_queries": contract["num_queries"], "num_feature_levels": contract["num_feature_levels"], "feature_strides": contract["feature_strides"], "hidden_dim": contract["hidden_dim"], "deformable_sampling_points": contract["deformable_sampling_points"], "parameters": contract["visdrone_parameter_count"]}
+    expected = {"baseline_id": contract["baseline_id"], "backbone": contract["backbone"], "encoder": contract["encoder"], "decoder": contract["decoder"], "decoder_layers": contract["decoder_layers"], "num_classes": contract["num_classes"], "num_queries": contract["num_queries"], "num_feature_levels": contract["num_feature_levels"], "feature_strides": contract["feature_strides"], "hidden_dim": contract["hidden_dim"], "deformable_sampling_points": contract["deformable_sampling_points"], "contract_parameters": contract["visdrone_parameter_count"]}
     for field, expected_value in expected.items():
         if value[field] != expected_value:
             raise SmokeEvidenceError(f"model_identity {field} drift")
-    for field in ("decoder_layers", "num_classes", "num_queries", "num_feature_levels", "hidden_dim", "parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count"):
+    for field in ("decoder_layers", "num_classes", "num_queries", "num_feature_levels", "hidden_dim", "contract_parameters", "parameters", "trainable_parameters", "parameter_tensor_count", "buffer_count"):
         _strict_int(value[field], f"model_identity.{field}")
-    for field in ("baseline_id", "num_classes", "num_queries", "parameters"):
+    for field in ("baseline_id", "num_classes", "num_queries"):
         if model_config.get(field) != expected[field]:
             raise SmokeEvidenceError(f"model identity is not bound to smoke config: {field}")
+    if model_config.get("parameters") != value["contract_parameters"]:
+        raise SmokeEvidenceError("model identity contract parameter binding drift")
     if model_config.get("pretrained") is not False or model_config.get("checkpoint") is not None or model_config.get("nms") is not False or model_config.get("num_top_queries") != 300:
         raise SmokeEvidenceError("model identity is not bound to frozen inference config")
     if value["feature_strides"] != [8, 16, 32] or value["deformable_sampling_points"] != [4, 4, 4] or value["training"] is not False or value["eval"] is not True or value["device"] != expected_device or value["pretrained"] is not False or value["checkpoint"] is not None or value["all_parameters_finite"] is not True:
         raise SmokeEvidenceError("model_identity runtime drift")
+    if value["runtime_mode"] == "real":
+        if value["model_type"] != "RTDETR" or value["model_class"] != "RTDETR" or value["model_module"] != "src.zoo.rtdetr.rtdetr" or value["postprocessor"]["type"] != "VisDronePostProcessor" or value["postprocessor"]["module"] != "sparse_rtdetr.baseline.postprocessor":
+            raise SmokeEvidenceError("real model identity class drift")
+    elif value["model_type"] != "synthetic-contract-model" or value["model_class"] != "SyntheticSmokeModel" or value["model_module"] != "sparse_rtdetr.baseline.smoke":
+        raise SmokeEvidenceError("synthetic model identity class drift")
+    rows = value["parameter_inventory"] + value["buffer_inventory"]
+    if value["parameters"] != sum(row["numel"] for row in value["parameter_inventory"]):
+        raise SmokeEvidenceError("model observed parameter count drift")
+    if value["trainable_parameters"] != sum(row["numel"] for row in value["parameter_inventory"] if row["requires_grad"]):
+        raise SmokeEvidenceError("model trainable parameter count drift")
+    if value["parameter_tensor_count"] != len(value["parameter_inventory"]) or value["buffer_count"] != len(value["buffer_inventory"]):
+        raise SmokeEvidenceError("model tensor count drift")
+    for row, kind in [
+        *[(row, "parameter") for row in value["parameter_inventory"]],
+        *[(row, "buffer") for row in value["buffer_inventory"]],
+    ]:
+        if set(row) != {"name", "shape", "dtype", "numel", "requires_grad", "kind", "logical_sha256"} or row["kind"] != kind:
+            raise SmokeEvidenceError("model state inventory schema drift")
+        if type(row["name"]) is not str or type(row["shape"]) is not list or any(type(item) is not int or item < 0 for item in row["shape"]):
+            raise SmokeEvidenceError("model state inventory shape drift")
+        if type(row["dtype"]) is not str or type(row["numel"]) is not int or row["numel"] < 0 or type(row["requires_grad"]) is not bool:
+            raise SmokeEvidenceError("model state inventory type drift")
+        product = 1
+        for dimension in row["shape"]:
+            product *= dimension
+        if product != row["numel"]:
+            raise SmokeEvidenceError("model state inventory numel drift")
+        _strict_sha(row["logical_sha256"], "model state logical_sha256")
+    schema_rows = [{key: row[key] for key in ("name", "shape", "dtype", "numel", "requires_grad", "kind")} for row in rows]
+    value_rows = [{**{key: row[key] for key in ("name", "shape", "dtype", "numel", "requires_grad", "kind")}, "logical_sha256": row["logical_sha256"]} for row in rows]
+    if value["parameter_state_schema_sha256"] != _descriptor_sha(schema_rows) or value["parameter_state_value_sha256"] != _descriptor_sha(value_rows):
+        raise SmokeEvidenceError("model state inventory hash drift")
     _strict_sha(value["parameter_state_schema_sha256"], "model_identity.parameter_state_schema_sha256")
     _strict_sha(value["parameter_state_value_sha256"], "model_identity.parameter_state_value_sha256")
-    if value["runtime_mode"] == "synthetic":
-        _, _, _, expected_schema_sha, expected_value_sha, _ = _synthetic_state_hashes(contract)
-        if value["parameter_state_schema_sha256"] != expected_schema_sha or value["parameter_state_value_sha256"] != expected_value_sha:
-            raise SmokeEvidenceError("model_identity synthetic state hash drift")
     post = value["postprocessor"]
-    if not isinstance(post, dict) or set(post) != {"type", "num_top_queries", "nms"} or type(post["type"]) is not str or post["num_top_queries"] != 300 or post["nms"] is not False:
+    if not isinstance(post, dict) or set(post) != {"type", "module", "num_top_queries", "nms"} or type(post["type"]) is not str or type(post["module"]) is not str or type(post["num_top_queries"]) is not int or type(post["nms"]) is not bool or post["num_top_queries"] != 300 or post["nms"] is not False:
         raise SmokeEvidenceError("model_identity postprocessor drift")
+    if value["runtime_mode"] == "real":
+        if post["type"] != "VisDronePostProcessor":
+            raise SmokeEvidenceError("real model postprocessor type drift")
+    elif post["type"] != "SyntheticSmokePostProcessor":
+        raise SmokeEvidenceError("synthetic model postprocessor type drift")
     if value["output_tensors"] != output_audit:
         raise SmokeEvidenceError("model_identity output tensor binding drift")
 
 
-def _validate_source_identity(value: Any, config: dict[str, Any], repo_root: Path) -> None:
-    required = {"schema_version", "baseline_id", "implementation", "source_allowlist", "source_rows_canonical_sha256", "baseline_config", "upstream_manifest", "vendor", "r3_binding"}
+def _validate_source_identity(value: Any, config: dict[str, Any], repo_root: Path, context: dict[str, Any]) -> None:
+    required = {"schema_version", "context", "baseline_id", "implementation", "source_allowlist", "source_rows_canonical_sha256", "environment_lock", "environment_rows_canonical_sha256", "baseline_config", "upstream_manifest", "vendor", "r3_binding"}
     if not isinstance(value, dict) or set(value) != required:
         raise SmokeEvidenceError("source_identity schema fields are invalid")
     _strict_schema_version(value["schema_version"], "source_identity.schema_version")
+    if value["context"] != context:
+        raise SmokeEvidenceError("source identity context drift")
     if value["baseline_id"] != config["baseline_contract"]["baseline_id"] or value["implementation"] != "vendored RT-DETRv2 PyTorch":
         raise SmokeEvidenceError("source_identity baseline drift")
     rows = value["source_allowlist"]
@@ -313,11 +625,22 @@ def _validate_source_identity(value: Any, config: dict[str, Any], repo_root: Pat
         if set(row) != {"relative_path", "size_bytes", "sha256"} or row["relative_path"] != relative:
             raise SmokeEvidenceError("source_identity row schema drift")
         path = repo_root / relative
-        if not path.is_file() or row["size_bytes"] != path.stat().st_size or row["sha256"] != sha256_file(path):
+        if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1 or row["size_bytes"] != path.stat().st_size or row["sha256"] != sha256_file(path):
             raise SmokeEvidenceError(f"source_identity source drift: {relative}")
         _strict_int(row["size_bytes"], "source_identity.size_bytes"); _strict_sha(row["sha256"], "source_identity.sha256")
     if value["source_rows_canonical_sha256"] != sha256_bytes(canonical_json_bytes(rows)):
         raise SmokeEvidenceError("source_identity source rows SHA drift")
+    environment_rows = value["environment_lock"]
+    if not isinstance(environment_rows, list) or [row.get("relative_path") for row in environment_rows] != list(SCIENTIFIC_ENVIRONMENT_ALLOWLIST):
+        raise SmokeEvidenceError("source_identity environment allowlist drift")
+    for row, relative in zip(environment_rows, SCIENTIFIC_ENVIRONMENT_ALLOWLIST):
+        path = repo_root / relative
+        if set(row) != {"relative_path", "size_bytes", "sha256"} or row["relative_path"] != relative or path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1 or row["size_bytes"] != path.stat().st_size or row["sha256"] != sha256_file(path):
+            raise SmokeEvidenceError(f"source_identity environment drift: {relative}")
+        _strict_int(row["size_bytes"], "source_identity.environment.size_bytes")
+        _strict_sha(row["sha256"], "source_identity.environment.sha256")
+    if value["environment_rows_canonical_sha256"] != sha256_bytes(canonical_json_bytes(environment_rows)):
+        raise SmokeEvidenceError("source_identity environment rows SHA drift")
     baseline = value["baseline_config"]
     baseline_path = repo_root / SCIENTIFIC_BASELINE_CONFIG
     if not baseline_path.is_file():
@@ -326,21 +649,35 @@ def _validate_source_identity(value: Any, config: dict[str, Any], repo_root: Pat
         raise SmokeEvidenceError("source_identity baseline config drift")
     manifest = value["upstream_manifest"]
     manifest_path = repo_root / SCIENTIFIC_MANIFEST
-    if not manifest_path.is_file():
+    if context["runtime_mode"] == "synthetic" and manifest is not None:
+        raise SmokeEvidenceError("synthetic source identity must not claim a manifest")
+    if context["runtime_mode"] == "real" and not manifest_path.is_file():
         raise SmokeEvidenceError("source_identity upstream manifest is missing")
-    manifest_value = json.loads(manifest_path.read_bytes().decode("utf-8"))
-    expected_manifest = {"relative_path": SCIENTIFIC_MANIFEST, "size_bytes": manifest_path.stat().st_size, "sha256": sha256_file(manifest_path), "upstream_commit": SCIENTIFIC_UPSTREAM_COMMIT, "upstream_root_tree": SCIENTIFIC_UPSTREAM_ROOT_TREE, "upstream_subtree": SCIENTIFIC_UPSTREAM_SUBTREE}
-    if manifest != expected_manifest or manifest_value.get("canonical_inventory_sha256") != SCIENTIFIC_VENDOR_INVENTORY_SHA256 or manifest_value.get("file_count") != SCIENTIFIC_VENDOR_FILE_COUNT or manifest_value.get("total_size_bytes") != SCIENTIFIC_VENDOR_TOTAL_BYTES:
-        raise SmokeEvidenceError("source_identity upstream manifest drift")
+    if context["runtime_mode"] == "real":
+        manifest_value = json.loads(manifest_path.read_bytes().decode("utf-8"))
+        expected_manifest = {"relative_path": SCIENTIFIC_MANIFEST, "size_bytes": manifest_path.stat().st_size, "sha256": sha256_file(manifest_path), "upstream_commit": SCIENTIFIC_UPSTREAM_COMMIT, "upstream_root_tree": SCIENTIFIC_UPSTREAM_ROOT_TREE, "upstream_subtree": SCIENTIFIC_UPSTREAM_SUBTREE}
+        if manifest != expected_manifest or manifest_value.get("canonical_inventory_sha256") != SCIENTIFIC_VENDOR_INVENTORY_SHA256 or manifest_value.get("file_count") != SCIENTIFIC_VENDOR_FILE_COUNT or manifest_value.get("total_size_bytes") != SCIENTIFIC_VENDOR_TOTAL_BYTES:
+            raise SmokeEvidenceError("source_identity upstream manifest drift")
     vendor = value["vendor"]
-    expected_vendor = {"canonical_inventory_sha256": SCIENTIFIC_VENDOR_INVENTORY_SHA256, "file_count": SCIENTIFIC_VENDOR_FILE_COUNT, "total_size_bytes": SCIENTIFIC_VENDOR_TOTAL_BYTES, "r18_config": config["vendor"]["r18_config"], "r18_config_sha256": config["vendor"]["r18_config_sha256"], "r18_include": config["vendor"]["r18_include"], "r18_include_sha256": config["vendor"]["r18_include_sha256"]}
+    expected_vendor = {"r18_config": config["vendor"]["r18_config"], "r18_config_sha256": config["vendor"]["r18_config_sha256"], "r18_include": config["vendor"]["r18_include"], "r18_include_sha256": config["vendor"]["r18_include_sha256"]}
+    if context["runtime_mode"] == "real":
+        expected_vendor.update({"canonical_inventory_sha256": SCIENTIFIC_VENDOR_INVENTORY_SHA256, "file_count": SCIENTIFIC_VENDOR_FILE_COUNT, "total_size_bytes": SCIENTIFIC_VENDOR_TOTAL_BYTES})
     if vendor != expected_vendor:
         raise SmokeEvidenceError("source_identity vendor drift")
     for path_key, sha_key in (("r18_config", "r18_config_sha256"), ("r18_include", "r18_include_sha256")):
         vendor_path = repo_root / vendor[path_key]
         if vendor_path.is_symlink() or not vendor_path.is_file() or sha256_file(vendor_path) != vendor[sha_key]:
             raise SmokeEvidenceError(f"source_identity vendor file drift: {path_key}")
-    if value["r3_binding"] != {"artifact_root": config["r3_binding"]["artifact_root"], **SCIENTIFIC_R3_BINDING}:
+    expected_r3 = {
+        "artifact_root": config["r3_binding"]["artifact_root"],
+        "runtime_mode": context["runtime_mode"],
+        "artifact_validation_mode": "real_r3_metadata" if context["runtime_mode"] == "real" else "synthetic_tracked_contract_only",
+        **{key: config["r3_binding"][key] for key in (
+            "completion_sha256", "artifact_inventory_sha256", "entry_canonical_inventory_sha256",
+            "config_sha256", "category_contract_sha256", "source_identity_sha256",
+        )},
+    }
+    if value["r3_binding"] != expected_r3:
         raise SmokeEvidenceError("source_identity R3 binding drift")
 
 
@@ -438,6 +775,8 @@ def build_input_batch_audit(
     model_orig_target_sizes: Any,
     *,
     runtime_mode: str,
+    preprocessing: dict[str, Any],
+    context: dict[str, Any],
 ) -> dict[str, object]:
     images = batch["images"]
     sizes = batch["orig_target_sizes"]
@@ -454,6 +793,7 @@ def build_input_batch_audit(
         boxes.append(audit)
     return {
         "schema_version": SCIENTIFIC_SCHEMA_VERSION,
+        "context": context,
         "runtime_mode": runtime_mode,
         "batch_count": 1,
         "image_count": 2,
@@ -465,16 +805,7 @@ def build_input_batch_audit(
         "model_orig_target_sizes": tensor_audit(model_orig_target_sizes),
         "labels": labels,
         "boxes": boxes,
-        "preprocessing": {
-            "ordered_pipeline": ["Resize", "ConvertPILImage"],
-            "resize": {"size": [640, 640], "interpolation": "default", "antialias": None},
-            "convert_pil_image": {"dtype": "float32", "scale": True},
-            "scale_divisor": 255,
-            "normalization": {"used": False, "mean": None, "std": None},
-            "padding": {"used": False, "mode": None},
-            "color": {"mode": "RGB", "channel_order": "RGB"},
-            "value_range": _tensor_range(images),
-        },
+        "preprocessing": {**preprocessing, "value_range": _tensor_range(images), "descriptor_sha256": _descriptor_sha(preprocessing)},
     }
 
 
@@ -491,14 +822,14 @@ def _state_hashes(model: Any, *, synthetic: bool) -> tuple[int, int, int, str, s
         detached = parameter.detach()
         finite = bool(torch.isfinite(detached).all())
         all_finite = all_finite and finite
-        row = {"name": name, "shape": list(detached.shape), "dtype": str(detached.dtype), "requires_grad": bool(parameter.requires_grad)}
+        row = {"name": name, "shape": list(detached.shape), "dtype": str(detached.dtype), "numel": detached.numel(), "requires_grad": bool(parameter.requires_grad), "kind": "parameter"}
         schema_rows.append(row)
         value_rows.append({**row, "logical_sha256": sha256_bytes(detached.cpu().contiguous().numpy().tobytes()) if finite else None})
     for name, buffer in model.named_buffers():
         detached = buffer.detach()
         finite = bool(torch.isfinite(detached).all())
         all_finite = all_finite and finite
-        row = {"name": name, "shape": list(detached.shape), "dtype": str(detached.dtype), "requires_grad": False, "buffer": True}
+        row = {"name": name, "shape": list(detached.shape), "dtype": str(detached.dtype), "numel": detached.numel(), "requires_grad": False, "kind": "buffer"}
         schema_rows.append(row)
         value_rows.append({**row, "logical_sha256": sha256_bytes(detached.cpu().contiguous().numpy().tobytes()) if finite else None})
     return (
@@ -512,31 +843,34 @@ def _state_hashes(model: Any, *, synthetic: bool) -> tuple[int, int, int, str, s
 
 
 def _synthetic_state_hashes(contract: dict[str, Any]) -> tuple[int, int, int, str, str, bool]:
-    rows = [{
-        "model": "synthetic-contract-model",
-        "baseline_id": contract["baseline_id"],
-        "parameters": contract["visdrone_parameter_count"],
-        "trainable_parameters": contract["visdrone_parameter_count"],
-        "parameter_tensor_count": 0,
-        "buffer_count": 0,
-    }]
+    rows: list[dict[str, Any]] = []
     digest = sha256_bytes(canonical_json_bytes(rows))
-    return contract["visdrone_parameter_count"], contract["visdrone_parameter_count"], 0, digest, digest, True
+    return 0, 0, 0, digest, digest, True
 
 
-def build_model_identity(repo_root: str | Path, smoke_config: dict[str, Any], model: Any, postprocessor: Any, outputs: dict[str, Any], *, runtime_mode: str, device: str) -> dict[str, object]:
+def build_model_identity(repo_root: str | Path, smoke_config: dict[str, Any], model: Any, postprocessor: Any, outputs: dict[str, Any], *, runtime_mode: str, device: str, context: dict[str, Any]) -> dict[str, object]:
     baseline_path = Path(repo_root).resolve() / SCIENTIFIC_BASELINE_CONFIG
     baseline = json.loads(baseline_path.read_bytes().decode("utf-8"))
     contract = baseline["baseline_contract"]
-    if runtime_mode == "synthetic":
-        parameters, trainable, parameter_tensors, schema_sha, value_sha, finite = _synthetic_state_hashes(contract)
-    else:
-        parameters, trainable, parameter_tensors, schema_sha, value_sha, finite = _state_hashes(model, synthetic=False)
+    parameters, trainable, parameter_tensors, schema_sha, value_sha, finite = _state_hashes(model, synthetic=runtime_mode == "synthetic")
+    parameter_inventory: list[dict[str, Any]] = []
+    buffer_inventory: list[dict[str, Any]] = []
+    if hasattr(model, "named_parameters"):
+        import torch
+        for name, parameter in model.named_parameters():
+            detached = parameter.detach()
+            parameter_inventory.append({"name": name, "shape": list(detached.shape), "dtype": str(detached.dtype), "numel": detached.numel(), "requires_grad": bool(parameter.requires_grad), "kind": "parameter", "logical_sha256": sha256_bytes(detached.cpu().contiguous().numpy().tobytes()) if bool(torch.isfinite(detached).all()) else None})
+        for name, buffer in model.named_buffers():
+            detached = buffer.detach()
+            buffer_inventory.append({"name": name, "shape": list(detached.shape), "dtype": str(detached.dtype), "numel": detached.numel(), "requires_grad": False, "kind": "buffer", "logical_sha256": sha256_bytes(detached.cpu().contiguous().numpy().tobytes()) if bool(torch.isfinite(detached).all()) else None})
     return {
         "schema_version": SCIENTIFIC_SCHEMA_VERSION,
+        "context": context,
         "runtime_mode": runtime_mode,
         "baseline_id": contract["baseline_id"],
-        "model_type": baseline["model"]["type"],
+        "model_type": "synthetic-contract-model" if runtime_mode == "synthetic" else baseline["model"]["type"],
+        "model_class": type(model).__name__,
+        "model_module": type(model).__module__,
         "backbone": contract["backbone"],
         "encoder": contract["encoder"],
         "decoder": contract["decoder"],
@@ -547,6 +881,7 @@ def build_model_identity(repo_root: str | Path, smoke_config: dict[str, Any], mo
         "feature_strides": list(contract["feature_strides"]),
         "hidden_dim": contract["hidden_dim"],
         "deformable_sampling_points": list(contract["deformable_sampling_points"]),
+        "contract_parameters": contract["visdrone_parameter_count"],
         "parameters": parameters,
         "trainable_parameters": trainable,
         "parameter_tensor_count": parameter_tensors,
@@ -559,40 +894,58 @@ def build_model_identity(repo_root: str | Path, smoke_config: dict[str, Any], mo
         "all_parameters_finite": finite,
         "parameter_state_schema_sha256": schema_sha,
         "parameter_state_value_sha256": value_sha,
-        "postprocessor": {"type": type(postprocessor).__name__, "num_top_queries": int(getattr(postprocessor, "num_top_queries", 300)), "nms": bool(getattr(postprocessor, "nms", False))},
+        "parameter_inventory": parameter_inventory,
+        "buffer_inventory": buffer_inventory,
+        "postprocessor": {"type": type(postprocessor).__name__, "module": type(postprocessor).__module__, "num_top_queries": int(getattr(postprocessor, "num_top_queries", 300)), "nms": bool(getattr(postprocessor, "nms", False))},
         "output_tensors": outputs,
     }
 
 
-def build_source_identity(repo_root: str | Path, smoke_config: dict[str, Any]) -> dict[str, object]:
+def build_source_identity(repo_root: str | Path, smoke_config: dict[str, Any], *, runtime_mode: str, context: dict[str, Any]) -> dict[str, object]:
     root = Path(repo_root).resolve()
     rows = []
     for relative in SCIENTIFIC_SOURCE_ALLOWLIST:
         path = root / relative
         rows.append({"relative_path": relative, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)})
+    environment_rows = []
+    for relative in SCIENTIFIC_ENVIRONMENT_ALLOWLIST:
+        path = root / relative
+        environment_rows.append({"relative_path": relative, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)})
     baseline_path = root / SCIENTIFIC_BASELINE_CONFIG
     manifest_path = root / SCIENTIFIC_MANIFEST
-    manifest = json.loads(manifest_path.read_bytes().decode("utf-8"))
+    manifest = json.loads(manifest_path.read_bytes().decode("utf-8")) if runtime_mode == "real" else None
     baseline = json.loads((root / SCIENTIFIC_BASELINE_CONFIG).read_bytes().decode("utf-8"))
     vendor = baseline["vendor"]
     return {
         "schema_version": SCIENTIFIC_SCHEMA_VERSION,
+        "context": context,
         "baseline_id": baseline["baseline_contract"]["baseline_id"],
         "implementation": "vendored RT-DETRv2 PyTorch",
         "source_allowlist": rows,
         "source_rows_canonical_sha256": sha256_bytes(canonical_json_bytes(rows)),
+        "environment_lock": environment_rows,
+        "environment_rows_canonical_sha256": sha256_bytes(canonical_json_bytes(environment_rows)),
         "baseline_config": {"relative_path": SCIENTIFIC_BASELINE_CONFIG, "size_bytes": baseline_path.stat().st_size, "sha256": sha256_file(baseline_path)},
-        "upstream_manifest": {"relative_path": SCIENTIFIC_MANIFEST, "size_bytes": manifest_path.stat().st_size, "sha256": sha256_file(manifest_path), "upstream_commit": manifest["upstream_commit"], "upstream_root_tree": manifest["upstream_root_tree"], "upstream_subtree": manifest["upstream_subtree"]},
-        "vendor": {"canonical_inventory_sha256": manifest["canonical_inventory_sha256"], "file_count": manifest["file_count"], "total_size_bytes": manifest["total_size_bytes"], "r18_config": vendor["r18_config"], "r18_config_sha256": vendor["r18_config_sha256"], "r18_include": vendor["r18_include"], "r18_include_sha256": vendor["r18_include_sha256"]},
-        "r3_binding": {"artifact_root": baseline["r3_binding"]["artifact_root"], **SCIENTIFIC_R3_BINDING},
+        "upstream_manifest": {"relative_path": SCIENTIFIC_MANIFEST, "size_bytes": manifest_path.stat().st_size, "sha256": sha256_file(manifest_path), "upstream_commit": manifest["upstream_commit"], "upstream_root_tree": manifest["upstream_root_tree"], "upstream_subtree": manifest["upstream_subtree"]} if runtime_mode == "real" else None,
+        "vendor": {"canonical_inventory_sha256": manifest["canonical_inventory_sha256"], "file_count": manifest["file_count"], "total_size_bytes": manifest["total_size_bytes"], "r18_config": vendor["r18_config"], "r18_config_sha256": vendor["r18_config_sha256"], "r18_include": vendor["r18_include"], "r18_include_sha256": vendor["r18_include_sha256"]} if runtime_mode == "real" else {"r18_config": vendor["r18_config"], "r18_config_sha256": vendor["r18_config_sha256"], "r18_include": vendor["r18_include"], "r18_include_sha256": vendor["r18_include_sha256"]},
+        "r3_binding": {
+            "artifact_root": baseline["r3_binding"]["artifact_root"],
+            "runtime_mode": runtime_mode,
+            "artifact_validation_mode": "real_r3_metadata" if runtime_mode == "real" else "synthetic_tracked_contract_only",
+            **{key: baseline["r3_binding"][key] for key in (
+                "completion_sha256", "artifact_inventory_sha256", "entry_canonical_inventory_sha256",
+                "config_sha256", "category_contract_sha256", "source_identity_sha256",
+            )},
+        },
     }
 
 
-def build_cuda_runtime_identity(runtime: dict[str, Any], *, runtime_mode: str) -> dict[str, object]:
+def build_cuda_runtime_identity(runtime: dict[str, Any], *, runtime_mode: str, context: dict[str, Any]) -> dict[str, object]:
     if runtime_mode == "synthetic":
-        return {"schema_version": SCIENTIFIC_SCHEMA_VERSION, "runtime_mode": "synthetic", "cuda_visible_devices": "", "device_count": 0, "current_device": None, "device": "cpu", "device_name": "cpu", "device_capability": None, "torch_version": "synthetic", "torch_cuda_version": None, "cpu_fallback": True, "runtime_capture_after_cuda_initialization": False}
+        return {"schema_version": SCIENTIFIC_SCHEMA_VERSION, "context": context, "runtime_mode": "synthetic", **SCIENTIFIC_SYNTHETIC_CUDA_IDENTITY}
     import torch
-    return {"schema_version": SCIENTIFIC_SCHEMA_VERSION, "runtime_mode": "real", "cuda_visible_devices": "0", "device_count": 1, "current_device": int(torch.cuda.current_device()), "device": "cuda:0", "device_name": torch.cuda.get_device_name(0), "device_capability": list(torch.cuda.get_device_capability(0)), "torch_version": torch.__version__, "torch_cuda_version": torch.version.cuda, "cpu_fallback": False, "runtime_capture_after_cuda_initialization": True}
+    actual = {"cuda_visible_devices": "0", "device_count": int(torch.cuda.device_count()), "current_device": int(torch.cuda.current_device()), "device": "cuda:0", "device_name": torch.cuda.get_device_name(0), "device_capability": list(torch.cuda.get_device_capability(0)), "torch_version": torch.__version__, "torch_cuda_version": torch.version.cuda, "cpu_fallback": False, "runtime_capture_after_cuda_initialization": True}
+    return {"schema_version": SCIENTIFIC_SCHEMA_VERSION, "context": context, "runtime_mode": "real", **actual}
 
 
 def canonical_argv(argv: list[str]) -> list[str]:
@@ -669,7 +1022,7 @@ def _read_object(path: Path) -> dict[str, Any]:
 
 def _infer_repo_root(output_root: Path) -> Path:
     for candidate in (output_root, *output_root.parents):
-        if (candidate / SCIENTIFIC_BASELINE_CONFIG).is_file() and (candidate / SCIENTIFIC_MANIFEST).is_file():
+        if (candidate / SCIENTIFIC_BASELINE_CONFIG).is_file():
             return candidate.resolve()
     return Path(__file__).resolve().parents[3]
 
@@ -823,6 +1176,7 @@ def validate_entry_output(
             "cuda_runtime_identity.json",
             "model_identity.json",
             "source_identity.json",
+            "data_binding_audit.json",
             "model_output_audit.json",
             "postprocess_audit.json",
             "call_audit.json",
@@ -837,15 +1191,28 @@ def validate_entry_output(
     if not isinstance(expected_config_records, list) or [record.get("stable_image_id") for record in expected_config_records] != stable_ids:
         raise SmokeEvidenceError("input batch IDs are not bound to config selection")
     expected_device = "cpu" if invocation["mode"] == "synthetic" else "cuda:0"
-    _validate_input_batch_audit(input_audit, stable_ids, expected_device)
-    _validate_cuda_runtime_identity(scientific["cuda_runtime_identity.json"], expected_device)
+    preprocessing = input_audit.get("preprocessing")
+    data_binding = scientific["data_binding_audit.json"]
+    source_value = scientific["source_identity.json"]
+    context = input_audit.get("context")
+    if not isinstance(context, dict) or set(context) != {"schema_version", "runtime_mode", "expected_device", "preprocessing_sha256", "data_binding_sha256", "source_rows_canonical_sha256", "environment_rows_canonical_sha256"}:
+        raise SmokeEvidenceError("scientific context schema is invalid")
+    if context["schema_version"] != SCIENTIFIC_SCHEMA_VERSION or context["runtime_mode"] != invocation["mode"] or context["expected_device"] != expected_device:
+        raise SmokeEvidenceError("scientific context runtime drift")
+    if context["data_binding_sha256"] != _data_binding_sha(data_binding):
+        raise SmokeEvidenceError("scientific context data binding drift")
+    _validate_data_binding(data_binding, config_value, repo_root, context)
+    _validate_input_batch_audit(input_audit, stable_ids, expected_device, context)
+    _validate_cuda_runtime_identity(scientific["cuda_runtime_identity.json"], expected_device, context)
     _validate_model_output_audit(scientific["model_output_audit.json"], expected_device)
-    _validate_model_identity(scientific["model_identity.json"], baseline_config, config_value, expected_device, scientific["model_output_audit.json"])
-    _validate_source_identity(scientific["source_identity.json"], baseline_config, repo_root)
+    _validate_model_identity(scientific["model_identity.json"], baseline_config, config_value, expected_device, scientific["model_output_audit.json"], context)
+    _validate_source_identity(source_value, baseline_config, repo_root, context)
+    if source_value["source_rows_canonical_sha256"] != context["source_rows_canonical_sha256"] or source_value["environment_rows_canonical_sha256"] != context["environment_rows_canonical_sha256"]:
+        raise SmokeEvidenceError("scientific context source binding drift")
     _validate_call_audit(scientific["call_audit.json"])
     _validate_postprocess_audit(scientific["postprocess_audit.json"], stable_ids, expected_device, completion["total_predictions"])
     image_selection = scientific["image_selection_audit.json"]
-    if not isinstance(image_selection, dict) or set(image_selection) != {"records", "verified_from_manifest", "selection_policy"} or image_selection["verified_from_manifest"] is not True or image_selection["selection_policy"] != "explicit_coco_image_ids_only":
+    if not isinstance(image_selection, dict) or set(image_selection) != {"records", "verified_from_manifest", "selection_policy"} or image_selection["verified_from_manifest"] is not (invocation["mode"] == "real") or image_selection["selection_policy"] != "explicit_coco_image_ids_only":
         raise SmokeEvidenceError("image selection audit schema drift")
     records = image_selection["records"]
     if records != expected_config_records or not isinstance(records, list) or [record.get("stable_image_id") for record in records if isinstance(record, dict)] != stable_ids:

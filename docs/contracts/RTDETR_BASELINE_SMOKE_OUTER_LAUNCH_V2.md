@@ -220,9 +220,12 @@ metrics execution.
 
 ## Entry scientific evidence schema
 
-Every successful future entry must contain the four scientific evidence files
+Scientific evidence schema v2 is the failed historical implementation from the
+independent audit; no v2 entry is certified. Future successful entries use
+schema v3 and are rejected when any v2 scientific file is present. The v3
+entry contains the four scientific evidence files
 `input_batch_audit.json`, `cuda_runtime_identity.json`, `model_identity.json`,
-and `source_identity.json` with `schema_version: 2`. The entry validator uses
+and `source_identity.json`, plus the v3 `data_binding_audit.json`. The entry validator uses
 exact-key objects and rejects missing, extra, boolean-as-integer, non-finite,
 device, shape, dtype, range, and SHA-256 drift. Rebuilding
 `artifact_inventory.json` and `completion.json` after changing a scientific
@@ -231,13 +234,15 @@ field does not make the entry valid.
 `input_batch_audit.json` binds the one batch, two frozen stable image IDs,
 loader CPU tensors, model tensors, original target sizes, labels, boxes, and
 the actual `Resize([640, 640])` plus `ConvertPILImage(dtype="float32",
-scale=True)` pipeline. Tensor hashes are
+scale=True)` pipeline. The descriptor is introspected from the production
+instances: torchvision 0.19.1 reports `interpolation=bilinear`,
+`antialias=true`, and `max_size=null`. Tensor hashes are
 `sha256(detached.cpu().contiguous().numpy().tobytes())` and are recorded only
 when the tensor is finite. Synthetic tests use CPU tensors and
 `cuda_runtime_identity.json` records an explicit CPU fallback; a real entry
 must record the initialized single `cuda:0` runtime from PyTorch APIs.
 
-`model_identity.json` binds the frozen RT-DETRv2 R18/VisDrone contract,
+`model_identity.json` v3 binds the frozen RT-DETRv2 R18/VisDrone contract,
 20,094,584 parameters, eval state, postprocessor settings, output tensor
 audits, and deterministic parameter/state schema and value hashes. The state
 hash rows are canonical JSON and contain only tensor names, shapes, dtypes,
@@ -247,6 +252,24 @@ an explicit production-source allowlist, the baseline config and upstream
 manifest hashes, the vendor inventory and R18 config/include hashes, and the
 frozen Conversion R3 binding. It does not discover the repository recursively
 and does not use Git or the network.
+
+The explicit source dependency allowlist covers the AST-resolved local
+production closure: the package initializers, baseline artifacts/categories/
+config/contract/dataset/postprocessor/smoke modules, smoke launchers, and the
+data-protocol categories/converter/evaluation/lineage/parser/protocol/schema/
+split modules. The checker rejects a production local import that is missing
+from this allowlist. Vendor code remains bound by the upstream canonical
+inventory.
+
+R3 binding is mode-specific. Real mode re-reads and verifies the five frozen
+R3 metadata files plus `train_core_manifest.json`, including regular-file,
+non-symlink, link-count, size, SHA, selected-record, and frozen-contract
+checks. Synthetic mode reads selection only from tracked smoke config, records
+`real_data_accessed=false`, `runtime_artifacts_accessed=false`, and
+`artifact_validation_mode=synthetic_tracked_contract_only`, and does not claim
+manifest verification. A clean tracked archive can therefore write and
+validate synthetic evidence without ignored R3 runtime files; real mode still
+fails closed when those files are absent.
 
 These CPU/synthetic checks establish only that the future entry evidence
 writer and validator are internally consistent. They do not certify R5, make

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 import re
 import subprocess
@@ -108,6 +109,35 @@ BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/smoke.py",
     "src/sparse_rtdetr/baseline/smoke_evidence.py",
 }
+
+SCIENTIFIC_ENTRY_ROOTS = (
+    "src/sparse_rtdetr/baseline/smoke.py",
+    "src/sparse_rtdetr/baseline/smoke_launcher.py",
+    "src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
+)
+SCIENTIFIC_SOURCE_ALLOWLIST = (
+    "src/sparse_rtdetr/__init__.py",
+    "src/sparse_rtdetr/baseline/__init__.py",
+    "src/sparse_rtdetr/baseline/artifacts.py",
+    "src/sparse_rtdetr/baseline/categories.py",
+    "src/sparse_rtdetr/baseline/config.py",
+    "src/sparse_rtdetr/baseline/contract.py",
+    "src/sparse_rtdetr/baseline/dataset.py",
+    "src/sparse_rtdetr/baseline/postprocessor.py",
+    "src/sparse_rtdetr/baseline/smoke.py",
+    "src/sparse_rtdetr/baseline/smoke_evidence.py",
+    "src/sparse_rtdetr/baseline/smoke_launcher.py",
+    "src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
+    "src/sparse_rtdetr/data_protocol/__init__.py",
+    "src/sparse_rtdetr/data_protocol/categories.py",
+    "src/sparse_rtdetr/data_protocol/converter.py",
+    "src/sparse_rtdetr/data_protocol/evaluation.py",
+    "src/sparse_rtdetr/data_protocol/lineage.py",
+    "src/sparse_rtdetr/data_protocol/parser.py",
+    "src/sparse_rtdetr/data_protocol/protocol.py",
+    "src/sparse_rtdetr/data_protocol/schema.py",
+    "src/sparse_rtdetr/data_protocol/split.py",
+)
 
 LEGACY_FILES = {
     "docs/legacy_p2/P2_FINAL_CLOSURE.md",
@@ -266,6 +296,76 @@ def _source_policy_failures(root: Path, files: set[str]) -> list[str]:
             failures.append(f"machine-specific path: {relative}")
         if path.suffix == ".py" and forbidden_import.search(text) and relative not in BASELINE_MODEL_IMPORT_FILES:
             failures.append(f"model import: {relative}")
+    return failures
+
+
+def _local_import_targets(root: Path, source: Path) -> set[Path]:
+    """Resolve AST-visible imports inside the repository's own package."""
+
+    try:
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    except (OSError, UnicodeError, SyntaxError):
+        return set()
+    package_parts = source.relative_to(root / "src").with_suffix("").parts[:-1]
+    targets: set[Path] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                keep = len(package_parts) - (node.level - 1)
+                prefix = package_parts[:keep]
+                module_parts = tuple(node.module.split(".")) if node.module else ()
+                base = (*prefix, *module_parts)
+                modules = [
+                    ".".join((*base, alias.name)) for alias in node.names
+                ] + ([".".join(base)] if base else [])
+            else:
+                base = tuple(node.module.split(".")) if node.module else ()
+                modules = [
+                    ".".join((*base, alias.name)) for alias in node.names
+                ] + ([".".join(base)] if base else [])
+        else:
+            continue
+        for module in modules:
+            if not module or not module.startswith("sparse_rtdetr"):
+                continue
+            candidate = root / "src" / Path(*module.split("."))
+            file_candidate = candidate.with_suffix(".py")
+            package_candidate = candidate / "__init__.py"
+            if file_candidate.is_file():
+                targets.add(file_candidate)
+            elif package_candidate.is_file():
+                targets.add(package_candidate)
+    return targets
+
+
+def _scientific_dependency_closure(root: Path) -> set[str]:
+    pending = [root / relative for relative in SCIENTIFIC_ENTRY_ROOTS]
+    seen: set[Path] = set()
+    while pending:
+        source = pending.pop()
+        if source in seen or not source.is_file():
+            continue
+        seen.add(source)
+        package = source.parent
+        while package != root / "src" and package.is_relative_to(root / "src"):
+            init = package / "__init__.py"
+            if init.is_file() and init not in seen:
+                pending.append(init)
+            package = package.parent
+        pending.extend(_local_import_targets(root, source) - seen)
+    return {path.relative_to(root).as_posix() for path in seen}
+
+
+def _scientific_dependency_failures(root: Path) -> list[str]:
+    closure = _scientific_dependency_closure(root)
+    allowlist = set(SCIENTIFIC_SOURCE_ALLOWLIST)
+    failures = []
+    for relative in sorted(closure - allowlist):
+        failures.append(f"scientific source dependency missing from allowlist: {relative}")
+    for relative in sorted(allowlist - closure):
+        failures.append(f"scientific source allowlist contains non-closure file: {relative}")
     return failures
 
 
@@ -466,6 +566,7 @@ def check_repository(root: Path) -> bool:
         failures.append("legacy manifest parse failure")
 
     failures.extend(_source_policy_failures(root, files))
+    failures.extend(_scientific_dependency_failures(root))
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],

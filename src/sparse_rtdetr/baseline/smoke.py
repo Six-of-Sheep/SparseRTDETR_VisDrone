@@ -22,11 +22,13 @@ from .contract import (
 )
 from .smoke_evidence import (
     SmokeEvidence,
+    build_scientific_context,
     build_cuda_runtime_identity,
     build_input_batch_audit,
     build_model_identity,
     build_source_identity,
     canonical_json_bytes,
+    describe_preprocessing_pipeline,
     tensor_audit,
 )
 
@@ -251,9 +253,23 @@ def _manifest_path(repo_root: str | Path) -> Path:
     return Path(repo_root).resolve() / "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json"
 
 
-def load_frozen_image_selection(repo_root: str | Path) -> tuple[dict[str, Any], ...]:
+def load_frozen_image_selection(repo_root: str | Path, *, runtime_mode: str = "real", config_path: str | Path | None = None) -> tuple[dict[str, Any], ...]:
     """Read and validate only the two explicitly frozen manifest records."""
 
+    if runtime_mode == "synthetic":
+        selected_config_path = Path(repo_root).resolve() / SMOKE_CONFIG_RELATIVE if config_path is None else Path(config_path)
+        if not selected_config_path.is_absolute():
+            selected_config_path = Path(repo_root).resolve() / selected_config_path
+        try:
+            config = json.loads(selected_config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise SmokeContractError("synthetic smoke config is invalid") from exc
+        records = config.get("image_selection", {}).get("records") if isinstance(config, dict) else None
+        if not isinstance(records, list) or len(records) != len(FROZEN_IMAGE_RECORDS):
+            raise SmokeContractError("synthetic smoke selection is missing")
+        return tuple(dict(record) for record in records)
+    if runtime_mode != "real":
+        raise SmokeContractError("unknown smoke runtime mode")
     path = _manifest_path(repo_root)
     if path.is_symlink() or not path.is_file():
         raise SmokeContractError("certified train_core_manifest.json is missing or not regular")
@@ -352,7 +368,7 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
         raise SmokeContractError("portable smoke config contains data_root")
 
 
-def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = None) -> dict[str, Any]:
+def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = None, *, runtime_mode: str = "real") -> dict[str, Any]:
     root = Path(repo_root).resolve()
     path = root / SMOKE_CONFIG_RELATIVE if config_path is None else Path(config_path)
     if not path.is_absolute():
@@ -368,10 +384,23 @@ def load_smoke_config(repo_root: str | Path, config_path: str | Path | None = No
     spec = get_smoke_runtime_spec(config["smoke_id"])
     if path != root / spec.config_relative_path:
         raise SmokeContractError("smoke config path is not bound to its config identity")
-    selected = load_frozen_image_selection(repo_root)
+    selected = load_frozen_image_selection(repo_root, runtime_mode=runtime_mode, config_path=path)
     if list(selected) != config["image_selection"]["records"]:
         raise SmokeContractError("smoke config and manifest selection differ")
     return config
+
+
+def _build_frozen_preprocessing_pipeline(repo_root: str | Path) -> tuple[Any, dict[str, Any]]:
+    """Construct and describe the one production preprocessing pipeline."""
+
+    from .config import _vendor_path
+
+    with _vendor_path(Path(repo_root).resolve() / "vendor/rtdetrv2_pytorch"):
+        from src.data.transforms import ConvertPILImage, Resize
+        from src.data.transforms.container import Compose
+
+    pipeline = Compose([Resize([640, 640]), ConvertPILImage(dtype="float32", scale=True)])
+    return pipeline, describe_preprocessing_pipeline(pipeline)
 
 
 def contract_check(repo_root: str | Path, config_path: str | Path | None = None) -> dict[str, Any]:
@@ -553,7 +582,7 @@ def run_synthetic_smoke(
 
     import torch
 
-    config = load_smoke_config(repo_root, config_path)
+    config = load_smoke_config(repo_root, config_path, runtime_mode="synthetic")
     evidence = SmokeEvidence(output_dir, repo_root=Path(repo_root))
     config_sha = evidence.write_config(config)
     counters = SmokeCounters()
@@ -654,32 +683,40 @@ def run_synthetic_smoke(
                 "config_size_bytes": (output_dir / "config.json").stat().st_size,
             })
         evidence.write_json("invocation.json", invocation)
+        _, preprocessing = _build_frozen_preprocessing_pipeline(repo_root)
+        data_binding = {
+            "schema_version": 3,
+            "context": {},
+            "role": "train_core",
+            "manifest_relative_path": None,
+            "records": list(config["image_selection"]["records"]),
+            "metadata": [],
+            "portable": True,
+            "nonportable": False,
+            "real_data_accessed": False,
+            "runtime_artifacts_accessed": False,
+            "artifact_validation_mode": "synthetic_tracked_contract_only",
+        }
+        context = build_scientific_context(repo_root, runtime_mode="synthetic", expected_device="cpu", preprocessing=preprocessing, data_binding=data_binding)
+        data_binding["context"] = context
         input_batch_audit = build_input_batch_audit(
             batch,
             images,
             batch["orig_target_sizes"],
             runtime_mode="synthetic",
+            preprocessing=preprocessing,
+            context=context,
         )
         model_output_audit = {"pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)}
-        evidence.write_json("source_identity.json", build_source_identity(repo_root, config))
-        evidence.write_json("data_binding_audit.json", {
-            "role": "train_core",
-            "r3_artifact_relative_path": R3_ARTIFACT_RELATIVE,
-            "r3_artifact_inventory_sha256": R3_ARTIFACT_INVENTORY_SHA256,
-            "r3_entry_canonical_inventory_sha256": R3_ENTRY_CANONICAL_INVENTORY_SHA256,
-            "manifest_relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json",
-            "records": [{"stable_image_id": record["stable_image_id"], "relative_path": record["relative_path"]} for record in FROZEN_IMAGE_RECORDS],
-            "portable": True,
-            "nonportable": False,
-            "real_data_accessed": False,
-        })
+        evidence.write_json("source_identity.json", build_source_identity(repo_root, config, runtime_mode="synthetic", context=context))
+        evidence.write_json("data_binding_audit.json", data_binding)
         evidence.write_json("image_selection_audit.json", {
             "records": list(FROZEN_IMAGE_RECORDS),
-            "verified_from_manifest": True,
+            "verified_from_manifest": False,
             "selection_policy": "explicit_coco_image_ids_only",
         })
-        evidence.write_json("cuda_runtime_identity.json", build_cuda_runtime_identity({}, runtime_mode="synthetic"))
-        evidence.write_json("model_identity.json", build_model_identity(repo_root, config, model, postprocessor, model_output_audit, runtime_mode="synthetic", device="cpu"))
+        evidence.write_json("cuda_runtime_identity.json", build_cuda_runtime_identity({}, runtime_mode="synthetic", context=context))
+        evidence.write_json("model_identity.json", build_model_identity(repo_root, config, model, postprocessor, model_output_audit, runtime_mode="synthetic", device="cpu", context=context))
         evidence.write_json("call_audit.json", counters.as_dict())
         evidence.write_json("input_batch_audit.json", input_batch_audit)
         evidence.write_json("model_output_audit.json", model_output_audit)
@@ -873,11 +910,7 @@ def run_authorized_smoke(
         from .dataset import VisDroneCocoDetection
         from .postprocessor import VisDronePostProcessor
 
-        with _vendor_path(Path(repo_root).resolve() / "vendor/rtdetrv2_pytorch"):
-            from src.data.transforms import ConvertPILImage, Resize
-            from src.data.transforms.container import Compose
-
-        transforms = Compose([Resize([640, 640]), ConvertPILImage(dtype="float32", scale=True)])
+        transforms, preprocessing = _build_frozen_preprocessing_pipeline(repo_root)
         dataset = VisDroneCocoDetection(
             paths.data_root,
             paths.annotation_file,
@@ -932,16 +965,19 @@ def run_authorized_smoke(
             runtime,
             config_sha,
             data_binding={
+                "schema_version": 3,
+                "context": {},
                 "role": "train_core",
-                "r3_artifact_relative_path": R3_ARTIFACT_RELATIVE,
-                "r3_artifact_inventory_sha256": R3_ARTIFACT_INVENTORY_SHA256,
-                "r3_entry_canonical_inventory_sha256": R3_ENTRY_CANONICAL_INVENTORY_SHA256,
                 "manifest_relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3/train_core_manifest.json",
-                "records": [{"stable_image_id": record["stable_image_id"], "relative_path": record["relative_path"]} for record in selected],
-                "portable": True,
-                "nonportable": False,
+                "records": list(selected),
+                "metadata": [],
+                "portable": False,
+                "nonportable": True,
                 "real_data_accessed": True,
+                "runtime_artifacts_accessed": True,
+                "artifact_validation_mode": "real_r3_metadata",
             },
+            preprocessing=preprocessing,
             rng_before=rng_before,
             rng_before_audit=rng_before_audit,
         )
@@ -964,6 +1000,7 @@ def _run_prepared_smoke(
     config_sha: str,
     *,
     data_binding: dict[str, Any],
+    preprocessing: dict[str, Any],
     rng_before: tuple[object, object, tuple[Any, ...], list[Any] | None],
     rng_before_audit: dict[str, str | None],
 ) -> dict[str, Any]:
@@ -1052,21 +1089,35 @@ def _run_prepared_smoke(
         completion = _base_completion(counters, success=True)
         completion.update({"config_sha256": config_sha, "total_predictions": total_predictions})
         model_output_audit = {"pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)}
+        metadata = []
+        r3_root = Path(repo_root) / R3_ARTIFACT_RELATIVE
+        for relative in (
+            "completion.json", "artifact_inventory.json", "config.json", "category_contract.json", "source_identity.json",
+        ):
+            path = r3_root / relative
+            metadata.append({"relative_path": (Path(R3_ARTIFACT_RELATIVE) / relative).as_posix(), "size_bytes": path.stat().st_size, "sha256": _sha256_file(path)})
+        manifest_path = _manifest_path(repo_root)
+        metadata.append({"relative_path": manifest_path.relative_to(Path(repo_root)).as_posix(), "size_bytes": manifest_path.stat().st_size, "sha256": _sha256_file(manifest_path)})
+        data_binding.update({"schema_version": 3, "manifest_relative_path": metadata[-1]["relative_path"], "metadata": metadata, "portable": False, "nonportable": True, "real_data_accessed": True, "runtime_artifacts_accessed": True, "artifact_validation_mode": "real_r3_metadata"})
+        context = build_scientific_context(repo_root, runtime_mode="real", expected_device="cuda:0", preprocessing=preprocessing, data_binding=data_binding)
+        data_binding["context"] = context
         input_batch_audit = build_input_batch_audit(
             batch,
             images,
             orig_target_sizes,
             runtime_mode="real",
+            preprocessing=preprocessing,
+            context=context,
         )
-        evidence.write_json("source_identity.json", build_source_identity(repo_root, config))
+        evidence.write_json("source_identity.json", build_source_identity(repo_root, config, runtime_mode="real", context=context))
         evidence.write_json("data_binding_audit.json", data_binding)
         evidence.write_json("image_selection_audit.json", {
             "records": list(FROZEN_IMAGE_RECORDS),
             "verified_from_manifest": True,
             "selection_policy": "explicit_coco_image_ids_only",
         })
-        evidence.write_json("cuda_runtime_identity.json", build_cuda_runtime_identity(runtime, runtime_mode="real"))
-        evidence.write_json("model_identity.json", build_model_identity(repo_root, config, model, postprocessor, model_output_audit, runtime_mode="real", device="cuda:0"))
+        evidence.write_json("cuda_runtime_identity.json", build_cuda_runtime_identity(runtime, runtime_mode="real", context=context))
+        evidence.write_json("model_identity.json", build_model_identity(repo_root, config, model, postprocessor, model_output_audit, runtime_mode="real", device="cuda:0", context=context))
         evidence.write_json("call_audit.json", counters.as_dict())
         evidence.write_json("input_batch_audit.json", input_batch_audit)
         evidence.write_json("model_output_audit.json", model_output_audit)
