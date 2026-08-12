@@ -20,7 +20,15 @@ from .contract import (
     R3_ARTIFACT_RELATIVE,
     R3_ENTRY_CANONICAL_INVENTORY_SHA256,
 )
-from .smoke_evidence import SmokeEvidence, canonical_json_bytes
+from .smoke_evidence import (
+    SmokeEvidence,
+    build_cuda_runtime_identity,
+    build_input_batch_audit,
+    build_model_identity,
+    build_source_identity,
+    canonical_json_bytes,
+    tensor_audit,
+)
 
 
 class SmokeContractError(BaselineContractError):
@@ -539,13 +547,14 @@ def run_synthetic_smoke(
     loader_factory: Callable[[], Iterable[dict[str, Any]]] | None = None,
     model_factory: Callable[[], Any] | None = None,
     postprocessor_factory: Callable[[], Any] | None = None,
+    config_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the exact one-batch state machine with injected CPU components."""
 
     import torch
 
-    config = load_smoke_config(repo_root)
-    evidence = SmokeEvidence(output_dir)
+    config = load_smoke_config(repo_root, config_path)
+    evidence = SmokeEvidence(output_dir, repo_root=Path(repo_root))
     config_sha = evidence.write_config(config)
     counters = SmokeCounters()
     rng_before = _rng_state(torch)
@@ -605,9 +614,11 @@ def run_synthetic_smoke(
                 raise SmokeContractError("smoke prediction finite/category contract failed")
             total_predictions += len(labels)
             postprocess_audit.append({
+                "stable_image_id": batch["stable_image_ids"][len(postprocess_audit)],
                 "labels_min": int(labels.min().item()),
                 "labels_max": int(labels.max().item()),
                 "prediction_count": len(labels),
+                "labels": tensor_audit(labels),
                 "boxes": tensor_audit(result_boxes),
                 "scores": tensor_audit(scores),
             })
@@ -635,8 +646,22 @@ def run_synthetic_smoke(
             raise SmokeContractError("smoke call counters drift")
         completion = _base_completion(counters, success=True)
         completion.update({"config_sha256": config_sha, "total_predictions": total_predictions})
-        evidence.write_json("invocation.json", {"schema_version": 1, "mode": "synthetic", "smoke_id": SMOKE_ID, "config_sha256": config_sha})
-        evidence.write_json("source_identity.json", {"baseline_id": config["model"]["baseline_id"], "synthetic": True})
+        invocation = {"schema_version": 1, "mode": "synthetic", "smoke_id": config["smoke_id"], "config_sha256": config_sha}
+        if config_path is not None:
+            selected_config_path = Path(config_path).resolve()
+            invocation.update({
+                "config_relative_path": selected_config_path.relative_to(Path(repo_root).resolve()).as_posix(),
+                "config_size_bytes": (output_dir / "config.json").stat().st_size,
+            })
+        evidence.write_json("invocation.json", invocation)
+        input_batch_audit = build_input_batch_audit(
+            batch,
+            images,
+            batch["orig_target_sizes"],
+            runtime_mode="synthetic",
+        )
+        model_output_audit = {"pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)}
+        evidence.write_json("source_identity.json", build_source_identity(repo_root, config))
         evidence.write_json("data_binding_audit.json", {
             "role": "train_core",
             "r3_artifact_relative_path": R3_ARTIFACT_RELATIVE,
@@ -648,12 +673,16 @@ def run_synthetic_smoke(
             "nonportable": False,
             "real_data_accessed": False,
         })
-        evidence.write_json("image_selection_audit.json", {"records": list(FROZEN_IMAGE_RECORDS), "verified_from_manifest": True})
-        evidence.write_json("cuda_runtime_identity.json", {"mode": "synthetic", "device": "cpu", "cuda_visible_devices": "", "cpu_fallback": True})
-        evidence.write_json("model_identity.json", {"parameters": 0, "pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)})
+        evidence.write_json("image_selection_audit.json", {
+            "records": list(FROZEN_IMAGE_RECORDS),
+            "verified_from_manifest": True,
+            "selection_policy": "explicit_coco_image_ids_only",
+        })
+        evidence.write_json("cuda_runtime_identity.json", build_cuda_runtime_identity({}, runtime_mode="synthetic"))
+        evidence.write_json("model_identity.json", build_model_identity(repo_root, config, model, postprocessor, model_output_audit, runtime_mode="synthetic", device="cpu"))
         evidence.write_json("call_audit.json", counters.as_dict())
-        evidence.write_json("input_batch_audit.json", {"image_count": 2, "batch_count": 1, "target_labels_model_space": True, "stable_image_ids": batch["stable_image_ids"]})
-        evidence.write_json("model_output_audit.json", {"pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)})
+        evidence.write_json("input_batch_audit.json", input_batch_audit)
+        evidence.write_json("model_output_audit.json", model_output_audit)
         evidence.write_json("postprocess_audit.json", {"images": postprocess_audit, "total_predictions": total_predictions, "nms": False, "threshold": None})
         rng_after = _rng_snapshot(torch)
         _restore_rng(torch, rng_before)
@@ -672,7 +701,10 @@ def synthetic_batch() -> dict[str, Any]:
 
     return {
         "images": torch.zeros((2, 3, 640, 640), dtype=torch.float32),
-        "targets": [{"labels": torch.tensor([0], dtype=torch.int64)}, {"labels": torch.tensor([9], dtype=torch.int64)}],
+        "targets": [
+            {"labels": torch.tensor([0], dtype=torch.int64), "boxes": torch.full((1, 4), 0.5, dtype=torch.float32)},
+            {"labels": torch.tensor([9], dtype=torch.int64), "boxes": torch.full((1, 4), 0.5, dtype=torch.float32)},
+        ],
         "orig_target_sizes": torch.tensor([[960, 540], [960, 540]], dtype=torch.int64),
         "stable_image_ids": [record["stable_image_id"] for record in FROZEN_IMAGE_RECORDS],
     }
@@ -801,7 +833,7 @@ def run_authorized_smoke(
     paths = resolve_runtime_paths(repo_root, data_root, "train_core")
     if output_dir.exists() or output_dir.is_symlink():
         raise SmokeContractError("real smoke output directory already exists")
-    evidence = SmokeEvidence(output_dir)
+    evidence = SmokeEvidence(output_dir, repo_root=Path(repo_root))
     config_sha = evidence.write_config(config)
     entry_invocation = {
         "schema_version": 1,
@@ -891,6 +923,7 @@ def run_authorized_smoke(
             vendor_root=Path(repo_root).resolve() / "vendor/rtdetrv2_pytorch"
         ).to("cuda:0")
         return _run_prepared_smoke(
+            Path(repo_root),
             config,
             evidence,
             loader,
@@ -921,6 +954,7 @@ def run_authorized_smoke(
 
 
 def _run_prepared_smoke(
+    repo_root: Path,
     config: dict[str, Any],
     evidence: SmokeEvidence,
     loader: Iterable[dict[str, Any]],
@@ -986,9 +1020,11 @@ def _run_prepared_smoke(
                 raise SmokeContractError("smoke prediction finite/category contract failed")
             total_predictions += len(labels)
             postprocess_audit.append({
+                "stable_image_id": batch["stable_image_ids"][len(postprocess_audit)],
                 "labels_min": int(labels.min().item()),
                 "labels_max": int(labels.max().item()),
                 "prediction_count": len(labels),
+                "labels": tensor_audit(labels),
                 "boxes": tensor_audit(result_boxes),
                 "scores": tensor_audit(scores),
             })
@@ -1015,35 +1051,25 @@ def _run_prepared_smoke(
             raise SmokeContractError("smoke call counters drift")
         completion = _base_completion(counters, success=True)
         completion.update({"config_sha256": config_sha, "total_predictions": total_predictions})
-        evidence.write_json("source_identity.json", {
-            "baseline_id": config["model"]["baseline_id"],
-            "implementation": "vendored RT-DETRv2 PyTorch",
-            "parameters": sum(parameter.numel() for parameter in model.parameters()),
-        })
+        model_output_audit = {"pred_logits": tensor_audit(logits), "pred_boxes": tensor_audit(boxes)}
+        input_batch_audit = build_input_batch_audit(
+            batch,
+            images,
+            orig_target_sizes,
+            runtime_mode="real",
+        )
+        evidence.write_json("source_identity.json", build_source_identity(repo_root, config))
         evidence.write_json("data_binding_audit.json", data_binding)
         evidence.write_json("image_selection_audit.json", {
             "records": list(FROZEN_IMAGE_RECORDS),
             "verified_from_manifest": True,
             "selection_policy": "explicit_coco_image_ids_only",
         })
-        evidence.write_json("cuda_runtime_identity.json", runtime)
-        evidence.write_json("model_identity.json", {
-            "parameters": sum(parameter.numel() for parameter in model.parameters()),
-            "device": "cuda:0",
-            "pred_logits": tensor_audit(logits),
-            "pred_boxes": tensor_audit(boxes),
-        })
+        evidence.write_json("cuda_runtime_identity.json", build_cuda_runtime_identity(runtime, runtime_mode="real"))
+        evidence.write_json("model_identity.json", build_model_identity(repo_root, config, model, postprocessor, model_output_audit, runtime_mode="real", device="cuda:0"))
         evidence.write_json("call_audit.json", counters.as_dict())
-        evidence.write_json("input_batch_audit.json", {
-            "image_count": 2,
-            "batch_count": 1,
-            "target_labels_model_space": True,
-            "stable_image_ids": batch["stable_image_ids"],
-        })
-        evidence.write_json("model_output_audit.json", {
-            "pred_logits": tensor_audit(logits),
-            "pred_boxes": tensor_audit(boxes),
-        })
+        evidence.write_json("input_batch_audit.json", input_batch_audit)
+        evidence.write_json("model_output_audit.json", model_output_audit)
         evidence.write_json("postprocess_audit.json", {
             "images": postprocess_audit,
             "total_predictions": total_predictions,

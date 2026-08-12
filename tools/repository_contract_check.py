@@ -106,6 +106,7 @@ BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
     "src/sparse_rtdetr/baseline/smoke.py",
+    "src/sparse_rtdetr/baseline/smoke_evidence.py",
 }
 
 LEGACY_FILES = {

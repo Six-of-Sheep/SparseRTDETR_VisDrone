@@ -62,6 +62,13 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     root = tmp_path / "repo"
     shutil.copytree(ROOT / "src", root / "src")
     (root / "configs/baseline").mkdir(parents=True)
+    shutil.copyfile(ROOT / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json", root / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json")
+    vendor_config = root / "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include"
+    vendor_config.mkdir(parents=True)
+    shutil.copyfile(ROOT / "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml", vendor_config.parent / "rtdetrv2_r18vd_120e_coco.yml")
+    shutil.copyfile(ROOT / "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml", vendor_config / "rtdetrv2_r50vd.yml")
+    (root / "manifests").mkdir(parents=True)
+    shutil.copyfile(ROOT / "manifests/rtdetrv2_upstream.json", root / "manifests/rtdetrv2_upstream.json")
     (root / "artifacts/data/visdrone_protocol_v2_conversion_r3").mkdir(parents=True)
     config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG, 5: V5_CONFIG}[version]
     config_name = config_source.name
@@ -137,24 +144,26 @@ def _entry_completion() -> dict[str, object]:
 
 
 def _write_real_child(path: Path) -> None:
-    completion = repr(_entry_completion())
     path.write_text(
         "\n".join([
             "import json, os",
             "from pathlib import Path",
-            "from sparse_rtdetr.baseline.smoke_evidence import SmokeEvidence",
+            "from sparse_rtdetr.baseline.smoke import run_synthetic_smoke",
             "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff",
             "output = Path(os.environ['P3_SMOKE_OUTPUT_DIR'])",
             "receipt, receipt_sha = _consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))",
-            "config = json.loads(Path(receipt['config_path']).read_text(encoding='utf-8'))",
-            "evidence = SmokeEvidence(output)",
-            "config_sha = evidence.write_config(config)",
-            "invocation = {'schema_version': 1, 'mode': 'real', 'smoke_id': receipt['smoke_id'], 'config_sha256': config_sha, 'config_relative_path': receipt['config_relative_path'], 'config_size_bytes': (output / 'config.json').stat().st_size, 'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'}",
-            "evidence.write_json('invocation.json', invocation)",
-            "[evidence.write_json(name, {}) for name in ('source_identity.json', 'data_binding_audit.json', 'image_selection_audit.json', 'cuda_runtime_identity.json', 'model_identity.json', 'call_audit.json', 'input_batch_audit.json', 'model_output_audit.json', 'postprocess_audit.json', 'rng_audit.json')]",
-            "completion = " + completion,
-            "completion['config_sha256'] = config_sha",
-            "evidence.finalize_success(completion)",
+            "run_synthetic_smoke(Path(os.environ['P3_SMOKE_REPO_ROOT']), output, config_path=receipt['config_path'])",
+            "from sparse_rtdetr.baseline.smoke_evidence import ENTRY_INVENTORY_EXCLUDED, inventory, sha256_file, canonical_json_bytes",
+            "invocation_path = output / 'invocation.json'",
+            "invocation = json.loads(invocation_path.read_text(encoding='utf-8'))",
+            "invocation.update({'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'})",
+            "invocation_path.write_bytes(canonical_json_bytes(invocation))",
+            "inventory_path = output / 'artifact_inventory.json'",
+            "inventory_path.write_bytes(canonical_json_bytes(inventory(output, ENTRY_INVENTORY_EXCLUDED)))",
+            "completion_path = output / 'completion.json'",
+            "completion = json.loads(completion_path.read_text(encoding='utf-8'))",
+            "completion['artifact_inventory_sha256'] = sha256_file(inventory_path)",
+            "completion_path.write_bytes(canonical_json_bytes(completion))",
         ]) + "\n",
         encoding="utf-8",
     )

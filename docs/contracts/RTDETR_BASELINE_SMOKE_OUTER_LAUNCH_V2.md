@@ -218,6 +218,41 @@ available for independent audit only; they do not authorize filesystem
 provisioning, tmux, Smoke, GPU, CUDA, data, model, training, evaluation, or
 metrics execution.
 
+## Entry scientific evidence schema
+
+Every successful future entry must contain the four scientific evidence files
+`input_batch_audit.json`, `cuda_runtime_identity.json`, `model_identity.json`,
+and `source_identity.json` with `schema_version: 2`. The entry validator uses
+exact-key objects and rejects missing, extra, boolean-as-integer, non-finite,
+device, shape, dtype, range, and SHA-256 drift. Rebuilding
+`artifact_inventory.json` and `completion.json` after changing a scientific
+field does not make the entry valid.
+
+`input_batch_audit.json` binds the one batch, two frozen stable image IDs,
+loader CPU tensors, model tensors, original target sizes, labels, boxes, and
+the actual `Resize([640, 640])` plus `ConvertPILImage(dtype="float32",
+scale=True)` pipeline. Tensor hashes are
+`sha256(detached.cpu().contiguous().numpy().tobytes())` and are recorded only
+when the tensor is finite. Synthetic tests use CPU tensors and
+`cuda_runtime_identity.json` records an explicit CPU fallback; a real entry
+must record the initialized single `cuda:0` runtime from PyTorch APIs.
+
+`model_identity.json` binds the frozen RT-DETRv2 R18/VisDrone contract,
+20,094,584 parameters, eval state, postprocessor settings, output tensor
+audits, and deterministic parameter/state schema and value hashes. The state
+hash rows are canonical JSON and contain only tensor names, shapes, dtypes,
+gradient flags, buffer markers, and tensor logical hashes; they contain no
+object IDs, representations, or absolute paths. `source_identity.json` uses
+an explicit production-source allowlist, the baseline config and upstream
+manifest hashes, the vendor inventory and R18 config/include hashes, and the
+frozen Conversion R3 binding. It does not discover the repository recursively
+and does not use Git or the network.
+
+These CPU/synthetic checks establish only that the future entry evidence
+writer and validator are internally consistent. They do not certify R5, make
+V6 launch-ready, authorize R6, or access real data, CUDA, models, tmux, or
+confirmatory metrics.
+
 The child handoff has one canonical argv schema shared by the parent and child:
 the bound executable path, `-m`, `sparse_rtdetr.baseline.smoke_launcher`,
 `_child`, `--repo-root`, and the canonical repository root. It never contains

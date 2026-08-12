@@ -94,6 +94,34 @@ V4_CONFIG = ROOT / SMOKE_V4_CONFIG_RELATIVE
 V5_CONFIG = ROOT / SMOKE_V5_CONFIG_RELATIVE
 
 
+def _directory_fingerprint(path: Path) -> tuple[tuple[str, int, str], ...] | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    rows = []
+    for item in sorted(path.rglob("*")):
+        relative = item.relative_to(path).as_posix()
+        if item.is_symlink():
+            rows.append((relative, -1, os.readlink(item)))
+        elif item.is_file():
+            rows.append((relative, item.stat().st_size, hashlib.sha256(item.read_bytes()).hexdigest()))
+        elif item.is_dir():
+            rows.append((relative + "/", 0, "directory"))
+    return tuple(rows)
+
+
+R5_FROZEN_FINGERPRINTS = {
+    relative: _directory_fingerprint(ROOT / relative)
+    for relative in (SMOKE_V5_OUTPUT_RELATIVE, SMOKE_V5_PROCESS_RELATIVE, SMOKE_V5_OUTER_RELATIVE)
+}
+
+
+def _assert_r5_frozen():
+    assert {
+        relative: _directory_fingerprint(ROOT / relative)
+        for relative in R5_FROZEN_FINGERPRINTS
+    } == R5_FROZEN_FINGERPRINTS
+
+
 class _PreCudaSentinel(RuntimeError):
     pass
 
@@ -208,7 +236,7 @@ def _write_module_child_sitecustomize(path: Path) -> None:
         "    import sparse_rtdetr.baseline.smoke as smoke\n"
         "    def stub(repo_root, data_root, output_dir, **kwargs):\n"
         "        Path(os.environ['P3_SMOKE_TEST_MARKER']).write_text('called\\n', encoding='utf-8')\n"
-        "        completion = smoke.run_synthetic_smoke(repo_root, output_dir)\n"
+        "        completion = smoke.run_synthetic_smoke(repo_root, output_dir, config_path=Path(repo_root, 'configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json'))\n"
         "        receipt = kwargs['handoff_receipt']\n"
         "        invocation_path = Path(output_dir, 'invocation.json')\n"
         "        invocation = json.loads(invocation_path.read_text(encoding='utf-8'))\n"
@@ -311,7 +339,7 @@ def _write_success_child(
                 "import os",
                 "from pathlib import Path",
                 "import json",
-                "from sparse_rtdetr.baseline.smoke_evidence import SmokeEvidence",
+                "from sparse_rtdetr.baseline.smoke import run_synthetic_smoke",
                 "from sparse_rtdetr.baseline.smoke_launcher import _consume_handoff",
                 "output = Path(os.environ['P3_SMOKE_OUTPUT_DIR'])",
                 "receipt, receipt_sha = _consume_handoff(Path(os.environ['P3_SMOKE_REPO_ROOT']))",
@@ -321,15 +349,19 @@ def _write_success_child(
                 "process_invocation = json.loads(process_invocation_path.read_text(encoding='utf-8'))",
                 "process_invocation.update(" + repr(process_invocation_drift) + ")",
                 "process_invocation_path.write_text(json.dumps(process_invocation), encoding='utf-8') if " + repr(bool(process_invocation_drift)) + " else None",
-                "evidence = SmokeEvidence(output)",
-                "config_sha = evidence.write_config({'synthetic_launcher_child': True})",
-                "invocation = {'schema_version': 1, 'mode': 'synthetic', 'smoke_id': 'rtdetrv2_r18_visdrone_baseline_smoke_v1', 'config_sha256': config_sha, 'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'}",
+                "run_synthetic_smoke(Path(os.environ['P3_SMOKE_REPO_ROOT']), output, config_path=receipt['config_path'])",
+                "invocation_path = output / 'invocation.json'",
+                "invocation = json.loads(invocation_path.read_text(encoding='utf-8'))",
+                "invocation.update({'nonce': receipt['nonce'], 'launcher_pid': receipt['launcher_pid'], 'child_pid': receipt['child_pid'], 'child_ppid': receipt['child_ppid'], 'child_argv_sha256': receipt['child_argv_sha256'], 'handoff_receipt_sha256': receipt_sha, 'handoff_receipt_relative_path': 'handoff_receipt.json'})",
                 "invocation.update(" + repr(mutation) + ")",
-                "evidence.write_json('invocation.json', invocation)",
-                "[evidence.write_json(name, {}) for name in ('source_identity.json', 'data_binding_audit.json', 'image_selection_audit.json', 'cuda_runtime_identity.json', 'model_identity.json', 'call_audit.json', 'input_batch_audit.json', 'model_output_audit.json', 'postprocess_audit.json', 'rng_audit.json')]",
-                "completion = " + repr(_entry_completion()),
-                "completion['config_sha256'] = config_sha",
-                "evidence.finalize_success(completion)",
+                "from sparse_rtdetr.baseline.smoke_evidence import ENTRY_INVENTORY_EXCLUDED, inventory, sha256_file, canonical_json_bytes",
+                "invocation_path.write_bytes(canonical_json_bytes(invocation))",
+                "inventory_path = output / 'artifact_inventory.json'",
+                "inventory_path.write_bytes(canonical_json_bytes(inventory(output, ENTRY_INVENTORY_EXCLUDED)))",
+                "completion_path = output / 'completion.json'",
+                "completion = json.loads(completion_path.read_text(encoding='utf-8'))",
+                "completion['artifact_inventory_sha256'] = sha256_file(inventory_path)",
+                "completion_path.write_bytes(canonical_json_bytes(completion))",
             ]
         )
         + "\n",
@@ -342,15 +374,10 @@ def _write_unconsuming_child(path: Path) -> None:
         "\n".join([
             "import os",
             "from pathlib import Path",
-            "from sparse_rtdetr.baseline.smoke_evidence import SmokeEvidence",
+            "from sparse_rtdetr.baseline.smoke import run_synthetic_smoke",
             "output = Path(os.environ['P3_SMOKE_OUTPUT_DIR'])",
-            "evidence = SmokeEvidence(output)",
-            "config_sha = evidence.write_config({'unconsuming_child': True})",
-            "evidence.write_json('invocation.json', {'schema_version': 1, 'mode': 'synthetic', 'smoke_id': 'rtdetrv2_r18_visdrone_baseline_smoke_v1', 'config_sha256': config_sha})",
-            "[evidence.write_json(name, {}) for name in ('source_identity.json', 'data_binding_audit.json', 'image_selection_audit.json', 'cuda_runtime_identity.json', 'model_identity.json', 'call_audit.json', 'input_batch_audit.json', 'model_output_audit.json', 'postprocess_audit.json', 'rng_audit.json')]",
-            "completion = " + repr(_entry_completion()),
-            "completion['config_sha256'] = config_sha",
-            "evidence.finalize_success(completion)",
+            "from pathlib import Path",
+            "run_synthetic_smoke(Path(os.environ['P3_SMOKE_REPO_ROOT']), output)",
         ]) + "\n",
         encoding="utf-8",
     )
@@ -358,8 +385,9 @@ def _write_unconsuming_child(path: Path) -> None:
 
 def _write_real_entry(output: Path, config_path: Path) -> dict[str, object]:
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    evidence = SmokeEvidence(output)
-    config_sha = evidence.write_config(config)
+    run_synthetic_smoke(ROOT, output, config_path=config_path)
+    invocation_path = output / "invocation.json"
+    invocation = _read_object(invocation_path)
     receipt = {
         "nonce": "a" * 32,
         "launcher_pid": 11,
@@ -369,29 +397,13 @@ def _write_real_entry(output: Path, config_path: Path) -> dict[str, object]:
         "handoff_receipt_sha256": "2" * 64,
         "handoff_receipt_relative_path": "handoff_receipt.json",
     }
-    invocation = {
-        "schema_version": 1,
-        "mode": "real",
-        "smoke_id": config["smoke_id"],
-        "config_sha256": config_sha,
-        "config_relative_path": config_path.relative_to(ROOT).as_posix(),
-        "config_size_bytes": (output / "config.json").stat().st_size,
-        **receipt,
-    }
-    evidence.write_json("invocation.json", invocation)
-    for name in (
-        "source_identity.json", "data_binding_audit.json", "image_selection_audit.json",
-        "cuda_runtime_identity.json", "model_identity.json", "call_audit.json",
-        "input_batch_audit.json", "model_output_audit.json", "postprocess_audit.json", "rng_audit.json",
-    ):
-        evidence.write_json(name, {})
-    completion = _entry_completion()
-    completion["config_sha256"] = config_sha
-    evidence.finalize_success(completion)
+    invocation.update({"mode": "synthetic", **receipt})
+    invocation_path.write_bytes(canonical_json_bytes(invocation))
+    _repack_entry(output)
     return {
         **receipt,
         "smoke_id": config["smoke_id"],
-        "config_relative_path": invocation["config_relative_path"],
+        "config_relative_path": config_path.relative_to(ROOT).as_posix(),
         "config_canonical_sha256": hashlib.sha256(canonical_json_bytes(config)).hexdigest(),
     }
 
@@ -642,11 +654,7 @@ def test_contract_check_cli_rejects_duplicate_config_without_v1_fallback(config_
     )
     assert result.returncode == 2
     assert "PASS" not in result.stdout
-    assert all(not path.exists() and not path.is_symlink() for path in (
-        ROOT / SMOKE_V5_OUTPUT_RELATIVE,
-        ROOT / SMOKE_V5_PROCESS_RELATIVE,
-        ROOT / SMOKE_V5_OUTER_RELATIVE,
-    ))
+    _assert_r5_frozen()
 
 
 def test_contract_check_parser_rejects_duplicate_config_and_defaults_to_none(monkeypatch):
@@ -758,14 +766,10 @@ def test_contract_check_parser_and_child_argv_static_guards():
 
 
 def test_real_contract_check_cli_preserves_r5_absence(tmp_path):
-    before = [
-        ROOT / SMOKE_V5_OUTPUT_RELATIVE,
-        ROOT / SMOKE_V5_PROCESS_RELATIVE,
-        ROOT / SMOKE_V5_OUTER_RELATIVE,
-    ]
-    assert all(not path.exists() and not path.is_symlink() for path in before)
+    before = R5_FROZEN_FINGERPRINTS.copy()
+    _assert_r5_frozen()
     _assert_contract_cli_pass(_real_contract_cli(V5_CONFIG)[1], SMOKE_V5_ID)
-    assert all(not path.exists() and not path.is_symlink() for path in before)
+    assert {relative: _directory_fingerprint(ROOT / relative) for relative in before} == before
 
 
 def test_clean_archive_real_contract_cli_matrix():
@@ -1482,6 +1486,49 @@ def test_synthetic_smoke_has_exact_one_batch_and_complete_evidence(tmp_path):
     assert completion["total_predictions"] == 600
     assert _read_object(output / "rng_audit.json")["restored_equal"] is True
     assert validate_entry_output(output)["entry_success_accepted"] is True
+
+
+@pytest.mark.parametrize("artifact, mutation", [
+    ("input_batch_audit.json", lambda value: value["preprocessing"].update({"padding": {"used": True, "mode": "zero"}})),
+    ("cuda_runtime_identity.json", lambda value: value.update({"cpu_fallback": False})),
+    ("model_identity.json", lambda value: value.update({"parameter_state_value_sha256": "0" * 64})),
+    ("source_identity.json", lambda value: value["vendor"].update({"canonical_inventory_sha256": "0" * 64})),
+    ("model_output_audit.json", lambda value: value["pred_logits"].update({"shape": [2, 300, 9]})),
+    ("postprocess_audit.json", lambda value: value.update({"total_predictions": 599})),
+    ("call_audit.json", lambda value: value.update({"model_forward_calls": 2})),
+])
+def test_scientific_semantic_mutation_rejected_after_inventory_repack(tmp_path, artifact, mutation):
+    output = tmp_path / "entry"
+    run_synthetic_smoke(ROOT, output)
+    path = output / artifact
+    value = _read_object(path)
+    mutation(value)
+    path.write_bytes(canonical_json_bytes(value))
+    _repack_entry(output)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
+
+
+@pytest.mark.parametrize("artifact", [
+    "input_batch_audit.json",
+    "cuda_runtime_identity.json",
+    "model_identity.json",
+    "source_identity.json",
+])
+@pytest.mark.parametrize("operation", ["missing", "extra"])
+def test_scientific_exact_keys_reject_missing_and_extra_after_repack(tmp_path, artifact, operation):
+    output = tmp_path / f"{artifact}-{operation}"
+    run_synthetic_smoke(ROOT, output)
+    path = output / artifact
+    value = _read_object(path)
+    if operation == "missing":
+        value.pop(next(iter(value)))
+    else:
+        value["unexpected"] = 1
+    path.write_bytes(canonical_json_bytes(value))
+    _repack_entry(output)
+    with pytest.raises(SmokeEvidenceError):
+        validate_entry_output(output)
 
 
 @pytest.mark.parametrize("field", ["inference_only", "model_eval", "torch_no_grad", "speed_measurement", "total_predictions", "config_sha256"])
