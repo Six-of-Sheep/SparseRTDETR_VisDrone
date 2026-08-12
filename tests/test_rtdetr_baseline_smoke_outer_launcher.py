@@ -19,6 +19,7 @@ from sparse_rtdetr.baseline.smoke import (
     SMOKE_V3_ID,
     SMOKE_V4_ID,
     SMOKE_V5_ID,
+    SMOKE_V6_ID,
     load_smoke_config,
 )
 from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, inventory, sha256_bytes, sha256_file
@@ -46,6 +47,7 @@ V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 V4_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
 V5_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
+V6_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
 SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
 V3_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r3"
 V4_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"
@@ -74,7 +76,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     (root / "manifests").mkdir(parents=True)
     shutil.copyfile(ROOT / "manifests/rtdetrv2_upstream.json", root / "manifests/rtdetrv2_upstream.json")
     (root / "artifacts/data/visdrone_protocol_v2_conversion_r3").mkdir(parents=True)
-    config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG, 5: V5_CONFIG}[version]
+    config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG, 5: V5_CONFIG, 6: V6_CONFIG}[version]
     config_name = config_source.name
     shutil.copyfile(config_source, root / "configs/baseline" / config_name)
     config = json.loads(config_source.read_text(encoding="utf-8"))
@@ -92,7 +94,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     child = _script(tmp_path / "child", f"echo child >> {child_count}\nexit {child_rc}")
     tmux_count = tmp_path / "tmux.count"
     tmux = _script(tmp_path / "fake-tmux", f"echo tmux >> {tmux_count}\n\"$7\"\nexit 0")
-    suffix = {2: "r2", 3: "r3", 4: "r4", 5: "r5"}[version]
+    suffix = {2: "r2", 3: "r3", 4: "r4", 5: "r5", 6: "r6"}[version]
     output = root / f"artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     process = root / f"artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     outer = outer_parent / f"rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
@@ -105,7 +107,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
         "outer_evidence_dir": outer,
         "child_python": child,
         "tmux_executable": tmux,
-        "tmux_session": {2: SESSION, 3: V3_SESSION, 4: V4_SESSION, 5: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5"}[version],
+        "tmux_session": {2: SESSION, 3: V3_SESSION, 4: V4_SESSION, 5: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5", 6: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r6"}[version],
     }
     return args, child_count, tmux_count
 
@@ -317,6 +319,17 @@ def test_v5_outer_contract_check_is_data_free_and_uses_only_v5_identity(tmp_path
     assert not args["outer_evidence_dir"].exists()
 
 
+def test_v6_outer_contract_check_is_data_free_and_uses_only_v6_identity(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=6)
+    result = contract_check(args["repo_root"], args["config_path"])
+    assert result["status"] == "PASS"
+    assert result["smoke_id"] == SMOKE_V6_ID
+    assert result["config_binding"]["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
+    assert result["tmux_called"] is False
+    assert result["torch_imported"] is False
+    assert not args["outer_evidence_dir"].exists()
+
+
 def test_v4_outer_synthetic_full_path_uses_only_v4_identity(tmp_path):
     args, _child_count, tmux_count = _repo(tmp_path, version=4)
     result = run_outer_launch(**args)
@@ -343,6 +356,19 @@ def test_v5_outer_synthetic_full_path_uses_only_v5_identity(tmp_path):
     assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "INNER_STARTED_PROCESS_EVIDENCE_ABSENT"
 
 
+def test_v6_outer_synthetic_full_path_uses_only_v6_identity(tmp_path):
+    args, _child_count, tmux_count = _repo(tmp_path, version=6)
+    result = run_outer_launch(**args)
+    assert result["status"] == "TMUX_ACCEPTED"
+    assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
+    outer = validate_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    assert outer["invocation"]["smoke_id"] == SMOKE_V6_ID
+    assert outer["invocation"]["tmux_session"] == "p3_rtdetrv2_r18_visdrone_baseline_smoke_r6"
+    binding = json.loads((args["outer_evidence_dir"] / "launcher/outer_config_binding.json").read_text(encoding="utf-8"))
+    assert binding["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "INNER_STARTED_PROCESS_EVIDENCE_ABSENT"
+
+
 def test_v3_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, monkeypatch):
     args = _complete_v3_chain(tmp_path, monkeypatch)
     assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "TERMINAL_COMPLETE"
@@ -362,6 +388,14 @@ def test_v5_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, mo
     completion = json.loads((args["process_evidence_dir"] / "process_completion.json").read_text(encoding="utf-8"))
     assert completion["smoke_id"] == SMOKE_V5_ID
     assert completion["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
+
+
+def test_v6_classifier_accepts_complete_synthetic_entry_and_process(tmp_path, monkeypatch):
+    args = _complete_v3_chain(tmp_path, monkeypatch, version=6)
+    assert classify_outer_evidence(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"]) == "TERMINAL_COMPLETE"
+    completion = json.loads((args["process_evidence_dir"] / "process_completion.json").read_text(encoding="utf-8"))
+    assert completion["smoke_id"] == SMOKE_V6_ID
+    assert completion["config_relative_path"] == "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
 
 
 def test_v4_main_propagates_pane_nonce_through_complete_synthetic_chain(tmp_path, monkeypatch):

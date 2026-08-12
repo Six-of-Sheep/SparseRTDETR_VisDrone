@@ -33,6 +33,7 @@ from sparse_rtdetr.baseline.smoke import (
     SMOKE_V3_ID,
     SMOKE_V4_ID,
     SMOKE_V5_ID,
+    SMOKE_V6_ID,
     SMOKE_V3_CONFIG_RELATIVE,
     SMOKE_V3_OUTPUT_RELATIVE,
     SMOKE_V3_PROCESS_RELATIVE,
@@ -48,6 +49,11 @@ from sparse_rtdetr.baseline.smoke import (
     SMOKE_V5_PROCESS_RELATIVE,
     SMOKE_V5_OUTER_RELATIVE,
     SMOKE_V5_TMUX_SESSION,
+    SMOKE_V6_CONFIG_RELATIVE,
+    SMOKE_V6_OUTPUT_RELATIVE,
+    SMOKE_V6_PROCESS_RELATIVE,
+    SMOKE_V6_OUTER_RELATIVE,
+    SMOKE_V6_TMUX_SESSION,
     SmokeContractError,
     get_smoke_runtime_spec,
     SyntheticOneBatchLoader,
@@ -98,6 +104,7 @@ V2_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 V3_CONFIG = ROOT / SMOKE_V3_CONFIG_RELATIVE
 V4_CONFIG = ROOT / SMOKE_V4_CONFIG_RELATIVE
 V5_CONFIG = ROOT / SMOKE_V5_CONFIG_RELATIVE
+V6_CONFIG = ROOT / SMOKE_V6_CONFIG_RELATIVE
 CHECKER_PATH = ROOT / "tools" / "repository_contract_check.py"
 CHECKER_SPEC = importlib.util.spec_from_file_location("repository_contract_check_for_smoke", CHECKER_PATH)
 CHECKER = importlib.util.module_from_spec(CHECKER_SPEC)
@@ -473,7 +480,7 @@ def test_smoke_config_and_manifest_are_strict_and_frozen():
         importlib.import_module("sparse_rtdetr.baseline.smoke").validate_smoke_config(drifted)
 
 
-@pytest.mark.parametrize("config_path", [V1_CONFIG, V2_CONFIG, V3_CONFIG, V4_CONFIG, V5_CONFIG])
+@pytest.mark.parametrize("config_path", [V1_CONFIG, V2_CONFIG, V3_CONFIG, V4_CONFIG, V5_CONFIG, V6_CONFIG])
 def test_schema_version_accepts_only_builtin_int_one(config_path):
     smoke = importlib.import_module("sparse_rtdetr.baseline.smoke")
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -595,6 +602,7 @@ def _assert_contract_cli_pass(result, smoke_id):
         (V3_CONFIG, SMOKE_V3_ID),
         (V4_CONFIG, SMOKE_V4_ID),
         (V5_CONFIG, SMOKE_V5_ID),
+        (V6_CONFIG, SMOKE_V6_ID),
     ],
 )
 def test_real_contract_check_cli_binds_explicit_config_across_versions(config_path, smoke_id):
@@ -822,9 +830,11 @@ def test_clean_archive_real_contract_cli_matrix():
         subprocess.run(["git", "archive", "HEAD", "-o", str(export / "repo.tar")], cwd=ROOT, check=True)
         subprocess.run(["tar", "-xf", str(export / "repo.tar"), "-C", str(export)], check=True)
         for relative in (
+            "src/sparse_rtdetr/baseline/smoke.py",
             "src/sparse_rtdetr/baseline/smoke_launcher.py",
             "tests/test_rtdetr_baseline_smoke.py",
             "docs/contracts/RTDETR_BASELINE_SMOKE_OUTER_LAUNCH_V2.md",
+            "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json",
         ):
             destination = export / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -844,7 +854,7 @@ def test_clean_archive_real_contract_cli_matrix():
         archive_root = export
         if (archive_root / "artifacts/runs").exists():
             assert not any(path.name.startswith("rtdetrv2_r18_visdrone_baseline_smoke_r") for path in (archive_root / "artifacts/runs").glob("*"))
-        for config_path, smoke_id in ((None, SMOKE_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json", SMOKE_V2_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json", SMOKE_V3_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json", SMOKE_V4_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json", SMOKE_V5_ID)):
+        for config_path, smoke_id in ((None, SMOKE_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json", SMOKE_V2_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json", SMOKE_V3_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json", SMOKE_V4_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json", SMOKE_V5_ID), (archive_root / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json", SMOKE_V6_ID)):
             _, result = _real_contract_cli(config_path, repo_root=archive_root)
             _assert_contract_cli_pass(result, smoke_id)
         duplicate = subprocess.run(
@@ -1048,12 +1058,13 @@ def test_versioned_runtime_registry_rejects_cross_version_inner_paths(config_pat
 
 
 def test_runtime_registry_is_explicit_and_unknown_ids_fail_closed():
-    ids = (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID, SMOKE_V5_ID)
+    ids = (SMOKE_ID, SMOKE_V2_ID, SMOKE_V3_ID, SMOKE_V4_ID, SMOKE_V5_ID, SMOKE_V6_ID)
     assert tuple(get_smoke_runtime_spec(value).smoke_id for value in ids) == ids
-    assert len({get_smoke_runtime_spec(value).config_relative_path for value in ids}) == 5
+    assert len({get_smoke_runtime_spec(value).config_relative_path for value in ids}) == 6
     assert get_smoke_runtime_spec(SMOKE_V4_ID).output_relative_path.endswith("_r4")
     assert get_smoke_runtime_spec(SMOKE_V5_ID).output_relative_path.endswith("_r5")
-    for value in ("rtdetrv2_r18_visdrone_baseline_smoke_v6", "", True, None):
+    assert get_smoke_runtime_spec(SMOKE_V6_ID).output_relative_path.endswith("_r6")
+    for value in ("unknown_smoke", "", True, None):
         with pytest.raises(SmokeContractError):
             get_smoke_runtime_spec(value)
 
@@ -1166,6 +1177,34 @@ def test_v5_raw_and_canonical_config_identity_is_frozen_from_bytes():
     assert hashlib.sha256(raw).hexdigest() == "18c425805f33726d0bbe1834e295366a4aa39e5ad830f1f1f3cf92b3d1509716"
     assert len(canonical) == 2922
     assert hashlib.sha256(canonical).hexdigest() == "ed39e40602b716fcc7e94bb521dbcf66ce6f57436b9cbc99ed7ed778462f672b"
+
+
+def test_v6_is_a_v5_identity_pointer_variant_with_stable_bytes():
+    v5 = json.loads(V5_CONFIG.read_text(encoding="utf-8"))
+    v6 = json.loads(V6_CONFIG.read_text(encoding="utf-8"))
+    allowed = {
+        "/smoke_id",
+        "/runtime/config_relative_path",
+        "/runtime/output_relative_path",
+        "/runtime/process_evidence_relative_path",
+        "/runtime/outer_launch_evidence_relative_path",
+        "/runtime/tmux_session_name",
+    }
+    assert set(_json_pointer_diffs(v5, v6)) == allowed
+    assert v6["smoke_id"] == SMOKE_V6_ID
+    assert v6["runtime"] == {
+        **v5["runtime"],
+        "config_relative_path": SMOKE_V6_CONFIG_RELATIVE,
+        "output_relative_path": SMOKE_V6_OUTPUT_RELATIVE,
+        "process_evidence_relative_path": SMOKE_V6_PROCESS_RELATIVE,
+        "outer_launch_evidence_relative_path": SMOKE_V6_OUTER_RELATIVE,
+        "tmux_session_name": SMOKE_V6_TMUX_SESSION,
+    }
+    raw = V6_CONFIG.read_bytes()
+    assert raw.startswith(b"{") and b"\r" not in raw and not raw.startswith(b"\xef\xbb\xbf")
+    assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
+    assert hashlib.sha256(raw).hexdigest() == hashlib.sha256(V6_CONFIG.read_bytes()).hexdigest()
+    assert hashlib.sha256(canonical_json_bytes(v6)).hexdigest() == hashlib.sha256(canonical_json_bytes(json.loads(raw))).hexdigest()
 
 
 @pytest.mark.parametrize("mutation", [

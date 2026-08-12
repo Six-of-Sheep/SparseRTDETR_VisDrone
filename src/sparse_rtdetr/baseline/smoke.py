@@ -43,11 +43,13 @@ SMOKE_V2_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v2"
 SMOKE_V3_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v3"
 SMOKE_V4_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v4"
 SMOKE_V5_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v5"
+SMOKE_V6_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v6"
 SMOKE_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 SMOKE_V2_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 SMOKE_V3_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 SMOKE_V4_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
 SMOKE_V5_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
+SMOKE_V6_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
 SMOKE_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_V2_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
@@ -70,6 +72,11 @@ SMOKE_V5_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_ba
 SMOKE_V5_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r5"
 SMOKE_V5_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5"
 SMOKE_V5_TMUX_TIMEOUT_SECONDS = 10
+SMOKE_V6_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r6"
+SMOKE_V6_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r6"
+SMOKE_V6_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r6"
+SMOKE_V6_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r6"
+SMOKE_V6_TMUX_TIMEOUT_SECONDS = 10
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
 
@@ -137,6 +144,16 @@ SMOKE_RUNTIME_SPECS = MappingProxyType({
         outer_relative_path=SMOKE_V5_OUTER_RELATIVE,
         tmux_session=SMOKE_V5_TMUX_SESSION,
         tmux_timeout_seconds=SMOKE_V5_TMUX_TIMEOUT_SECONDS,
+        allow_outer_launch=True,
+    ),
+    SMOKE_V6_ID: SmokeRuntimeSpec(
+        smoke_id=SMOKE_V6_ID,
+        config_relative_path=SMOKE_V6_CONFIG_RELATIVE,
+        output_relative_path=SMOKE_V6_OUTPUT_RELATIVE,
+        process_relative_path=SMOKE_V6_PROCESS_RELATIVE,
+        outer_relative_path=SMOKE_V6_OUTER_RELATIVE,
+        tmux_session=SMOKE_V6_TMUX_SESSION,
+        tmux_timeout_seconds=SMOKE_V6_TMUX_TIMEOUT_SECONDS,
         allow_outer_launch=True,
     ),
 })
