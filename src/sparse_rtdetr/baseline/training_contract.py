@@ -6,7 +6,9 @@ import copy
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -1072,49 +1074,321 @@ def validate_training_contract(config: Any, baseline_config: Any) -> dict[str, A
     return copy.deepcopy(config)
 
 
-def load_training_contract(repo_root: str | Path, config_path: str | Path = TRAINING_CONFIG_RELATIVE_PATH) -> dict[str, Any]:
-    """Load and validate the checked-in contract without runtime side effects."""
+def _assert_repository_root(value: str | Path) -> str:
+    try:
+        root = os.fspath(value)
+    except TypeError as exc:
+        raise TrainingContractError("repo_root must be an absolute portable path") from exc
+    if type(root) is not str or not root or "\x00" in root or "\\" in root:
+        raise TrainingContractError("repo_root must be an absolute portable path")
+    if root == "/":
+        return root
+    if not root.startswith("/") or root.endswith("/") or "//" in root:
+        raise TrainingContractError("repo_root must be an absolute lexically normalized path")
+    components = root[1:].split("/")
+    if any(not component or component in {".", ".."} for component in components):
+        raise TrainingContractError("repo_root must be an absolute lexically normalized path")
+    return root
 
-    root = Path(repo_root).resolve()
+
+def _require_secure_fd_support() -> tuple[int, int, int, int]:
+    required = ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC", "O_NONBLOCK")
+    if any(not hasattr(os, name) or not getattr(os, name) for name in required):
+        raise TrainingContractError("secure repository file access is unavailable")
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if os.open not in supports_dir_fd or os.stat not in supports_dir_fd:
+        raise TrainingContractError("secure repository dir_fd access is unavailable")
+    return (
+        os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+        os.O_NOFOLLOW | os.O_CLOEXEC,
+        os.O_CLOEXEC,
+    )
+
+
+def _object_identity(value: os.stat_result) -> tuple[int, int, int]:
+    return value.st_dev, value.st_ino, stat.S_IFMT(value.st_mode)
+
+
+def _file_snapshot(value: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _lstat_at(name: str, parent_fd: int) -> os.stat_result:
+    while True:
+        try:
+            return os.lstat(name, dir_fd=parent_fd)
+        except InterruptedError:
+            continue
+        except OSError as exc:
+            raise TrainingContractError(f"secure repository lstat failed: {name}") from exc
+
+
+def _open_at(name: str, flags: int, parent_fd: int | None = None) -> int:
+    while True:
+        try:
+            if parent_fd is None:
+                return os.open(name, flags)
+            return os.open(name, flags, dir_fd=parent_fd)
+        except InterruptedError:
+            continue
+        except OSError as exc:
+            raise TrainingContractError(f"secure repository open failed: {name}") from exc
+
+
+def _fstat_fd(fd: int) -> os.stat_result:
+    while True:
+        try:
+            return os.fstat(fd)
+        except InterruptedError:
+            continue
+        except OSError as exc:
+            raise TrainingContractError("secure repository descriptor became invalid") from exc
+
+
+def _readlink_fd(fd: int) -> str:
+    while True:
+        try:
+            return os.readlink(f"/proc/self/fd/{fd}")
+        except InterruptedError:
+            continue
+        except OSError as exc:
+            raise TrainingContractError("secure repository descriptor path is unavailable") from exc
+
+
+class _DirectoryRecord:
+    __slots__ = ("name", "parent_fd", "fd", "identity")
+
+    def __init__(self, name: str, parent_fd: int, fd: int, identity: tuple[int, int, int]) -> None:
+        self.name = name
+        self.parent_fd = parent_fd
+        self.fd = fd
+        self.identity = identity
+
+
+class _VerifiedRepository:
+    """One verified directory-fd boundary for all checked-in contract inputs."""
+
+    def __init__(self, repo_root: str | Path) -> None:
+        self.lexical_root = _assert_repository_root(repo_root)
+        self._directory_flags, self._file_flags, _, _ = _require_secure_fd_support()
+        self._directory_fds: list[int] = []
+        self._component_records: list[_DirectoryRecord] = []
+        self._root_fd: int | None = None
+        self._root_identity: tuple[int, int, int] | None = None
+        self._root_device: int | None = None
+
+    def __enter__(self) -> "_VerifiedRepository":
+        try:
+            self._open_root()
+            return self
+        except BaseException:
+            self._close_all()
+            raise
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> bool:
+        self._close_all()
+        return False
+
+    def _close_all(self) -> None:
+        for fd in reversed(self._directory_fds):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self._directory_fds.clear()
+
+    def _open_root(self) -> None:
+        root_fd = _open_at("/", self._directory_flags)
+        self._directory_fds.append(root_fd)
+        parent_fd = root_fd
+        components = [] if self.lexical_root == "/" else self.lexical_root[1:].split("/")
+        for name in components:
+            observed = _lstat_at(name, parent_fd)
+            if stat.S_ISLNK(observed.st_mode) or not stat.S_ISDIR(observed.st_mode):
+                raise TrainingContractError("repo_root contains a non-directory or symlink component")
+            if observed.st_dev < 0:
+                raise TrainingContractError("repo_root component identity is invalid")
+            child_fd = _open_at(name, self._directory_flags, parent_fd)
+            self._directory_fds.append(child_fd)
+            opened = _fstat_fd(child_fd)
+            if _object_identity(observed) != _object_identity(opened):
+                raise TrainingContractError("repo_root component identity changed during open")
+            self._component_records.append(
+                _DirectoryRecord(name, parent_fd, child_fd, _object_identity(observed))
+            )
+            parent_fd = child_fd
+        root_stat = _fstat_fd(parent_fd)
+        self._root_fd = parent_fd
+        self._root_identity = _object_identity(root_stat)
+        self._root_device = root_stat.st_dev
+        if _readlink_fd(parent_fd) != self.lexical_root:
+            raise TrainingContractError("repo_root canonical identity drift")
+        self._assert_root_stable()
+
+    def _assert_root_stable(self) -> None:
+        if self._root_fd is None or self._root_identity is None:
+            raise TrainingContractError("repository boundary is not open")
+        if _object_identity(_fstat_fd(self._root_fd)) != self._root_identity:
+            raise TrainingContractError("repo_root descriptor identity drift")
+        if _readlink_fd(self._root_fd) != self.lexical_root:
+            raise TrainingContractError("repo_root canonical identity drift")
+        for record in self._component_records:
+            if _object_identity(_lstat_at(record.name, record.parent_fd)) != record.identity:
+                raise TrainingContractError("repo_root path component identity drift")
+            if _object_identity(_fstat_fd(record.fd)) != record.identity:
+                raise TrainingContractError("repo_root descriptor identity drift")
+
+    def _assert_descendant_stable(
+        self,
+        records: list[_DirectoryRecord],
+        final_parent_fd: int,
+        final_name: str,
+        expected_final: tuple[int, int, int, int, int, int, int],
+    ) -> None:
+        self._assert_root_stable()
+        for record in records:
+            if _object_identity(_lstat_at(record.name, record.parent_fd)) != record.identity:
+                raise TrainingContractError("repository file path component identity drift")
+            if _object_identity(_fstat_fd(record.fd)) != record.identity:
+                raise TrainingContractError("repository file descriptor identity drift")
+        if _file_snapshot(_lstat_at(final_name, final_parent_fd)) != expected_final:
+            raise TrainingContractError("repository file path identity drift")
+
+    def read_file(self, relative: str) -> bytes:
+        relative = _assert_relative_path(relative, "repository file path")
+        if self._root_fd is None or self._root_device is None:
+            raise TrainingContractError("repository boundary is not open")
+        self._assert_root_stable()
+        components = relative.split("/")
+        parent_fd = self._root_fd
+        opened_directories: list[int] = []
+        file_fd: int | None = None
+        descendant_records: list[_DirectoryRecord] = []
+        try:
+            for index, name in enumerate(components):
+                observed = _lstat_at(name, parent_fd)
+                if index != len(components) - 1:
+                    if (
+                        stat.S_ISLNK(observed.st_mode)
+                        or not stat.S_ISDIR(observed.st_mode)
+                        or observed.st_dev != self._root_device
+                    ):
+                        raise TrainingContractError(f"repository path component is not a local directory: {relative}")
+                    child_fd = _open_at(name, self._directory_flags, parent_fd)
+                    opened_directories.append(child_fd)
+                    opened = _fstat_fd(child_fd)
+                    if _object_identity(observed) != _object_identity(opened):
+                        raise TrainingContractError(f"repository path component identity drift: {relative}")
+                    descendant_records.append(
+                        _DirectoryRecord(name, parent_fd, child_fd, _object_identity(observed))
+                    )
+                    parent_fd = child_fd
+                    continue
+                if (
+                    stat.S_ISLNK(observed.st_mode)
+                    or not stat.S_ISREG(observed.st_mode)
+                    or observed.st_nlink != 1
+                    or observed.st_dev != self._root_device
+                ):
+                    raise TrainingContractError(f"repository file is not a stable ordinary file: {relative}")
+                file_fd = _open_at(name, self._file_flags, parent_fd)
+                opened = _fstat_fd(file_fd)
+                if (
+                    _file_snapshot(observed) != _file_snapshot(opened)
+                    or not stat.S_ISREG(opened.st_mode)
+                    or opened.st_nlink != 1
+                    or opened.st_dev != self._root_device
+                ):
+                    raise TrainingContractError(f"repository file identity changed during open: {relative}")
+                expected = _file_snapshot(opened)
+                self._assert_descendant_stable(descendant_records, parent_fd, name, expected)
+                chunks: list[bytes] = []
+                while True:
+                    try:
+                        chunk = os.read(file_fd, 1024 * 1024)
+                    except InterruptedError:
+                        continue
+                    except OSError as exc:
+                        raise TrainingContractError(f"repository file read failed: {relative}") from exc
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                after = _fstat_fd(file_fd)
+                if _file_snapshot(after) != expected:
+                    raise TrainingContractError(f"repository file changed while reading: {relative}")
+                self._assert_descendant_stable(descendant_records, parent_fd, name, expected)
+                return b"".join(chunks)
+            raise TrainingContractError(f"repository file path is empty: {relative}")
+        finally:
+            if file_fd is not None:
+                try:
+                    os.close(file_fd)
+                except OSError:
+                    pass
+            for fd in reversed(opened_directories):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
+
+def _load_training_contract_from_boundary(
+    repository: _VerifiedRepository, config_path: str | Path
+) -> tuple[dict[str, Any], bytes]:
     relative = _assert_relative_path(str(config_path), "config_path")
     if relative != TRAINING_CONFIG_RELATIVE_PATH:
         raise TrainingContractError("training config path identity drift")
-    training_raw = (root / relative).read_bytes()
-    baseline_raw = (root / BASELINE_CONFIG_RELATIVE_PATH).read_bytes()
+    training_raw = repository.read_file(relative)
+    baseline_raw = repository.read_file(BASELINE_CONFIG_RELATIVE_PATH)
     baseline = _parse_portable_json(baseline_raw, label="baseline config")
     if len(baseline_raw) != BASELINE_CONFIG_SIZE_BYTES or _sha256_bytes(baseline_raw) != BASELINE_CONFIG_RAW_SHA256:
         raise TrainingContractError("baseline raw identity drift")
     if len(training_raw) != TRAINING_CONFIG_SIZE_BYTES or _sha256_bytes(training_raw) != TRAINING_CONFIG_RAW_SHA256:
         raise TrainingContractError("training config raw identity drift")
     config = _parse_portable_json(training_raw, label="training config")
-    return validate_training_contract(config, baseline)
+    return validate_training_contract(config, baseline), training_raw
 
 
-def _validate_vendor_source_files(root: Path, config: dict[str, Any]) -> None:
+def load_training_contract(repo_root: str | Path, config_path: str | Path = TRAINING_CONFIG_RELATIVE_PATH) -> dict[str, Any]:
+    """Load and validate the checked-in contract without runtime side effects."""
+
+    with _VerifiedRepository(repo_root) as repository:
+        config, _ = _load_training_contract_from_boundary(repository, config_path)
+        return config
+
+
+def _validate_vendor_source_files(repository: _VerifiedRepository, config: dict[str, Any]) -> None:
     bindings = [config["source_bindings"]["vendor_recipe"]]
     bindings.extend(config["source_bindings"]["vendor_includes"])
     for binding in bindings:
         relative = _assert_relative_path(binding["relative_path"], "vendor source path")
-        path = root / relative
-        if not path.is_file() or path.is_symlink() or _sha256_bytes(path.read_bytes()) != binding["sha256"]:
+        if _sha256_bytes(repository.read_file(relative)) != binding["sha256"]:
             raise TrainingContractError(f"vendor source identity drift: {relative}")
 
 
 def training_contract_binding(repo_root: str | Path, config_path: str | Path = TRAINING_CONFIG_RELATIVE_PATH) -> dict[str, Any]:
     """Return raw/canonical identities after complete validation."""
 
-    root = Path(repo_root).resolve()
-    config = load_training_contract(root, config_path)
-    _validate_vendor_source_files(root, config)
-    raw = (root / TRAINING_CONFIG_RELATIVE_PATH).read_bytes()
-    canonical = canonical_training_contract_bytes(config)
-    return {
-        "schema_version": 1,
-        "training_contract_id": config["training_contract_id"],
-        "baseline_id": config["baseline_id"],
-        "relative_path": TRAINING_CONFIG_RELATIVE_PATH,
-        "raw_size_bytes": len(raw),
-        "raw_sha256": _sha256_bytes(raw),
-        "canonical_size_bytes": len(canonical),
-        "canonical_sha256": _sha256_bytes(canonical),
-    }
+    with _VerifiedRepository(repo_root) as repository:
+        config, raw = _load_training_contract_from_boundary(repository, config_path)
+        _validate_vendor_source_files(repository, config)
+        canonical = canonical_training_contract_bytes(config)
+        return {
+            "schema_version": 1,
+            "training_contract_id": config["training_contract_id"],
+            "baseline_id": config["baseline_id"],
+            "relative_path": TRAINING_CONFIG_RELATIVE_PATH,
+            "raw_size_bytes": len(raw),
+            "raw_sha256": _sha256_bytes(raw),
+            "canonical_size_bytes": len(canonical),
+            "canonical_sha256": _sha256_bytes(canonical),
+        }

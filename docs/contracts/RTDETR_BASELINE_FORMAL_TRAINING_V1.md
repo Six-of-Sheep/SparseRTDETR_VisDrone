@@ -80,6 +80,35 @@ It does not import torch, construct a model or dataset, access runtime data, or
 create output. This phase does not implement a trainer, evaluator, launcher,
 checkpoint writer, or training evidence writer.
 
+## Runtime path identity boundary
+
+Runtime loading accepts only an absolute, lexically normalized POSIX
+`repo_root`. The boundary rejects NUL bytes, backslashes, empty components,
+`.` and `..` before opening anything. It walks the root from `/` with retained
+directory file descriptors and `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`; every
+component is checked with `lstat` and `fstat`, and the final descriptor path
+must equal the supplied lexical root. Ancestors may cross devices, but every
+managed descendant after the repository root must remain on the repository
+device.
+
+Training, baseline, vendor recipe, and vendor include files are read through
+the same verified root descriptor boundary. Each relative path rejects
+absolute, empty, dot, dot-dot, backslash, and NUL components. Intermediate
+components must be real directories. A final object must be a non-symlink
+regular file with link count one and the repository device identity. It is
+opened with `O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK`, read through the descriptor,
+and checked with stable device, inode, mode, link-count, size, mtime, and ctime
+snapshots before and after the read. The root and descendant path chains are
+revalidated after the read, so symlinks, hardlinks, special files, canonical
+escapes, replacement, and metadata/content races fail closed before their
+contents can be accepted.
+
+`load_training_contract` reads the training and baseline bytes in one verified
+boundary transaction. `training_contract_binding` reuses that transaction's
+validated configuration and training bytes, then reads all vendor sources
+through the same boundary; it does not resolve or reopen the training path a
+second time.
+
 Every object role in the portable contract is closed by one recursive static
 schema descriptor. Root objects, nested objects, objects inside lists, lists,
 and scalar roles are validated before path/SHA semantics, cross-field rules,

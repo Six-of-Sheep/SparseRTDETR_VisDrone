@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import copy
 from collections import OrderedDict, defaultdict
 import hashlib
@@ -9,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import stat
 from pathlib import Path
 
 import numpy as np
@@ -109,6 +111,34 @@ def _portable_root(tmp_path: Path, training_bytes: bytes) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / item["relative_path"]).read_bytes())
     return tmp_path
+
+
+def _portable_fixture(tmp_path: Path) -> Path:
+    root = tmp_path / "portable-repo"
+    root.mkdir(parents=True)
+    return _portable_root(root, (ROOT / contract.TRAINING_CONFIG_RELATIVE_PATH).read_bytes())
+
+
+def _replace_with_fifo(path: Path) -> None:
+    path.unlink()
+    os.mkfifo(path)
+
+
+def _replace_with_hardlink(path: Path, target: Path) -> None:
+    target.write_bytes(path.read_bytes())
+    path.unlink()
+    path.hardlink_to(target)
+
+
+def _replace_with_symlink(path: Path, target: Path) -> None:
+    path.unlink()
+    path.symlink_to(target)
+
+
+def _vendor_source_paths(training: dict) -> list[str]:
+    sources = [training["source_bindings"]["vendor_recipe"]]
+    sources.extend(training["source_bindings"]["vendor_includes"])
+    return [item["relative_path"] for item in sources]
 
 
 def test_positive_load_validate_canonical_and_binding():
@@ -807,3 +837,210 @@ def test_baseline_mutations_are_rejected():
         _set_path(baseline, path, bad)
         with pytest.raises(contract.TrainingContractError):
             contract.validate_training_contract(_training(), baseline)
+
+
+def test_runtime_root_identity_rejects_root_and_intermediate_symlinks(tmp_path):
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    real_root = real_parent / "repo"
+    real_root.mkdir()
+    _portable_root(real_root, (ROOT / contract.TRAINING_CONFIG_RELATIVE_PATH).read_bytes())
+
+    root_alias = tmp_path / "root-alias"
+    root_alias.symlink_to(real_root, target_is_directory=True)
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(root_alias)
+
+    parent_alias = tmp_path / "parent-alias"
+    parent_alias.symlink_to(real_parent, target_is_directory=True)
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(parent_alias / "repo")
+
+
+def test_runtime_root_identity_rejects_relative_noncanonical_file_and_missing_roots(tmp_path):
+    real_root = tmp_path / "repo"
+    real_root.mkdir()
+    _portable_root(real_root, (ROOT / contract.TRAINING_CONFIG_RELATIVE_PATH).read_bytes())
+    relative = os.path.relpath(real_root, start=Path.cwd())
+    for candidate in (
+        relative,
+        str(real_root) + "/.",
+        str(real_root) + "/../" + real_root.name,
+        str(real_root) + "/",
+        str(real_root).replace("/", "\\"),
+    ):
+        with pytest.raises(contract.TrainingContractError):
+            contract.load_training_contract(candidate)
+
+    file_root = tmp_path / "root-file"
+    file_root.write_bytes(b"not a directory")
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(file_root)
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(tmp_path / "missing-root")
+
+
+@pytest.mark.parametrize("relative", [contract.TRAINING_CONFIG_RELATIVE_PATH, contract.BASELINE_CONFIG_RELATIVE_PATH])
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "missing", "bytes"])
+def test_runtime_config_and_baseline_object_matrix(tmp_path, relative, kind):
+    portable = _portable_fixture(tmp_path)
+    path = portable / relative
+    if kind == "symlink":
+        _replace_with_symlink(path, ROOT / relative)
+    elif kind == "hardlink":
+        _replace_with_hardlink(path, tmp_path / "hardlink-source")
+    elif kind == "directory":
+        path.unlink()
+        path.mkdir()
+    elif kind == "fifo":
+        _replace_with_fifo(path)
+    elif kind == "missing":
+        path.unlink()
+    elif kind == "bytes":
+        path.write_bytes(path.read_bytes() + b"mutation")
+    else:
+        raise AssertionError(kind)
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(portable)
+
+
+def test_runtime_config_intermediate_symlink_is_rejected(tmp_path):
+    portable = _portable_fixture(tmp_path)
+    original = portable / "configs" / "baseline"
+    external = tmp_path / "external-baseline"
+    original.rename(external)
+    original.symlink_to(external, target_is_directory=True)
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(portable)
+
+
+def test_runtime_replacement_is_rejected_before_content_read(tmp_path):
+    portable = _portable_fixture(tmp_path)
+    training_path = portable / contract.TRAINING_CONFIG_RELATIVE_PATH
+    _replace_with_hardlink(training_path, tmp_path / "training-replacement")
+    with pytest.raises(contract.TrainingContractError):
+        contract.load_training_contract(portable)
+
+
+def test_vendor_root_and_intermediate_symlinks_are_rejected(tmp_path):
+    portable = _portable_fixture(tmp_path)
+    vendor = portable / "vendor"
+    external_vendor = tmp_path / "external-vendor"
+    vendor.rename(external_vendor)
+    vendor.symlink_to(external_vendor, target_is_directory=True)
+    with pytest.raises(contract.TrainingContractError):
+        contract.training_contract_binding(portable)
+
+    portable = _portable_fixture(tmp_path / "second")
+    original = portable / "vendor" / "rtdetrv2_pytorch" / "configs" / "rtdetrv2"
+    external = tmp_path / "external-rtdetrv2-config"
+    original.rename(external)
+    original.symlink_to(external, target_is_directory=True)
+    with pytest.raises(contract.TrainingContractError):
+        contract.training_contract_binding(portable)
+
+
+@pytest.mark.parametrize("relative", _vendor_source_paths(_training()))
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "missing", "bytes"])
+def test_vendor_source_object_matrix(tmp_path, relative, kind):
+    portable = _portable_fixture(tmp_path)
+    path = portable / relative
+    if kind == "symlink":
+        _replace_with_symlink(path, ROOT / relative)
+    elif kind == "hardlink":
+        _replace_with_hardlink(path, tmp_path / "vendor-hardlink-source")
+    elif kind == "directory":
+        path.unlink()
+        path.mkdir()
+    elif kind == "fifo":
+        _replace_with_fifo(path)
+    elif kind == "missing":
+        path.unlink()
+    elif kind == "bytes":
+        path.write_bytes(path.read_bytes() + b"mutation")
+    else:
+        raise AssertionError(kind)
+    with pytest.raises(contract.TrainingContractError):
+        contract.training_contract_binding(portable)
+
+
+def test_outside_fifo_symlink_is_rejected_without_reading_the_target(tmp_path):
+    portable = _portable_fixture(tmp_path)
+    outside_fifo = tmp_path / "outside.fifo"
+    os.mkfifo(outside_fifo)
+    _replace_with_symlink(portable / contract.TRAINING_CONFIG_RELATIVE_PATH, outside_fifo)
+    script = (
+        "import importlib.util,sys\n"
+        "spec=importlib.util.spec_from_file_location('isolated_contract',sys.argv[2])\n"
+        "module=importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(module)\n"
+        "try:\n"
+        "    module.load_training_contract(sys.argv[1])\n"
+        "except module.TrainingContractError:\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(3)\n"
+    )
+    env = dict(os.environ)
+    env.update(
+        {
+            "CUDA_VISIBLE_DEVICES": "",
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPATH": str(ROOT / "src"),
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(portable), str(SOURCE)],
+        check=False,
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=2,
+    )
+    assert result.returncode == 0, result.stderr
+    assert stat.S_ISFIFO(os.lstat(outside_fifo).st_mode)
+
+
+def test_runtime_boundary_does_not_leak_file_descriptors(tmp_path):
+    portable = _portable_fixture(tmp_path)
+    before = len(os.listdir("/proc/self/fd"))
+    for _ in range(3):
+        contract.load_training_contract(portable)
+        contract.training_contract_binding(portable)
+    root_alias = tmp_path / "root-alias"
+    root_alias.symlink_to(portable, target_is_directory=True)
+    for _ in range(3):
+        with pytest.raises(contract.TrainingContractError):
+            contract.load_training_contract(root_alias)
+    after = len(os.listdir("/proc/self/fd"))
+    assert after == before
+
+
+def test_runtime_boundary_preserves_portable_tree_bytes(tmp_path):
+    portable = _portable_fixture(tmp_path)
+    before = {
+        path.relative_to(portable): path.read_bytes()
+        for path in portable.rglob("*")
+        if path.is_file()
+    }
+    contract.training_contract_binding(portable)
+    after = {
+        path.relative_to(portable): path.read_bytes()
+        for path in portable.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
+def test_runtime_path_consumers_have_no_unsafe_path_methods():
+    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    forbidden = {"resolve", "read_bytes", "is_file", "is_symlink", "realpath"}
+    calls = [
+        (node.lineno, node.func.attr)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in forbidden
+    ]
+    assert calls == []
+    assert "os.path.realpath" not in SOURCE.read_text(encoding="utf-8")
