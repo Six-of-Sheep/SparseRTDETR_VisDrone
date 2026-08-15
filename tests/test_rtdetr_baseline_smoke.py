@@ -1234,7 +1234,9 @@ def test_v7_is_v6_identity_variant_plus_frozen_dual_gate_policy():
         "durable_terminal_evidence_required": True,
         "immediate_snapshot": {
             "required": True, "owner": "outer_launcher", "capture_count": 1,
-            "max_delay_seconds": 1.0, "response_binding_required": True,
+            "max_delay_seconds": 1.0, "observer_timeout_seconds": 0.25,
+            "max_observer_elapsed_seconds": 0.5, "response_binding_required": True,
+            "timing_tolerance_seconds": 0.01,
         },
     }
     assert get_smoke_runtime_spec(SMOKE_V7_ID).output_relative_path == SMOKE_V7_OUTPUT_RELATIVE

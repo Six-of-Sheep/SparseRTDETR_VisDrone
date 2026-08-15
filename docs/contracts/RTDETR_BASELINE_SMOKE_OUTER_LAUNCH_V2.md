@@ -379,27 +379,35 @@ once, and records snapshot-started/snapshot-finished monotonic/UTC times.
 There is no sleep, polling, retry, background writer, or second capture. A
 successfully observed absent session is valid because the pane may already
 have terminated. An observer exception produces durable `FAIL` evidence and
-is never retried. The frozen maximum start delay is 1.0 second.
+is never retried. Return code 0 means present, 1 means absent, and every other
+return code is a lookup failure. The subprocess timeout is 0.25 seconds, the
+maximum observer elapsed time is 0.5 seconds, the maximum start delay is 1.0
+second, and UTC/monotonic deltas must agree within 0.01 second.
 
 V7 defines these exact launcher-owned post-inventory files:
 
 - `outer_cli_response.jsonl`: canonical JSON response bytes followed by one
-  LF, binding status, outer evidence path, completion SHA-256, and nonce.
+  LF, binding status, outer evidence path, completion SHA-256, nonce, and the
+  snapshot result filename, size, SHA-256, and status.
 - `immediate_snapshot.json`: the unique successful snapshot result.
 - `immediate_snapshot_failure.json`: the unique failed snapshot result.
 
 Exactly one snapshot result file must exist. These three names are V7-only
 post-inventory ownership exceptions; they are not retroactively excluded
 from V2-V6 inventories. Creation order is outer inventory, outer completion,
-CLI response, then snapshot result. Completion does not reference response or
-snapshot, response references completion, and snapshot references completion
-and response, avoiding a circular hash. The successful CLI writes the exact
-persisted response bytes to stdout. Successful stderr is empty.
+snapshot result, CLI response, then actual stdout. Completion references
+neither snapshot nor response; snapshot references completion; response
+references completion and snapshot. This is acyclic. The successful CLI writes
+the exact persisted response bytes to stdout and successful stderr is empty.
+Snapshot validation and certification require those externally captured stdout
+bytes. The local response must match them byte-for-byte, making stdout the
+root-of-trust against simultaneous snapshot/local-response repacking.
 
 The snapshot binds its exact schema/policy versions, smoke identity, nonce,
 session, canonical runtime paths, raw/canonical config identity, tmux argv and
 stream references, one observed session state, pane/process/output presence,
-timings, capture count, completion reference, and response size/SHA/LF. The
+timings, policy limits, capture count, and completion reference. The response
+then anchors the exact snapshot bytes and its own single trailing LF. The
 validator rejects missing, extra, pre-existing, symlinked, hardlinked,
 non-regular, non-canonical, mistimed, non-UTC, non-finite, cross-boundary, or
 mutated evidence. Builtin numeric and boolean types are checked separately.

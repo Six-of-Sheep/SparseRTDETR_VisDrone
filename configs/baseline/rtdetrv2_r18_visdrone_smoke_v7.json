@@ -109,7 +109,10 @@
       "owner": "outer_launcher",
       "capture_count": 1,
       "max_delay_seconds": 1,
-      "response_binding_required": true
+      "observer_timeout_seconds": 0.25,
+      "max_observer_elapsed_seconds": 0.5,
+      "response_binding_required": true,
+      "timing_tolerance_seconds": 0.01
     }
   }
 }

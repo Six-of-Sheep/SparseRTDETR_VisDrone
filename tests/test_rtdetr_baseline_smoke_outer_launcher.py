@@ -197,7 +197,10 @@ def _repack_process(process: Path) -> None:
 def _complete_v3_chain(tmp_path: Path, monkeypatch, *, version: int = 3) -> dict[str, Path | str]:
     args, _child_count, _tmux_count = _repo(tmp_path, version=version)
     observer = {"session_observer": lambda *_: {"state": "absent", "returncode": 1}} if version == 7 else {}
-    assert run_outer_launch(**args, **observer)["status"] == "TMUX_ACCEPTED"
+    outer_result = run_outer_launch(**args, **observer)
+    assert outer_result["status"] == "TMUX_ACCEPTED"
+    if version == 7:
+        args["actual_outer_response_bytes"] = canonical_json_bytes(outer_result) + b"\n"
     monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     monkeypatch.setenv("PYTHONNOUSERSITE", "1")
@@ -245,6 +248,10 @@ def _v7_clocks(monotonic=(10.0, 10.1, 10.2)):
     return lambda: next(mono), lambda: next(utc)
 
 
+def _actual_response_bytes(result):
+    return canonical_json_bytes(result) + b"\n"
+
+
 def test_v7_immediate_snapshot_is_one_shot_and_does_not_certify_durable_execution(tmp_path):
     args, child_count, tmux_count = _repo(tmp_path, version=7)
     args["tmux_executable"].write_text("#!/bin/sh\necho tmux >> " + str(tmux_count) + "\nexit 0\n", encoding="ascii")
@@ -252,8 +259,8 @@ def test_v7_immediate_snapshot_is_one_shot_and_does_not_certify_durable_executio
     observations = []
     mono, utc = _v7_clocks()
 
-    def observe(tmux, session):
-        observations.append((tmux, session))
+    def observe(tmux, session, timeout):
+        observations.append((tmux, session, timeout))
         return {"state": "absent", "returncode": 1}
 
     result = run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
@@ -261,9 +268,10 @@ def test_v7_immediate_snapshot_is_one_shot_and_does_not_certify_durable_executio
     assert len(observations) == 1
     assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
     assert not child_count.exists()
-    snapshot = validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+    actual = _actual_response_bytes(result)
+    snapshot = validate_immediate_snapshot_evidence(args["outer_evidence_dir"], actual)
     assert snapshot["status"] == "PASS"
-    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"], actual)
     assert decision == {
         "durable_terminal_status": "TMUX_ACCEPTED_PANE_NOT_STARTED",
         "durable_terminal_pass": False,
@@ -281,21 +289,129 @@ def test_v7_observer_error_is_persisted_once_without_retry(tmp_path):
     calls = []
     mono, utc = _v7_clocks()
 
-    def observe(_tmux, _session):
+    def observe(_tmux, _session, _timeout):
         calls.append(1)
         raise RuntimeError("lookup failed")
 
-    run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
+    result = run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
     assert calls == [1]
     launcher = args["outer_evidence_dir"] / "launcher"
     assert not (launcher / IMMEDIATE_SNAPSHOT).exists()
     assert (launcher / IMMEDIATE_SNAPSHOT_FAILURE).is_file()
-    assert validate_immediate_snapshot_evidence(args["outer_evidence_dir"])["status"] == "FAIL"
+    assert validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))["status"] == "FAIL"
+
+
+@pytest.mark.parametrize("returncode,expected_state,expected_status", [
+    (0, "present", "PASS"), (1, "absent", "PASS"), (2, "lookup_failed", "FAIL"),
+    (126, "lookup_failed", "FAIL"), (127, "lookup_failed", "FAIL"), (255, "lookup_failed", "FAIL"),
+])
+def test_v7_observer_returncode_state_machine(tmp_path, returncode, expected_state, expected_status):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    calls = []
+    mono, utc = _v7_clocks()
+
+    def observe(_tmux, _session, timeout):
+        calls.append(timeout)
+        return {"state": expected_state, "returncode": returncode}
+
+    result = run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
+    value = validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
+    assert calls == [0.25]
+    assert value["status"] == expected_status
+    assert value["snapshot"]["session_observation"] == {"state": expected_state, "returncode": returncode}
+
+
+def test_v7_default_observer_timeout_is_bounded_and_not_retried(tmp_path, monkeypatch):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    module = __import__("sparse_rtdetr.baseline.smoke_outer_launcher", fromlist=["unused"])
+    calls = []
+
+    def timeout_run(argv, **kwargs):
+        calls.append((argv, kwargs["timeout"]))
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    monkeypatch.setattr(module.subprocess, "run", timeout_run)
+    mono, utc = _v7_clocks()
+    result = run_outer_launch(**args, monotonic_clock=mono, utc_clock=utc)
+    value = validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
+    assert len(calls) == 1 and calls[0][1] == 0.25
+    assert value["status"] == "FAIL"
+    assert value["snapshot"]["failure_class"] == "SESSION_OBSERVER_TIMEOUT"
+
+
+def test_v7_observer_schema_error_is_normalized_without_retry(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    calls = []
+    mono, utc = _v7_clocks()
+
+    def observe(*_args):
+        calls.append(1)
+        return {"state": "absent", "returncode": 0}
+
+    result = run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
+    value = validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
+    assert calls == [1]
+    assert value["status"] == "FAIL"
+    assert value["snapshot"]["failure_class"] == "SESSION_OBSERVER_SCHEMA_ERROR"
+    assert value["snapshot"]["session_observation"] == {"state": "lookup_failed", "returncode": 0}
+
+
+def test_v7_observer_elapsed_limit_is_durable_failure(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono = iter((10.0, 10.1, 10.7))
+    utc = iter(("2026-08-15T00:00:00+00:00", "2026-08-15T00:00:00.100000+00:00", "2026-08-15T00:00:00.700000+00:00"))
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=lambda: next(mono), utc_clock=lambda: next(utc))
+    value = validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
+    assert value["status"] == "FAIL"
+    assert value["snapshot"]["failure_class"] == "SESSION_OBSERVER_ELAPSED_LIMIT_EXCEEDED"
+
+
+def _rewrite_snapshot_and_local_response(launcher, snapshot_path, snapshot):
+    snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    response_path = launcher / OUTER_CLI_RESPONSE
+    response = json.loads(response_path.read_text(encoding="utf-8"))
+    response["snapshot_status"] = snapshot["status"]
+    response["snapshot_result"] = {
+        "present": True,
+        "relative_path": snapshot_path.name,
+        "size_bytes": snapshot_path.stat().st_size,
+        "sha256": sha256_file(snapshot_path),
+    }
+    response_path.write_bytes(canonical_json_bytes(response) + b"\n")
+
+
+@pytest.mark.parametrize("field", ["pane_start_present", "pane_receipt_present", "pane_completion_present", "process_evidence_present", "output_present"])
+def test_v7_point_in_time_presence_repack_rejected_by_external_stdout(tmp_path, field):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono, utc = _v7_clocks()
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "absent", "returncode": 1}, monotonic_clock=mono, utc_clock=utc)
+    actual = _actual_response_bytes(result)
+    launcher = args["outer_evidence_dir"] / "launcher"
+    snapshot_path = launcher / IMMEDIATE_SNAPSHOT
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot[field] = not snapshot[field]
+    _rewrite_snapshot_and_local_response(launcher, snapshot_path, snapshot)
+    with pytest.raises(OuterLaunchError, match="frozen actual stdout"):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], actual)
+
+
+def test_v7_session_observation_repack_rejected_by_external_stdout(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono, utc = _v7_clocks()
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "absent", "returncode": 1}, monotonic_clock=mono, utc_clock=utc)
+    actual = _actual_response_bytes(result)
+    launcher = args["outer_evidence_dir"] / "launcher"
+    snapshot_path = launcher / IMMEDIATE_SNAPSHOT
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot["session_observation"] = {"state": "present", "returncode": 0}
+    _rewrite_snapshot_and_local_response(launcher, snapshot_path, snapshot)
+    with pytest.raises(OuterLaunchError, match="frozen actual stdout"):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], actual)
 
 
 def test_v7_fast_terminal_chain_passes_both_gates(tmp_path, monkeypatch):
     args = _complete_v3_chain(tmp_path, monkeypatch, version=7)
-    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"], args.pop("actual_outer_response_bytes"))
     assert decision["durable_terminal_status"] == "TERMINAL_COMPLETE"
     assert decision["durable_terminal_pass"] is True
     assert decision["immediate_snapshot_pass"] is True
@@ -311,7 +427,7 @@ def test_v7_rejected_tmux_has_snapshot_but_never_certifies(tmp_path):
     result = run_outer_launch(**args, session_observer=lambda *_: {"state": "absent", "returncode": 1}, monotonic_clock=mono, utc_clock=utc)
     assert result["status"] == "TMUX_REJECTED"
     assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
-    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"], _actual_response_bytes(result))
     assert decision["durable_terminal_status"] == "TMUX_REJECTED"
     assert decision["immediate_snapshot_pass"] is True
     assert decision["overall_certified"] is False
@@ -321,7 +437,8 @@ def test_v7_rejected_tmux_has_snapshot_but_never_certifies(tmp_path):
 def test_v7_snapshot_file_shape_mutations_fail_closed(tmp_path, mutation):
     args, _child_count, _tmux_count = _repo(tmp_path, version=7)
     mono, utc = _v7_clocks()
-    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    actual = _actual_response_bytes(result)
     launcher = args["outer_evidence_dir"] / "launcher"
     snapshot = launcher / IMMEDIATE_SNAPSHOT
     if mutation == "missing":
@@ -338,11 +455,10 @@ def test_v7_snapshot_file_shape_mutations_fail_closed(tmp_path, mutation):
         snapshot.unlink()
         snapshot.mkdir()
     with pytest.raises(OuterLaunchError):
-        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], actual)
 
 
 @pytest.mark.parametrize("times", [
-    (10.0, 11.1, 11.2),
     (10.0, 9.9, 10.1),
     (10.0, 10.2, 10.1),
     (10.0, float("nan"), 10.2),
@@ -352,9 +468,19 @@ def test_v7_snapshot_file_shape_mutations_fail_closed(tmp_path, mutation):
 def test_v7_snapshot_invalid_monotonic_timing_fails_closed(tmp_path, times):
     args, _child_count, _tmux_count = _repo(tmp_path, version=7)
     mono, utc = _v7_clocks(times)
-    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
     with pytest.raises(OuterLaunchError):
-        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
+
+
+def test_v7_snapshot_start_delay_limit_is_durable_failure(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono = iter((10.0, 11.1, 11.2))
+    utc = iter(("2026-08-15T00:00:00+00:00", "2026-08-15T00:00:01.100000+00:00", "2026-08-15T00:00:01.200000+00:00"))
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=lambda: next(mono), utc_clock=lambda: next(utc))
+    value = validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
+    assert value["status"] == "FAIL"
+    assert value["snapshot"]["failure_class"] == "SNAPSHOT_START_DELAY_EXCEEDED"
 
 
 @pytest.mark.parametrize("utc_values", [
@@ -366,16 +492,17 @@ def test_v7_snapshot_invalid_utc_timing_fails_closed(tmp_path, utc_values):
     args, _child_count, _tmux_count = _repo(tmp_path, version=7)
     mono = iter((10.0, 10.1, 10.2))
     utc = iter(utc_values)
-    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=lambda: next(mono), utc_clock=lambda: next(utc))
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=lambda: next(mono), utc_clock=lambda: next(utc))
     with pytest.raises(OuterLaunchError):
-        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
 
 
 @pytest.mark.parametrize("mutation", ["bytes", "missing_lf", "completion", "nonce", "tmux_sha", "capture_count", "config", "path", "session", "extra"])
 def test_v7_snapshot_and_response_binding_mutations_fail_closed(tmp_path, mutation):
     args, _child_count, _tmux_count = _repo(tmp_path, version=7)
     mono, utc = _v7_clocks()
-    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    actual = _actual_response_bytes(result)
     launcher = args["outer_evidence_dir"] / "launcher"
     snapshot_path = launcher / IMMEDIATE_SNAPSHOT
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
@@ -409,7 +536,7 @@ def test_v7_snapshot_and_response_binding_mutations_fail_closed(tmp_path, mutati
         snapshot["extra"] = True
         snapshot_path.write_bytes(canonical_json_bytes(snapshot))
     with pytest.raises(OuterLaunchError):
-        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], actual)
 
 
 def test_v7_snapshot_persistence_failure_is_fail_closed_without_observer_retry(tmp_path, monkeypatch):
@@ -433,7 +560,7 @@ def test_v7_snapshot_persistence_failure_is_fail_closed_without_observer_retry(t
     assert observer_calls == [1]
     assert result["status"] == "FINALIZATION_FAILED"
     with pytest.raises(OuterLaunchError):
-        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"], _actual_response_bytes(result))
 
 
 @pytest.mark.parametrize("durable,snapshot,overall", [
@@ -449,7 +576,7 @@ def test_v7_dual_gate_truth_table(monkeypatch, durable, snapshot, overall):
         monkeypatch.setattr(module, "validate_immediate_snapshot_evidence", lambda *_: {"status": "PASS"})
     else:
         monkeypatch.setattr(module, "validate_immediate_snapshot_evidence", lambda *_: (_ for _ in ()).throw(OuterLaunchError("fail")))
-    result = module.classify_smoke_certification(Path("/unused"), Path("/unused"), Path("/unused"))
+    result = module.classify_smoke_certification(Path("/unused"), Path("/unused"), Path("/unused"), b"{}\n")
     assert result["durable_terminal_pass"] is (durable == "TERMINAL_COMPLETE")
     assert result["immediate_snapshot_pass"] is (snapshot == "PASS")
     assert result["overall_certified"] is overall

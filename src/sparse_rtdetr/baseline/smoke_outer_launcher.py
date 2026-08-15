@@ -104,15 +104,17 @@ def _outer_excluded(smoke_id: Any) -> frozenset[str]:
     return OUTER_EXCLUDED | V7_POST_INVENTORY_FILES if smoke_id == SMOKE_V7_ID else OUTER_EXCLUDED
 
 
-def _default_session_observer(tmux: Path, session: str) -> dict[str, Any]:
+def _default_session_observer(tmux: Path, session: str, timeout_seconds: float) -> dict[str, Any]:
     result = subprocess.run(
         [str(tmux), "has-session", "-t", session],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+        timeout=timeout_seconds,
     )
+    state = "present" if result.returncode == 0 else "absent" if result.returncode == 1 else "lookup_failed"
     return {
-        "state": "present" if result.returncode == 0 else "absent",
+        "state": state,
         "returncode": result.returncode,
     }
 
@@ -1155,7 +1157,7 @@ def _finish_outer(outer: Path, launcher: Path, invocation: dict[str, Any], statu
     return {"status": status, "completion_sha256": completion_sha, "outer_evidence_dir": str(outer)}
 
 
-def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, output_dir: Path, process_evidence_dir: Path, outer_evidence_dir: Path, child_python: Path, tmux_executable: Path, tmux_session: str, session_observer: Callable[[Path, str], dict[str, Any]] | None = None, monotonic_clock: Callable[[], float] = time.monotonic, utc_clock: Callable[[], str] = _utc_now) -> dict[str, Any]:
+def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, output_dir: Path, process_evidence_dir: Path, outer_evidence_dir: Path, child_python: Path, tmux_executable: Path, tmux_session: str, session_observer: Callable[[Path, str, float], dict[str, Any]] | None = None, monotonic_clock: Callable[[], float] = time.monotonic, utc_clock: Callable[[], str] = _utc_now) -> dict[str, Any]:
     """Prepare evidence and issue exactly one bounded tmux client call."""
 
     repo_root = Path(repo_root)
@@ -1285,34 +1287,58 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
         snapshot_started_monotonic = monotonic_clock()
         snapshot_started_at_utc = utc_clock()
         observer = _default_session_observer if session_observer is None else session_observer
+        snapshot_policy = config["evidence_policy"]["immediate_snapshot"]
         observation_error = None
         try:
-            observation = observer(tmux, tmux_session)
+            observation = observer(tmux, tmux_session, snapshot_policy["observer_timeout_seconds"])
             if not isinstance(observation, dict) or set(observation) != {"state", "returncode"}:
-                raise OuterLaunchError("session observer result schema drift")
-            if observation["state"] not in {"present", "absent"} or type(observation["returncode"]) is not int:
-                raise OuterLaunchError("session observer result is invalid")
-        except BaseException as exc:
+                raise OuterLaunchError("SESSION_OBSERVER_SCHEMA_ERROR")
+            returncode = observation["returncode"]
+            expected_state = "present" if returncode == 0 else "absent" if returncode == 1 else None
+            if type(returncode) is not int or expected_state is None:
+                observation = {"state": "lookup_failed", "returncode": returncode if type(returncode) is int else None}
+                raise OuterLaunchError("SESSION_OBSERVER_UNEXPECTED_RETURNCODE")
+            if observation["state"] != expected_state:
+                raise OuterLaunchError("SESSION_OBSERVER_SCHEMA_ERROR")
+        except subprocess.TimeoutExpired as exc:
             observation = {"state": "lookup_failed", "returncode": None}
-            observation_error = {"type": type(exc).__name__, "message": str(exc)}
+            observation_error = {"failure_class": "SESSION_OBSERVER_TIMEOUT", "exception_type": type(exc).__name__, "message": "session observer exceeded its subprocess timeout", "returncode": None}
+        except BaseException as exc:
+            if not isinstance(locals().get("observation"), dict):
+                observation = {"state": "lookup_failed", "returncode": None}
+            failure_class = str(exc) if isinstance(exc, OuterLaunchError) and str(exc).startswith("SESSION_OBSERVER_") else "SESSION_OBSERVER_EXCEPTION"
+            failed_returncode = observation.get("returncode")
+            observation = {"state": "lookup_failed", "returncode": failed_returncode}
+            observation_error = {"failure_class": failure_class, "exception_type": type(exc).__name__, "message": str(exc) or type(exc).__name__, "returncode": failed_returncode}
         snapshot_finished_monotonic = monotonic_clock()
         snapshot_finished_at_utc = utc_clock()
+        delay_seconds = snapshot_started_monotonic - tmux_finished_monotonic
+        elapsed_seconds = snapshot_finished_monotonic - snapshot_started_monotonic
+        try:
+            utc_finished = _parse_utc(tmux_finished_at_utc, "tmux finished UTC")
+            utc_started = _parse_utc(snapshot_started_at_utc, "snapshot started UTC")
+            utc_snapshot_finished = _parse_utc(snapshot_finished_at_utc, "snapshot finished UTC")
+            utc_delay_seconds = (utc_started - utc_finished).total_seconds()
+            utc_elapsed_seconds = (utc_snapshot_finished - utc_started).total_seconds()
+        except BaseException:
+            utc_delay_seconds = 0.0
+            utc_elapsed_seconds = 0.0
+        tolerance = snapshot_policy["timing_tolerance_seconds"]
+        timing_valid = all(math.isfinite(float(value)) for value in (delay_seconds, elapsed_seconds, utc_delay_seconds, utc_elapsed_seconds)) and delay_seconds >= 0 and elapsed_seconds >= 0 and abs(delay_seconds - utc_delay_seconds) <= tolerance and abs(elapsed_seconds - utc_elapsed_seconds) <= tolerance
+        if observation_error is None and not timing_valid:
+            failure_class = "SNAPSHOT_CLOCK_MISMATCH"
+            observation_error = {"failure_class": failure_class, "exception_type": "SnapshotTimingError", "message": "snapshot timing violated the frozen clock contract", "returncode": observation["returncode"]}
+        elif observation_error is None and delay_seconds > snapshot_policy["max_delay_seconds"]:
+            observation_error = {"failure_class": "SNAPSHOT_START_DELAY_EXCEEDED", "exception_type": "SnapshotTimingError", "message": "snapshot start exceeded the frozen delay limit", "returncode": observation["returncode"]}
+        elif observation_error is None and elapsed_seconds > snapshot_policy["max_observer_elapsed_seconds"]:
+            observation_error = {"failure_class": "SESSION_OBSERVER_ELAPSED_LIMIT_EXCEEDED", "exception_type": "ObserverElapsedError", "message": "session observer exceeded the elapsed limit", "returncode": observation["returncode"]}
         result = _finish_outer(outer, launcher, invocation | {"nonce": nonce}, status, runner)
-        response = {
-            "status": result["status"],
-            "outer_evidence_dir": result["outer_evidence_dir"],
-            "completion_sha256": result.get("completion_sha256"),
-            "nonce": nonce,
-        }
-        response_bytes = canonical_json_bytes(response) + b"\n"
-        atomic_write(launcher / OUTER_CLI_RESPONSE, response_bytes)
         completion_ref = _file_ref_strict(launcher, OUTER_COMPLETION, required=True)
-        response_ref = _file_ref_strict(launcher, OUTER_CLI_RESPONSE, required=True)
         snapshot = {
             "schema_version": 1,
             "policy_version": config["evidence_policy"]["policy_version"],
             "status": "PASS" if observation_error is None else "FAIL",
-            "failure_class": None if observation_error is None else "SESSION_OBSERVER_ERROR",
+            "failure_class": None if observation_error is None else observation_error["failure_class"],
             "smoke_id": spec.smoke_id,
             "nonce": nonce,
             "tmux_session": tmux_session,
@@ -1339,15 +1365,30 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
             "tmux_finished_at_utc": tmux_finished_at_utc,
             "snapshot_started_at_utc": snapshot_started_at_utc,
             "snapshot_finished_at_utc": snapshot_finished_at_utc,
-            "delay_seconds": snapshot_started_monotonic - tmux_finished_monotonic,
-            "elapsed_seconds": snapshot_finished_monotonic - snapshot_started_monotonic,
-            "max_delay_seconds": config["evidence_policy"]["immediate_snapshot"]["max_delay_seconds"],
+            "delay_seconds": delay_seconds,
+            "elapsed_seconds": elapsed_seconds,
+            "utc_delay_seconds": utc_delay_seconds,
+            "utc_elapsed_seconds": utc_elapsed_seconds,
+            "max_delay_seconds": snapshot_policy["max_delay_seconds"],
+            "observer_timeout_seconds": snapshot_policy["observer_timeout_seconds"],
+            "max_observer_elapsed_seconds": snapshot_policy["max_observer_elapsed_seconds"],
+            "timing_tolerance_seconds": tolerance,
             "capture_count": 1,
             "outer_completion": completion_ref,
-            "outer_cli_response": response_ref,
-            "outer_cli_response_trailing_lf": response_bytes.endswith(b"\n") and not response_bytes.endswith(b"\n\n"),
         }
-        _write_json(launcher / (IMMEDIATE_SNAPSHOT if observation_error is None else IMMEDIATE_SNAPSHOT_FAILURE), snapshot)
+        snapshot_name = IMMEDIATE_SNAPSHOT if observation_error is None else IMMEDIATE_SNAPSHOT_FAILURE
+        _write_json(launcher / snapshot_name, snapshot)
+        snapshot_ref = _file_ref_strict(launcher, snapshot_name, required=True)
+        response = {
+            "status": result["status"],
+            "outer_evidence_dir": result["outer_evidence_dir"],
+            "completion_sha256": result.get("completion_sha256"),
+            "nonce": nonce,
+            "snapshot_status": snapshot["status"],
+            "snapshot_result": snapshot_ref,
+        }
+        response_bytes = canonical_json_bytes(response) + b"\n"
+        atomic_write(launcher / OUTER_CLI_RESPONSE, response_bytes)
         return response
     except BaseException as error:
         if runner["original_exception"] is None:
@@ -1541,12 +1582,23 @@ _SNAPSHOT_KEYS = {
     "process_evidence_present", "output_present", "tmux_finished_monotonic",
     "snapshot_started_monotonic", "snapshot_finished_monotonic", "tmux_finished_at_utc",
     "snapshot_started_at_utc", "snapshot_finished_at_utc", "delay_seconds", "elapsed_seconds",
-    "max_delay_seconds", "capture_count", "outer_completion", "outer_cli_response",
-    "outer_cli_response_trailing_lf",
+    "utc_delay_seconds", "utc_elapsed_seconds", "max_delay_seconds", "observer_timeout_seconds",
+    "max_observer_elapsed_seconds", "timing_tolerance_seconds", "capture_count", "outer_completion",
+}
+_OBSERVATION_ERROR_KEYS = {"failure_class", "exception_type", "message", "returncode"}
+_SNAPSHOT_FAILURE_CLASSES = {
+    "SESSION_OBSERVER_TIMEOUT", "SESSION_OBSERVER_UNEXPECTED_RETURNCODE",
+    "SESSION_OBSERVER_SCHEMA_ERROR", "SESSION_OBSERVER_EXCEPTION",
+    "SESSION_OBSERVER_ELAPSED_LIMIT_EXCEEDED", "SNAPSHOT_START_DELAY_EXCEEDED",
+    "SNAPSHOT_CLOCK_MISMATCH",
+}
+_OBSERVER_LOOKUP_FAILURE_CLASSES = {
+    "SESSION_OBSERVER_TIMEOUT", "SESSION_OBSERVER_UNEXPECTED_RETURNCODE",
+    "SESSION_OBSERVER_SCHEMA_ERROR", "SESSION_OBSERVER_EXCEPTION",
 }
 
 
-def validate_immediate_snapshot_evidence(outer_evidence_dir: Path) -> dict[str, Any]:
+def validate_immediate_snapshot_evidence(outer_evidence_dir: Path, actual_outer_response_bytes: bytes) -> dict[str, Any]:
     """Validate V7's one-shot launch observation and exact CLI response binding."""
 
     root = Path(outer_evidence_dir)
@@ -1580,28 +1632,39 @@ def validate_immediate_snapshot_evidence(outer_evidence_dir: Path) -> dict[str, 
     if status == "PASS":
         if snapshot["failure_class"] is not None or snapshot["observation_error"] is not None:
             raise OuterLaunchError("passing snapshot contains failure evidence")
-    elif snapshot["failure_class"] != "SESSION_OBSERVER_ERROR" or not isinstance(snapshot["observation_error"], dict):
-        raise OuterLaunchError("failed snapshot classification is invalid")
-    for field in ("pane_start_present", "pane_receipt_present", "pane_completion_present", "process_evidence_present", "output_present", "outer_cli_response_trailing_lf"):
+    else:
+        error = snapshot["observation_error"]
+        if snapshot["failure_class"] not in _SNAPSHOT_FAILURE_CLASSES or not isinstance(error, dict) or set(error) != _OBSERVATION_ERROR_KEYS or error["failure_class"] != snapshot["failure_class"]:
+            raise OuterLaunchError("failed snapshot classification is invalid")
+        if type(error["exception_type"]) is not str or not error["exception_type"] or type(error["message"]) is not str or not error["message"]:
+            raise OuterLaunchError("snapshot observation error text is invalid")
+        if error["returncode"] is not None and type(error["returncode"]) is not int:
+            raise OuterLaunchError("snapshot observation error returncode is invalid")
+    for field in ("pane_start_present", "pane_receipt_present", "pane_completion_present", "process_evidence_present", "output_present"):
         _strict_bool(snapshot[field], "snapshot " + field)
-    if snapshot["outer_cli_response_trailing_lf"] is not True:
-        raise OuterLaunchError("outer CLI response LF attestation failed")
     _strict_int(snapshot["capture_count"], "snapshot capture_count", 1)
     if snapshot["capture_count"] != 1:
         raise OuterLaunchError("snapshot capture count is not one")
-    for field in ("tmux_finished_monotonic", "snapshot_started_monotonic", "snapshot_finished_monotonic", "delay_seconds", "elapsed_seconds", "max_delay_seconds"):
+    for field in ("tmux_finished_monotonic", "snapshot_started_monotonic", "snapshot_finished_monotonic", "delay_seconds", "elapsed_seconds", "utc_delay_seconds", "utc_elapsed_seconds", "max_delay_seconds", "observer_timeout_seconds", "max_observer_elapsed_seconds", "timing_tolerance_seconds"):
         _strict_finite_number(snapshot[field], "snapshot " + field, 0.0)
     tmux_finished = float(snapshot["tmux_finished_monotonic"])
     started = float(snapshot["snapshot_started_monotonic"])
     finished = float(snapshot["snapshot_finished_monotonic"])
     delay = float(snapshot["delay_seconds"])
     elapsed = float(snapshot["elapsed_seconds"])
+    utc_delay = float(snapshot["utc_delay_seconds"])
+    utc_elapsed = float(snapshot["utc_elapsed_seconds"])
     maximum = float(snapshot["max_delay_seconds"])
-    if not tmux_finished <= started <= finished or delay != started - tmux_finished or elapsed != finished - started or delay > maximum:
+    observer_maximum = float(snapshot["max_observer_elapsed_seconds"])
+    tolerance = float(snapshot["timing_tolerance_seconds"])
+    if not tmux_finished <= started <= finished or delay != started - tmux_finished or elapsed != finished - started:
         raise OuterLaunchError("immediate snapshot monotonic timing is invalid")
     utc_values = [_parse_utc(snapshot[field], "snapshot " + field) for field in ("tmux_finished_at_utc", "snapshot_started_at_utc", "snapshot_finished_at_utc")]
-    if not utc_values[0] <= utc_values[1] <= utc_values[2]:
+    actual_utc_delay = (utc_values[1] - utc_values[0]).total_seconds()
+    actual_utc_elapsed = (utc_values[2] - utc_values[1]).total_seconds()
+    if not utc_values[0] <= utc_values[1] <= utc_values[2] or utc_delay != actual_utc_delay or utc_elapsed != actual_utc_elapsed:
         raise OuterLaunchError("immediate snapshot UTC chronology is invalid")
+    clocks_agree = abs(delay - utc_delay) <= tolerance and abs(elapsed - utc_elapsed) <= tolerance
     completion = outer["completion"]
     config, binding = _bind_config(Path(invocation["repo_root"]), Path(invocation["config_path"]))
     expected_bindings = {
@@ -1614,8 +1677,20 @@ def validate_immediate_snapshot_evidence(outer_evidence_dir: Path) -> dict[str, 
     for field, expected in expected_bindings.items():
         if snapshot[field] != expected:
             raise OuterLaunchError("immediate snapshot binding mismatch: " + field)
-    if config["evidence_policy"]["immediate_snapshot"]["max_delay_seconds"] != snapshot["max_delay_seconds"]:
-        raise OuterLaunchError("immediate snapshot delay policy drift")
+    policy = config["evidence_policy"]["immediate_snapshot"]
+    for field in ("max_delay_seconds", "observer_timeout_seconds", "max_observer_elapsed_seconds", "timing_tolerance_seconds"):
+        if policy[field] != snapshot[field]:
+            raise OuterLaunchError("immediate snapshot timing policy drift: " + field)
+    limits_pass = delay <= maximum and elapsed <= observer_maximum
+    if status == "PASS" and (not limits_pass or not clocks_agree):
+        raise OuterLaunchError("passing immediate snapshot violates timing")
+    if status == "FAIL":
+        if snapshot["failure_class"] == "SNAPSHOT_CLOCK_MISMATCH" and clocks_agree:
+            raise OuterLaunchError("clock mismatch failure is not established")
+        if snapshot["failure_class"] == "SNAPSHOT_START_DELAY_EXCEEDED" and (not clocks_agree or delay <= maximum):
+            raise OuterLaunchError("start delay failure is not established")
+        if snapshot["failure_class"] == "SESSION_OBSERVER_ELAPSED_LIMIT_EXCEEDED" and (not clocks_agree or elapsed <= observer_maximum):
+            raise OuterLaunchError("observer elapsed failure is not established")
     tmux_invocation = _read_json_object(launcher / "tmux_invocation.json")
     if tmux_invocation is None or snapshot["tmux_argv_sha256"] != tmux_invocation.get("argv_sha256"):
         raise OuterLaunchError("immediate snapshot tmux argv binding mismatch")
@@ -1624,25 +1699,37 @@ def validate_immediate_snapshot_evidence(outer_evidence_dir: Path) -> dict[str, 
     _verify_ref(launcher, snapshot["tmux_stdout"], "tmux_stdout.log")
     _verify_ref(launcher, snapshot["tmux_stderr"], "tmux_stderr.log")
     _verify_ref(launcher, snapshot["outer_completion"], OUTER_COMPLETION)
-    _verify_ref(launcher, snapshot["outer_cli_response"], OUTER_CLI_RESPONSE)
     response_path = launcher / OUTER_CLI_RESPONSE
     _strict_file(response_path)
     response_bytes = response_path.read_bytes()
-    expected_response = canonical_json_bytes({
+    if type(actual_outer_response_bytes) is not bytes or actual_outer_response_bytes != response_bytes:
+        raise OuterLaunchError("persisted response does not match frozen actual stdout bytes")
+    if not response_bytes.endswith(b"\n") or response_bytes.endswith(b"\n\n"):
+        raise OuterLaunchError("outer CLI response trailing LF is invalid")
+    expected_response_value = {
         "status": outer["status"],
         "outer_evidence_dir": str(root),
         "completion_sha256": sha256_file(launcher / OUTER_COMPLETION),
         "nonce": invocation["nonce"],
-    }) + b"\n"
-    if response_bytes != expected_response or not response_bytes.endswith(b"\n") or response_bytes.endswith(b"\n\n"):
-        raise OuterLaunchError("outer CLI response bytes do not bind completion")
+        "snapshot_status": status,
+        "snapshot_result": _file_ref_strict(launcher, snapshot_path.name, required=True),
+    }
+    expected_response = canonical_json_bytes(expected_response_value) + b"\n"
+    if response_bytes != expected_response:
+        raise OuterLaunchError("outer CLI response bytes do not bind completion and snapshot")
     observation = snapshot["session_observation"]
     if not isinstance(observation, dict) or set(observation) != {"state", "returncode"}:
         raise OuterLaunchError("session observation schema drift")
-    if status == "PASS" and (observation["state"] not in {"present", "absent"} or type(observation["returncode"]) is not int):
+    if status == "PASS" and observation not in ({"state": "present", "returncode": 0}, {"state": "absent", "returncode": 1}):
         raise OuterLaunchError("passing session observation is invalid")
-    if status == "FAIL" and observation != {"state": "lookup_failed", "returncode": None}:
-        raise OuterLaunchError("failed session observation is invalid")
+    if status == "FAIL":
+        if snapshot["failure_class"] in _OBSERVER_LOOKUP_FAILURE_CLASSES:
+            if observation.get("state") != "lookup_failed" or observation.get("returncode") != snapshot["observation_error"]["returncode"]:
+                raise OuterLaunchError("failed session lookup observation is invalid")
+            if snapshot["failure_class"] == "SESSION_OBSERVER_UNEXPECTED_RETURNCODE" and (type(observation.get("returncode")) is not int or observation["returncode"] in (0, 1)):
+                raise OuterLaunchError("unexpected observer returncode failure is not established")
+        elif observation not in ({"state": "present", "returncode": 0}, {"state": "absent", "returncode": 1}):
+            raise OuterLaunchError("timing-failed session observation is invalid")
     return {"status": status, "snapshot": snapshot, "response_bytes": response_bytes}
 
 
@@ -2135,13 +2222,13 @@ def classify_outer_evidence(outer_evidence_dir: Path, output_dir: Path, process_
     return "TERMINAL_COMPLETE"
 
 
-def classify_smoke_certification(outer_evidence_dir: Path, output_dir: Path, process_evidence_dir: Path) -> dict[str, Any]:
+def classify_smoke_certification(outer_evidence_dir: Path, output_dir: Path, process_evidence_dir: Path, actual_outer_response_bytes: bytes) -> dict[str, Any]:
     """Apply V7's frozen dual-gate policy without changing durable classification."""
 
     durable_status = classify_outer_evidence(outer_evidence_dir, output_dir, process_evidence_dir)
     durable_pass = durable_status == "TERMINAL_COMPLETE"
     try:
-        snapshot_status = validate_immediate_snapshot_evidence(outer_evidence_dir)["status"]
+        snapshot_status = validate_immediate_snapshot_evidence(outer_evidence_dir, actual_outer_response_bytes)["status"]
     except (OSError, OuterLaunchError, SmokeEvidenceError, ValueError):
         snapshot_status = "FAIL"
     snapshot_pass = snapshot_status == "PASS"

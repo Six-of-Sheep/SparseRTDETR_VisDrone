@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import random
 import sys
@@ -85,6 +86,9 @@ SMOKE_V7_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone
 SMOKE_V7_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r7"
 SMOKE_V7_TMUX_TIMEOUT_SECONDS = 10
 SMOKE_V7_SNAPSHOT_MAX_DELAY_SECONDS = 1.0
+SMOKE_V7_OBSERVER_TIMEOUT_SECONDS = 0.25
+SMOKE_V7_OBSERVER_MAX_ELAPSED_SECONDS = 0.5
+SMOKE_V7_TIMING_TOLERANCE_SECONDS = 0.01
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
 
@@ -412,10 +416,20 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
                 "owner": "outer_launcher",
                 "capture_count": 1,
                 "max_delay_seconds": SMOKE_V7_SNAPSHOT_MAX_DELAY_SECONDS,
+                "observer_timeout_seconds": SMOKE_V7_OBSERVER_TIMEOUT_SECONDS,
+                "max_observer_elapsed_seconds": SMOKE_V7_OBSERVER_MAX_ELAPSED_SECONDS,
                 "response_binding_required": True,
+                "timing_tolerance_seconds": SMOKE_V7_TIMING_TOLERANCE_SECONDS,
             },
         }:
             raise SmokeContractError("smoke V7 evidence policy drift")
+        snapshot_policy = policy["immediate_snapshot"]
+        for field in ("max_delay_seconds", "observer_timeout_seconds", "max_observer_elapsed_seconds", "timing_tolerance_seconds"):
+            value = snapshot_policy[field]
+            if type(value) not in (int, float) or isinstance(value, bool) or not math.isfinite(float(value)) or value <= 0:
+                raise SmokeContractError("smoke V7 timing policy must contain positive finite builtin numbers")
+        if snapshot_policy["observer_timeout_seconds"] > snapshot_policy["max_observer_elapsed_seconds"]:
+            raise SmokeContractError("smoke V7 observer timeout exceeds elapsed limit")
     if "data_root" in json.dumps(config, ensure_ascii=True, sort_keys=True):
         raise SmokeContractError("portable smoke config contains data_root")
 
