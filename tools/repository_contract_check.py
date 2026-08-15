@@ -80,6 +80,8 @@ ALLOWED_FILES = {
 }
 
 BASELINE_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_V1.md",
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json",
     "docs/contracts/RTDETR_BASELINE_ADAPTER_V1.md",
     "src/sparse_rtdetr/baseline/__init__.py",
@@ -93,6 +95,7 @@ BASELINE_FILES = {
     "src/sparse_rtdetr/baseline/smoke_evidence.py",
     "src/sparse_rtdetr/baseline/smoke_launcher.py",
     "src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
+    "src/sparse_rtdetr/baseline/training_contract.py",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json",
@@ -103,6 +106,7 @@ BASELINE_FILES = {
     "docs/contracts/RTDETR_BASELINE_SMOKE_V1.md",
     "docs/contracts/RTDETR_BASELINE_SMOKE_OUTER_LAUNCH_V2.md",
     "tests/test_rtdetr_baseline_smoke_outer_launcher.py",
+    "tests/test_rtdetr_baseline_training_contract.py",
 }
 
 BASELINE_MODEL_IMPORT_FILES = {
@@ -570,6 +574,21 @@ def check_repository(root: Path) -> bool:
 
     failures.extend(_source_policy_failures(root, files))
     failures.extend(_scientific_dependency_failures(root))
+
+    try:
+        import importlib.util
+
+        contract_path = root / "src/sparse_rtdetr/baseline/training_contract.py"
+        spec = importlib.util.spec_from_file_location("p3_training_contract_check", contract_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("training contract module spec unavailable")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        binding = module.training_contract_binding(root)
+        if binding["canonical_sha256"] != module.TRAINING_CONTRACT_CANONICAL_SHA256:
+            failures.append("formal training contract canonical identity mismatch")
+    except Exception as exc:
+        failures.append(f"formal training contract validation failure: {type(exc).__name__}: {exc}")
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
