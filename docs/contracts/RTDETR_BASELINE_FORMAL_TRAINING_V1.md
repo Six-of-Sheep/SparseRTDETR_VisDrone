@@ -79,3 +79,13 @@ The module is standard-library-only and has no import-time filesystem access.
 It does not import torch, construct a model or dataset, access runtime data, or
 create output. This phase does not implement a trainer, evaluator, launcher,
 checkpoint writer, or training evidence writer.
+
+Every object role in the portable contract is closed by one recursive static
+schema descriptor. Root objects, nested objects, objects inside lists, lists,
+and scalar roles are validated before path/SHA semantics, cross-field rules,
+and the frozen canonical digest. Missing, extra, and renamed keys fail with
+their JSON pointer. Builtin dictionary insertion order is irrelevant, while
+list length and order remain part of the frozen contract. Integer and boolean
+roles are distinct, floats must be finite, and the four GradScaler fields only
+accept `IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` until a later implementation
+contract freezes executable values.

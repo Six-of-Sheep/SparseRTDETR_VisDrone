@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections import OrderedDict, defaultdict
 import hashlib
 import importlib.util
 import json
@@ -61,6 +62,27 @@ def _different(value):
     raise AssertionError(type(value))
 
 
+def _reorder_builtin_dicts(value):
+    if type(value) is dict:
+        return {key: _reorder_builtin_dicts(value[key]) for key in reversed(list(value))}
+    if type(value) is list:
+        return [_reorder_builtin_dicts(item) for item in value]
+    return copy.deepcopy(value)
+
+
+def _closed_object_roles(value, schema=contract._TRAINING_CONTRACT_SCHEMA, pointer=""):
+    kind, detail = schema
+    if kind == "object":
+        yield pointer or "/", value, schema
+        for key, child_schema in detail.items():
+            child_pointer = (pointer + "/" + key) if pointer else ("/" + key)
+            yield from _closed_object_roles(value[key], child_schema, child_pointer)
+    elif kind == "list":
+        for index, child_schema in enumerate(detail):
+            child_pointer = pointer + "/" + str(index)
+            yield from _closed_object_roles(value[index], child_schema, child_pointer)
+
+
 def _portable_root(tmp_path: Path, training_bytes: bytes) -> Path:
     for relative in (contract.TRAINING_CONFIG_RELATIVE_PATH, contract.BASELINE_CONFIG_RELATIVE_PATH):
         target = tmp_path / relative
@@ -92,6 +114,146 @@ def test_positive_load_validate_canonical_and_binding():
         "canonical_size_bytes": 6866,
         "canonical_sha256": contract.TRAINING_CONTRACT_CANONICAL_SHA256,
     }
+
+
+def test_closed_schema_exploit_replay_rejects_before_frozen_digest():
+    candidate = _training()
+    candidate["source_bindings"]["unexpected_nested_key"] = "value"
+    with pytest.raises(contract.TrainingContractError, match=r"closed schema extra keys at /source_bindings"):
+        contract._validate_closed_schema(candidate)
+    with pytest.raises(contract.TrainingContractError, match=r"closed schema extra keys at /source_bindings"):
+        contract.validate_training_contract(candidate, _baseline())
+
+
+def test_closed_schema_all_object_roles_extra_missing_and_rename():
+    valid = _training()
+    roles = list(_closed_object_roles(valid))
+    assert tuple(pointer for pointer, _, _ in roles) == contract._closed_schema_object_roles()
+    assert len(roles) == 31
+    cases = 0
+    for pointer, _, schema in roles:
+        _, required = schema
+        first = next(iter(required))
+
+        extra = copy.deepcopy(valid)
+        target = _value_at_pointer(extra, pointer)
+        target["unexpected_key"] = "value"
+        with pytest.raises(contract.TrainingContractError, match="closed schema extra keys"):
+            contract._validate_closed_schema(extra)
+        cases += 1
+
+        missing = copy.deepcopy(valid)
+        target = _value_at_pointer(missing, pointer)
+        target.pop(first)
+        with pytest.raises(contract.TrainingContractError, match="closed schema missing keys"):
+            contract._validate_closed_schema(missing)
+        cases += 1
+
+        renamed = copy.deepcopy(valid)
+        target = _value_at_pointer(renamed, pointer)
+        target[first + "_renamed"] = target.pop(first)
+        with pytest.raises(contract.TrainingContractError, match="closed schema renamed keys"):
+            contract._validate_closed_schema(renamed)
+        cases += 1
+    assert cases == 93
+
+
+def _value_at_pointer(value, pointer):
+    if pointer == "/":
+        return value
+    current = value
+    for token in pointer.lstrip("/").split("/"):
+        current = current[int(token)] if type(current) is list else current[token]
+    return current
+
+
+def test_closed_schema_builtin_dict_reorder_and_roundtrip_controls():
+    valid = _training()
+    candidates = [copy.deepcopy(valid), _reorder_builtin_dicts(valid), json.loads(json.dumps(valid))]
+    expected = contract.canonical_training_contract_bytes(valid)
+    for candidate in candidates:
+        assert type(candidate) is dict
+        assert candidate == valid
+        assert contract.canonical_training_contract_bytes(candidate) == expected
+        contract._assert_json_types(candidate)
+        contract._validate_closed_schema(candidate)
+        contract._validate_path_and_sha_fields(candidate)
+        contract._validate_cross_fields(candidate)
+        assert contract.validate_training_contract(candidate, _baseline()) == valid
+    assert list(candidates[1]) == list(reversed(list(valid)))
+
+
+def test_closed_schema_rejects_non_builtin_containers():
+    class DictSubclass(dict):
+        pass
+
+    class ListSubclass(list):
+        pass
+
+    candidates = [OrderedDict(_training()), defaultdict(int, _training()), DictSubclass(_training())]
+    for candidate in candidates:
+        with pytest.raises(contract.TrainingContractError, match="closed schema object type mismatch"):
+            contract._validate_closed_schema(candidate)
+    candidate = _training()
+    candidate["model"]["input_size"] = ListSubclass(candidate["model"]["input_size"])
+    with pytest.raises(contract.TrainingContractError, match=r"closed schema list type mismatch at /model/input_size"):
+        contract._validate_closed_schema(candidate)
+
+
+def test_closed_schema_strict_scalar_and_amp_placeholder_types():
+    mutations = [
+        (("schema_version",), True, "scalar type mismatch"),
+        (("initialization", "seed"), False, "scalar type mismatch"),
+        (("topology", "world_size"), True, "scalar type mismatch"),
+        (("model", "nms"), 0, "scalar type mismatch"),
+        (("source_bindings", "vendor_recipe", "relative_path"), np.str_("vendor/x"), "scalar type mismatch"),
+        (("source_bindings", "vendor_recipe", "sha256"), np.str_("a" * 64), "scalar type mismatch"),
+        (("optimizer", "default_lr"), float("nan"), "non-finite float"),
+        (("ema", "decay"), float("inf"), "non-finite float"),
+        (("amp", "init_scale"), None, "literal mismatch"),
+        (("amp", "growth_factor"), True, "literal mismatch"),
+        (("amp", "backoff_factor"), 1, "literal mismatch"),
+        (("amp", "growth_interval"), 1.0, "literal mismatch"),
+        (("amp", "init_scale"), "other", "literal mismatch"),
+    ]
+    for path, bad, message in mutations:
+        candidate = _training()
+        _set_path(candidate, path, bad)
+        with pytest.raises(contract.TrainingContractError, match=message):
+            contract._validate_closed_schema(candidate)
+
+
+def test_closed_schema_rejects_nested_container_kind_swaps():
+    for path, bad, message in [
+        (("source_bindings",), [], "object type mismatch"),
+        (("augmentation", "transforms"), {}, "list type mismatch"),
+        (("augmentation", "transforms", 0), [], "object type mismatch"),
+    ]:
+        candidate = _training()
+        _set_path(candidate, path, bad)
+        with pytest.raises(contract.TrainingContractError, match=message):
+            contract._validate_closed_schema(candidate)
+
+
+def test_validation_layers_have_distinct_rejections():
+    exact = _training()
+    exact["source_bindings"]["unexpected_nested_key"] = "value"
+    with pytest.raises(contract.TrainingContractError, match="closed schema extra keys"):
+        contract.validate_training_contract(exact, _baseline())
+
+    cross = _training()
+    cross["topology"]["effective_train_batch"] = 32
+    contract._validate_closed_schema(cross)
+    with pytest.raises(contract.TrainingContractError, match="effective train batch arithmetic drift"):
+        contract.validate_training_contract(cross, _baseline())
+
+    digest = _training()
+    digest["owner_decision"] = "T1_RANDOM_INITIALIZATION_RENAMED"
+    contract._validate_closed_schema(digest)
+    contract._validate_path_and_sha_fields(digest)
+    contract._validate_cross_fields(digest)
+    with pytest.raises(contract.TrainingContractError, match="training contract frozen content drift"):
+        contract.validate_training_contract(digest, _baseline())
 
 
 def test_baseline_raw_canonical_model_category_and_role_binding():
