@@ -44,12 +44,14 @@ SMOKE_V3_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v3"
 SMOKE_V4_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v4"
 SMOKE_V5_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v5"
 SMOKE_V6_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v6"
+SMOKE_V7_ID = "rtdetrv2_r18_visdrone_baseline_smoke_v7"
 SMOKE_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json"
 SMOKE_V2_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json"
 SMOKE_V3_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 SMOKE_V4_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
 SMOKE_V5_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
 SMOKE_V6_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
+SMOKE_V7_CONFIG_RELATIVE = "configs/baseline/rtdetrv2_r18_visdrone_smoke_v7.json"
 SMOKE_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r1"
 SMOKE_V2_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r2"
@@ -77,6 +79,12 @@ SMOKE_V6_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_ba
 SMOKE_V6_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r6"
 SMOKE_V6_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r6"
 SMOKE_V6_TMUX_TIMEOUT_SECONDS = 10
+SMOKE_V7_OUTPUT_RELATIVE = "artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_r7"
+SMOKE_V7_PROCESS_RELATIVE = "artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r7"
+SMOKE_V7_OUTER_RELATIVE = "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_baseline_smoke_r7"
+SMOKE_V7_TMUX_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r7"
+SMOKE_V7_TMUX_TIMEOUT_SECONDS = 10
+SMOKE_V7_SNAPSHOT_MAX_DELAY_SECONDS = 1.0
 SMOKE_NONCE_ENV = "P3_RTDETR_BASELINE_SMOKE_NONCE"
 SMOKE_AUTH_ENV = "P3_RTDETR_BASELINE_SMOKE_AUTHORIZED"
 
@@ -154,6 +162,16 @@ SMOKE_RUNTIME_SPECS = MappingProxyType({
         outer_relative_path=SMOKE_V6_OUTER_RELATIVE,
         tmux_session=SMOKE_V6_TMUX_SESSION,
         tmux_timeout_seconds=SMOKE_V6_TMUX_TIMEOUT_SECONDS,
+        allow_outer_launch=True,
+    ),
+    SMOKE_V7_ID: SmokeRuntimeSpec(
+        smoke_id=SMOKE_V7_ID,
+        config_relative_path=SMOKE_V7_CONFIG_RELATIVE,
+        output_relative_path=SMOKE_V7_OUTPUT_RELATIVE,
+        process_relative_path=SMOKE_V7_PROCESS_RELATIVE,
+        outer_relative_path=SMOKE_V7_OUTER_RELATIVE,
+        tmux_session=SMOKE_V7_TMUX_SESSION,
+        tmux_timeout_seconds=SMOKE_V7_TMUX_TIMEOUT_SECONDS,
         allow_outer_launch=True,
     ),
 })
@@ -319,10 +337,12 @@ def load_frozen_image_selection(repo_root: str | Path, *, runtime_mode: str = "r
 def validate_smoke_config(config: dict[str, Any]) -> None:
     if not isinstance(config, dict):
         raise SmokeContractError("smoke config must be a JSON object")
+    smoke_id = config.get("smoke_id")
     expected_top = {"schema_version", "smoke_id", "mode", "split_role", "execution", "model", "image_selection", "runtime", "evidence"}
+    if smoke_id == SMOKE_V7_ID:
+        expected_top.add("evidence_policy")
     if set(config) != expected_top:
         raise SmokeContractError("smoke config top-level schema drift")
-    smoke_id = config.get("smoke_id")
     schema_version = config.get("schema_version")
     if type(schema_version) is not int or schema_version != SMOKE_SCHEMA_VERSION:
         raise SmokeContractError("smoke config identity drift")
@@ -381,6 +401,21 @@ def validate_smoke_config(config: dict[str, Any]) -> None:
     }:
         raise SmokeContractError("smoke evidence contract drift")
     _strict_bool(evidence["non_reportable"], "evidence.non_reportable")
+    if smoke_id == SMOKE_V7_ID:
+        policy = config["evidence_policy"]
+        if policy != {
+            "policy_version": 1,
+            "certification_policy": "DUAL_GATE",
+            "durable_terminal_evidence_required": True,
+            "immediate_snapshot": {
+                "required": True,
+                "owner": "outer_launcher",
+                "capture_count": 1,
+                "max_delay_seconds": SMOKE_V7_SNAPSHOT_MAX_DELAY_SECONDS,
+                "response_binding_required": True,
+            },
+        }:
+            raise SmokeContractError("smoke V7 evidence policy drift")
     if "data_root" in json.dumps(config, ensure_ascii=True, sort_keys=True):
         raise SmokeContractError("portable smoke config contains data_root")
 

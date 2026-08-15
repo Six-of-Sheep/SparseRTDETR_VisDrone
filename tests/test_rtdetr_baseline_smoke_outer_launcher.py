@@ -20,12 +20,16 @@ from sparse_rtdetr.baseline.smoke import (
     SMOKE_V4_ID,
     SMOKE_V5_ID,
     SMOKE_V6_ID,
+    SMOKE_V7_ID,
     load_smoke_config,
 )
 from sparse_rtdetr.baseline.smoke_evidence import canonical_json_bytes, inventory, sha256_bytes, sha256_file
 from sparse_rtdetr.baseline.smoke_launcher import launch_smoke
 from sparse_rtdetr.baseline.smoke_outer_launcher import (
     OUTER_EXCLUDED,
+    IMMEDIATE_SNAPSHOT,
+    IMMEDIATE_SNAPSHOT_FAILURE,
+    OUTER_CLI_RESPONSE,
     PANE_EXCLUDED,
     PANE_FINALIZER_EXIT,
     OuterLaunchError,
@@ -33,8 +37,10 @@ from sparse_rtdetr.baseline.smoke_outer_launcher import (
     _finish_outer,
     _run_tmux,
     classify_outer_evidence,
+    classify_smoke_certification,
     run_outer_launch,
     validate_outer_evidence,
+    validate_immediate_snapshot_evidence,
     validate_pane_evidence,
     validate_process_evidence,
     contract_check,
@@ -48,6 +54,7 @@ V3_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json"
 V4_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json"
 V5_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json"
 V6_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json"
+V7_CONFIG = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_smoke_v7.json"
 SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r2"
 V3_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r3"
 V4_SESSION = "p3_rtdetrv2_r18_visdrone_baseline_smoke_r4"
@@ -76,7 +83,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     (root / "manifests").mkdir(parents=True)
     shutil.copyfile(ROOT / "manifests/rtdetrv2_upstream.json", root / "manifests/rtdetrv2_upstream.json")
     (root / "artifacts/data/visdrone_protocol_v2_conversion_r3").mkdir(parents=True)
-    config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG, 5: V5_CONFIG, 6: V6_CONFIG}[version]
+    config_source = {2: V2_CONFIG, 3: V3_CONFIG, 4: V4_CONFIG, 5: V5_CONFIG, 6: V6_CONFIG, 7: V7_CONFIG}[version]
     config_name = config_source.name
     shutil.copyfile(config_source, root / "configs/baseline" / config_name)
     config = json.loads(config_source.read_text(encoding="utf-8"))
@@ -94,7 +101,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
     child = _script(tmp_path / "child", f"echo child >> {child_count}\nexit {child_rc}")
     tmux_count = tmp_path / "tmux.count"
     tmux = _script(tmp_path / "fake-tmux", f"echo tmux >> {tmux_count}\n\"$7\"\nexit 0")
-    suffix = {2: "r2", 3: "r3", 4: "r4", 5: "r5", 6: "r6"}[version]
+    suffix = {2: "r2", 3: "r3", 4: "r4", 5: "r5", 6: "r6", 7: "r7"}[version]
     output = root / f"artifacts/runs/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     process = root / f"artifacts/process_evidence/rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
     outer = outer_parent / f"rtdetrv2_r18_visdrone_baseline_smoke_{suffix}"
@@ -107,7 +114,7 @@ def _repo(tmp_path: Path, *, child_rc: int = 0, version: int = 2) -> tuple[dict[
         "outer_evidence_dir": outer,
         "child_python": child,
         "tmux_executable": tmux,
-        "tmux_session": {2: SESSION, 3: V3_SESSION, 4: V4_SESSION, 5: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5", 6: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r6"}[version],
+        "tmux_session": {2: SESSION, 3: V3_SESSION, 4: V4_SESSION, 5: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r5", 6: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r6", 7: "p3_rtdetrv2_r18_visdrone_baseline_smoke_r7"}[version],
     }
     return args, child_count, tmux_count
 
@@ -189,7 +196,8 @@ def _repack_process(process: Path) -> None:
 
 def _complete_v3_chain(tmp_path: Path, monkeypatch, *, version: int = 3) -> dict[str, Path | str]:
     args, _child_count, _tmux_count = _repo(tmp_path, version=version)
-    assert run_outer_launch(**args)["status"] == "TMUX_ACCEPTED"
+    observer = {"session_observer": lambda *_: {"state": "absent", "returncode": 1}} if version == 7 else {}
+    assert run_outer_launch(**args, **observer)["status"] == "TMUX_ACCEPTED"
     monkeypatch.setenv("P3_RTDETR_BASELINE_SMOKE_AUTHORIZED", "1")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     monkeypatch.setenv("PYTHONNOUSERSITE", "1")
@@ -225,6 +233,226 @@ def _complete_v4_chain(tmp_path: Path, monkeypatch) -> dict[str, Path | str]:
 
 def _complete_v5_chain(tmp_path: Path, monkeypatch) -> dict[str, Path | str]:
     return _complete_v3_chain(tmp_path, monkeypatch, version=5)
+
+
+def _v7_clocks(monotonic=(10.0, 10.1, 10.2)):
+    mono = iter(monotonic)
+    utc = iter((
+        "2026-08-15T00:00:00+00:00",
+        "2026-08-15T00:00:00.100000+00:00",
+        "2026-08-15T00:00:00.200000+00:00",
+    ))
+    return lambda: next(mono), lambda: next(utc)
+
+
+def test_v7_immediate_snapshot_is_one_shot_and_does_not_certify_durable_execution(tmp_path):
+    args, child_count, tmux_count = _repo(tmp_path, version=7)
+    args["tmux_executable"].write_text("#!/bin/sh\necho tmux >> " + str(tmux_count) + "\nexit 0\n", encoding="ascii")
+    args["tmux_executable"].chmod(0o755)
+    observations = []
+    mono, utc = _v7_clocks()
+
+    def observe(tmux, session):
+        observations.append((tmux, session))
+        return {"state": "absent", "returncode": 1}
+
+    result = run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
+    assert result["status"] == "TMUX_ACCEPTED"
+    assert len(observations) == 1
+    assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
+    assert not child_count.exists()
+    snapshot = validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+    assert snapshot["status"] == "PASS"
+    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    assert decision == {
+        "durable_terminal_status": "TMUX_ACCEPTED_PANE_NOT_STARTED",
+        "durable_terminal_pass": False,
+        "immediate_snapshot_status": "PASS",
+        "immediate_snapshot_pass": True,
+        "overall_certified": False,
+        "failure_classes": ["DURABLE_TERMINAL_EVIDENCE_FAILED"],
+    }
+    response = args["outer_evidence_dir"] / "launcher" / OUTER_CLI_RESPONSE
+    assert response.read_bytes() == canonical_json_bytes(result) + b"\n"
+
+
+def test_v7_observer_error_is_persisted_once_without_retry(tmp_path):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    calls = []
+    mono, utc = _v7_clocks()
+
+    def observe(_tmux, _session):
+        calls.append(1)
+        raise RuntimeError("lookup failed")
+
+    run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
+    assert calls == [1]
+    launcher = args["outer_evidence_dir"] / "launcher"
+    assert not (launcher / IMMEDIATE_SNAPSHOT).exists()
+    assert (launcher / IMMEDIATE_SNAPSHOT_FAILURE).is_file()
+    assert validate_immediate_snapshot_evidence(args["outer_evidence_dir"])["status"] == "FAIL"
+
+
+def test_v7_fast_terminal_chain_passes_both_gates(tmp_path, monkeypatch):
+    args = _complete_v3_chain(tmp_path, monkeypatch, version=7)
+    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    assert decision["durable_terminal_status"] == "TERMINAL_COMPLETE"
+    assert decision["durable_terminal_pass"] is True
+    assert decision["immediate_snapshot_pass"] is True
+    assert decision["overall_certified"] is True
+    assert decision["failure_classes"] == []
+
+
+def test_v7_rejected_tmux_has_snapshot_but_never_certifies(tmp_path):
+    args, _child_count, tmux_count = _repo(tmp_path, version=7)
+    args["tmux_executable"].write_text("#!/bin/sh\necho tmux >> " + str(tmux_count) + "\nexit 4\n", encoding="ascii")
+    args["tmux_executable"].chmod(0o755)
+    mono, utc = _v7_clocks()
+    result = run_outer_launch(**args, session_observer=lambda *_: {"state": "absent", "returncode": 1}, monotonic_clock=mono, utc_clock=utc)
+    assert result["status"] == "TMUX_REJECTED"
+    assert tmux_count.read_text(encoding="ascii").splitlines() == ["tmux"]
+    decision = classify_smoke_certification(args["outer_evidence_dir"], args["output_dir"], args["process_evidence_dir"])
+    assert decision["durable_terminal_status"] == "TMUX_REJECTED"
+    assert decision["immediate_snapshot_pass"] is True
+    assert decision["overall_certified"] is False
+
+
+@pytest.mark.parametrize("mutation", ["missing", "extra", "symlink", "hardlink", "directory"])
+def test_v7_snapshot_file_shape_mutations_fail_closed(tmp_path, mutation):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono, utc = _v7_clocks()
+    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    launcher = args["outer_evidence_dir"] / "launcher"
+    snapshot = launcher / IMMEDIATE_SNAPSHOT
+    if mutation == "missing":
+        snapshot.unlink()
+    elif mutation == "extra":
+        (launcher / IMMEDIATE_SNAPSHOT_FAILURE).write_bytes(snapshot.read_bytes())
+    elif mutation == "symlink":
+        snapshot.unlink()
+        snapshot.symlink_to(launcher / OUTER_CLI_RESPONSE)
+    elif mutation == "hardlink":
+        target = launcher / "snapshot.link"
+        os.link(snapshot, target)
+    else:
+        snapshot.unlink()
+        snapshot.mkdir()
+    with pytest.raises(OuterLaunchError):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+
+
+@pytest.mark.parametrize("times", [
+    (10.0, 11.1, 11.2),
+    (10.0, 9.9, 10.1),
+    (10.0, 10.2, 10.1),
+    (10.0, float("nan"), 10.2),
+    (10.0, float("inf"), 10.2),
+    (10.0, True, 10.2),
+])
+def test_v7_snapshot_invalid_monotonic_timing_fails_closed(tmp_path, times):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono, utc = _v7_clocks(times)
+    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    with pytest.raises(OuterLaunchError):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+
+
+@pytest.mark.parametrize("utc_values", [
+    ("2026-08-15T08:00:00+08:00", "2026-08-15T00:00:00.1+00:00", "2026-08-15T00:00:00.2+00:00"),
+    ("2026-08-15T00:00:00+00:00", "2026-08-14T23:59:59+00:00", "2026-08-15T00:00:00.2+00:00"),
+    ("2026-08-15T00:00:00+00:00", "2026-08-15T00:00:00.2+00:00", "2026-08-15T00:00:00.1+00:00"),
+])
+def test_v7_snapshot_invalid_utc_timing_fails_closed(tmp_path, utc_values):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono = iter((10.0, 10.1, 10.2))
+    utc = iter(utc_values)
+    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=lambda: next(mono), utc_clock=lambda: next(utc))
+    with pytest.raises(OuterLaunchError):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+
+
+@pytest.mark.parametrize("mutation", ["bytes", "missing_lf", "completion", "nonce", "tmux_sha", "capture_count", "config", "path", "session", "extra"])
+def test_v7_snapshot_and_response_binding_mutations_fail_closed(tmp_path, mutation):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    mono, utc = _v7_clocks()
+    run_outer_launch(**args, session_observer=lambda *_: {"state": "present", "returncode": 0}, monotonic_clock=mono, utc_clock=utc)
+    launcher = args["outer_evidence_dir"] / "launcher"
+    snapshot_path = launcher / IMMEDIATE_SNAPSHOT
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    if mutation == "bytes":
+        (launcher / OUTER_CLI_RESPONSE).write_bytes(b"{}\n")
+    elif mutation == "missing_lf":
+        path = launcher / OUTER_CLI_RESPONSE
+        path.write_bytes(path.read_bytes().rstrip(b"\n"))
+    elif mutation == "completion":
+        snapshot["outer_completion"]["sha256"] = "0" * 64
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    elif mutation == "nonce":
+        snapshot["nonce"] = "0" * 32
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    elif mutation == "tmux_sha":
+        snapshot["tmux_argv_sha256"] = "0" * 64
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    elif mutation == "capture_count":
+        snapshot["capture_count"] = 2
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    elif mutation == "config":
+        snapshot["config_binding"]["config_canonical_sha256"] = "0" * 64
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    elif mutation == "path":
+        snapshot["output_dir"] += ".drift"
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    elif mutation == "session":
+        snapshot["tmux_session"] += "_drift"
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    else:
+        snapshot["extra"] = True
+        snapshot_path.write_bytes(canonical_json_bytes(snapshot))
+    with pytest.raises(OuterLaunchError):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+
+
+def test_v7_snapshot_persistence_failure_is_fail_closed_without_observer_retry(tmp_path, monkeypatch):
+    args, _child_count, _tmux_count = _repo(tmp_path, version=7)
+    module = __import__("sparse_rtdetr.baseline.smoke_outer_launcher", fromlist=["unused"])
+    original = module.atomic_write
+    observer_calls = []
+
+    def failing_atomic_write(path, payload):
+        if Path(path).name == IMMEDIATE_SNAPSHOT:
+            raise OSError("injected snapshot fsync failure")
+        return original(path, payload)
+
+    def observe(*_args):
+        observer_calls.append(1)
+        return {"state": "present", "returncode": 0}
+
+    monkeypatch.setattr(module, "atomic_write", failing_atomic_write)
+    mono, utc = _v7_clocks()
+    result = run_outer_launch(**args, session_observer=observe, monotonic_clock=mono, utc_clock=utc)
+    assert observer_calls == [1]
+    assert result["status"] == "FINALIZATION_FAILED"
+    with pytest.raises(OuterLaunchError):
+        validate_immediate_snapshot_evidence(args["outer_evidence_dir"])
+
+
+@pytest.mark.parametrize("durable,snapshot,overall", [
+    ("TERMINAL_COMPLETE", "PASS", True),
+    ("TERMINAL_COMPLETE", "FAIL", False),
+    ("TERMINAL_FAILED", "PASS", False),
+    ("TERMINAL_FAILED", "FAIL", False),
+])
+def test_v7_dual_gate_truth_table(monkeypatch, durable, snapshot, overall):
+    module = __import__("sparse_rtdetr.baseline.smoke_outer_launcher", fromlist=["unused"])
+    monkeypatch.setattr(module, "classify_outer_evidence", lambda *_: durable)
+    if snapshot == "PASS":
+        monkeypatch.setattr(module, "validate_immediate_snapshot_evidence", lambda *_: {"status": "PASS"})
+    else:
+        monkeypatch.setattr(module, "validate_immediate_snapshot_evidence", lambda *_: (_ for _ in ()).throw(OuterLaunchError("fail")))
+    result = module.classify_smoke_certification(Path("/unused"), Path("/unused"), Path("/unused"))
+    assert result["durable_terminal_pass"] is (durable == "TERMINAL_COMPLETE")
+    assert result["immediate_snapshot_pass"] is (snapshot == "PASS")
+    assert result["overall_certified"] is overall
 
 
 def _digests(root: Path) -> dict[str, str]:

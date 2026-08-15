@@ -16,11 +16,12 @@ import signal
 import stat
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from .smoke import SmokeRuntimeSpec, get_smoke_runtime_spec, load_smoke_config
+from .smoke import SMOKE_V7_ID, SmokeRuntimeSpec, get_smoke_runtime_spec, load_smoke_config
 from .smoke_evidence import (
     SmokeEvidenceError,
     _read_object,
@@ -44,6 +45,10 @@ OUTER_INVENTORY = "outer_inventory.json"
 OUTER_PARTIAL_INVENTORY = "outer_partial_inventory.json"
 OUTER_SECONDARY_FAILURE = "outer_secondary_finalization_failure.json"
 OUTER_EXCLUDED = frozenset({OUTER_COMPLETION, OUTER_INVENTORY, OUTER_PARTIAL_INVENTORY, OUTER_SECONDARY_FAILURE})
+IMMEDIATE_SNAPSHOT = "immediate_snapshot.json"
+IMMEDIATE_SNAPSHOT_FAILURE = "immediate_snapshot_failure.json"
+OUTER_CLI_RESPONSE = "outer_cli_response.jsonl"
+V7_POST_INVENTORY_FILES = frozenset({IMMEDIATE_SNAPSHOT, IMMEDIATE_SNAPSHOT_FAILURE, OUTER_CLI_RESPONSE})
 PANE_COMPLETION = "pane_completion.json"
 PANE_INVENTORY = "pane_inventory.json"
 PANE_PARTIAL_INVENTORY = "pane_partial_inventory.json"
@@ -93,6 +98,23 @@ _FORWARD_FAILURE_RE = re.compile(r"^failed:[A-Za-z_][A-Za-z0-9_]*$")
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _outer_excluded(smoke_id: Any) -> frozenset[str]:
+    return OUTER_EXCLUDED | V7_POST_INVENTORY_FILES if smoke_id == SMOKE_V7_ID else OUTER_EXCLUDED
+
+
+def _default_session_observer(tmux: Path, session: str) -> dict[str, Any]:
+    result = subprocess.run(
+        [str(tmux), "has-session", "-t", session],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    return {
+        "state": "present" if result.returncode == 0 else "absent",
+        "returncode": result.returncode,
+    }
 
 
 def _strict_sha(value: Any, field: str) -> None:
@@ -1088,12 +1110,13 @@ def _finish_outer(outer: Path, launcher: Path, invocation: dict[str, Any], statu
         "finished_at_utc": _utc_now(),
         "runner": _runner_summary(runner),
     }))
-    attempt("outer_partial_inventory", lambda: _write_json(launcher / OUTER_PARTIAL_INVENTORY, _inventory_value(launcher, OUTER_EXCLUDED)))
+    excluded = _outer_excluded(invocation.get("smoke_id"))
+    attempt("outer_partial_inventory", lambda: _write_json(launcher / OUTER_PARTIAL_INVENTORY, _inventory_value(launcher, excluded)))
     inventory_sha = None
     inventory_ref: dict[str, Any] = {"present": False, "relative_path": OUTER_INVENTORY}
     if not failures:
         def write_inventory() -> str:
-            value = _inventory_value(launcher, OUTER_EXCLUDED)
+            value = _inventory_value(launcher, excluded)
             payload = canonical_json_bytes(value)
             atomic_write(launcher / OUTER_INVENTORY, payload)
             return sha256_bytes(payload)
@@ -1132,7 +1155,7 @@ def _finish_outer(outer: Path, launcher: Path, invocation: dict[str, Any], statu
     return {"status": status, "completion_sha256": completion_sha, "outer_evidence_dir": str(outer)}
 
 
-def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, output_dir: Path, process_evidence_dir: Path, outer_evidence_dir: Path, child_python: Path, tmux_executable: Path, tmux_session: str) -> dict[str, Any]:
+def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, output_dir: Path, process_evidence_dir: Path, outer_evidence_dir: Path, child_python: Path, tmux_executable: Path, tmux_session: str, session_observer: Callable[[Path, str], dict[str, Any]] | None = None, monotonic_clock: Callable[[], float] = time.monotonic, utc_clock: Callable[[], str] = _utc_now) -> dict[str, Any]:
     """Prepare evidence and issue exactly one bounded tmux client call."""
 
     repo_root = Path(repo_root)
@@ -1252,10 +1275,80 @@ def run_outer_launch(*, repo_root: Path, data_root: Path, config_path: Path, out
         _write_json(launcher / "preflight_audit.json", {"schema_version": 1, "status": "PASS", "config_binding": binding, "data_root": str(data_root), "output_process_not_created_by_outer": True, "tmux_executable_identity": tmux_identity, "child_python_identity": child_identity, "pane_evidence_python_identity": pane_evidence_identity, "environment": invocation["environment"], "wrapper_relative_path": "../pane/pane_wrapper.sh", "wrapper_sha256": sha256_bytes(wrapper_bytes), "pane_plan_relative_path": "../pane/pane_plan.json", "pane_plan_sha256": plan_sha, "inner_argv_sha256": inner_sha, "nonce": nonce, "tmux_session": tmux_session, "tmux_client_timeout_seconds": config["runtime"]["tmux_client_timeout_seconds"], "created_at_utc": created_at})
         _write_json(launcher / "tmux_invocation.json", {"schema_version": 1, "argv": tmux_argv, "argv_sha256": argv_sha256(tmux_argv), "wrapper_sha256": sha256_bytes(wrapper_bytes), "pane_plan_sha256": plan_sha, "nonce": nonce, "tmux_session": tmux_session, "timeout_seconds": config["runtime"]["tmux_client_timeout_seconds"], "called_at_utc": _utc_now(), "tmux_executable_identity": tmux_identity, "child_python_identity": child_identity, "pane_evidence_python_identity": pane_evidence_identity})
         runner = _run_tmux(argv=tmux_argv, cwd=repo_root, env={**os.environ, **pane_environment}, timeout_seconds=config["runtime"]["tmux_client_timeout_seconds"])
+        tmux_finished_monotonic = monotonic_clock()
+        tmux_finished_at_utc = utc_clock()
         atomic_write(launcher / "tmux_stdout.log", runner["stdout"])
         atomic_write(launcher / "tmux_stderr.log", runner["stderr"])
         status = "TMUX_ACCEPTED" if runner["returncode"] == 0 and not runner["timeout_triggered"] and runner["original_exception"] is None else "TMUX_REJECTED" if runner["returncode"] is not None and not runner["timeout_triggered"] else "INTERRUPTED_WITH_EVIDENCE"
-        return _finish_outer(outer, launcher, invocation | {"nonce": nonce}, status, runner)
+        if spec.smoke_id != SMOKE_V7_ID:
+            return _finish_outer(outer, launcher, invocation | {"nonce": nonce}, status, runner)
+        snapshot_started_monotonic = monotonic_clock()
+        snapshot_started_at_utc = utc_clock()
+        observer = _default_session_observer if session_observer is None else session_observer
+        observation_error = None
+        try:
+            observation = observer(tmux, tmux_session)
+            if not isinstance(observation, dict) or set(observation) != {"state", "returncode"}:
+                raise OuterLaunchError("session observer result schema drift")
+            if observation["state"] not in {"present", "absent"} or type(observation["returncode"]) is not int:
+                raise OuterLaunchError("session observer result is invalid")
+        except BaseException as exc:
+            observation = {"state": "lookup_failed", "returncode": None}
+            observation_error = {"type": type(exc).__name__, "message": str(exc)}
+        snapshot_finished_monotonic = monotonic_clock()
+        snapshot_finished_at_utc = utc_clock()
+        result = _finish_outer(outer, launcher, invocation | {"nonce": nonce}, status, runner)
+        response = {
+            "status": result["status"],
+            "outer_evidence_dir": result["outer_evidence_dir"],
+            "completion_sha256": result.get("completion_sha256"),
+            "nonce": nonce,
+        }
+        response_bytes = canonical_json_bytes(response) + b"\n"
+        atomic_write(launcher / OUTER_CLI_RESPONSE, response_bytes)
+        completion_ref = _file_ref_strict(launcher, OUTER_COMPLETION, required=True)
+        response_ref = _file_ref_strict(launcher, OUTER_CLI_RESPONSE, required=True)
+        snapshot = {
+            "schema_version": 1,
+            "policy_version": config["evidence_policy"]["policy_version"],
+            "status": "PASS" if observation_error is None else "FAIL",
+            "failure_class": None if observation_error is None else "SESSION_OBSERVER_ERROR",
+            "smoke_id": spec.smoke_id,
+            "nonce": nonce,
+            "tmux_session": tmux_session,
+            "repo_root": str(repo_root),
+            "config_path": binding["config_path"],
+            "output_dir": str(output),
+            "process_evidence_dir": str(process),
+            "outer_evidence_dir": str(outer),
+            "config_binding": binding,
+            "tmux_argv_sha256": argv_sha256(tmux_argv),
+            "tmux_returncode": runner["returncode"],
+            "tmux_stdout": _file_ref_strict(launcher, "tmux_stdout.log", required=True),
+            "tmux_stderr": _file_ref_strict(launcher, "tmux_stderr.log", required=True),
+            "session_observation": observation,
+            "observation_error": observation_error,
+            "pane_start_present": (pane / PANE_START).is_file(),
+            "pane_receipt_present": (pane / PANE_RECEIPT).is_file(),
+            "pane_completion_present": (pane / PANE_COMPLETION).is_file(),
+            "process_evidence_present": process.is_dir(),
+            "output_present": output.is_dir(),
+            "tmux_finished_monotonic": tmux_finished_monotonic,
+            "snapshot_started_monotonic": snapshot_started_monotonic,
+            "snapshot_finished_monotonic": snapshot_finished_monotonic,
+            "tmux_finished_at_utc": tmux_finished_at_utc,
+            "snapshot_started_at_utc": snapshot_started_at_utc,
+            "snapshot_finished_at_utc": snapshot_finished_at_utc,
+            "delay_seconds": snapshot_started_monotonic - tmux_finished_monotonic,
+            "elapsed_seconds": snapshot_finished_monotonic - snapshot_started_monotonic,
+            "max_delay_seconds": config["evidence_policy"]["immediate_snapshot"]["max_delay_seconds"],
+            "capture_count": 1,
+            "outer_completion": completion_ref,
+            "outer_cli_response": response_ref,
+            "outer_cli_response_trailing_lf": response_bytes.endswith(b"\n") and not response_bytes.endswith(b"\n\n"),
+        }
+        _write_json(launcher / (IMMEDIATE_SNAPSHOT if observation_error is None else IMMEDIATE_SNAPSHOT_FAILURE), snapshot)
+        return response
     except BaseException as error:
         if runner["original_exception"] is None:
             runner["original_exception"] = {"type": type(error).__name__, "message": str(error)}
@@ -1420,7 +1513,7 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
         value = _read_json_object(launcher / OUTER_INVENTORY)
         if value is None or value.get("canonical_inventory_sha256") != sha256_bytes(canonical_json_bytes(value.get("artifacts"))):
             raise OuterLaunchError("outer inventory is not canonical")
-        if value != _inventory_value(launcher, OUTER_EXCLUDED):
+        if value != _inventory_value(launcher, _outer_excluded(invocation.get("smoke_id"))):
             raise OuterLaunchError("outer inventory does not bind current files")
     if status == "PREFLIGHT_FAILED":
         if completion.get("tmux_called") is not False or completion.get("tmux_returncode") is not None:
@@ -1437,6 +1530,120 @@ def validate_outer_evidence(outer_evidence_dir: Path, output_dir: Path | None = 
         _verify_ref(launcher, completion.get("tmux_stdout"), "tmux_stdout.log")
         _verify_ref(launcher, completion.get("tmux_stderr"), "tmux_stderr.log")
     return {"status": status, "invocation": invocation, "completion": completion}
+
+
+_SNAPSHOT_KEYS = {
+    "schema_version", "policy_version", "status", "failure_class", "smoke_id", "nonce",
+    "tmux_session", "repo_root", "config_path", "output_dir", "process_evidence_dir",
+    "outer_evidence_dir", "config_binding", "tmux_argv_sha256", "tmux_returncode",
+    "tmux_stdout", "tmux_stderr", "session_observation", "observation_error",
+    "pane_start_present", "pane_receipt_present", "pane_completion_present",
+    "process_evidence_present", "output_present", "tmux_finished_monotonic",
+    "snapshot_started_monotonic", "snapshot_finished_monotonic", "tmux_finished_at_utc",
+    "snapshot_started_at_utc", "snapshot_finished_at_utc", "delay_seconds", "elapsed_seconds",
+    "max_delay_seconds", "capture_count", "outer_completion", "outer_cli_response",
+    "outer_cli_response_trailing_lf",
+}
+
+
+def validate_immediate_snapshot_evidence(outer_evidence_dir: Path) -> dict[str, Any]:
+    """Validate V7's one-shot launch observation and exact CLI response binding."""
+
+    root = Path(outer_evidence_dir)
+    try:
+        outer = validate_outer_evidence(root)
+    except (OSError, SmokeEvidenceError, ValueError) as exc:
+        raise OuterLaunchError("outer evidence is invalid for immediate snapshot") from exc
+    invocation = outer["invocation"]
+    if invocation["smoke_id"] != SMOKE_V7_ID:
+        raise OuterLaunchError("immediate snapshot is only defined for V7")
+    launcher = root / "launcher"
+    candidates = [launcher / IMMEDIATE_SNAPSHOT, launcher / IMMEDIATE_SNAPSHOT_FAILURE]
+    present = [path for path in candidates if path.exists() or path.is_symlink()]
+    if len(present) != 1:
+        raise OuterLaunchError("exactly one immediate snapshot result is required")
+    snapshot_path = present[0]
+    _strict_file(snapshot_path)
+    snapshot = _read_json_object(snapshot_path)
+    if snapshot is None or set(snapshot) != _SNAPSHOT_KEYS:
+        raise OuterLaunchError("immediate snapshot schema drift")
+    if snapshot["schema_version"] != 1 or type(snapshot["schema_version"]) is not int:
+        raise OuterLaunchError("immediate snapshot schema version drift")
+    if snapshot["policy_version"] != 1 or type(snapshot["policy_version"]) is not int:
+        raise OuterLaunchError("immediate snapshot policy version drift")
+    status = snapshot["status"]
+    if status not in {"PASS", "FAIL"}:
+        raise OuterLaunchError("immediate snapshot status is invalid")
+    expected_name = IMMEDIATE_SNAPSHOT if status == "PASS" else IMMEDIATE_SNAPSHOT_FAILURE
+    if snapshot_path.name != expected_name:
+        raise OuterLaunchError("immediate snapshot filename/status mismatch")
+    if status == "PASS":
+        if snapshot["failure_class"] is not None or snapshot["observation_error"] is not None:
+            raise OuterLaunchError("passing snapshot contains failure evidence")
+    elif snapshot["failure_class"] != "SESSION_OBSERVER_ERROR" or not isinstance(snapshot["observation_error"], dict):
+        raise OuterLaunchError("failed snapshot classification is invalid")
+    for field in ("pane_start_present", "pane_receipt_present", "pane_completion_present", "process_evidence_present", "output_present", "outer_cli_response_trailing_lf"):
+        _strict_bool(snapshot[field], "snapshot " + field)
+    if snapshot["outer_cli_response_trailing_lf"] is not True:
+        raise OuterLaunchError("outer CLI response LF attestation failed")
+    _strict_int(snapshot["capture_count"], "snapshot capture_count", 1)
+    if snapshot["capture_count"] != 1:
+        raise OuterLaunchError("snapshot capture count is not one")
+    for field in ("tmux_finished_monotonic", "snapshot_started_monotonic", "snapshot_finished_monotonic", "delay_seconds", "elapsed_seconds", "max_delay_seconds"):
+        _strict_finite_number(snapshot[field], "snapshot " + field, 0.0)
+    tmux_finished = float(snapshot["tmux_finished_monotonic"])
+    started = float(snapshot["snapshot_started_monotonic"])
+    finished = float(snapshot["snapshot_finished_monotonic"])
+    delay = float(snapshot["delay_seconds"])
+    elapsed = float(snapshot["elapsed_seconds"])
+    maximum = float(snapshot["max_delay_seconds"])
+    if not tmux_finished <= started <= finished or delay != started - tmux_finished or elapsed != finished - started or delay > maximum:
+        raise OuterLaunchError("immediate snapshot monotonic timing is invalid")
+    utc_values = [_parse_utc(snapshot[field], "snapshot " + field) for field in ("tmux_finished_at_utc", "snapshot_started_at_utc", "snapshot_finished_at_utc")]
+    if not utc_values[0] <= utc_values[1] <= utc_values[2]:
+        raise OuterLaunchError("immediate snapshot UTC chronology is invalid")
+    completion = outer["completion"]
+    config, binding = _bind_config(Path(invocation["repo_root"]), Path(invocation["config_path"]))
+    expected_bindings = {
+        "smoke_id": invocation["smoke_id"], "nonce": invocation["nonce"],
+        "tmux_session": invocation["tmux_session"], "repo_root": invocation["repo_root"],
+        "config_path": invocation["config_path"], "output_dir": invocation["output_dir"],
+        "process_evidence_dir": invocation["process_evidence_dir"],
+        "outer_evidence_dir": invocation["outer_evidence_dir"], "config_binding": binding,
+    }
+    for field, expected in expected_bindings.items():
+        if snapshot[field] != expected:
+            raise OuterLaunchError("immediate snapshot binding mismatch: " + field)
+    if config["evidence_policy"]["immediate_snapshot"]["max_delay_seconds"] != snapshot["max_delay_seconds"]:
+        raise OuterLaunchError("immediate snapshot delay policy drift")
+    tmux_invocation = _read_json_object(launcher / "tmux_invocation.json")
+    if tmux_invocation is None or snapshot["tmux_argv_sha256"] != tmux_invocation.get("argv_sha256"):
+        raise OuterLaunchError("immediate snapshot tmux argv binding mismatch")
+    if snapshot["tmux_returncode"] != completion["tmux_returncode"]:
+        raise OuterLaunchError("immediate snapshot tmux returncode mismatch")
+    _verify_ref(launcher, snapshot["tmux_stdout"], "tmux_stdout.log")
+    _verify_ref(launcher, snapshot["tmux_stderr"], "tmux_stderr.log")
+    _verify_ref(launcher, snapshot["outer_completion"], OUTER_COMPLETION)
+    _verify_ref(launcher, snapshot["outer_cli_response"], OUTER_CLI_RESPONSE)
+    response_path = launcher / OUTER_CLI_RESPONSE
+    _strict_file(response_path)
+    response_bytes = response_path.read_bytes()
+    expected_response = canonical_json_bytes({
+        "status": outer["status"],
+        "outer_evidence_dir": str(root),
+        "completion_sha256": sha256_file(launcher / OUTER_COMPLETION),
+        "nonce": invocation["nonce"],
+    }) + b"\n"
+    if response_bytes != expected_response or not response_bytes.endswith(b"\n") or response_bytes.endswith(b"\n\n"):
+        raise OuterLaunchError("outer CLI response bytes do not bind completion")
+    observation = snapshot["session_observation"]
+    if not isinstance(observation, dict) or set(observation) != {"state", "returncode"}:
+        raise OuterLaunchError("session observation schema drift")
+    if status == "PASS" and (observation["state"] not in {"present", "absent"} or type(observation["returncode"]) is not int):
+        raise OuterLaunchError("passing session observation is invalid")
+    if status == "FAIL" and observation != {"state": "lookup_failed", "returncode": None}:
+        raise OuterLaunchError("failed session observation is invalid")
+    return {"status": status, "snapshot": snapshot, "response_bytes": response_bytes}
 
 
 def _parse_lock(path: Path, spec: SmokeRuntimeSpec | None = None) -> dict[str, str]:
@@ -1926,6 +2133,31 @@ def classify_outer_evidence(outer_evidence_dir: Path, output_dir: Path, process_
     except (OSError, OuterLaunchError, SmokeEvidenceError, ValueError):
         return "TERMINAL_FAILED"
     return "TERMINAL_COMPLETE"
+
+
+def classify_smoke_certification(outer_evidence_dir: Path, output_dir: Path, process_evidence_dir: Path) -> dict[str, Any]:
+    """Apply V7's frozen dual-gate policy without changing durable classification."""
+
+    durable_status = classify_outer_evidence(outer_evidence_dir, output_dir, process_evidence_dir)
+    durable_pass = durable_status == "TERMINAL_COMPLETE"
+    try:
+        snapshot_status = validate_immediate_snapshot_evidence(outer_evidence_dir)["status"]
+    except (OSError, OuterLaunchError, SmokeEvidenceError, ValueError):
+        snapshot_status = "FAIL"
+    snapshot_pass = snapshot_status == "PASS"
+    failures = []
+    if not durable_pass:
+        failures.append("DURABLE_TERMINAL_EVIDENCE_FAILED")
+    if not snapshot_pass:
+        failures.append("IMMEDIATE_SNAPSHOT_PROTOCOL_FAILED")
+    return {
+        "durable_terminal_status": durable_status,
+        "durable_terminal_pass": durable_pass,
+        "immediate_snapshot_status": snapshot_status,
+        "immediate_snapshot_pass": snapshot_pass,
+        "overall_certified": durable_pass and snapshot_pass,
+        "failure_classes": failures,
+    }
 
 
 def contract_check(repo_root: Path, config_path: Path) -> dict[str, Any]:

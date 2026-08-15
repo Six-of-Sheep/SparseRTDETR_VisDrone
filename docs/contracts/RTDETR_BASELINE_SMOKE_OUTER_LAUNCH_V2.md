@@ -363,3 +363,52 @@ No `PANE_COMPLETED` record is created; classification reports
 Outer and process evidence are nonportable and may contain absolute runtime
 paths. Entry evidence remains portable and contains no host data root, repo
 root, Python path, or credentials.
+
+## V7 dual-gate certification policy
+
+V7 freezes overall certification as the conjunction of two independent
+gates: durable terminal evidence must classify as `TERMINAL_COMPLETE`, and
+the immediate snapshot protocol must validate as `PASS`. Neither gate can
+override the other. `TMUX_ACCEPTED`, directory presence, and snapshot `PASS`
+are not durable execution certification.
+
+The outer launcher owns the one-shot observation. Immediately after the only
+`tmux new-session` call returns, and before the outer CLI returns, it records
+the tmux-finished monotonic/UTC times, calls the session observer exactly
+once, and records snapshot-started/snapshot-finished monotonic/UTC times.
+There is no sleep, polling, retry, background writer, or second capture. A
+successfully observed absent session is valid because the pane may already
+have terminated. An observer exception produces durable `FAIL` evidence and
+is never retried. The frozen maximum start delay is 1.0 second.
+
+V7 defines these exact launcher-owned post-inventory files:
+
+- `outer_cli_response.jsonl`: canonical JSON response bytes followed by one
+  LF, binding status, outer evidence path, completion SHA-256, and nonce.
+- `immediate_snapshot.json`: the unique successful snapshot result.
+- `immediate_snapshot_failure.json`: the unique failed snapshot result.
+
+Exactly one snapshot result file must exist. These three names are V7-only
+post-inventory ownership exceptions; they are not retroactively excluded
+from V2-V6 inventories. Creation order is outer inventory, outer completion,
+CLI response, then snapshot result. Completion does not reference response or
+snapshot, response references completion, and snapshot references completion
+and response, avoiding a circular hash. The successful CLI writes the exact
+persisted response bytes to stdout. Successful stderr is empty.
+
+The snapshot binds its exact schema/policy versions, smoke identity, nonce,
+session, canonical runtime paths, raw/canonical config identity, tmux argv and
+stream references, one observed session state, pane/process/output presence,
+timings, capture count, completion reference, and response size/SHA/LF. The
+validator rejects missing, extra, pre-existing, symlinked, hardlinked,
+non-regular, non-canonical, mistimed, non-UTC, non-finite, cross-boundary, or
+mutated evidence. Builtin numeric and boolean types are checked separately.
+
+The certification truth table is:
+
+| Durable terminal | Immediate snapshot | Overall certified |
+| --- | --- | --- |
+| PASS | PASS | true |
+| PASS | FAIL | false |
+| FAIL | PASS | false |
+| FAIL | FAIL | false |
