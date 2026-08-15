@@ -331,6 +331,184 @@ def _set_json_pointer(value, pointer, replacement):
         current[final] = replacement
 
 
+def _pointer_path(pointer):
+    return tuple(int(token) if token.isdigit() else token for token in pointer.lstrip("/").split("/"))
+
+
+def _semantic_string_alternatives(expected):
+    candidates = [expected + "_drift", "", " ", expected.swapcase(), expected + "X"]
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate != expected))
+
+
+def _semantic_wrong_type(expected):
+    if type(expected) is str:
+        return None
+    if type(expected) is bool:
+        return 0
+    if expected is None:
+        return False
+    raise AssertionError(type(expected))
+
+
+def _semantic_same_type_alternative(expected):
+    if type(expected) is str:
+        return expected + "_drift"
+    if type(expected) is bool:
+        return not expected
+    if expected is None:
+        return None
+    raise AssertionError(type(expected))
+
+
+def _semantic_value_drift(expected):
+    if type(expected) is str:
+        return expected + "_drift"
+    if type(expected) is bool:
+        return not expected
+    if type(expected) is int:
+        return expected + 1
+    if type(expected) is float:
+        return expected + 0.125
+    if expected is None:
+        return "not-null"
+    raise AssertionError(type(expected))
+
+
+def test_semantic_registry_exactly_covers_all_in_scope_non_numeric_leaves():
+    inventory = contract.semantic_contract_inventory(_training())
+    assert inventory["leaf_count"] == 127
+    assert inventory["registered_leaf_count"] == 127
+    assert inventory["missing"] == ()
+    assert inventory["extra"] == ()
+    assert inventory["duplicate"] == ()
+    assert inventory["sequence_rule_count"] == 6
+    assert inventory["relation_rule_count"] == 11
+    rule_ids = [rule["rule_id"] for rule in contract._TRAINING_CONTRACT_SEMANTIC_RULES]
+    assert len(rule_ids) == len(set(rule_ids)) == 144
+    contract._validate_semantic_rules(_training())
+
+
+@pytest.mark.parametrize("bad", ["raw", "EMA", "", " ", None, False])
+def test_ema_development_evaluation_weight_exploit_rejected_before_digest(bad):
+    candidate = _training()
+    candidate["ema"]["development_evaluation_weights"] = bad
+    with pytest.raises(contract.TrainingContractError, match=r"pointer=/ema/development_evaluation_weights") as direct:
+        contract._validate_semantic_rules(candidate)
+    assert "rule_id=SEM_EMA_DEVELOPMENT_WEIGHTS" in str(direct.value)
+    with pytest.raises(contract.TrainingContractError, match=r"pointer=/ema/development_evaluation_weights"):
+        contract._validate_cross_fields(candidate)
+    with pytest.raises(contract.TrainingContractError, match=r"(semantic|closed schema)") as public:
+        contract.validate_training_contract(candidate, _baseline())
+    assert "frozen content drift" not in str(public.value)
+
+
+def test_every_semantic_leaf_rejects_same_type_and_wrong_type_before_digest():
+    for rule in contract._semantic_leaf_rules():
+        pointer = rule["pointer"]
+        expected = rule["expected"]
+        if expected is not None:
+            candidate = _training()
+            _set_json_pointer(candidate, pointer, _semantic_same_type_alternative(expected))
+            with pytest.raises(contract.TrainingContractError, match=r"semantic"):
+                contract._validate_semantic_rules(candidate)
+            with pytest.raises(contract.TrainingContractError):
+                contract.validate_training_contract(candidate, _baseline())
+
+        candidate = _training()
+        _set_json_pointer(candidate, pointer, _semantic_wrong_type(expected))
+        with pytest.raises(contract.TrainingContractError, match=r"semantic"):
+            contract._validate_semantic_rules(candidate)
+        with pytest.raises(contract.TrainingContractError):
+            contract.validate_training_contract(candidate, _baseline())
+
+
+def test_every_string_semantic_leaf_rejects_empty_whitespace_and_case_drift():
+    executed = 0
+    for rule in contract._semantic_leaf_rules():
+        expected = rule["expected"]
+        if type(expected) is not str:
+            continue
+        for bad in _semantic_string_alternatives(expected):
+            candidate = _training()
+            _set_json_pointer(candidate, rule["pointer"], bad)
+            with pytest.raises(contract.TrainingContractError, match=r"semantic"):
+                contract._validate_semantic_rules(candidate)
+            executed += 1
+    assert executed >= 200
+
+
+def test_semantic_ordered_list_rules_reject_reverse_drop_duplicate_and_append():
+    for rule in contract._semantic_sequence_rules():
+        pointer = rule["pointer"]
+        original = copy.deepcopy(_value_at_pointer(_training(), pointer))
+        mutations = [
+            list(reversed(original)),
+            original[:-1],
+            original[:-1] + [copy.deepcopy(original[-2])],
+            original + [copy.deepcopy(original[0])],
+        ]
+        for bad in mutations:
+            candidate = _training()
+            _set_path(candidate, _pointer_path(pointer), bad)
+            with pytest.raises(contract.TrainingContractError, match=rf"rule_id={re.escape(rule['rule_id'])}"):
+                contract._validate_semantic_sequence_rules(candidate)
+            with pytest.raises(contract.TrainingContractError):
+                contract.validate_training_contract(candidate, _baseline())
+
+
+def test_semantic_relation_matrix_rejects_left_right_and_synchronized_drift():
+    cases = 0
+    for rule in contract._semantic_relation_rules():
+        pointers = tuple(rule["frozen"])
+        for selected in (pointers[:1], pointers[-1:], pointers):
+            candidate = _training()
+            for pointer in selected:
+                _set_path(candidate, _pointer_path(pointer), _semantic_value_drift(rule["frozen"][pointer]))
+            with pytest.raises(contract.TrainingContractError, match=rf"rule_id={re.escape(rule['rule_id'])}"):
+                contract._validate_semantic_relation_rule(candidate, rule)
+            with pytest.raises(contract.TrainingContractError):
+                contract.validate_training_contract(candidate, _baseline())
+            cases += 1
+    assert cases == 33
+
+
+def test_semantic_layering_distinguishes_closed_numeric_path_semantic_relation_and_digest():
+    wrong_type = _training()
+    wrong_type["initialization"]["seed"] = 0.0
+    with pytest.raises(contract.TrainingContractError, match="closed schema scalar type mismatch"):
+        contract.validate_training_contract(wrong_type, _baseline())
+
+    numeric = _training()
+    numeric["initialization"]["seed"] = -1
+    with pytest.raises(contract.TrainingContractError, match="numeric out_of_range"):
+        contract.validate_training_contract(numeric, _baseline())
+
+    path = _training()
+    path["source_bindings"]["vendor_recipe"]["relative_path"] = "/host/recipe.yml"
+    with pytest.raises(contract.TrainingContractError, match="POSIX path"):
+        contract.validate_training_contract(path, _baseline())
+
+    semantic = _training()
+    semantic["ema"]["development_evaluation_weights"] = "raw"
+    with pytest.raises(contract.TrainingContractError, match="semantic"):
+        contract.validate_training_contract(semantic, _baseline())
+
+    relation = _training()
+    relation["evaluation_and_selection"]["primary_evaluator_independently_certified"] = True
+    relation["evaluation_and_selection"]["training_launch_blocked"] = False
+    with pytest.raises(contract.TrainingContractError, match="semantic"):
+        contract.validate_training_contract(relation, _baseline())
+
+    digest = _training()
+    digest["source_bindings"]["vendor_recipe"]["sha256"] = "a" * 64
+    contract._validate_closed_schema(digest)
+    contract._validate_numeric_constraints(digest)
+    contract._validate_path_and_sha_fields(digest)
+    contract._validate_semantic_rules(digest)
+    with pytest.raises(contract.TrainingContractError, match="training contract frozen content drift"):
+        contract.validate_training_contract(digest, _baseline())
+
+
 def test_numeric_semantic_layers_are_distinct():
     wrong_type = _training()
     wrong_type["initialization"]["seed"] = 0.0
@@ -356,14 +534,14 @@ def test_numeric_semantic_layers_are_distinct():
     cross = _training()
     cross["evaluation_and_selection"]["training_launch_blocked"] = False
     contract._validate_numeric_constraints(cross)
-    with pytest.raises(contract.TrainingContractError, match="primary evaluator launch gate must remain closed"):
+    with pytest.raises(contract.TrainingContractError, match=r"semantic literal mismatch"):
         contract.validate_training_contract(cross, _baseline())
 
     digest = _training()
     digest["owner_decision"] = "T1_RANDOM_INITIALIZATION_RENAMED"
     contract._validate_numeric_constraints(digest)
     contract._validate_cross_fields(digest)
-    with pytest.raises(contract.TrainingContractError, match="training contract frozen content drift"):
+    with pytest.raises(contract.TrainingContractError, match=r"semantic literal mismatch"):
         contract.validate_training_contract(digest, _baseline())
 
 
@@ -389,7 +567,7 @@ def test_validation_layers_have_distinct_rejections():
     cross["evaluation_and_selection"]["training_launch_blocked"] = False
     contract._validate_closed_schema(cross)
     contract._validate_numeric_constraints(cross)
-    with pytest.raises(contract.TrainingContractError, match="primary evaluator launch gate must remain closed"):
+    with pytest.raises(contract.TrainingContractError, match=r"semantic literal mismatch"):
         contract.validate_training_contract(cross, _baseline())
 
     digest = _training()
@@ -398,7 +576,7 @@ def test_validation_layers_have_distinct_rejections():
     contract._validate_numeric_constraints(digest)
     contract._validate_path_and_sha_fields(digest)
     contract._validate_cross_fields(digest)
-    with pytest.raises(contract.TrainingContractError, match="training contract frozen content drift"):
+    with pytest.raises(contract.TrainingContractError, match=r"semantic literal mismatch"):
         contract.validate_training_contract(digest, _baseline())
 
 

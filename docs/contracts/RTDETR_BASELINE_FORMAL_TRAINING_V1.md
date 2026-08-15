@@ -102,6 +102,32 @@ blocking, and exactly-once checkpoint ownership. The final canonical digest
 remains a separate identity layer rather than a substitute for these semantic
 checks.
 
+The semantic layer is a single static registry of 127 in-scope non-numeric
+leaves. It covers the contract and owner decisions, model and device modes,
+initialization source, optimizer and scheduler roles, AMP placeholders, EMA
+weight selection, R18 transform identity, development-only evaluation, the
+primary evaluator gate, checkpoint ownership, and acceptance states. Path/SHA
+syntax and external source-binding values are deliberately left to their
+dedicated binding layer; semantic role fields inside those binding objects are
+still covered. Six ordered-list rules independently bind vendor include roles,
+the R18 transform sequence, train-only stopped transforms, selection
+tie-breakers, checkpoint state ownership, and acceptance-state order and set.
+
+Eleven stable cross-field rules reject synchronized drift as well as one-sided
+drift: random initialization cannot acquire a pretrained or checkpoint source;
+one formal run cannot resume, retry, or overwrite; required EMA evaluation and
+selection use EMA weights; AMP remains enabled while its four executable
+parameters remain unresolved placeholders; AdamW parameter-group identity is
+audited; epoch scheduler semantics stay epoch-based; development-only
+selection keeps confirmatory and test access sealed; the uncertified primary
+evaluator keeps launch blocked; R18 augmentation remains ordered and
+train-only; checkpoint evidence remains exactly-once and loadable; and
+acceptance evidence remains bound to finite, complete states. Validation order
+is JSON/type, closed schema, numeric, path/SHA, semantic literal/enum/list and
+cross-field rules, frozen digest, then external binding. Thus changing
+`/ema/development_evaluation_weights` from `ema` to `raw` fails at the semantic
+layer rather than being accepted until the whole-contract digest.
+
 The four GradScaler placeholders remain non-numeric
 `IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` values. Numeric validation does not
 make them executable, does not certify the primary evaluator, and does not
