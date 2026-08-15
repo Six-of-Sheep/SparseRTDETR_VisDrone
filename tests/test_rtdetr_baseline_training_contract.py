@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -81,6 +82,18 @@ def _closed_object_roles(value, schema=contract._TRAINING_CONTRACT_SCHEMA, point
         for index, child_schema in enumerate(detail):
             child_pointer = pointer + "/" + str(index)
             yield from _closed_object_roles(value[index], child_schema, child_pointer)
+
+
+def _numeric_leaves(value, pointer=""):
+    if type(value) is dict:
+        for key, child in value.items():
+            child_pointer = (pointer + "/" + key) if pointer else ("/" + key)
+            yield from _numeric_leaves(child, child_pointer)
+    elif type(value) is list:
+        for index, child in enumerate(value):
+            yield from _numeric_leaves(child, pointer + "/" + str(index))
+    elif type(value) in {int, float}:
+        yield pointer, value
 
 
 def _portable_root(tmp_path: Path, training_bytes: bytes) -> Path:
@@ -208,8 +221,6 @@ def test_closed_schema_strict_scalar_and_amp_placeholder_types():
         (("model", "nms"), 0, "scalar type mismatch"),
         (("source_bindings", "vendor_recipe", "relative_path"), np.str_("vendor/x"), "scalar type mismatch"),
         (("source_bindings", "vendor_recipe", "sha256"), np.str_("a" * 64), "scalar type mismatch"),
-        (("optimizer", "default_lr"), float("nan"), "non-finite float"),
-        (("ema", "decay"), float("inf"), "non-finite float"),
         (("amp", "init_scale"), None, "literal mismatch"),
         (("amp", "growth_factor"), True, "literal mismatch"),
         (("amp", "backoff_factor"), 1, "literal mismatch"),
@@ -221,6 +232,139 @@ def test_closed_schema_strict_scalar_and_amp_placeholder_types():
         _set_path(candidate, path, bad)
         with pytest.raises(contract.TrainingContractError, match=message):
             contract._validate_closed_schema(candidate)
+
+
+def test_numeric_registry_exactly_covers_all_builtin_numeric_leaves():
+    numeric = dict(_numeric_leaves(_training()))
+    registry = contract._TRAINING_CONTRACT_NUMERIC_CONSTRAINTS
+    assert len(numeric) == 50
+    assert set(numeric) == set(registry)
+    for pointer, value in numeric.items():
+        constraint = registry[pointer]
+        assert constraint["expected_type"] is type(value)
+        assert constraint["finite"] is True
+        assert constraint["exact"] == value
+        assert type(constraint["role"]) is str and constraint["role"]
+    contract._validate_numeric_constraints(_training())
+
+
+@pytest.mark.parametrize("bad", [-1, 1, 10**100, True, 0.0])
+def test_numeric_seed_zero_exploit_replay(bad):
+    candidate = _training()
+    candidate["initialization"]["seed"] = bad
+    if type(bad) is int:
+        expected = "out_of_range" if bad < 0 else "frozen_literal_mismatch"
+        with pytest.raises(contract.TrainingContractError, match=rf"numeric {expected} at /initialization/seed"):
+            contract._validate_numeric_constraints(candidate)
+        with pytest.raises(contract.TrainingContractError, match=rf"numeric {expected} at /initialization/seed"):
+            contract.validate_training_contract(candidate, _baseline())
+    else:
+        with pytest.raises(contract.TrainingContractError, match=r"closed schema scalar type mismatch at /initialization/seed"):
+            contract.validate_training_contract(candidate, _baseline())
+
+
+def _in_range_alternative(constraint):
+    exact = constraint["exact"]
+    if constraint["expected_type"] is int:
+        for value in (exact + 1, exact - 1, 0, 1, 2):
+            if value == exact:
+                continue
+            lower = constraint["lower"]
+            upper = constraint["upper"]
+            if lower is not None and (value < lower or (value == lower and not constraint["lower_inclusive"])):
+                continue
+            if upper is not None and (value > upper or (value == upper and not constraint["upper_inclusive"])):
+                continue
+            return value
+    else:
+        for value in (exact / 2.0, exact + 0.01, 0.5, 0.0):
+            if value == exact:
+                continue
+            lower = constraint["lower"]
+            upper = constraint["upper"]
+            if lower is not None and (value < lower or (value == lower and not constraint["lower_inclusive"])):
+                continue
+            if upper is not None and (value > upper or (value == upper and not constraint["upper_inclusive"])):
+                continue
+            return float(value)
+    raise AssertionError("no in-range alternative for constraint")
+
+
+def test_all_numeric_constraints_reject_range_nonfinite_and_literal_drift():
+    registry = contract._TRAINING_CONTRACT_NUMERIC_CONSTRAINTS
+    executed = 0
+    for pointer, constraint in registry.items():
+        cases = []
+        if constraint["expected_type"] is float:
+            cases.extend([(float("nan"), "nonfinite"), (float("inf"), "nonfinite"), (float("-inf"), "nonfinite")])
+        lower = constraint["lower"]
+        if lower is not None:
+            bad = lower if not constraint["lower_inclusive"] else lower - 1
+            bad = int(bad) if constraint["expected_type"] is int else float(bad)
+            cases.append((bad, "out_of_range"))
+        upper = constraint["upper"]
+        if upper is not None:
+            bad = upper if not constraint["upper_inclusive"] else upper + 1
+            bad = int(bad) if constraint["expected_type"] is int else float(bad)
+            cases.append((bad, "out_of_range"))
+        cases.append((_in_range_alternative(constraint), "frozen_literal_mismatch"))
+        for bad, category in cases:
+            candidate = _training()
+            _set_json_pointer(candidate, pointer, bad)
+            with pytest.raises(contract.TrainingContractError, match=rf"numeric {category} at {re.escape(pointer)}"):
+                contract._validate_numeric_constraints(candidate)
+            with pytest.raises(contract.TrainingContractError, match=rf"numeric {category} at {re.escape(pointer)}"):
+                contract.validate_training_contract(candidate, _baseline())
+            executed += 1
+    assert executed >= 100
+
+
+def _set_json_pointer(value, pointer, replacement):
+    tokens = pointer.lstrip("/").split("/")
+    current = value
+    for token in tokens[:-1]:
+        current = current[int(token)] if type(current) is list else current[token]
+    final = tokens[-1]
+    if type(current) is list:
+        current[int(final)] = replacement
+    else:
+        current[final] = replacement
+
+
+def test_numeric_semantic_layers_are_distinct():
+    wrong_type = _training()
+    wrong_type["initialization"]["seed"] = 0.0
+    with pytest.raises(contract.TrainingContractError, match="closed schema scalar type mismatch"):
+        contract.validate_training_contract(wrong_type, _baseline())
+
+    nonfinite = _training()
+    nonfinite["optimizer"]["default_lr"] = float("nan")
+    contract._validate_closed_schema(nonfinite)
+    with pytest.raises(contract.TrainingContractError, match="numeric nonfinite"):
+        contract.validate_training_contract(nonfinite, _baseline())
+
+    out_of_range = _training()
+    out_of_range["initialization"]["seed"] = -1
+    with pytest.raises(contract.TrainingContractError, match="numeric out_of_range"):
+        contract.validate_training_contract(out_of_range, _baseline())
+
+    literal = _training()
+    literal["initialization"]["seed"] = 1
+    with pytest.raises(contract.TrainingContractError, match="numeric frozen_literal_mismatch"):
+        contract.validate_training_contract(literal, _baseline())
+
+    cross = _training()
+    cross["evaluation_and_selection"]["training_launch_blocked"] = False
+    contract._validate_numeric_constraints(cross)
+    with pytest.raises(contract.TrainingContractError, match="primary evaluator launch gate must remain closed"):
+        contract.validate_training_contract(cross, _baseline())
+
+    digest = _training()
+    digest["owner_decision"] = "T1_RANDOM_INITIALIZATION_RENAMED"
+    contract._validate_numeric_constraints(digest)
+    contract._validate_cross_fields(digest)
+    with pytest.raises(contract.TrainingContractError, match="training contract frozen content drift"):
+        contract.validate_training_contract(digest, _baseline())
 
 
 def test_closed_schema_rejects_nested_container_kind_swaps():
@@ -242,14 +386,16 @@ def test_validation_layers_have_distinct_rejections():
         contract.validate_training_contract(exact, _baseline())
 
     cross = _training()
-    cross["topology"]["effective_train_batch"] = 32
+    cross["evaluation_and_selection"]["training_launch_blocked"] = False
     contract._validate_closed_schema(cross)
-    with pytest.raises(contract.TrainingContractError, match="effective train batch arithmetic drift"):
+    contract._validate_numeric_constraints(cross)
+    with pytest.raises(contract.TrainingContractError, match="primary evaluator launch gate must remain closed"):
         contract.validate_training_contract(cross, _baseline())
 
     digest = _training()
     digest["owner_decision"] = "T1_RANDOM_INITIALIZATION_RENAMED"
     contract._validate_closed_schema(digest)
+    contract._validate_numeric_constraints(digest)
     contract._validate_path_and_sha_fields(digest)
     contract._validate_cross_fields(digest)
     with pytest.raises(contract.TrainingContractError, match="training contract frozen content drift"):

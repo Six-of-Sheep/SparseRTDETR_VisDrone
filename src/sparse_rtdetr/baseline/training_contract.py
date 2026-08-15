@@ -152,6 +152,82 @@ _TRAINING_CONTRACT_SCHEMA = _object(
 )
 
 
+def _numeric(
+    expected_type: type,
+    exact: int | float,
+    role: str,
+    *,
+    lower: int | float | None = None,
+    lower_inclusive: bool = True,
+    upper: int | float | None = None,
+    upper_inclusive: bool = True,
+) -> dict[str, Any]:
+    return {
+        "expected_type": expected_type,
+        "finite": True,
+        "lower": lower,
+        "lower_inclusive": lower_inclusive,
+        "upper": upper,
+        "upper_inclusive": upper_inclusive,
+        "exact": exact,
+        "role": role,
+    }
+
+
+_TRAINING_CONTRACT_NUMERIC_CONSTRAINTS = {
+    "/schema_version": _numeric(int, 1, "schema_version", lower=1),
+    "/source_bindings/baseline_config/size_bytes": _numeric(int, 4316, "size_bytes", lower=1),
+    "/model/num_classes": _numeric(int, 10, "count", lower=1),
+    "/model/parameter_count": _numeric(int, 20094584, "count", lower=1),
+    "/model/input_size/0": _numeric(int, 640, "size", lower=1),
+    "/model/input_size/1": _numeric(int, 640, "size", lower=1),
+    "/model/num_queries": _numeric(int, 300, "count", lower=1),
+    "/model/decoder_layers": _numeric(int, 3, "count", lower=1),
+    "/initialization/seed": _numeric(int, 0, "seed", lower=0),
+    "/initialization/formal_run_count": _numeric(int, 1, "count", lower=1),
+    "/topology/world_size": _numeric(int, 1, "count", lower=1),
+    "/topology/train_micro_batch": _numeric(int, 16, "batch_size", lower=1),
+    "/topology/gradient_accumulation_steps": _numeric(int, 1, "step_count", lower=1),
+    "/topology/effective_train_batch": _numeric(int, 16, "batch_size", lower=1),
+    "/topology/train_workers": _numeric(int, 4, "worker_count", lower=0),
+    "/topology/development_batch": _numeric(int, 32, "batch_size", lower=1),
+    "/topology/development_workers": _numeric(int, 4, "worker_count", lower=0),
+    "/schedule/epochs": _numeric(int, 120, "epoch_count", lower=1),
+    "/schedule/checkpoint_frequency_epochs": _numeric(int, 1, "epoch_interval", lower=1),
+    "/schedule/development_evaluation_frequency_epochs": _numeric(int, 1, "epoch_interval", lower=1),
+    "/schedule/augmentation_stop_epoch": _numeric(int, 117, "epoch_index", lower=0),
+    "/optimizer/default_lr": _numeric(float, 0.0001, "learning_rate", lower=0.0, lower_inclusive=False),
+    "/optimizer/backbone_non_norm_lr": _numeric(float, 0.00001, "learning_rate", lower=0.0, lower_inclusive=False),
+    "/optimizer/betas/0": _numeric(float, 0.9, "adam_beta", lower=0.0, upper=1.0, upper_inclusive=False),
+    "/optimizer/betas/1": _numeric(float, 0.999, "adam_beta", lower=0.0, upper=1.0, upper_inclusive=False),
+    "/optimizer/default_weight_decay": _numeric(float, 0.0001, "weight_decay", lower=0.0),
+    "/optimizer/norm_bn_weight_decay": _numeric(float, 0.0, "weight_decay", lower=0.0),
+    "/optimizer/clip_max_norm": _numeric(float, 0.1, "gradient_norm", lower=0.0, lower_inclusive=False),
+    "/learning_rate/warmup_optimizer_steps": _numeric(int, 2000, "step_count", lower=1),
+    "/learning_rate/milestones/0": _numeric(int, 1000, "epoch_milestone", lower=1),
+    "/learning_rate/gamma": _numeric(float, 0.1, "scheduler_factor", lower=0.0, lower_inclusive=False, upper=1.0),
+    "/learning_rate/expected_decay_events_within_120_epochs": _numeric(int, 0, "count", lower=0),
+    "/amp/nonfinite_loss_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
+    "/amp/nonfinite_gradient_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
+    "/amp/optimizer_skipped_steps_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
+    "/amp/overflow_events_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
+    "/ema/decay": _numeric(float, 0.9999, "ema_decay", lower=0.0, lower_inclusive=False, upper=1.0, upper_inclusive=False),
+    "/ema/warmups": _numeric(int, 2000, "update_count", lower=1),
+    "/augmentation/transforms/0/p": _numeric(float, 0.5, "probability", lower=0.0, upper=1.0),
+    "/augmentation/transforms/1/fill": _numeric(int, 0, "pixel_fill", lower=0, upper=255),
+    "/augmentation/transforms/2/p": _numeric(float, 0.8, "probability", lower=0.0, upper=1.0),
+    "/augmentation/transforms/3/min_size": _numeric(int, 1, "size", lower=1),
+    "/augmentation/transforms/5/size/0": _numeric(int, 640, "size", lower=1),
+    "/augmentation/transforms/5/size/1": _numeric(int, 640, "size", lower=1),
+    "/augmentation/transforms/6/min_size": _numeric(int, 1, "size", lower=1),
+    "/augmentation/stop_epoch": _numeric(int, 117, "epoch_index", lower=0),
+    "/evaluation_and_selection/evaluation_frequency_epochs": _numeric(int, 1, "epoch_interval", lower=1),
+    "/checkpoint_policy/periodic_checkpoint_frequency_epochs": _numeric(int, 10, "epoch_interval", lower=1),
+    "/acceptance/required_epochs_complete": _numeric(int, 120, "epoch_count", lower=1),
+    "/acceptance/required_exit_code": _numeric(int, 0, "process_exit_code", lower=0),
+}
+
+
 class TrainingContractError(ValueError):
     """Raised when the portable formal-training contract fails closed."""
 
@@ -210,10 +286,7 @@ def _assert_json_types(value: Any, field: str = "contract") -> None:
     elif type(value) is list:
         for index, child in enumerate(value):
             _assert_json_types(child, f"{field}[{index}]")
-    elif type(value) is float:
-        if not math.isfinite(value):
-            raise TrainingContractError(f"{field} must be finite")
-    elif type(value) not in {str, int, bool, type(None)}:
+    elif type(value) not in {str, int, float, bool, type(None)}:
         raise TrainingContractError(f"{field} has a non-JSON or non-strict scalar type")
 
 
@@ -261,8 +334,56 @@ def _validate_closed_schema(value: Any, schema: Any = _TRAINING_CONTRACT_SCHEMA,
         raise RuntimeError(f"unknown closed schema kind: {kind}")
     if type(value) is not detail:
         raise TrainingContractError(f"closed schema scalar type mismatch at {location}: expected={detail.__name__}")
-    if detail is float and not math.isfinite(value):
-        raise TrainingContractError(f"closed schema non-finite float at {location}")
+
+
+def _numeric_values(value: Any, pointer: str = "") -> dict[str, int | float]:
+    rows: dict[str, int | float] = {}
+    if type(value) is dict:
+        for key, child in value.items():
+            rows.update(_numeric_values(child, _pointer_child(pointer, key)))
+    elif type(value) is list:
+        for index, child in enumerate(value):
+            rows.update(_numeric_values(child, _pointer_child(pointer, index)))
+    elif type(value) in {int, float}:
+        rows[pointer] = value
+    return rows
+
+
+def _validate_numeric_constraints(config: Any) -> None:
+    """Validate every numeric leaf independently of whole-contract identity."""
+
+    values = _numeric_values(config)
+    expected = set(_TRAINING_CONTRACT_NUMERIC_CONSTRAINTS)
+    actual = set(values)
+    if actual != expected:
+        raise TrainingContractError(
+            f"numeric constraint registry coverage drift: missing={sorted(actual - expected)} orphan={sorted(expected - actual)}"
+        )
+    for pointer, constraint in _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS.items():
+        value = values[pointer]
+        expected_type = constraint["expected_type"]
+        if type(value) is not expected_type:
+            raise TrainingContractError(
+                f"numeric type mismatch at {pointer}: observed={value!r} expected={expected_type.__name__}"
+            )
+        if constraint["finite"] and type(value) is float and not math.isfinite(value):
+            raise TrainingContractError(f"numeric nonfinite at {pointer}: observed={value!r}")
+        lower = constraint["lower"]
+        if lower is not None and (value < lower or (value == lower and not constraint["lower_inclusive"])):
+            operator = ">=" if constraint["lower_inclusive"] else ">"
+            raise TrainingContractError(
+                f"numeric out_of_range at {pointer}: observed={value!r} constraint={operator}{lower!r}"
+            )
+        upper = constraint["upper"]
+        if upper is not None and (value > upper or (value == upper and not constraint["upper_inclusive"])):
+            operator = "<=" if constraint["upper_inclusive"] else "<"
+            raise TrainingContractError(
+                f"numeric out_of_range at {pointer}: observed={value!r} constraint={operator}{upper!r}"
+            )
+        if value != constraint["exact"]:
+            raise TrainingContractError(
+                f"numeric frozen_literal_mismatch at {pointer}: observed={value!r} expected={constraint['exact']!r}"
+            )
 
 
 def _closed_schema_object_roles(schema: Any = _TRAINING_CONTRACT_SCHEMA, pointer: str = "") -> tuple[str, ...]:
@@ -316,8 +437,11 @@ def _validate_path_and_sha_fields(config: dict[str, Any]) -> None:
 
 def _validate_cross_fields(config: dict[str, Any]) -> None:
     topology = config["topology"]
-    if topology["train_micro_batch"] * topology["gradient_accumulation_steps"] != topology["effective_train_batch"]:
+    if topology["train_micro_batch"] * topology["gradient_accumulation_steps"] * topology["world_size"] != topology["effective_train_batch"]:
         raise TrainingContractError("effective train batch arithmetic drift")
+    initialization = config["initialization"]
+    if initialization["formal_run_count"] != 1 or initialization["seed_selection_forbidden"] is not True:
+        raise TrainingContractError("single formal run policy drift")
     schedule = config["schedule"]
     if schedule["augmentation_stop_epoch"] >= schedule["epochs"]:
         raise TrainingContractError("augmentation stop must precede completion")
@@ -335,6 +459,16 @@ def _validate_cross_fields(config: dict[str, Any]) -> None:
         raise TrainingContractError("development evaluation frequency drift")
     if evaluation["primary_evaluator_independently_certified"] or not evaluation["training_launch_blocked"]:
         raise TrainingContractError("primary evaluator launch gate must remain closed")
+    if config["optimizer"]["type"] != "AdamW":
+        raise TrainingContractError("optimizer type must remain AdamW")
+    if config["amp"]["enabled"] is not True or config["ema"]["enabled"] is not True:
+        raise TrainingContractError("AMP/EMA required-state drift")
+    if config["acceptance"]["required_epochs_complete"] != schedule["epochs"]:
+        raise TrainingContractError("required epoch completion drift")
+    if config["checkpoint_policy"]["exactly_once_run_identity"] is not True or any(
+        config["checkpoint_policy"][key] is not False for key in ("resume", "retry", "overwrite")
+    ):
+        raise TrainingContractError("exactly-once checkpoint ownership drift")
 
 
 def _validate_baseline_binding(config: dict[str, Any], baseline_config: dict[str, Any]) -> None:
@@ -369,6 +503,7 @@ def validate_training_contract(config: Any, baseline_config: Any) -> dict[str, A
 
     _assert_json_types(config)
     _validate_closed_schema(config)
+    _validate_numeric_constraints(config)
     _validate_path_and_sha_fields(config)
     _validate_cross_fields(config)
     digest = _sha256_bytes(canonical_training_contract_bytes(config))

@@ -89,3 +89,20 @@ list length and order remain part of the frozen contract. Integer and boolean
 roles are distinct, floats must be finite, and the four GradScaler fields only
 accept `IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` until a later implementation
 contract freezes executable values.
+
+All 50 builtin numeric leaves are also covered by a static JSON-pointer
+constraint registry before path, cross-field, and digest validation. Each role
+declares its exact builtin type, finite requirement, basic legal range, and T1
+frozen literal. Errors distinguish non-finite values, values outside the legal
+domain, and in-range values that differ from the frozen decision. In
+particular, the initialization seed is exactly integer zero, not an arbitrary
+non-negative seed. Cross-field checks separately bind effective batch,
+single-run policy, epoch completion, AMP/EMA requirements, evaluator launch
+blocking, and exactly-once checkpoint ownership. The final canonical digest
+remains a separate identity layer rather than a substitute for these semantic
+checks.
+
+The four GradScaler placeholders remain non-numeric
+`IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` values. Numeric validation does not
+make them executable, does not certify the primary evaluator, and does not
+make this contract frozen or training-launch ready.
