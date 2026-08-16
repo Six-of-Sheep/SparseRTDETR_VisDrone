@@ -6,6 +6,7 @@ import hashlib
 import math
 import os
 import random
+import shutil
 import socket
 import stat
 import subprocess
@@ -24,6 +25,8 @@ from sparse_rtdetr.baseline.primary_evaluator import (
     IOU_THRESHOLDS,
     MAX_DETS,
     METRIC_NAMES,
+    PRIMARY_CONFIG_RELATIVE_PATH,
+    PRIMARY_MANIFEST_RELATIVE_PATH,
     PrimaryEvaluatorContractError,
     evaluate_primary_v1,
     load_primary_evaluator_authority_manifest,
@@ -510,6 +513,32 @@ def _read_fixture(root: Path, relative: str = "payload") -> bytes:
         return raw
 
 
+def _copy_binding_root(root: Path) -> Path:
+    for relative in (PRIMARY_CONFIG_RELATIVE_PATH, PRIMARY_MANIFEST_RELATIVE_PATH):
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, destination)
+    return root
+
+
+def _replace_directory(path: Path, *, payload: bytes | None = None) -> int:
+    old_inode = path.stat().st_ino
+    moved = path.with_name(path.name + ".old")
+    os.rename(path, moved)
+    path.mkdir()
+    if payload is not None:
+        (path / "payload").write_bytes(payload)
+    new_inode = path.stat().st_ino
+    assert new_inode != old_inode
+    return new_inode
+
+
+def _fake_device(value: os.stat_result, device: int) -> os.stat_result:
+    fields = list(value)
+    fields[2] = device
+    return os.stat_result(fields)
+
+
 def test_fd_repository_boundary_rejects_symlink_and_hardlink_objects(tmp_path):
     real_root = tmp_path / "repo"
     real_root.mkdir()
@@ -529,6 +558,198 @@ def test_fd_repository_boundary_rejects_symlink_and_hardlink_objects(tmp_path):
     (real_root / "hardlink").hardlink_to(real_root / "nested" / "payload")
     with pytest.raises(PrimaryEvaluatorContractError):
         _read_fixture(real_root, "hardlink")
+
+
+def test_fd_repository_boundary_rejects_absolute_ancestor_symlink(tmp_path):
+    target = tmp_path / "target" / "repo"
+    target.mkdir(parents=True)
+    exposed = tmp_path / "exposed"
+    exposed.symlink_to(target.parent, target_is_directory=True)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluator_module._RepositoryBoundary(exposed / "repo")
+
+
+@pytest.mark.parametrize("position", (0, 1, 2))
+def test_fd_repository_boundary_rejects_symlink_at_every_absolute_root_position(tmp_path, position):
+    case = tmp_path / f"position-{position}"
+    target = case / "target" / "level-a" / "level-b" / "repo"
+    target.mkdir(parents=True)
+    exposed = case / "exposed"
+    exposed.mkdir(parents=True)
+    if position == 0:
+        (exposed / "level-a").symlink_to(target.parent.parent, target_is_directory=True)
+    else:
+        (exposed / "level-a").mkdir()
+        if position == 1:
+            (exposed / "level-a" / "level-b").symlink_to(target.parent, target_is_directory=True)
+        else:
+            (exposed / "level-a" / "level-b").mkdir()
+            (exposed / "level-a" / "level-b" / "repo").symlink_to(target, target_is_directory=True)
+    root = exposed / "level-a" / "level-b" / "repo"
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluator_module._RepositoryBoundary(root)
+
+
+@pytest.mark.parametrize("component", ("stable-parent", "nested"))
+def test_fd_repository_boundary_rejects_first_and_last_descendant_replacement(tmp_path, component, monkeypatch):
+    root = tmp_path / "repo"
+    (root / "stable-parent" / "nested").mkdir(parents=True)
+    (root / "stable-parent" / "nested" / "payload").write_bytes(b"old-authority")
+    original_open = evaluator_module.os.open
+    mutated = {"value": False}
+
+    def replace_after_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        if path == component and flags & os.O_DIRECTORY and not mutated["value"]:
+            if component == "stable-parent":
+                _replace_directory(root / "stable-parent")
+            else:
+                _replace_directory(root / "stable-parent" / "nested", payload=b"new-authority")
+            mutated["value"] = True
+        return fd
+
+    monkeypatch.setattr(evaluator_module.os, "open", replace_after_open)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(root, "stable-parent/nested/payload")
+    assert mutated["value"] is True
+
+
+def test_fd_repository_boundary_rejects_deep_descendant_replacement_exploit(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    (root / "stable-parent" / "nested").mkdir(parents=True)
+    (root / "stable-parent" / "nested" / "payload").write_bytes(b"old-authority")
+    original_open = evaluator_module.os.open
+    mutated = {"value": False}
+
+    def replace_nested_after_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        if path == "nested" and flags & os.O_DIRECTORY and not mutated["value"]:
+            _replace_directory(root / "stable-parent" / "nested", payload=b"new-authority")
+            mutated["value"] = True
+        return fd
+
+    monkeypatch.setattr(evaluator_module.os, "open", replace_nested_after_open)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(root, "stable-parent/nested/payload")
+    assert mutated["value"] is True
+
+
+def test_fd_repository_boundary_rejects_replacement_before_second_binding_read(tmp_path, monkeypatch):
+    root = _copy_binding_root(tmp_path / "archive")
+    original_read = evaluator_module._read_fd_complete
+    mutated = {"value": False}
+
+    def replace_config_directory(fd, expected_size, label):
+        raw = original_read(fd, expected_size, label)
+        if label == "primary evaluator contract" and not mutated["value"]:
+            old = root / "configs"
+            moved = root / "configs.old"
+            os.rename(old, moved)
+            (root / "configs" / "baseline").mkdir(parents=True)
+            shutil.copyfile(ROOT / PRIMARY_CONFIG_RELATIVE_PATH, root / PRIMARY_CONFIG_RELATIVE_PATH)
+            assert (root / "configs").stat().st_ino != moved.stat().st_ino
+            mutated["value"] = True
+        return raw
+
+    monkeypatch.setattr(evaluator_module, "_read_fd_complete", replace_config_directory)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        primary_evaluator_contract_binding(root)
+    assert mutated["value"] is True
+
+
+def test_fd_repository_boundary_rejects_config_replacement_at_terminal_closure(tmp_path, monkeypatch):
+    root = _copy_binding_root(tmp_path / "archive")
+    config = root / PRIMARY_CONFIG_RELATIVE_PATH
+    original_read = evaluator_module._read_fd_complete
+    mutated = {"value": False}
+
+    def replace_config_file(fd, expected_size, label):
+        raw = original_read(fd, expected_size, label)
+        if label == "primary evaluator contract" and not mutated["value"]:
+            moved = config.with_name(config.name + ".old")
+            os.rename(config, moved)
+            shutil.copyfile(ROOT / PRIMARY_CONFIG_RELATIVE_PATH, config)
+            assert config.stat().st_ino != moved.stat().st_ino
+            mutated["value"] = True
+        return raw
+
+    monkeypatch.setattr(evaluator_module, "_read_fd_complete", replace_config_file)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        primary_evaluator_contract_binding(root)
+    assert mutated["value"] is True
+
+
+def test_fd_repository_boundary_accepts_production_and_clean_archive_roots(tmp_path):
+    production = primary_evaluator_contract_binding(ROOT)
+    assert production["config_raw_sha256"] == evaluator_module.PRIMARY_CONFIG_RAW_SHA256
+    archive = _copy_binding_root(tmp_path / "archive")
+    clean_archive = primary_evaluator_contract_binding(archive)
+    assert clean_archive["authority_manifest_raw_sha256"] == evaluator_module.AUTHORITY_MANIFEST_RAW_SHA256
+
+
+def test_fd_repository_boundary_allows_ancestor_device_transition_and_rejects_descendant_drift(tmp_path, monkeypatch):
+    root = tmp_path / "transition" / "repo"
+    root.mkdir(parents=True)
+    (root / "payload").write_bytes(b"payload")
+    original_stat = evaluator_module.os.stat
+    original_open = evaluator_module.os.open
+    original_fstat = evaluator_module.os.fstat
+    transition_fds = set()
+
+    def transition_stat(path, *args, **kwargs):
+        observed = original_stat(path, *args, **kwargs)
+        if path == "transition" and kwargs.get("dir_fd") is not None and kwargs.get("follow_symlinks") is False:
+            return _fake_device(observed, observed.st_dev + 1)
+        return observed
+
+    def transition_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        if path == "transition" and flags & os.O_DIRECTORY and dir_fd is not None:
+            transition_fds.add(fd)
+        return fd
+
+    def transition_fstat(fd):
+        observed = original_fstat(fd)
+        if fd in transition_fds:
+            return _fake_device(observed, observed.st_dev + 1)
+        return observed
+
+    monkeypatch.setattr(evaluator_module.os, "stat", transition_stat)
+    monkeypatch.setattr(evaluator_module.os, "open", transition_open)
+    monkeypatch.setattr(evaluator_module.os, "fstat", transition_fstat)
+    assert _read_fixture(root) == b"payload"
+
+    nested_root = tmp_path / "nested-root"
+    (nested_root / "nested").mkdir(parents=True)
+    (nested_root / "nested" / "payload").write_bytes(b"payload")
+
+    def descendant_drift_stat(path, *args, **kwargs):
+        observed = original_stat(path, *args, **kwargs)
+        if path == "nested" and kwargs.get("dir_fd") is not None and kwargs.get("follow_symlinks") is False:
+            return _fake_device(observed, observed.st_dev + 1)
+        return observed
+
+    monkeypatch.setattr(evaluator_module.os, "stat", descendant_drift_stat)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(nested_root, "nested/payload")
+
+
+def test_fd_repository_boundary_failure_paths_do_not_leak_descriptors(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "payload").write_bytes(b"payload")
+    before = len(os.listdir("/proc/self/fd"))
+    for _ in range(25):
+        with pytest.raises(PrimaryEvaluatorContractError):
+            _read_fixture(root, "missing")
+    after_missing = len(os.listdir("/proc/self/fd"))
+    assert after_missing == before
+    link = tmp_path / "root-link"
+    link.symlink_to(root, target_is_directory=True)
+    for _ in range(25):
+        with pytest.raises(PrimaryEvaluatorContractError):
+            evaluator_module._RepositoryBoundary(link)
+    assert len(os.listdir("/proc/self/fd")) == before
 
 
 @pytest.mark.parametrize("kind", ("directory", "fifo", "socket"))

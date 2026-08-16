@@ -41,12 +41,22 @@ remain one-to-one.
 
 `primary_evaluator_contract_binding()` verifies the committed strict JSON
 contract and source-identity manifest through one descriptor-rooted boundary.
-The repository root must be an absolute, non-symlink directory.  Every path
-component is opened with `O_DIRECTORY|O_NOFOLLOW`, and the final object is
-checked before opening as a same-device, same-owner, single-link regular file.
-Reads use a complete EINTR-safe descriptor loop and compare before/after
-device, inode, mode, link-count, owner, size, mtime, and ctime identities.  A
-single stable root descriptor covers both the config and manifest reads.
+The original absolute root is parsed lexically, traversed from `/`, and every
+ancestor and final component is opened with `O_DIRECTORY|O_NOFOLLOW` after a
+no-follow stat identity check.  Ancestor mount transitions are allowed; the
+final repository device is established at the root and all descendants must
+remain on it.  The complete absolute descriptor chain is retained through
+transaction closure, so an ancestor symlink, exchange, rename, or replacement
+fails closed even when the final root component is still a directory.
+
+Every relative read retains its complete parent/name/child-descriptor chain,
+including the final parent and file descriptor.  Reads use a complete
+EINTR-safe descriptor loop and compare before/after device, inode, mode,
+link-count, owner, size, mtime, and ctime identities.  The terminal
+`assert_stable()` independently re-stats every retained child name through its
+frozen parent descriptor and re-fstats every retained descriptor for both the
+config and manifest observations.  All retained descriptors are closed exactly
+once on success and failure, while preserving the original contract error.
 
 The evaluator accepts only the exact builtin-dict authoritative binding with
 these ten keys: `config`, `authority_manifest`,

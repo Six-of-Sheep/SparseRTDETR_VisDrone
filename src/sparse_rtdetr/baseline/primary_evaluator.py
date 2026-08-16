@@ -13,6 +13,7 @@ import math
 import os
 import stat
 import errno
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -226,14 +227,27 @@ def _stat_identity(value: os.stat_result) -> tuple[int, int, int, int, int, int,
     )
 
 
-def _repo_root_path(repo_root: Path | str) -> Path:
+def _repo_root_path(repo_root: Path | str) -> tuple[Path, tuple[str, ...]]:
     try:
-        root = Path(repo_root)
+        raw = os.fspath(repo_root)
     except (TypeError, ValueError) as exc:
         _fail(f"repository root is invalid: {type(exc).__name__}")
-    if not root.is_absolute():
+    if type(raw) is not str or not raw:
+        _fail("repository root must be a non-empty builtin string path")
+    if "\x00" in raw or "\\" in raw:
+        _fail("repository root contains an invalid separator or NUL")
+    if not raw.startswith("/"):
         _fail("repository root must be absolute")
-    return root
+    if raw == "/":
+        return Path(raw), ()
+    if raw.startswith("//") or raw.endswith("/") or "//" in raw:
+        _fail("repository root is not a canonical absolute path")
+    components = tuple(raw[1:].split("/"))
+    if any(not component or component in (".", "..") for component in components):
+        _fail("repository root contains an invalid lexical component")
+    if os.path.normpath(raw) != raw:
+        _fail("repository root is not a canonical absolute path")
+    return Path(raw), components
 
 
 def _relative_components(relative_path: str) -> tuple[str, ...]:
@@ -277,48 +291,130 @@ def _read_fd_complete(fd: int, expected_size: int, label: str) -> bytes:
     return b"".join(chunks)
 
 
+@dataclass(frozen=True)
+class _DescriptorComponent:
+    parent_fd: int
+    name: str
+    child_fd: int
+    identity: tuple[int, int, int, int, int, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class _ReadEvidence:
+    directories: tuple[_DescriptorComponent, ...]
+    parent_fd: int
+    final_name: str
+    file_fd: int
+    identity: tuple[int, int, int, int, int, int, int, int, int]
+
+
 class _RepositoryBoundary:
     """A stable descriptor-rooted reader for committed evaluator JSON."""
 
     def __init__(self, repo_root: Path | str):
-        self.root = _repo_root_path(repo_root)
+        self.root, root_components = _repo_root_path(repo_root)
+        self._owned_fds: list[int] = []
+        self._closed = False
+        self._root_chain: tuple[_DescriptorComponent, ...] = ()
+        self._reads: list[_ReadEvidence] = []
         try:
-            self._root_lstat = os.lstat(os.fspath(self.root))
-        except OSError as exc:
-            _fail(f"repository root stat failure: {type(exc).__name__}")
-        if not stat.S_ISDIR(self._root_lstat.st_mode) or stat.S_ISLNK(self._root_lstat.st_mode):
-            _fail("repository root must be a real directory")
-        self._root_fd = _open_directory(os.fspath(self.root))
-        try:
-            self._root_fstat = os.fstat(self._root_fd)
-            if _stat_identity(self._root_fstat) != _stat_identity(self._root_lstat):
-                _fail("repository root identity changed during open")
+            self._open_root_chain(root_components)
         except BaseException:
-            os.close(self._root_fd)
+            self._close_owned()
             raise
 
     def __enter__(self) -> "_RepositoryBoundary":
         return self
 
     def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        close_error = self._close_owned()
+        if exc_type is None and close_error is not None:
+            raise close_error
+
+    def _close_owned(self) -> OSError | None:
+        if self._closed:
+            return None
+        self._closed = True
+        first_error: OSError | None = None
+        for fd in reversed(self._owned_fds):
+            try:
+                os.close(fd)
+            except OSError as exc:
+                if first_error is None:
+                    first_error = exc
+        return first_error
+
+    def _open_root_chain(self, components: tuple[str, ...]) -> None:
+        current_fd = _open_directory("/")
+        self._owned_fds.append(current_fd)
+        evidence: list[_DescriptorComponent] = []
+        for component in components:
+            try:
+                before = os.stat(component, dir_fd=current_fd, follow_symlinks=False)
+            except OSError as exc:
+                _fail(f"repository root component stat failure: {type(exc).__name__}")
+            if not stat.S_ISDIR(before.st_mode) or stat.S_ISLNK(before.st_mode):
+                _fail("repository root component must be a real directory")
+            next_fd = _open_directory(component, dir_fd=current_fd)
+            self._owned_fds.append(next_fd)
+            try:
+                after = os.fstat(next_fd)
+            except OSError as exc:
+                _fail(f"repository root component fstat failure: {type(exc).__name__}")
+            if _stat_identity(after) != _stat_identity(before):
+                _fail("repository root component identity changed during open")
+            evidence.append(_DescriptorComponent(current_fd, component, next_fd, _stat_identity(before)))
+            current_fd = next_fd
+        self._root_chain = tuple(evidence)
+        self._root_fd = current_fd
         try:
-            os.close(self._root_fd)
-        except OSError:
-            if exc_type is None:
-                raise
+            self._root_fstat = os.fstat(self._root_fd)
+        except OSError as exc:
+            _fail(f"repository root final fstat failure: {type(exc).__name__}")
+        if not stat.S_ISDIR(self._root_fstat.st_mode) or stat.S_ISLNK(self._root_fstat.st_mode):
+            _fail("repository root must be a real directory")
+        self._root_device = self._root_fstat.st_dev
 
     def assert_stable(self) -> None:
+        if self._closed:
+            _fail("repository boundary is already closed")
+        for component in self._root_chain:
+            try:
+                current_path = os.stat(component.name, dir_fd=component.parent_fd, follow_symlinks=False)
+                current_fd = os.fstat(component.child_fd)
+            except OSError as exc:
+                _fail(f"repository root terminal revalidation failure: {type(exc).__name__}")
+            if _stat_identity(current_path) != component.identity or _stat_identity(current_fd) != component.identity:
+                _fail("repository root descriptor path identity changed")
         try:
             current = os.fstat(self._root_fd)
         except OSError as exc:
             _fail(f"repository root final stat failure: {type(exc).__name__}")
         if _stat_identity(current) != _stat_identity(self._root_fstat):
             _fail("repository root identity changed during transaction")
+        for read in self._reads:
+            for component in read.directories:
+                try:
+                    current_path = os.stat(component.name, dir_fd=component.parent_fd, follow_symlinks=False)
+                    current_fd = os.fstat(component.child_fd)
+                except OSError as exc:
+                    _fail(f"repository descendant terminal revalidation failure: {type(exc).__name__}")
+                if _stat_identity(current_path) != component.identity or _stat_identity(current_fd) != component.identity:
+                    _fail("repository descendant descriptor path identity changed")
+            try:
+                current_path = os.stat(read.final_name, dir_fd=read.parent_fd, follow_symlinks=False)
+                current_fd = os.fstat(read.file_fd)
+            except OSError as exc:
+                _fail(f"repository file terminal revalidation failure: {type(exc).__name__}")
+            if _stat_identity(current_path) != read.identity or _stat_identity(current_fd) != read.identity:
+                _fail("repository file descriptor path identity changed")
 
-    def _open_parent(self, components: tuple[str, ...]) -> tuple[int, str]:
+    def _open_parent(self, components: tuple[str, ...]) -> tuple[int, str, tuple[_DescriptorComponent, ...], list[int]]:
         if not components:
             _fail("repository relative path is empty")
-        current_fd = os.dup(self._root_fd)
+        current_fd = self._root_fd
+        opened_fds: list[int] = []
+        evidence: list[_DescriptorComponent] = []
         try:
             for component in components[:-1]:
                 try:
@@ -327,30 +423,31 @@ class _RepositoryBoundary:
                     _fail(f"repository path component stat failure: {type(exc).__name__}")
                 if not stat.S_ISDIR(before.st_mode) or stat.S_ISLNK(before.st_mode):
                     _fail("repository path component is not a real directory")
-                if before.st_dev != self._root_fstat.st_dev:
+                if before.st_dev != self._root_device:
                     _fail("repository path component crossed devices")
                 next_fd = _open_directory(component, dir_fd=current_fd)
+                opened_fds.append(next_fd)
                 try:
                     after = os.fstat(next_fd)
                     if _stat_identity(after) != _stat_identity(before):
                         _fail("repository path component identity changed during open")
                 except BaseException:
-                    os.close(next_fd)
                     raise
-                os.close(current_fd)
+                evidence.append(_DescriptorComponent(current_fd, component, next_fd, _stat_identity(before)))
                 current_fd = next_fd
-            return current_fd, components[-1]
+            return current_fd, components[-1], tuple(evidence), opened_fds
         except BaseException:
-            try:
-                os.close(current_fd)
-            except OSError:
-                pass
+            for fd in reversed(opened_fds):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
             raise
 
     def read_bytes(self, relative_path: str, label: str) -> bytes:
         components = _relative_components(relative_path)
-        parent_fd, final_name = self._open_parent(components)
-        file_fd: int | None = None
+        parent_fd, final_name, directories, opened_fds = self._open_parent(components)
+        committed = False
         try:
             try:
                 before = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
@@ -360,7 +457,7 @@ class _RepositoryBoundary:
                 not stat.S_ISREG(before.st_mode)
                 or stat.S_ISLNK(before.st_mode)
                 or before.st_nlink != 1
-                or before.st_dev != self._root_fstat.st_dev
+                or before.st_dev != self._root_device
                 or before.st_uid != self._root_fstat.st_uid
                 or before.st_gid != self._root_fstat.st_gid
             ):
@@ -370,6 +467,7 @@ class _RepositoryBoundary:
                 file_fd = os.open(final_name, flags, dir_fd=parent_fd)
             except OSError as exc:
                 _fail(f"{label} open failure: {type(exc).__name__}")
+            opened_fds.append(file_fd)
             opened = os.fstat(file_fd)
             if _stat_identity(opened) != _stat_identity(before):
                 _fail(f"{label} identity changed during open")
@@ -381,11 +479,17 @@ class _RepositoryBoundary:
                 _fail(f"{label} final path stat failure: {type(exc).__name__}")
             if _stat_identity(after) != _stat_identity(before) or _stat_identity(path_after) != _stat_identity(before):
                 _fail(f"{label} identity changed during read")
+            self._reads.append(_ReadEvidence(directories, parent_fd, final_name, file_fd, _stat_identity(before)))
+            self._owned_fds.extend(opened_fds)
+            committed = True
             return raw
         finally:
-            if file_fd is not None:
-                os.close(file_fd)
-            os.close(parent_fd)
+            if not committed:
+                for fd in reversed(opened_fds):
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
 
 
 def _load_strict_json(boundary: _RepositoryBoundary, relative_path: str, label: str) -> tuple[dict[str, Any], bytes, bytes]:
