@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import copy
+import errno
 import hashlib
 import math
 import os
+import random
+import socket
+import stat
 import subprocess
 import sys
 from dataclasses import replace
@@ -28,6 +32,7 @@ from sparse_rtdetr.baseline.primary_evaluator import (
     validate_primary_evaluator_contract,
     validate_primary_evaluator_result,
 )
+from sparse_rtdetr.baseline import primary_evaluator as evaluator_module
 from sparse_rtdetr.data_protocol.evaluation import (
     COCODiagnosticInput,
     Detection,
@@ -200,6 +205,7 @@ def _reference_eval(value: PrimaryEvaluatorInputV2):
         occurrences.extend(sorted({item.category_id for item in gt[image.image_id]}))
     ap = [[0.0 for _ in IOU_THRESHOLDS] for _ in range(10)]
     ar = [[[0.0 for _ in MAX_DETS] for _ in IOU_THRESHOLDS] for _ in range(10)]
+    counts = [[[[0 for _ in range(4)] for _ in MAX_DETS] for _ in IOU_THRESHOLDS] for _ in range(10)]
     for class_index, category in enumerate(range(1, 11)):
         for threshold_index, threshold in enumerate(IOU_THRESHOLDS):
             for max_index, max_dets in enumerate(MAX_DETS):
@@ -228,6 +234,12 @@ def _reference_eval(value: PrimaryEvaluatorInputV2):
                     precision.append(tp / max(1, tp + fps))
                 if gt_matches:
                     ar[class_index][threshold_index][max_index] = max(recall or [0.0]) * 100.0
+                counts[class_index][threshold_index][max_index] = (
+                    len(gt_matches),
+                    sum(state == 1 for _, state in records),
+                    sum(state == 0 for _, state in records),
+                    sum(state == -1 for _, state in records),
+                )
                 if max_index == 3:
                     ap[class_index][threshold_index] = _reference_vocap(recall, precision) * 100.0
     rows = [category - 1 for category in occurrences]
@@ -240,7 +252,7 @@ def _reference_eval(value: PrimaryEvaluatorInputV2):
         )
     else:
         metrics = (0.0,) * 7
-    return metrics, ap, ar
+    return metrics, ap, ar, counts
 
 
 def test_authority_manifest_and_contract_identities(binding):
@@ -262,7 +274,7 @@ def test_authority_source_trace_is_exact(binding):
 def test_source_exact_reference_matches_perfect_case(binding):
     value = _input([_image()], [_det()], [_gt()])
     result = evaluate_primary_v1(value, binding)
-    metrics, ap, ar = _reference_eval(value)
+    metrics, ap, ar, counts = _reference_eval(value)
     assert result.metrics == pytest.approx(metrics, rel=0, abs=1e-12)
     for actual_row, expected_row in zip(result.ap_by_class_iou, ap):
         assert actual_row == pytest.approx(expected_row, rel=0, abs=1e-12)
@@ -274,6 +286,7 @@ def test_source_exact_reference_matches_perfect_case(binding):
     assert result.AP75 == 100.0
     assert result.AR1 == 100.0
     assert result.AR500 == 100.0
+    assert result.match_counts_by_class_iou_max_dets == tuple(tuple(tuple(tuple(row) for row in iou) for iou in category) for category in counts)
     validate_primary_evaluator_result(result, value, binding)
 
 
@@ -411,3 +424,235 @@ def test_contract_config_is_closed_and_exact(binding):
     assert config["output_contract"]["ap_small_emitted"] is False
     assert config["policy"]["confirmatory_access_allowed"] is False
     assert config["policy"]["test_access_allowed"] is False
+
+
+def test_authoritative_binding_requires_all_frozen_identity_fields(binding):
+    value = _input([])
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(value, binding["config"])
+    for key in ("config_raw_size_bytes", "config_raw_sha256", "authority_manifest_raw_size_bytes"):
+        bad = dict(binding)
+        bad.pop(key)
+        with pytest.raises(PrimaryEvaluatorContractError):
+            evaluate_primary_v1(value, bad)
+    bad = dict(binding)
+    bad["extra"] = False
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(value, bad)
+    bad = dict(binding)
+    bad["config_raw_size_bytes"] = True
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(value, bad)
+    bad = dict(binding)
+    bad["config_raw_sha256"] = "A" * 64
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(value, bad)
+
+
+def test_recursive_builtin_contract_and_manifest_closure(binding):
+    class TextSubclass(str):
+        pass
+
+    bad = copy.deepcopy(binding)
+    bad["config"]["algorithm"]["rounding"] = TextSubclass("matlab_half_away_from_zero")
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([]), bad)
+    bad = copy.deepcopy(binding)
+    bad["authority_manifest"]["inventory"]["rows"][0]["git_blob_oid"] = TextSubclass(
+        bad["authority_manifest"]["inventory"]["rows"][0]["git_blob_oid"]
+    )
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([]), bad)
+
+
+def test_input_identity_and_category_relations_fail_closed(binding):
+    duplicate = replace(_gt(), annotation_id="duplicate")
+    duplicate_again = replace(_gt(category=2), annotation_id="duplicate")
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([_image()], [], [duplicate, duplicate_again]), binding)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([_image()], [], [_gt(ignore_region=True)]), binding)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([_image()], [], [_gt(category=0, ignore_region=False)]), binding)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([_image()], [], [_gt(category=11, ignore_region=True)]), binding)
+
+
+def test_result_schema_rejects_json_equivalent_repacks(binding):
+    class TupleSubclass(tuple):
+        pass
+
+    class FloatSubclass(float):
+        pass
+
+    class IntSubclass(int):
+        pass
+
+    value = _input([_image()], [_det()], [_gt()])
+    result = evaluate_primary_v1(value, binding)
+    mutations = [
+        replace(result, metrics=TupleSubclass(result.metrics)),
+        replace(result, AP=FloatSubclass(result.AP)),
+        replace(result, evaluated_image_count=IntSubclass(result.evaluated_image_count)),
+        replace(result, ap_by_class_iou=result.ap_by_class_iou[:-1]),
+        replace(result, ar_by_class_iou_max_dets=TupleSubclass(result.ar_by_class_iou_max_dets)),
+        replace(result, match_counts_by_class_iou_max_dets=((),) + result.match_counts_by_class_iou_max_dets[1:]),
+    ]
+    for mutation in mutations:
+        with pytest.raises(PrimaryEvaluatorContractError):
+            validate_primary_evaluator_result(mutation, value, binding)
+
+
+def _read_fixture(root: Path, relative: str = "payload") -> bytes:
+    with evaluator_module._RepositoryBoundary(root) as boundary:
+        raw = boundary.read_bytes(relative, "fixture")
+        boundary.assert_stable()
+        return raw
+
+
+def test_fd_repository_boundary_rejects_symlink_and_hardlink_objects(tmp_path):
+    real_root = tmp_path / "repo"
+    real_root.mkdir()
+    (real_root / "nested").mkdir()
+    (real_root / "nested" / "payload").write_bytes(b"payload")
+    root_link = tmp_path / "root-link"
+    root_link.symlink_to(real_root, target_is_directory=True)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluator_module._RepositoryBoundary(root_link)
+
+    (real_root / "nested-link").symlink_to(real_root / "nested", target_is_directory=True)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(real_root, "nested-link/payload")
+    (real_root / "final-link").symlink_to(real_root / "nested" / "payload")
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(real_root, "final-link")
+    (real_root / "hardlink").hardlink_to(real_root / "nested" / "payload")
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(real_root, "hardlink")
+
+
+@pytest.mark.parametrize("kind", ("directory", "fifo", "socket"))
+def test_fd_repository_boundary_rejects_non_regular_final_objects(tmp_path, kind, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    path = root / "object"
+    sock = None
+    try:
+        if kind == "directory":
+            path.mkdir()
+        elif kind == "fifo":
+            os.mkfifo(path)
+        else:
+            # The managed sandbox forbids AF_UNIX bind; preserve the production
+            # lstat decision with a syscall-faithful stat-result substitution.
+            original_stat = evaluator_module.os.stat
+
+            def socket_stat(name, *args, **kwargs):
+                observed = original_stat(name, *args, **kwargs)
+                if name == "object" and kwargs.get("follow_symlinks") is False and kwargs.get("dir_fd") is not None:
+                    fields = list(observed)
+                    fields[0] = stat.S_IFSOCK | 0o700
+                    return os.stat_result(fields)
+                return observed
+
+            monkeypatch.setattr(evaluator_module.os, "stat", socket_stat)
+        with pytest.raises(PrimaryEvaluatorContractError):
+            _read_fixture(root, "object")
+    finally:
+        if sock is not None:
+            sock.close()
+
+
+def test_fd_repository_boundary_handles_partial_reads_eintr_and_premature_eof(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "payload").write_bytes(b"0123456789")
+    original_read = evaluator_module.os.read
+    calls = {"count": 0}
+
+    def partial_read(fd, size):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OSError(errno.EINTR, "interrupted")
+        return original_read(fd, min(size, 2))
+
+    monkeypatch.setattr(evaluator_module.os, "read", partial_read)
+    assert _read_fixture(root) == b"0123456789"
+    assert calls["count"] > 2
+
+    def premature_eof(fd, size):
+        return b""
+
+    monkeypatch.setattr(evaluator_module.os, "read", premature_eof)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        _read_fixture(root)
+
+
+def test_fd_repository_boundary_does_not_leak_descriptors(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "payload").write_bytes(b"payload")
+    before = len(os.listdir("/proc/self/fd"))
+    for _ in range(25):
+        assert _read_fixture(root) == b"payload"
+    after = len(os.listdir("/proc/self/fd"))
+    assert after == before
+
+
+def _matrix_case(seed: int) -> PrimaryEvaluatorInputV2:
+    rng = random.Random(seed)
+    images = tuple(_image(f"case-{seed}-image-{index}", 18 + index * 3, 20 + index * 2) for index in range(1 + seed % 3))
+    detections = []
+    ground_truth = []
+    annotation_index = 0
+    for image_index, image in enumerate(images):
+        if seed % 4 == 0 or image_index == 0:
+            region_box = (0.5, 0.5, float(image.width // 2 + 2), float(image.height // 2 + 2))
+            ground_truth.append(PrimaryGroundTruth(
+                f"case-{seed}-ann-{annotation_index}", image.image_id, 0, region_box,
+                (region_box[2] - region_box[0]) * (region_box[3] - region_box[1]), True, True,
+            ))
+            annotation_index += 1
+        if seed % 5 == 0:
+            other_box = (2.5, 2.5, 7.5, 8.5)
+            ground_truth.append(PrimaryGroundTruth(
+                f"case-{seed}-ann-{annotation_index}", image.image_id, 11, other_box,
+                (other_box[2] - other_box[0]) * (other_box[3] - other_box[1]), False, bool(seed % 2),
+            ))
+            annotation_index += 1
+        if seed % 9 != 0:
+            for offset in range(1 + (seed + image_index) % 4):
+                category = 1 + (seed + image_index + offset) % 10
+                x1 = 0.5 + ((seed + offset) % 4) * 0.5
+                y1 = 0.5 + ((seed + image_index + offset) % 3) * 0.5
+                x2 = x1 + 4.5 + (offset % 2)
+                y2 = y1 + 4.0 + ((seed + offset) % 2)
+                ground_truth.append(PrimaryGroundTruth(
+                    f"case-{seed}-ann-{annotation_index}", image.image_id, category,
+                    (x1, y1, x2, y2), (x2 - x1) * (y2 - y1), False, bool((seed + offset) % 6 == 0),
+                ))
+                annotation_index += 1
+        image_detections = []
+        for offset in range(2 + (seed + image_index) % 5):
+            category = 1 + (seed + image_index + offset * 2) % 10
+            box = (0.5 + (offset % 3) * 0.5, 0.5 + ((seed + offset) % 3) * 0.5, 6.0 + offset, 6.5 + offset)
+            score = (0.9, 0.7, 0.7, 0.4, 0.2, 0.1)[offset]
+            image_detections.append(Detection(image.image_id, category, box, score))
+        detections.extend(image_detections)
+    return _input(images, detections, ground_truth)
+
+
+def test_independent_reference_matrix_has_100_valid_cases(binding):
+    for seed in range(100):
+        value = _matrix_case(seed)
+        result = evaluate_primary_v1(value, binding)
+        metrics, ap, ar, counts = _reference_eval(value)
+        assert result.metrics == pytest.approx(metrics, rel=0, abs=1e-12)
+        for actual_row, expected_row in zip(result.ap_by_class_iou, ap):
+            assert actual_row == pytest.approx(expected_row, rel=0, abs=1e-12)
+        for actual_category, expected_category in zip(result.ar_by_class_iou_max_dets, ar):
+            for actual_row, expected_row in zip(actual_category, expected_category):
+                assert actual_row == pytest.approx(expected_row, rel=0, abs=1e-12)
+        expected_counts = tuple(tuple(tuple(tuple(row) for row in iou) for iou in category) for category in counts)
+        assert result.match_counts_by_class_iou_max_dets == expected_counts
+        validate_primary_evaluator_result(result, value, binding)

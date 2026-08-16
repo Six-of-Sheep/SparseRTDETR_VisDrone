@@ -12,6 +12,7 @@ import json
 import math
 import os
 import stat
+import errno
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -59,6 +60,7 @@ IOU_THRESHOLDS = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95)
 MAX_DETS = (1, 10, 100, 500)
 METRIC_NAMES = ("AP", "AP50", "AP75", "AR1", "AR10", "AR100", "AR500")
 _SHA256_RE = set("0123456789abcdef")
+_GIT_OID_RE = set("0123456789abcdef")
 
 # These are filled from the committed canonical config identity.  Keeping the
 # whole-file identity in code avoids an impossible self-referential JSON hash.
@@ -82,6 +84,12 @@ _INPUT_CATEGORY_KEYS = {"detections", "ground_truth", "scored", "spatial_ignore"
 _ALGORITHM_KEYS = {"iou_thresholds", "max_dets", "nms", "ignore_threshold", "ignore_fraction_rule", "standard_overlap", "ignored_overlap", "rounding", "clipping", "matching", "threshold_comparison", "recall_denominator", "ap_source", "voc_ap", "aggregation", "metrics_units"}
 _OUTPUT_KEYS = {"metric_names", "evidence", "ap_small_emitted", "result_immutable_detached", "float_dtype"}
 _POLICY_KEYS = {"development_only", "confirmatory_access_allowed", "test_access_allowed", "implementation_present", "independent_audit_pass", "training_gate_open", "secondary_evaluator_can_certify", "secondary_evaluator_can_select"}
+_BINDING_KEYS = {
+    "config", "authority_manifest", "config_raw_size_bytes", "config_raw_sha256",
+    "config_canonical_size_bytes", "config_canonical_sha256", "authority_manifest_raw_size_bytes",
+    "authority_manifest_raw_sha256", "authority_manifest_canonical_size_bytes",
+    "authority_manifest_canonical_sha256",
+}
 
 
 def _fail(message: str) -> None:
@@ -127,12 +135,51 @@ def _exact_float(value: object, path: str, *, minimum: float | None = None) -> f
     return number
 
 
+def _validate_builtin_json(value: object, path: str) -> None:
+    """Reject JSON-equivalent Python subclasses before semantic validation."""
+
+    value_type = type(value)
+    if value_type is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                _fail(f"{path} contains a non-builtin object key")
+            _validate_builtin_json(item, f"{path}/{key}")
+        return
+    if value_type is list:
+        for index, item in enumerate(value):
+            _validate_builtin_json(item, f"{path}/{index}")
+        return
+    if value_type is str or value_type is bool or value_type is int or value_type is type(None):
+        return
+    if value_type is float:
+        if not math.isfinite(value):
+            _fail(f"{path} must be finite")
+        return
+    _fail(f"{path} contains a non-builtin JSON value")
+
+
 def _sha(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
 def _is_sha(value: object) -> bool:
     return type(value) is str and len(value) == 64 and set(value) <= _SHA256_RE
+
+
+def _is_git_oid(value: object) -> bool:
+    return type(value) is str and len(value) == 40 and set(value) <= _GIT_OID_RE
+
+
+def _exact_sha(value: object, path: str) -> str:
+    if not _is_sha(value):
+        _fail(f"{path} must be a lowercase SHA-256")
+    return value
+
+
+def _exact_git_oid(value: object, path: str) -> str:
+    if not _is_git_oid(value):
+        _fail(f"{path} must be a lowercase Git blob OID")
+    return value
 
 
 def _strict_json_bytes(raw: bytes, label: str) -> tuple[dict[str, Any], bytes]:
@@ -165,11 +212,197 @@ def _strict_json_bytes(raw: bytes, label: str) -> tuple[dict[str, Any], bytes]:
     return value, canonical_json_bytes(value)
 
 
+def _stat_identity(value: os.stat_result) -> tuple[int, int, int, int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_uid,
+        value.st_gid,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _repo_root_path(repo_root: Path | str) -> Path:
+    try:
+        root = Path(repo_root)
+    except (TypeError, ValueError) as exc:
+        _fail(f"repository root is invalid: {type(exc).__name__}")
+    if not root.is_absolute():
+        _fail("repository root must be absolute")
+    return root
+
+
+def _relative_components(relative_path: str) -> tuple[str, ...]:
+    if type(relative_path) is not str or not relative_path:
+        _fail("repository relative path must be a non-empty builtin string")
+    if "\x00" in relative_path or "\\" in relative_path:
+        _fail("repository relative path contains an invalid separator")
+    raw_parts = tuple(relative_path.split("/"))
+    if any(part in ("", ".", "..") for part in raw_parts):
+        _fail("repository relative path is not lexically contained")
+    pure = PurePosixPath(relative_path)
+    if pure.is_absolute() or pure.parts != raw_parts:
+        _fail("repository relative path is not a contained POSIX path")
+    return raw_parts
+
+
+def _open_directory(path: str | bytes, *, dir_fd: int | None = None) -> int:
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        return os.open(path, flags, dir_fd=dir_fd)
+    except OSError as exc:
+        _fail(f"repository directory open failure: {type(exc).__name__}")
+
+
+def _read_fd_complete(fd: int, expected_size: int, label: str) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        try:
+            chunk = os.read(fd, 65536)
+        except OSError as exc:
+            if exc.errno == errno.EINTR:
+                continue
+            _fail(f"{label} read failure: {type(exc).__name__}")
+        if chunk == b"":
+            if total != expected_size:
+                _fail(f"{label} premature EOF")
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
+class _RepositoryBoundary:
+    """A stable descriptor-rooted reader for committed evaluator JSON."""
+
+    def __init__(self, repo_root: Path | str):
+        self.root = _repo_root_path(repo_root)
+        try:
+            self._root_lstat = os.lstat(os.fspath(self.root))
+        except OSError as exc:
+            _fail(f"repository root stat failure: {type(exc).__name__}")
+        if not stat.S_ISDIR(self._root_lstat.st_mode) or stat.S_ISLNK(self._root_lstat.st_mode):
+            _fail("repository root must be a real directory")
+        self._root_fd = _open_directory(os.fspath(self.root))
+        try:
+            self._root_fstat = os.fstat(self._root_fd)
+            if _stat_identity(self._root_fstat) != _stat_identity(self._root_lstat):
+                _fail("repository root identity changed during open")
+        except BaseException:
+            os.close(self._root_fd)
+            raise
+
+    def __enter__(self) -> "_RepositoryBoundary":
+        return self
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        try:
+            os.close(self._root_fd)
+        except OSError:
+            if exc_type is None:
+                raise
+
+    def assert_stable(self) -> None:
+        try:
+            current = os.fstat(self._root_fd)
+        except OSError as exc:
+            _fail(f"repository root final stat failure: {type(exc).__name__}")
+        if _stat_identity(current) != _stat_identity(self._root_fstat):
+            _fail("repository root identity changed during transaction")
+
+    def _open_parent(self, components: tuple[str, ...]) -> tuple[int, str]:
+        if not components:
+            _fail("repository relative path is empty")
+        current_fd = os.dup(self._root_fd)
+        try:
+            for component in components[:-1]:
+                try:
+                    before = os.stat(component, dir_fd=current_fd, follow_symlinks=False)
+                except OSError as exc:
+                    _fail(f"repository path component stat failure: {type(exc).__name__}")
+                if not stat.S_ISDIR(before.st_mode) or stat.S_ISLNK(before.st_mode):
+                    _fail("repository path component is not a real directory")
+                if before.st_dev != self._root_fstat.st_dev:
+                    _fail("repository path component crossed devices")
+                next_fd = _open_directory(component, dir_fd=current_fd)
+                try:
+                    after = os.fstat(next_fd)
+                    if _stat_identity(after) != _stat_identity(before):
+                        _fail("repository path component identity changed during open")
+                except BaseException:
+                    os.close(next_fd)
+                    raise
+                os.close(current_fd)
+                current_fd = next_fd
+            return current_fd, components[-1]
+        except BaseException:
+            try:
+                os.close(current_fd)
+            except OSError:
+                pass
+            raise
+
+    def read_bytes(self, relative_path: str, label: str) -> bytes:
+        components = _relative_components(relative_path)
+        parent_fd, final_name = self._open_parent(components)
+        file_fd: int | None = None
+        try:
+            try:
+                before = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+            except OSError as exc:
+                _fail(f"{label} stat failure: {type(exc).__name__}")
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or stat.S_ISLNK(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_dev != self._root_fstat.st_dev
+                or before.st_uid != self._root_fstat.st_uid
+                or before.st_gid != self._root_fstat.st_gid
+            ):
+                _fail(f"{label} must be a regular owned repository file")
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+            try:
+                file_fd = os.open(final_name, flags, dir_fd=parent_fd)
+            except OSError as exc:
+                _fail(f"{label} open failure: {type(exc).__name__}")
+            opened = os.fstat(file_fd)
+            if _stat_identity(opened) != _stat_identity(before):
+                _fail(f"{label} identity changed during open")
+            raw = _read_fd_complete(file_fd, before.st_size, label)
+            after = os.fstat(file_fd)
+            try:
+                path_after = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+            except OSError as exc:
+                _fail(f"{label} final path stat failure: {type(exc).__name__}")
+            if _stat_identity(after) != _stat_identity(before) or _stat_identity(path_after) != _stat_identity(before):
+                _fail(f"{label} identity changed during read")
+            return raw
+        finally:
+            if file_fd is not None:
+                os.close(file_fd)
+            os.close(parent_fd)
+
+
+def _load_strict_json(boundary: _RepositoryBoundary, relative_path: str, label: str) -> tuple[dict[str, Any], bytes, bytes]:
+    raw = boundary.read_bytes(relative_path, label)
+    value, canonical = _strict_json_bytes(raw, label)
+    _validate_builtin_json(value, label)
+    return value, raw, canonical
+
+
 def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
+    _validate_builtin_json(manifest, "authority_manifest")
     _exact_keys(manifest, _MANIFEST_KEYS, "authority_manifest")
     _exact_int(manifest["schema_version"], "authority_manifest/schema_version", minimum=1)
-    for key in ("authority_id", "repository_url", "branch", "commit_oid", "tree_oid", "toolkit_version", "algorithm_semantics_version", "license_and_use_notice"):
+    for key in ("authority_id", "repository_url", "branch", "toolkit_version", "algorithm_semantics_version", "license_and_use_notice"):
         _exact_str(manifest[key], f"authority_manifest/{key}")
+    _exact_git_oid(manifest["commit_oid"], "authority_manifest/commit_oid")
+    _exact_git_oid(manifest["tree_oid"], "authority_manifest/tree_oid")
     if manifest["repository_url"] != AUTHORITY_REPOSITORY_URL or manifest["branch"] != AUTHORITY_BRANCH:
         _fail("authority repository identity drift")
     if manifest["commit_oid"] != AUTHORITY_COMMIT or manifest["tree_oid"] != AUTHORITY_TREE:
@@ -178,14 +411,12 @@ def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
     _exact_str(archive["filename"], "authority_manifest/archive/filename")
     _exact_str(archive["prefix"], "authority_manifest/archive/prefix")
     _exact_int(archive["size_bytes"], "authority_manifest/archive/size_bytes", minimum=1)
-    if not _is_sha(archive["sha256"]):
-        _fail("authority archive SHA drift")
+    _exact_sha(archive["sha256"], "authority_manifest/archive/sha256")
     inventory = _exact_keys(manifest["inventory"], _MANIFEST_INVENTORY_KEYS, "authority_manifest/inventory")
     file_count = _exact_int(inventory["file_count"], "authority_manifest/inventory/file_count", minimum=1)
     _exact_int(inventory["total_size_bytes"], "authority_manifest/inventory/total_size_bytes", minimum=1)
     _exact_str(inventory["canonicalization"], "authority_manifest/inventory/canonicalization")
-    if not _is_sha(inventory["canonical_inventory_sha256"]):
-        _fail("authority inventory SHA drift")
+    _exact_sha(inventory["canonical_inventory_sha256"], "authority_manifest/inventory/canonical_inventory_sha256")
     rows = inventory["rows"]
     if type(rows) is not list or len(rows) != file_count:
         _fail("authority inventory row count drift")
@@ -198,10 +429,9 @@ def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
             _fail("authority inventory paths are not sorted and contained")
         previous = relative
         _exact_str(row_value["git_mode"], f"authority_manifest/inventory/rows/{index}/git_mode")
-        _exact_str(row_value["git_blob_oid"], f"authority_manifest/inventory/rows/{index}/git_blob_oid")
+        _exact_git_oid(row_value["git_blob_oid"], f"authority_manifest/inventory/rows/{index}/git_blob_oid")
         _exact_int(row_value["size_bytes"], f"authority_manifest/inventory/rows/{index}/size_bytes", minimum=0)
-        if not _is_sha(row_value["sha256"]):
-            _fail("authority inventory file SHA drift")
+        _exact_sha(row_value["sha256"], f"authority_manifest/inventory/rows/{index}/sha256")
         canonical_rows.append(row_value)
     if sum(row["size_bytes"] for row in canonical_rows) != inventory["total_size_bytes"]:
         _fail("authority inventory total size drift")
@@ -212,6 +442,7 @@ def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
 
 
 def _validate_contract(config: dict[str, Any], authority_manifest: dict[str, Any] | None) -> None:
+    _validate_builtin_json(config, "primary_evaluator_contract")
     _exact_keys(config, _CONFIG_KEYS, "primary_evaluator_contract")
     if _exact_int(config["schema_version"], "/schema_version", minimum=1) != 1:
         _fail("primary evaluator schema version drift")
@@ -223,6 +454,10 @@ def _validate_contract(config: dict[str, Any], authority_manifest: dict[str, Any
         _fail("primary input schema ID drift")
 
     authority = _exact_keys(config["authority"], _AUTHORITY_KEYS, "/authority")
+    for key in ("repository_url", "branch", "manifest_relative_path", "manifest_raw_sha256", "manifest_canonical_sha256", "inventory_canonical_sha256"):
+        _exact_str(authority[key], f"/authority/{key}")
+    _exact_git_oid(authority["commit_oid"], "/authority/commit_oid")
+    _exact_git_oid(authority["tree_oid"], "/authority/tree_oid")
     if authority["repository_url"] != AUTHORITY_REPOSITORY_URL or authority["branch"] != AUTHORITY_BRANCH:
         _fail("contract authority repository drift")
     if authority["commit_oid"] != AUTHORITY_COMMIT or authority["tree_oid"] != AUTHORITY_TREE:
@@ -233,6 +468,9 @@ def _validate_contract(config: dict[str, Any], authority_manifest: dict[str, Any
     _exact_int(authority["manifest_canonical_size_bytes"], "/authority/manifest_canonical_size_bytes", minimum=1)
     if authority["manifest_raw_size_bytes"] != AUTHORITY_MANIFEST_RAW_SIZE:
         _fail("contract manifest raw size drift")
+    _exact_sha(authority["manifest_raw_sha256"], "/authority/manifest_raw_sha256")
+    _exact_sha(authority["manifest_canonical_sha256"], "/authority/manifest_canonical_sha256")
+    _exact_sha(authority["inventory_canonical_sha256"], "/authority/inventory_canonical_sha256")
     if authority["manifest_raw_sha256"] != AUTHORITY_MANIFEST_RAW_SHA256:
         _fail("contract manifest raw SHA drift")
     if authority["manifest_canonical_size_bytes"] != AUTHORITY_MANIFEST_CANONICAL_SIZE:
@@ -246,8 +484,7 @@ def _validate_contract(config: dict[str, Any], authority_manifest: dict[str, Any
         _fail("contract authority source hash map drift")
     for relative, digest in authority_files.items():
         _exact_str(relative, "/authority/authority_file_sha256/path")
-        if not _is_sha(digest):
-            _fail("contract authority source SHA is invalid")
+        _exact_sha(digest, "/authority/authority_file_sha256/value")
 
     input_contract = _exact_keys(config["input_contract"], _INPUT_KEYS, "/input_contract")
     if input_contract["coordinate_system"] != "xyxy" or input_contract["box_conversion"] != "xywh: w=x2-x1; h=y2-y1; no_plus_one":
@@ -338,78 +575,61 @@ def validate_primary_evaluator_contract(config: object, authority_manifest: obje
     _validate_contract(config, authority_manifest)
 
 
-def _load_strict_json(path: Path, label: str) -> tuple[dict[str, Any], bytes, bytes]:
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        _fail(f"{label} read failure: {type(exc).__name__}")
-    value, canonical = _strict_json_bytes(raw, label)
-    return value, raw, canonical
-
-
 def load_primary_evaluator_authority_manifest(repo_root: Path | str) -> dict[str, Any]:
-    root = Path(repo_root)
-    path = root / PRIMARY_MANIFEST_RELATIVE_PATH
-    manifest, raw, canonical = _load_strict_json(path, "authority manifest")
-    observed = os.lstat(path)
-    if not stat.S_ISREG(observed.st_mode) or stat.S_ISLNK(observed.st_mode) or observed.st_nlink != 1:
-        _fail("authority manifest must be a regular non-symlink file")
-    if len(raw) != AUTHORITY_MANIFEST_RAW_SIZE or _sha(raw) != AUTHORITY_MANIFEST_RAW_SHA256:
-        _fail("authority manifest raw identity drift")
-    if len(canonical) != AUTHORITY_MANIFEST_CANONICAL_SIZE or _sha(canonical) != AUTHORITY_MANIFEST_CANONICAL_SHA256:
-        _fail("authority manifest canonical identity drift")
-    _validate_authority_manifest(manifest)
-    return manifest
+    with _RepositoryBoundary(repo_root) as boundary:
+        manifest, raw, canonical = _load_strict_json(boundary, PRIMARY_MANIFEST_RELATIVE_PATH, "authority manifest")
+        if len(raw) != AUTHORITY_MANIFEST_RAW_SIZE or _sha(raw) != AUTHORITY_MANIFEST_RAW_SHA256:
+            _fail("authority manifest raw identity drift")
+        if len(canonical) != AUTHORITY_MANIFEST_CANONICAL_SIZE or _sha(canonical) != AUTHORITY_MANIFEST_CANONICAL_SHA256:
+            _fail("authority manifest canonical identity drift")
+        _validate_authority_manifest(manifest)
+        boundary.assert_stable()
+        return manifest
 
 
 def load_primary_evaluator_contract(repo_root: Path | str) -> dict[str, Any]:
-    root = Path(repo_root)
-    path = root / PRIMARY_CONFIG_RELATIVE_PATH
-    config, raw, canonical = _load_strict_json(path, "primary evaluator contract")
-    observed = os.lstat(path)
-    if not stat.S_ISREG(observed.st_mode) or stat.S_ISLNK(observed.st_mode) or observed.st_nlink != 1:
-        _fail("primary evaluator contract must be a regular non-symlink file")
-    if PRIMARY_CONFIG_RAW_SIZE and (len(raw) != PRIMARY_CONFIG_RAW_SIZE or _sha(raw) != PRIMARY_CONFIG_RAW_SHA256):
-        _fail("primary evaluator contract raw identity drift")
-    if PRIMARY_CONFIG_CANONICAL_SIZE and (len(canonical) != PRIMARY_CONFIG_CANONICAL_SIZE or _sha(canonical) != PRIMARY_CONFIG_CANONICAL_SHA256):
-        _fail("primary evaluator contract canonical identity drift")
-    manifest = load_primary_evaluator_authority_manifest(root)
-    _validate_contract(config, manifest)
-    return config
+    with _RepositoryBoundary(repo_root) as boundary:
+        config, raw, canonical = _load_strict_json(boundary, PRIMARY_CONFIG_RELATIVE_PATH, "primary evaluator contract")
+        manifest, manifest_raw, manifest_canonical = _load_strict_json(boundary, PRIMARY_MANIFEST_RELATIVE_PATH, "authority manifest")
+        if PRIMARY_CONFIG_RAW_SIZE and (len(raw) != PRIMARY_CONFIG_RAW_SIZE or _sha(raw) != PRIMARY_CONFIG_RAW_SHA256):
+            _fail("primary evaluator contract raw identity drift")
+        if PRIMARY_CONFIG_CANONICAL_SIZE and (len(canonical) != PRIMARY_CONFIG_CANONICAL_SIZE or _sha(canonical) != PRIMARY_CONFIG_CANONICAL_SHA256):
+            _fail("primary evaluator contract canonical identity drift")
+        if len(manifest_raw) != AUTHORITY_MANIFEST_RAW_SIZE or _sha(manifest_raw) != AUTHORITY_MANIFEST_RAW_SHA256:
+            _fail("authority manifest raw identity drift")
+        if len(manifest_canonical) != AUTHORITY_MANIFEST_CANONICAL_SIZE or _sha(manifest_canonical) != AUTHORITY_MANIFEST_CANONICAL_SHA256:
+            _fail("authority manifest canonical identity drift")
+        _validate_contract(config, manifest)
+        boundary.assert_stable()
+        return config
 
 
 def primary_evaluator_contract_binding(repo_root: Path | str) -> dict[str, Any]:
-    root = Path(repo_root)
-    config_path = root / PRIMARY_CONFIG_RELATIVE_PATH
-    manifest_path = root / PRIMARY_MANIFEST_RELATIVE_PATH
-    config, config_raw, config_canonical = _load_strict_json(config_path, "primary evaluator contract")
-    manifest, manifest_raw, manifest_canonical = _load_strict_json(manifest_path, "authority manifest")
-    observed_config = os.lstat(config_path)
-    observed_manifest = os.lstat(manifest_path)
-    for observed, label in ((observed_config, "contract"), (observed_manifest, "manifest")):
-        if not stat.S_ISREG(observed.st_mode) or stat.S_ISLNK(observed.st_mode) or observed.st_nlink != 1:
-            _fail(f"authority {label} must be a regular non-symlink file")
-    if len(config_raw) != PRIMARY_CONFIG_RAW_SIZE or _sha(config_raw) != PRIMARY_CONFIG_RAW_SHA256:
-        _fail("primary evaluator contract raw identity drift")
-    if len(config_canonical) != PRIMARY_CONFIG_CANONICAL_SIZE or _sha(config_canonical) != PRIMARY_CONFIG_CANONICAL_SHA256:
-        _fail("primary evaluator contract canonical identity drift")
-    if len(manifest_raw) != AUTHORITY_MANIFEST_RAW_SIZE or _sha(manifest_raw) != AUTHORITY_MANIFEST_RAW_SHA256:
-        _fail("authority manifest raw identity drift")
-    if len(manifest_canonical) != AUTHORITY_MANIFEST_CANONICAL_SIZE or _sha(manifest_canonical) != AUTHORITY_MANIFEST_CANONICAL_SHA256:
-        _fail("authority manifest canonical identity drift")
-    _validate_contract(config, manifest)
-    return {
-        "config": config,
-        "authority_manifest": manifest,
-        "config_raw_size_bytes": len(config_raw),
-        "config_raw_sha256": _sha(config_raw),
-        "config_canonical_size_bytes": len(config_canonical),
-        "config_canonical_sha256": _sha(config_canonical),
-        "authority_manifest_raw_size_bytes": len(manifest_raw),
-        "authority_manifest_raw_sha256": _sha(manifest_raw),
-        "authority_manifest_canonical_size_bytes": len(manifest_canonical),
-        "authority_manifest_canonical_sha256": _sha(manifest_canonical),
-    }
+    with _RepositoryBoundary(repo_root) as boundary:
+        config, config_raw, config_canonical = _load_strict_json(boundary, PRIMARY_CONFIG_RELATIVE_PATH, "primary evaluator contract")
+        manifest, manifest_raw, manifest_canonical = _load_strict_json(boundary, PRIMARY_MANIFEST_RELATIVE_PATH, "authority manifest")
+        if len(config_raw) != PRIMARY_CONFIG_RAW_SIZE or _sha(config_raw) != PRIMARY_CONFIG_RAW_SHA256:
+            _fail("primary evaluator contract raw identity drift")
+        if len(config_canonical) != PRIMARY_CONFIG_CANONICAL_SIZE or _sha(config_canonical) != PRIMARY_CONFIG_CANONICAL_SHA256:
+            _fail("primary evaluator contract canonical identity drift")
+        if len(manifest_raw) != AUTHORITY_MANIFEST_RAW_SIZE or _sha(manifest_raw) != AUTHORITY_MANIFEST_RAW_SHA256:
+            _fail("authority manifest raw identity drift")
+        if len(manifest_canonical) != AUTHORITY_MANIFEST_CANONICAL_SIZE or _sha(manifest_canonical) != AUTHORITY_MANIFEST_CANONICAL_SHA256:
+            _fail("authority manifest canonical identity drift")
+        _validate_contract(config, manifest)
+        boundary.assert_stable()
+        return {
+            "config": config,
+            "authority_manifest": manifest,
+            "config_raw_size_bytes": len(config_raw),
+            "config_raw_sha256": _sha(config_raw),
+            "config_canonical_size_bytes": len(config_canonical),
+            "config_canonical_sha256": _sha(config_canonical),
+            "authority_manifest_raw_size_bytes": len(manifest_raw),
+            "authority_manifest_raw_sha256": _sha(manifest_raw),
+            "authority_manifest_canonical_size_bytes": len(manifest_canonical),
+            "authority_manifest_canonical_sha256": _sha(manifest_canonical),
+        }
 
 
 def _real(value: object, path: str) -> float:
@@ -436,9 +656,9 @@ def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
         _fail("primary evaluator requires PrimaryEvaluatorInputV2")
     if type(value.images) is not tuple or type(value.detections) is not tuple or type(value.ground_truth) is not tuple:
         _fail("input containers must be exact tuples")
-    if value.protocol != PRIMARY_PROTOCOL_ID or type(value.protocol) is not str:
+    if type(value.protocol) is not str or value.protocol != PRIMARY_PROTOCOL_ID:
         _fail("input protocol drift")
-    if type(value.iou_thresholds) is not tuple or tuple(_real(item, "iou_threshold") for item in value.iou_thresholds) != IOU_THRESHOLDS:
+    if type(value.iou_thresholds) is not tuple or len(value.iou_thresholds) != len(IOU_THRESHOLDS) or any(type(item) is not float or not math.isfinite(item) for item in value.iou_thresholds) or value.iou_thresholds != IOU_THRESHOLDS:
         _fail("input IoU thresholds drift")
     if type(value.max_dets) is not tuple or any(type(item) is not int for item in value.max_dets) or value.max_dets != MAX_DETS:
         _fail("input maxDets drift")
@@ -446,7 +666,7 @@ def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
         _fail("NMS is forbidden")
     if type(value.ignore_threshold) is not float or not math.isfinite(value.ignore_threshold) or value.ignore_threshold != 0.5:
         _fail("input ignored-region threshold drift")
-    if value.standard_overlap != "intersection_over_union" or value.ignored_overlap != "intersection_over_detection_area":
+    if type(value.standard_overlap) is not str or type(value.ignored_overlap) is not str or value.standard_overlap != "intersection_over_union" or value.ignored_overlap != "intersection_over_detection_area":
         _fail("input overlap rule drift")
 
     image_ids: set[str] = set()
@@ -455,7 +675,7 @@ def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
             _fail(f"images/{index} has an invalid exact type")
         if type(image.image_id) is not str or not image.image_id or image.image_id in image_ids:
             _fail("image IDs must be unique non-empty builtin strings")
-        if type(image.width) is not int or type(image.height) is not int or image.width <= 0 or image.height <= 0:
+        if type(image.image_id) is not str or type(image.width) is not int or type(image.height) is not int or image.width <= 0 or image.height <= 0:
             _fail("image dimensions must be positive builtin integers")
         image_ids.add(image.image_id)
 
@@ -473,19 +693,21 @@ def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
             _fail("detections for each image must be non-increasing by score")
         last_scores[detection.image_id] = score
 
+    annotation_ids: set[str] = set()
     for index, ground_truth in enumerate(value.ground_truth):
         if type(ground_truth) is not PrimaryGroundTruth:
             _fail(f"ground_truth/{index} has an invalid exact type")
-        if type(ground_truth.annotation_id) is not str or not ground_truth.annotation_id:
+        if type(ground_truth.annotation_id) is not str or not ground_truth.annotation_id or ground_truth.annotation_id in annotation_ids:
             _fail("ground-truth annotation IDs must be non-empty builtin strings")
+        annotation_ids.add(ground_truth.annotation_id)
         if type(ground_truth.image_id) is not str or ground_truth.image_id not in image_ids:
             _fail("ground-truth image ID is absent from image table")
         if type(ground_truth.category_id) is not int or ground_truth.category_id not in range(12):
             _fail("ground-truth category is outside 0..11")
         if type(ground_truth.ignore_region) is not bool or type(ground_truth.ignored) is not bool:
             _fail("ground-truth ignore flags must be builtin booleans")
-        if ground_truth.category_id == 0 and not ground_truth.ignore_region:
-            _fail("category 0 must be a spatial ignored region")
+        if ground_truth.ignore_region is not (ground_truth.category_id == 0):
+            _fail("ignore_region must be true exactly for category 0")
         x, y, width, height = _box_xywh(ground_truth.bbox_xyxy, f"ground_truth/{index}/bbox_xyxy")
         area = _real(ground_truth.area, f"ground_truth/{index}/area")
         if area <= 0 or area != width * height:
@@ -627,39 +849,52 @@ def _nested_lists(value: Any) -> Any:
 
 
 def _binding_identity(contract: object) -> tuple[dict[str, Any], str, str, str, str]:
-    if type(contract) is dict and set(("config", "authority_manifest")) <= set(contract):
-        config = contract["config"]
-        manifest = contract["authority_manifest"]
-        if type(config) is not dict or type(manifest) is not dict:
-            _fail("contract binding objects must be builtin dictionaries")
-        _validate_contract(config, manifest)
-        expected_identities = {
-            "config_raw_sha256": PRIMARY_CONFIG_RAW_SHA256,
-            "config_canonical_sha256": PRIMARY_CONFIG_CANONICAL_SHA256,
-            "authority_manifest_raw_sha256": AUTHORITY_MANIFEST_RAW_SHA256,
-            "authority_manifest_canonical_sha256": AUTHORITY_MANIFEST_CANONICAL_SHA256,
-        }
-        for key, expected in expected_identities.items():
-            if key in contract and (type(contract[key]) is not str or contract[key] != expected):
-                _fail(f"contract binding identity drift: {key}")
-        return (
-            config,
-            str(contract.get("config_raw_sha256", PRIMARY_CONFIG_RAW_SHA256)),
-            str(contract.get("config_canonical_sha256", PRIMARY_CONFIG_CANONICAL_SHA256)),
-            str(contract.get("authority_manifest_raw_sha256", AUTHORITY_MANIFEST_RAW_SHA256)),
-            str(contract.get("authority_manifest_canonical_sha256", AUTHORITY_MANIFEST_CANONICAL_SHA256)),
-        )
     if type(contract) is not dict:
-        _fail("evaluate_primary_v1 requires a contract dictionary or binding")
-    _validate_contract(contract, None)
-    return contract, PRIMARY_CONFIG_RAW_SHA256, PRIMARY_CONFIG_CANONICAL_SHA256, AUTHORITY_MANIFEST_RAW_SHA256, AUTHORITY_MANIFEST_CANONICAL_SHA256
+        _fail("evaluate_primary_v1 requires an authoritative binding dictionary")
+    _validate_builtin_json(contract, "contract_binding")
+    _exact_keys(contract, _BINDING_KEYS, "contract_binding")
+    config = contract["config"]
+    manifest = contract["authority_manifest"]
+    if type(config) is not dict or type(manifest) is not dict:
+        _fail("contract binding objects must be builtin dictionaries")
+    for key in (
+        "config_raw_size_bytes", "config_canonical_size_bytes",
+        "authority_manifest_raw_size_bytes", "authority_manifest_canonical_size_bytes",
+    ):
+        _exact_int(contract[key], f"contract_binding/{key}", minimum=0)
+    for key in (
+        "config_raw_sha256", "config_canonical_sha256",
+        "authority_manifest_raw_sha256", "authority_manifest_canonical_sha256",
+    ):
+        _exact_sha(contract[key], f"contract_binding/{key}")
+    expected = {
+        "config_raw_size_bytes": PRIMARY_CONFIG_RAW_SIZE,
+        "config_raw_sha256": PRIMARY_CONFIG_RAW_SHA256,
+        "config_canonical_size_bytes": PRIMARY_CONFIG_CANONICAL_SIZE,
+        "config_canonical_sha256": PRIMARY_CONFIG_CANONICAL_SHA256,
+        "authority_manifest_raw_size_bytes": AUTHORITY_MANIFEST_RAW_SIZE,
+        "authority_manifest_raw_sha256": AUTHORITY_MANIFEST_RAW_SHA256,
+        "authority_manifest_canonical_size_bytes": AUTHORITY_MANIFEST_CANONICAL_SIZE,
+        "authority_manifest_canonical_sha256": AUTHORITY_MANIFEST_CANONICAL_SHA256,
+    }
+    for key, frozen in expected.items():
+        if contract[key] != frozen:
+            _fail(f"contract binding identity drift: {key}")
+    _validate_contract(config, manifest)
+    return (
+        config,
+        contract["config_raw_sha256"],
+        contract["config_canonical_sha256"],
+        contract["authority_manifest_raw_sha256"],
+        contract["authority_manifest_canonical_sha256"],
+    )
 
 
 def evaluate_primary_v1(input_v2: PrimaryEvaluatorInputV2, contract: object) -> PrimaryEvaluatorResultV2:
     """Evaluate one immutable V2 input using the frozen official semantics."""
 
-    value = _validate_input(input_v2)
     config, config_raw_sha, config_canonical_sha, manifest_raw_sha, manifest_canonical_sha = _binding_identity(contract)
+    value = _validate_input(input_v2)
     _ = config
     image_by_id = {image.image_id: image for image in value.images}
     spatial_by_image: dict[str, list[PrimaryGroundTruth]] = {image.image_id: [] for image in value.images}
@@ -819,11 +1054,87 @@ def _result_payload(result: PrimaryEvaluatorResultV2) -> dict[str, Any]:
     }
 
 
+def _result_float(value: object, path: str) -> float:
+    if type(value) is not float or not math.isfinite(value) or not 0.0 <= value <= 100.0:
+        _fail(f"{path} must be a finite builtin float in [0,100]")
+    return value
+
+
+def _validate_result_schema(result: object) -> PrimaryEvaluatorResultV2:
+    if type(result) is not PrimaryEvaluatorResultV2:
+        _fail("primary evaluator result has the wrong exact type")
+    if type(result.protocol) is not str or result.protocol != PRIMARY_PROTOCOL_ID:
+        _fail("primary evaluator result protocol drift")
+    if type(result.metric_names) is not tuple or len(result.metric_names) != 7 or any(type(item) is not str for item in result.metric_names) or result.metric_names != METRIC_NAMES:
+        _fail("primary evaluator result metric names drift")
+    if type(result.metrics) is not tuple or len(result.metrics) != 7:
+        _fail("primary evaluator result metrics shape drift")
+    metrics = tuple(_result_float(item, f"result/metrics/{index}") for index, item in enumerate(result.metrics))
+    named = tuple(
+        _result_float(getattr(result, field), f"result/{field}")
+        for field in ("AP", "AP50", "AP75", "AR1", "AR10", "AR100", "AR500")
+    )
+    if metrics != named:
+        _fail("primary evaluator result named metrics are not bound to metrics")
+    for field in ("evaluated_image_count", "evaluated_detection_count", "evaluated_ground_truth_count"):
+        _exact_int(getattr(result, field), f"result/{field}", minimum=0)
+    for field in (
+        "canonical_input_sha256", "contract_raw_sha256", "contract_canonical_sha256",
+        "authority_manifest_raw_sha256", "authority_manifest_canonical_sha256", "canonical_result_sha256",
+    ):
+        _exact_sha(getattr(result, field), f"result/{field}")
+
+    occurrences = result.eval_class_occurrences
+    if type(occurrences) is not tuple or any(type(item) is not int or item not in range(1, 11) for item in occurrences):
+        _fail("primary evaluator result occurrence vector drift")
+
+    ap = result.ap_by_class_iou
+    if type(ap) is not tuple or len(ap) != 10:
+        _fail("primary evaluator result AP table shape drift")
+    for class_index, row in enumerate(ap):
+        if type(row) is not tuple or len(row) != 10:
+            _fail(f"result/ap_by_class_iou/{class_index} shape drift")
+        for iou_index, item in enumerate(row):
+            _result_float(item, f"result/ap_by_class_iou/{class_index}/{iou_index}")
+
+    ar = result.ar_by_class_iou_max_dets
+    if type(ar) is not tuple or len(ar) != 10:
+        _fail("primary evaluator result AR table shape drift")
+    for class_index, category in enumerate(ar):
+        if type(category) is not tuple or len(category) != 10:
+            _fail(f"result/ar_by_class_iou_max_dets/{class_index} shape drift")
+        for iou_index, row in enumerate(category):
+            if type(row) is not tuple or len(row) != 4:
+                _fail(f"result/ar_by_class_iou_max_dets/{class_index}/{iou_index} shape drift")
+            for max_index, item in enumerate(row):
+                _result_float(item, f"result/ar_by_class_iou_max_dets/{class_index}/{iou_index}/{max_index}")
+
+    counts = result.match_counts_by_class_iou_max_dets
+    if type(counts) is not tuple or len(counts) != 10:
+        _fail("primary evaluator result match-count shape drift")
+    for class_index, category in enumerate(counts):
+        if type(category) is not tuple or len(category) != 10:
+            _fail(f"result/match_counts/{class_index} shape drift")
+        for iou_index, rows in enumerate(category):
+            if type(rows) is not tuple or len(rows) != 4:
+                _fail(f"result/match_counts/{class_index}/{iou_index} shape drift")
+            for max_index, row in enumerate(rows):
+                if type(row) is not tuple or len(row) != 4:
+                    _fail(f"result/match_counts/{class_index}/{iou_index}/{max_index} shape drift")
+                gt_count, true_positive, false_positive, ignored = row
+                for field, item in zip(("gt", "tp", "fp", "ignored"), row):
+                    _exact_int(item, f"result/match_counts/{class_index}/{iou_index}/{max_index}/{field}", minimum=0)
+                if true_positive > gt_count or true_positive + false_positive + ignored > result.evaluated_detection_count:
+                    _fail("primary evaluator result match-count range drift")
+                if gt_count > result.evaluated_ground_truth_count:
+                    _fail("primary evaluator result ground-truth count range drift")
+    return result
+
+
 def validate_primary_evaluator_result(result: object, input_v2: PrimaryEvaluatorInputV2, contract: object) -> None:
     """Recompute every detached field and reject repacked or stale evidence."""
 
-    if type(result) is not PrimaryEvaluatorResultV2:
-        _fail("primary evaluator result has the wrong exact type")
+    _validate_result_schema(result)
     expected = evaluate_primary_v1(input_v2, contract)
     if result != expected:
         _fail("primary evaluator result evidence does not recompute")

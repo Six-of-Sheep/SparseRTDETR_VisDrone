@@ -40,12 +40,35 @@ remain one-to-one.
 ## Evidence and gates
 
 `primary_evaluator_contract_binding()` verifies the committed strict JSON
-contract and source-identity manifest.  `evaluate_primary_v1()` returns an
-immutable detached result containing the canonical input identity, both
-contract identities, evaluated counts, repeated evaluation-class occurrences,
-per-class by IoU AP, per-class by IoU and maxDets AR, match counts, seven
-metrics, and a recomputed canonical result SHA-256.  The result validator
-recomputes the full result and rejects stale, repacked, or hash-only mutations.
+contract and source-identity manifest through one descriptor-rooted boundary.
+The repository root must be an absolute, non-symlink directory.  Every path
+component is opened with `O_DIRECTORY|O_NOFOLLOW`, and the final object is
+checked before opening as a same-device, same-owner, single-link regular file.
+Reads use a complete EINTR-safe descriptor loop and compare before/after
+device, inode, mode, link-count, owner, size, mtime, and ctime identities.  A
+single stable root descriptor covers both the config and manifest reads.
+
+The evaluator accepts only the exact builtin-dict authoritative binding with
+these ten keys: `config`, `authority_manifest`,
+`config_raw_size_bytes`, `config_raw_sha256`,
+`config_canonical_size_bytes`, `config_canonical_sha256`,
+`authority_manifest_raw_size_bytes`, `authority_manifest_raw_sha256`,
+`authority_manifest_canonical_size_bytes`, and
+`authority_manifest_canonical_sha256`.  Bare config dictionaries and partial
+bindings are rejected.  Contract, manifest, binding, input, and result
+structures reject container and scalar subclasses, non-finite floats, invalid
+Git blob OIDs, and invalid SHA-256 strings before semantic comparison.
+
+`evaluate_primary_v1()` returns an immutable detached result containing the
+canonical input identity, both contract identities, evaluated counts, repeated
+evaluation-class occurrences, per-class by IoU AP, per-class by IoU and maxDets
+AR, match counts, seven metrics, and a recomputed canonical result SHA-256.
+The result validator first checks the exact result schema, table dimensions,
+metric bindings, ranges, and count cross-fields, then recomputes the full
+result and rejects stale, repacked, or hash-only mutations.  A structurally
+separate deterministic CPU oracle covers 100 valid multi-image cases and
+compares metrics, AP/AR tables, and match-count tables exactly under the
+frozen algorithm.
 
 This evaluator is development-only.  Confirmatory and test access are
 forbidden, the secondary COCO evaluator cannot certify or select a model, and
