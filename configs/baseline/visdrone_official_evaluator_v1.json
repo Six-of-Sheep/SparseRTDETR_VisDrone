@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "evaluator_id": "visdrone_official_primary_evaluator_v1",
+  "protocol_id": "visdrone_official_style_v1",
+  "schema_id": "primary_evaluator_input_v2",
+  "authority": {
+    "repository_url": "https://github.com/VisDrone/VisDrone2018-DET-toolkit.git",
+    "branch": "master",
+    "commit_oid": "005445782213e20cb91bc50a597db3dd949e749a",
+    "tree_oid": "038b9e68c6e9a93a64662a4d7a39be2cd2c0654e",
+    "manifest_relative_path": "manifests/visdrone_det_toolkit_005445.json",
+    "manifest_raw_size_bytes": 4166,
+    "manifest_raw_sha256": "71168baf15d6d945fd5a4a6c5605b5ba533524efeede2a9d4020127576c1b36f",
+    "manifest_canonical_size_bytes": 3351,
+    "manifest_canonical_sha256": "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3",
+    "inventory_canonical_sha256": "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0",
+    "authority_file_sha256": {
+      "utils/VOCap.m": "95dd1e02c956124e777caf6f44b50b0986a2a37785bd11982ef775e696c17945",
+      "utils/calcAccuracy.m": "285508f54903acd75eeda346c11c8e53267e72facd648f2e22bce121d4f55d7f",
+      "utils/compOas.m": "3e5c2d473c07bf2ddbe0d902284af98ef7104c609e867b2ed59083d31f3ed2af",
+      "utils/createIntImg.m": "7ce3de4fc105be4f088cae5d1fcfc8f4383f3d7ffd4a551bf1afe711eff09f72",
+      "utils/dropObjectsInIgr.m": "30dee2713d76a537f5c98ec5d0804e17cfd3993d83d8a80a70b90ef9461fa4de",
+      "utils/evalRes.m": "610f0d078f1af8d7987e360e6e88665c0290587191d5542b469a9792402f539b",
+      "utils/saveAnnoRes.m": "3210fb8fd98aed19cab61c996e0daf1dbfdb23fd5eb2fafff29afc71bb45876d"
+    }
+  },
+  "input_contract": {
+    "coordinate_system": "xyxy",
+    "box_conversion": "xywh: w=x2-x1; h=y2-y1; no_plus_one",
+    "category_domain": {
+      "detections": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "ground_truth": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      "scored": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "spatial_ignore": 0,
+      "others": 11
+    },
+    "image_id_order": "unique_in_declared_order",
+    "detection_order": "per_image_non_increasing_score_stable_ties",
+    "max_dets_prefix": "before_category_filter",
+    "width_height_required": true,
+    "input_immutability": "required"
+  },
+  "algorithm": {
+    "iou_thresholds": [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95],
+    "max_dets": [1, 10, 100, 500],
+    "nms": false,
+    "ignore_threshold": 0.5,
+    "ignore_fraction_rule": "remove_when_fraction_greater_or_equal",
+    "standard_overlap": "intersection_over_union",
+    "ignored_overlap": "intersection_over_detection_area",
+    "rounding": "matlab_half_away_from_zero",
+    "clipping": "one_based_inclusive",
+    "matching": "stable_score_descending_standard_before_ignored",
+    "threshold_comparison": "inclusive",
+    "recall_denominator": "max(1,numel(gtMatch))",
+    "ap_source": "maxDets=500",
+    "voc_ap": "monotonic_precision_envelope_continuous_recall",
+    "aggregation": "evalClass_occurrence_per_image",
+    "metrics_units": "percentage_0_100_float64"
+  },
+  "output_contract": {
+    "metric_names": ["AP", "AP50", "AP75", "AR1", "AR10", "AR100", "AR500"],
+    "evidence": [
+      "contract_raw_and_canonical_identity",
+      "authority_manifest_raw_and_canonical_identity",
+      "canonical_input_sha256",
+      "evaluated_counts",
+      "eval_class_occurrence_vector",
+      "per_class_iou_ap",
+      "per_class_iou_max_dets_ar",
+      "match_counts",
+      "canonical_result_sha256"
+    ],
+    "ap_small_emitted": false,
+    "result_immutable_detached": true,
+    "float_dtype": "float64"
+  },
+  "policy": {
+    "development_only": true,
+    "confirmatory_access_allowed": false,
+    "test_access_allowed": false,
+    "implementation_present": true,
+    "independent_audit_pass": false,
+    "training_gate_open": false,
+    "secondary_evaluator_can_certify": false,
+    "secondary_evaluator_can_select": false
+  }
+}

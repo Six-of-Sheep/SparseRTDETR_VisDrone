@@ -109,6 +109,14 @@ BASELINE_FILES = {
     "tests/test_rtdetr_baseline_training_contract.py",
 }
 
+PRIMARY_EVALUATOR_FILES = {
+    "configs/baseline/visdrone_official_evaluator_v1.json",
+    "manifests/visdrone_det_toolkit_005445.json",
+    "src/sparse_rtdetr/baseline/primary_evaluator.py",
+    "tests/test_rtdetr_baseline_primary_evaluator.py",
+    "docs/contracts/RTDETR_BASELINE_PRIMARY_EVALUATOR_V1.md",
+}
+
 BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
@@ -520,6 +528,7 @@ def check_repository(root: Path) -> bool:
     vendor_files = {relative for relative in files if relative.startswith(VENDOR_PREFIX)}
     allowed_files = ALLOWED_FILES | vendor_files
     allowed_files |= BASELINE_FILES
+    allowed_files |= PRIMARY_EVALUATOR_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 

@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "authority_id": "visdrone2018_det_toolkit_005445782213e20c",
+  "repository_url": "https://github.com/VisDrone/VisDrone2018-DET-toolkit.git",
+  "branch": "master",
+  "commit_oid": "005445782213e20cb91bc50a597db3dd949e749a",
+  "tree_oid": "038b9e68c6e9a93a64662a4d7a39be2cd2c0654e",
+  "toolkit_version": "1.0.4",
+  "algorithm_semantics_version": "1.0.3",
+  "license_and_use_notice": "The snapshot has no separate LICENSE file; its README states research-purpose use. The offline archive is an audit reference and must not be committed into the project repository.",
+  "archive": {
+    "filename": "visdrone_det_toolkit_005445782213e20c.tar",
+    "prefix": "VisDrone2018-DET-toolkit-005445782213e20c/",
+    "size_bytes": 40960,
+    "sha256": "bf19dd9477210adf106c7cbf2a72370ed4af22dedb577f361f3dc9e77e99baa4"
+  },
+  "inventory": {
+    "file_count": 11,
+    "total_size_bytes": 22093,
+    "canonical_inventory_sha256": "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0",
+    "canonicalization": "UTF-8 JSON of rows with ensure_ascii=true, sort_keys=true, separators=(',',':'), no trailing LF",
+    "rows": [
+      {
+        "relative_path": "README.md",
+        "git_mode": "100644",
+        "git_blob_oid": "5392781e2eee615ceff2fac62655d6d35844de34",
+        "size_bytes": 7845,
+        "sha256": "d2de211602633bdbd008f912b2d73e253a9c39970bb3823430fe6cbb6f07b562"
+      },
+      {
+        "relative_path": "evalDET.m",
+        "git_mode": "100644",
+        "git_blob_oid": "7e0a58f8ee2419b6ad83e4c634be570a7470360a",
+        "size_bytes": 1720,
+        "sha256": "10e88f1a8b45002bf5ca3e27cdc7fc870c59aef83ba806d74b60738cfecb2d61"
+      },
+      {
+        "relative_path": "utils/VOCap.m",
+        "git_mode": "100644",
+        "git_blob_oid": "92b87803283bf0adb79913c5bede04b5ef33c1f1",
+        "size_bytes": 263,
+        "sha256": "95dd1e02c956124e777caf6f44b50b0986a2a37785bd11982ef775e696c17945"
+      },
+      {
+        "relative_path": "utils/calcAccuracy.m",
+        "git_mode": "100644",
+        "git_blob_oid": "6d29c57734e832a16e27871ccff0aa83707d4988",
+        "size_bytes": 2367,
+        "sha256": "285508f54903acd75eeda346c11c8e53267e72facd648f2e22bce121d4f55d7f"
+      },
+      {
+        "relative_path": "utils/compOas.m",
+        "git_mode": "100644",
+        "git_blob_oid": "cfe4293c5e79caefba099b15bbcde13d66f9c82e",
+        "size_bytes": 1507,
+        "sha256": "3e5c2d473c07bf2ddbe0d902284af98ef7104c609e867b2ed59083d31f3ed2af"
+      },
+      {
+        "relative_path": "utils/createIntImg.m",
+        "git_mode": "100644",
+        "git_blob_oid": "cf45b3b84b0123f5d386132701dd82a5defe752d",
+        "size_bytes": 375,
+        "sha256": "7ce3de4fc105be4f088cae5d1fcfc8f4383f3d7ffd4a551bf1afe711eff09f72"
+      },
+      {
+        "relative_path": "utils/displayImage.m",
+        "git_mode": "100644",
+        "git_blob_oid": "f9b16b67e0c470116349b2b6040a60f7120ef00d",
+        "size_bytes": 1482,
+        "sha256": "dd5c24c2b824f1a9c884eff4f61bc9bfeef635cd6a46d3dab0071c48a67667b2"
+      },
+      {
+        "relative_path": "utils/dropObjectsInIgr.m",
+        "git_mode": "100644",
+        "git_blob_oid": "2bd0886c1ef8446bb8ca6d2f107285896a133280",
+        "size_bytes": 1842,
+        "sha256": "30dee2713d76a537f5c98ec5d0804e17cfd3993d83d8a80a70b90ef9461fa4de"
+      },
+      {
+        "relative_path": "utils/evalRes.m",
+        "git_mode": "100644",
+        "git_blob_oid": "d24ca6afa4c075ac053f8ef5a0187eea00119216",
+        "size_bytes": 3843,
+        "sha256": "610f0d078f1af8d7987e360e6e88665c0290587191d5542b469a9792402f539b"
+      },
+      {
+        "relative_path": "utils/findImageList.m",
+        "git_mode": "100644",
+        "git_blob_oid": "6add0a7723a7d17d48591e2f3a3310a33204885e",
+        "size_bytes": 131,
+        "sha256": "42af8763b4a271e32de9a2509a3103bc839d752cf86c7ac42a4be2c67e5abb68"
+      },
+      {
+        "relative_path": "utils/saveAnnoRes.m",
+        "git_mode": "100644",
+        "git_blob_oid": "2ade44fdf3045c367db1975df8dd69a09d8b8d65",
+        "size_bytes": 718,
+        "sha256": "3210fb8fd98aed19cab61c996e0daf1dbfdb23fd5eb2fafff29afc71bb45876d"
+      }
+    ]
+  }
+}
