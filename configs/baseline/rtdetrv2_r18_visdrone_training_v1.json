@@ -21,6 +21,19 @@
       {"role": "model", "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml", "sha256": "57b7fe0920b8c3046f66981f503045023ec68cff0148c88caf7b1e40c9b117c4"},
       {"role": "runtime", "relative_path": "vendor/rtdetrv2_pytorch/configs/runtime.yml", "sha256": "1b7c050257197e06f69049e0a27b9ea734e175a998a1655c9ad83ed124876e2d"}
     ],
+    "vendor_runtime": {
+      "relative_path": "vendor/rtdetrv2_pytorch",
+      "file_count": 124,
+      "directory_count_excluding_root": 25,
+      "total_size_bytes": 373735,
+      "compact_inventory_sha256": "0fc6803665bc4b5720e983345b2cacb0147eceead9f882588880b6f8a0e68051"
+    },
+    "vendor_manifest": {
+      "relative_path": "manifests/rtdetrv2_upstream.json",
+      "size_bytes": 33264,
+      "raw_sha256": "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae",
+      "canonical_inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
+    },
     "conversion_r3": {
       "artifact_root": "artifacts/data/visdrone_protocol_v2_conversion_r3",
       "completion_sha256": "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817",

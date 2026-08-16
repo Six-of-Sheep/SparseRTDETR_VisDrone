@@ -10,8 +10,13 @@ training identity.
 
 The portable authority is
 `configs/baseline/rtdetrv2_r18_visdrone_training_v1.json`. It binds the raw
-and canonical baseline config, frozen vendor commit and recipe files,
-Conversion R3, category mapping, model identity, and allowed data roles. It
+and canonical training contract, baseline config, frozen vendor commit and
+recipe files, the complete vendor runtime tree, its upstream manifest,
+Conversion R3, category mapping, model identity, and allowed data roles. The
+current training config identity is raw size 8652 bytes with SHA-256
+`d37676b9b918134f887f9d19aa05eb4bf6479163ccc0f2808524abe40cf3b914`; its
+canonical identity is 7366 bytes with SHA-256
+`fd1539298a3929c2659ecdf7a982c37a09ecc99b5aa5ef731feba968a110636c`. It
 contains no runtime data root, host path, username, or AutoDL path.
 
 ## Frozen recipe
@@ -103,6 +108,37 @@ revalidated after the read, so symlinks, hardlinks, special files, canonical
 escapes, replacement, and metadata/content races fail closed before their
 contents can be accepted.
 
+## Vendor runtime and manifest binding
+
+`training_contract_binding` validates the complete
+`vendor/rtdetrv2_pytorch` tree in the same verified repository transaction as
+the training config and source bindings. The frozen runtime inventory contains
+124 ordinary files, 25 descendant directories, and 373735 total bytes. Its
+compact rows use exactly `{relative_path,size_bytes,sha256}` relative to the
+vendor root and have canonical inventory SHA-256
+`0fc6803665bc4b5720e983345b2cacb0147eceead9f882588880b6f8a0e68051`.
+
+The repository manifest at `manifests/rtdetrv2_upstream.json` is independently
+bound by raw size 33264 bytes and raw SHA-256
+`f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae`. Its
+canonical five-field rows use exactly
+`{relative_path,size_bytes,sha256,executable,source_role}` relative to the
+repository root and have canonical inventory SHA-256
+`2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7`.
+
+The production inventory is generated from descriptor-relative `lstat` and
+`openat` operations with `O_NOFOLLOW|O_CLOEXEC` (and `O_NONBLOCK` for files),
+deterministically sorted directory enumeration, ordinary-file and link-count
+checks, same-device checks, descriptor reads, and metadata revalidation before
+and after each read and directory walk. Symlinks, hardlinks, special files,
+device drift, path escape, entry changes, partial reads, and descriptor leaks
+fail closed. The observed compact rows and manifest rows must independently
+match the frozen configuration and manifest; updating a vendor file together
+with a repacked manifest remains rejected by the frozen raw manifest and
+configuration identities. The returned `vendor_runtime_binding` reports only
+the verified observation, including file/directory counts, bytes, both
+inventory identities, and manifest raw identity.
+
 `load_training_contract` reads the training and baseline bytes in one verified
 boundary transaction. `training_contract_binding` reuses that transaction's
 validated configuration and training bytes, then reads all vendor sources
@@ -119,7 +155,7 @@ roles are distinct, floats must be finite, and the four GradScaler fields only
 accept `IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` until a later implementation
 contract freezes executable values.
 
-All 50 builtin numeric leaves are also covered by a static JSON-pointer
+All 54 builtin numeric leaves are also covered by a static JSON-pointer
 constraint registry before path, cross-field, and digest validation. Each role
 declares its exact builtin type, finite requirement, basic legal range, and T1
 frozen literal. Errors distinguish non-finite values, values outside the legal
@@ -131,7 +167,7 @@ blocking, and exactly-once checkpoint ownership. The final canonical digest
 remains a separate identity layer rather than a substitute for these semantic
 checks.
 
-The semantic layer is a single static registry of 127 in-scope non-numeric
+The semantic layer is a single static registry of 145 in-scope non-numeric
 leaves. It covers the contract and owner decisions, model and device modes,
 initialization source, optimizer and scheduler roles, AMP placeholders, EMA
 weight selection, R18 transform identity, development-only evaluation, the
@@ -142,7 +178,7 @@ still covered. Six ordered-list rules independently bind vendor include roles,
 the R18 transform sequence, train-only stopped transforms, selection
 tie-breakers, checkpoint state ownership, and acceptance-state order and set.
 
-Eleven stable cross-field rules reject synchronized drift as well as one-sided
+Twelve stable cross-field rules reject synchronized drift as well as one-sided
 drift: random initialization cannot acquire a pretrained or checkpoint source;
 one formal run cannot resume, retry, or overwrite; required EMA evaluation and
 selection use EMA weights; AMP remains enabled while its four executable

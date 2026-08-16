@@ -15,9 +15,27 @@ from typing import Any
 
 TRAINING_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json"
 BASELINE_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json"
-TRAINING_CONFIG_SIZE_BYTES = 8058
-TRAINING_CONFIG_RAW_SHA256 = "8ce30e636caad84ee6e3e0ec10d384730a00861ccf179c1e765c095465c6cd5d"
-TRAINING_CONTRACT_CANONICAL_SHA256 = "753991ca118267f571efda6a602c1347323707d074d9d7b2e4ed64fb7a17c4f6"
+VENDOR_RUNTIME_RELATIVE_PATH = "vendor/rtdetrv2_pytorch"
+VENDOR_MANIFEST_RELATIVE_PATH = "manifests/rtdetrv2_upstream.json"
+VENDOR_UPSTREAM_REPOSITORY = "https://github.com/lyuwenyu/RT-DETR.git"
+VENDOR_UPSTREAM_BRANCH = "main"
+VENDOR_UPSTREAM_COMMIT = "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47"
+VENDOR_UPSTREAM_COMMIT_TIME = "2026-06-15T13:50:44+09:00"
+VENDOR_UPSTREAM_ROOT_TREE = "b6de37e186373fc59b91d23c846bb0eda35b6986"
+VENDOR_UPSTREAM_SUBTREE = "96a3b3e7e015d5e548e2917df2fec9641375e96e"
+VENDOR_LICENSE_NAME = "Apache-2.0"
+VENDOR_LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+VENDOR_MANIFEST_INVENTORY_ALGORITHM = "sha256(canonical_json(files))"
+VENDOR_RUNTIME_FILE_COUNT = 124
+VENDOR_RUNTIME_DIRECTORY_COUNT = 25
+VENDOR_RUNTIME_TOTAL_SIZE_BYTES = 373735
+VENDOR_RUNTIME_COMPACT_INVENTORY_SHA256 = "0fc6803665bc4b5720e983345b2cacb0147eceead9f882588880b6f8a0e68051"
+VENDOR_MANIFEST_SIZE_BYTES = 33264
+VENDOR_MANIFEST_RAW_SHA256 = "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae"
+VENDOR_MANIFEST_INVENTORY_SHA256 = "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
+TRAINING_CONFIG_SIZE_BYTES = 8652
+TRAINING_CONFIG_RAW_SHA256 = "d37676b9b918134f887f9d19aa05eb4bf6479163ccc0f2808524abe40cf3b914"
+TRAINING_CONTRACT_CANONICAL_SHA256 = "fd1539298a3929c2659ecdf7a982c37a09ecc99b5aa5ef731feba968a110636c"
 BASELINE_CONFIG_SIZE_BYTES = 4316
 BASELINE_CONFIG_RAW_SHA256 = "38702c3483efcd3c3855552d087bbfd0fcfe3628fa9b1582847039f17eb083dd"
 BASELINE_CONFIG_CANONICAL_SHA256 = "c392efd44de7738401c1136261c8ca628dea3d3b0fe355b79d0d69d6ed91bfe0"
@@ -39,6 +57,19 @@ def _list(*children: Any) -> tuple[str, tuple[Any, ...]]:
 
 
 _VENDOR_INCLUDE_ROW = _object(role=_STR, relative_path=_STR, sha256=_STR)
+_VENDOR_RUNTIME_BINDING = _object(
+    relative_path=_STR,
+    file_count=_INT,
+    directory_count_excluding_root=_INT,
+    total_size_bytes=_INT,
+    compact_inventory_sha256=_STR,
+)
+_VENDOR_MANIFEST_BINDING = _object(
+    relative_path=_STR,
+    size_bytes=_INT,
+    raw_sha256=_STR,
+    canonical_inventory_sha256=_STR,
+)
 _TRAINING_CONTRACT_SCHEMA = _object(
     schema_version=_INT,
     training_contract_id=_STR,
@@ -49,6 +80,8 @@ _TRAINING_CONTRACT_SCHEMA = _object(
         vendor_upstream_commit=_STR,
         vendor_recipe=_object(relative_path=_STR, sha256=_STR),
         vendor_includes=_list(*(_VENDOR_INCLUDE_ROW for _ in range(4))),
+        vendor_runtime=_VENDOR_RUNTIME_BINDING,
+        vendor_manifest=_VENDOR_MANIFEST_BINDING,
         conversion_r3=_object(
             artifact_root=_STR,
             completion_sha256=_STR,
@@ -179,6 +212,10 @@ def _numeric(
 _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS = {
     "/schema_version": _numeric(int, 1, "schema_version", lower=1),
     "/source_bindings/baseline_config/size_bytes": _numeric(int, 4316, "size_bytes", lower=1),
+    "/source_bindings/vendor_runtime/file_count": _numeric(int, 124, "vendor_file_count", lower=1),
+    "/source_bindings/vendor_runtime/directory_count_excluding_root": _numeric(int, 25, "vendor_directory_count", lower=0),
+    "/source_bindings/vendor_runtime/total_size_bytes": _numeric(int, 373735, "vendor_total_size_bytes", lower=1),
+    "/source_bindings/vendor_manifest/size_bytes": _numeric(int, 33264, "vendor_manifest_size_bytes", lower=1),
     "/model/num_classes": _numeric(int, 10, "count", lower=1),
     "/model/parameter_count": _numeric(int, 20094584, "count", lower=1),
     "/model/input_size/0": _numeric(int, 640, "size", lower=1),
@@ -240,6 +277,11 @@ _SEMANTIC_SYNTAX_OR_BINDING_POINTERS = frozenset(
         "/source_bindings/vendor_upstream_commit",
         "/source_bindings/vendor_recipe/relative_path",
         "/source_bindings/vendor_recipe/sha256",
+        "/source_bindings/vendor_runtime/relative_path",
+        "/source_bindings/vendor_runtime/compact_inventory_sha256",
+        "/source_bindings/vendor_manifest/relative_path",
+        "/source_bindings/vendor_manifest/raw_sha256",
+        "/source_bindings/vendor_manifest/canonical_inventory_sha256",
         "/source_bindings/conversion_r3/artifact_root",
         "/source_bindings/conversion_r3/completion_sha256",
         "/source_bindings/conversion_r3/artifact_inventory_sha256",
@@ -624,6 +666,15 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
         },
         "evidence and acceptance decision states",
     ),
+    _semantic_relation_rule(
+        "REL_VENDOR_RUNTIME_MANIFEST_IDENTITY",
+        {
+            "/source_bindings/vendor_upstream_commit": VENDOR_UPSTREAM_COMMIT,
+            "/source_bindings/vendor_runtime/relative_path": VENDOR_RUNTIME_RELATIVE_PATH,
+            "/source_bindings/vendor_manifest/relative_path": VENDOR_MANIFEST_RELATIVE_PATH,
+        },
+        "vendor runtime and manifest path identity",
+    ),
 )
 
 
@@ -644,6 +695,10 @@ def canonical_training_contract_bytes(config: Any) -> bytes:
 
 def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _strict_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -983,6 +1038,28 @@ def _validate_path_and_sha_fields(config: dict[str, Any]) -> None:
     for index, item in enumerate(sources["vendor_includes"]):
         _assert_relative_path(item["relative_path"], f"vendor_includes[{index}].relative_path")
         _assert_sha(item["sha256"], f"vendor_includes[{index}].sha256")
+    vendor_runtime = sources["vendor_runtime"]
+    _assert_relative_path(vendor_runtime["relative_path"], "vendor_runtime.relative_path")
+    _assert_sha(vendor_runtime["compact_inventory_sha256"], "vendor_runtime.compact_inventory_sha256")
+    if vendor_runtime != {
+        "relative_path": VENDOR_RUNTIME_RELATIVE_PATH,
+        "file_count": VENDOR_RUNTIME_FILE_COUNT,
+        "directory_count_excluding_root": VENDOR_RUNTIME_DIRECTORY_COUNT,
+        "total_size_bytes": VENDOR_RUNTIME_TOTAL_SIZE_BYTES,
+        "compact_inventory_sha256": VENDOR_RUNTIME_COMPACT_INVENTORY_SHA256,
+    }:
+        raise TrainingContractError("vendor runtime source binding drift")
+    vendor_manifest = sources["vendor_manifest"]
+    _assert_relative_path(vendor_manifest["relative_path"], "vendor_manifest.relative_path")
+    _assert_sha(vendor_manifest["raw_sha256"], "vendor_manifest.raw_sha256")
+    _assert_sha(vendor_manifest["canonical_inventory_sha256"], "vendor_manifest.canonical_inventory_sha256")
+    if vendor_manifest != {
+        "relative_path": VENDOR_MANIFEST_RELATIVE_PATH,
+        "size_bytes": VENDOR_MANIFEST_SIZE_BYTES,
+        "raw_sha256": VENDOR_MANIFEST_RAW_SHA256,
+        "canonical_inventory_sha256": VENDOR_MANIFEST_INVENTORY_SHA256,
+    }:
+        raise TrainingContractError("vendor manifest source binding drift")
     conversion = sources["conversion_r3"]
     _assert_relative_path(conversion["artifact_root"], "conversion_r3.artifact_root")
     for key, value in conversion.items():
@@ -1164,14 +1241,56 @@ def _readlink_fd(fd: int) -> str:
             raise TrainingContractError("secure repository descriptor path is unavailable") from exc
 
 
-class _DirectoryRecord:
-    __slots__ = ("name", "parent_fd", "fd", "identity")
+def _listdir_fd(fd: int) -> list[str]:
+    while True:
+        try:
+            return list(os.listdir(fd))
+        except InterruptedError:
+            continue
+        except (OSError, TypeError) as exc:
+            raise TrainingContractError("secure repository directory enumeration failed") from exc
 
-    def __init__(self, name: str, parent_fd: int, fd: int, identity: tuple[int, int, int]) -> None:
+
+def _vendor_source_role(relative: str) -> str:
+    if relative in {"LICENSE", "UPSTREAM.md"}:
+        return "p3_additional"
+    if relative.endswith((".yml", ".yaml")):
+        return "config"
+    if relative == "Dockerfile" or relative.endswith(("requirements.txt", "docker-compose.yml")):
+        return "environment"
+    if relative.startswith("references/deploy/"):
+        return "deployment"
+    if relative.startswith("tools/"):
+        return "tool"
+    if relative.startswith("src/data/"):
+        return "data_adapter"
+    if relative.startswith(("src/nn/", "src/zoo/")):
+        return "model"
+    if relative.startswith("src/optim/"):
+        return "optimization"
+    if relative.startswith("src/solver/"):
+        return "training"
+    if relative.startswith(("src/core/", "src/misc/")):
+        return "runtime"
+    return "package_or_documentation"
+
+
+class _DirectoryRecord:
+    __slots__ = ("name", "parent_fd", "fd", "identity", "snapshot")
+
+    def __init__(
+        self,
+        name: str,
+        parent_fd: int,
+        fd: int,
+        identity: tuple[int, int, int],
+        snapshot: tuple[int, int, int, int, int, int, int] | None = None,
+    ) -> None:
         self.name = name
         self.parent_fd = parent_fd
         self.fd = fd
         self.identity = identity
+        self.snapshot = snapshot
 
 
 class _VerifiedRepository:
@@ -1256,12 +1375,32 @@ class _VerifiedRepository:
     ) -> None:
         self._assert_root_stable()
         for record in records:
-            if _object_identity(_lstat_at(record.name, record.parent_fd)) != record.identity:
+            observed = _lstat_at(record.name, record.parent_fd)
+            if _object_identity(observed) != record.identity:
                 raise TrainingContractError("repository file path component identity drift")
-            if _object_identity(_fstat_fd(record.fd)) != record.identity:
+            if record.snapshot is not None and _file_snapshot(observed) != record.snapshot:
+                raise TrainingContractError("repository file path component metadata drift")
+            opened = _fstat_fd(record.fd)
+            if _object_identity(opened) != record.identity:
                 raise TrainingContractError("repository file descriptor identity drift")
+            if record.snapshot is not None and _file_snapshot(opened) != record.snapshot:
+                raise TrainingContractError("repository file descriptor metadata drift")
         if _file_snapshot(_lstat_at(final_name, final_parent_fd)) != expected_final:
             raise TrainingContractError("repository file path identity drift")
+
+    def _assert_directory_records_stable(self, records: list[_DirectoryRecord]) -> None:
+        self._assert_root_stable()
+        for record in records:
+            observed = _lstat_at(record.name, record.parent_fd)
+            if _object_identity(observed) != record.identity:
+                raise TrainingContractError("repository directory path identity drift")
+            if record.snapshot is not None and _file_snapshot(observed) != record.snapshot:
+                raise TrainingContractError("repository directory path metadata drift")
+            opened = _fstat_fd(record.fd)
+            if _object_identity(opened) != record.identity:
+                raise TrainingContractError("repository directory descriptor identity drift")
+            if record.snapshot is not None and _file_snapshot(opened) != record.snapshot:
+                raise TrainingContractError("repository directory descriptor metadata drift")
 
     def read_file(self, relative: str) -> bytes:
         relative = _assert_relative_path(relative, "repository file path")
@@ -1340,6 +1479,306 @@ class _VerifiedRepository:
                 except OSError:
                     pass
 
+    def _read_open_file(
+        self,
+        parent_fd: int,
+        name: str,
+        observed: os.stat_result,
+        relative: str,
+        directory_records: list[_DirectoryRecord],
+    ) -> tuple[bytes, tuple[int, int, int, int, int, int, int]]:
+        if self._root_device is None:
+            raise TrainingContractError("repository boundary is not open")
+        if (
+            stat.S_ISLNK(observed.st_mode)
+            or not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != self._root_device
+        ):
+            raise TrainingContractError(f"repository file is not a stable ordinary file: {relative}")
+        file_fd = _open_at(name, self._file_flags, parent_fd)
+        try:
+            opened = _fstat_fd(file_fd)
+            if (
+                _file_snapshot(observed) != _file_snapshot(opened)
+                or not stat.S_ISREG(opened.st_mode)
+                or opened.st_nlink != 1
+                or opened.st_dev != self._root_device
+            ):
+                raise TrainingContractError(f"repository file identity changed during open: {relative}")
+            expected = _file_snapshot(opened)
+            self._assert_descendant_stable(directory_records, parent_fd, name, expected)
+            chunks: list[bytes] = []
+            while True:
+                try:
+                    chunk = os.read(file_fd, 1024 * 1024)
+                except InterruptedError:
+                    continue
+                except OSError as exc:
+                    raise TrainingContractError(f"repository file read failed: {relative}") from exc
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            raw = b"".join(chunks)
+            after = _fstat_fd(file_fd)
+            if _file_snapshot(after) != expected or len(raw) != expected[4]:
+                raise TrainingContractError(f"repository file changed while reading: {relative}")
+            self._assert_descendant_stable(directory_records, parent_fd, name, expected)
+            return raw, expected
+        finally:
+            try:
+                os.close(file_fd)
+            except OSError:
+                pass
+
+    def _open_inventory_directory(
+        self, relative: str
+    ) -> tuple[int, list[_DirectoryRecord], list[int]]:
+        relative = _assert_relative_path(relative, "inventory directory path")
+        if self._root_fd is None or self._root_device is None:
+            raise TrainingContractError("repository boundary is not open")
+        self._assert_root_stable()
+        parent_fd = self._root_fd
+        records: list[_DirectoryRecord] = []
+        opened_directories: list[int] = []
+        try:
+            for name in relative.split("/"):
+                observed = _lstat_at(name, parent_fd)
+                if (
+                    stat.S_ISLNK(observed.st_mode)
+                    or not stat.S_ISDIR(observed.st_mode)
+                    or observed.st_dev != self._root_device
+                ):
+                    raise TrainingContractError(f"inventory directory is not a local directory: {relative}")
+                child_fd = _open_at(name, self._directory_flags, parent_fd)
+                opened_directories.append(child_fd)
+                opened = _fstat_fd(child_fd)
+                if _file_snapshot(observed) != _file_snapshot(opened):
+                    raise TrainingContractError(f"inventory directory identity changed during open: {relative}")
+                records.append(
+                    _DirectoryRecord(
+                        name,
+                        parent_fd,
+                        child_fd,
+                        _object_identity(observed),
+                        _file_snapshot(observed),
+                    )
+                )
+                parent_fd = child_fd
+            self._assert_directory_records_stable(records)
+            return parent_fd, records, opened_directories
+        except BaseException:
+            for fd in reversed(opened_directories):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            raise
+
+    def inventory_directory(self, relative: str) -> dict[str, Any]:
+        directory_fd, root_records, opened_directories = self._open_inventory_directory(relative)
+        compact_rows: list[dict[str, Any]] = []
+        manifest_rows: list[dict[str, Any]] = []
+        directory_count = 0
+        total_size = 0
+
+        def visit(fd: int, prefix: str, records: list[_DirectoryRecord]) -> None:
+            nonlocal directory_count, total_size
+            before_directory = _file_snapshot(_fstat_fd(fd))
+            names = sorted(_listdir_fd(fd))
+            observed_entries: list[tuple[str, tuple[int, int, int, int, int, int, int]]] = []
+            for name in names:
+                observed = _lstat_at(name, fd)
+                child_relative = f"{prefix}/{name}" if prefix else name
+                if stat.S_ISLNK(observed.st_mode):
+                    raise TrainingContractError(f"vendor inventory symlink: {child_relative}")
+                if stat.S_ISDIR(observed.st_mode):
+                    if observed.st_dev != self._root_device:
+                        raise TrainingContractError(f"vendor inventory device drift: {child_relative}")
+                    child_fd = _open_at(name, self._directory_flags, fd)
+                    opened_directories.append(child_fd)
+                    opened = _fstat_fd(child_fd)
+                    if _file_snapshot(observed) != _file_snapshot(opened):
+                        raise TrainingContractError(f"vendor directory identity changed during open: {child_relative}")
+                    child_record = _DirectoryRecord(
+                        name,
+                        fd,
+                        child_fd,
+                        _object_identity(observed),
+                        _file_snapshot(observed),
+                    )
+                    directory_count += 1
+                    visit(child_fd, child_relative, [*records, child_record])
+                    observed_entries.append((name, _file_snapshot(observed)))
+                    continue
+                if not stat.S_ISREG(observed.st_mode):
+                    raise TrainingContractError(f"vendor inventory special object: {child_relative}")
+                raw, snapshot = self._read_open_file(fd, name, observed, child_relative, records)
+                total_size += len(raw)
+                compact_rows.append(
+                    {
+                        "relative_path": child_relative,
+                        "size_bytes": len(raw),
+                        "sha256": _sha256_bytes(raw),
+                    }
+                )
+                manifest_relative = f"{VENDOR_RUNTIME_RELATIVE_PATH}/{child_relative}"
+                manifest_rows.append(
+                    {
+                        "relative_path": manifest_relative,
+                        "size_bytes": len(raw),
+                        "sha256": _sha256_bytes(raw),
+                        "executable": bool(snapshot[2] & 0o111),
+                        "source_role": _vendor_source_role(child_relative),
+                    }
+                )
+                observed_entries.append((name, snapshot))
+            if sorted(_listdir_fd(fd)) != names:
+                raise TrainingContractError(f"vendor directory entries changed during enumeration: {prefix}")
+            if _file_snapshot(_fstat_fd(fd)) != before_directory:
+                raise TrainingContractError(f"vendor directory metadata changed during enumeration: {prefix}")
+            for name, expected in observed_entries:
+                if _file_snapshot(_lstat_at(name, fd)) != expected:
+                    raise TrainingContractError(f"vendor entry changed during enumeration: {prefix}/{name}")
+            self._assert_directory_records_stable(records)
+
+        try:
+            visit(directory_fd, "", root_records)
+            compact_rows.sort(key=lambda row: str(row["relative_path"]))
+            manifest_rows.sort(key=lambda row: str(row["relative_path"]))
+            return {
+                "file_count": len(compact_rows),
+                "directory_count_excluding_root": directory_count,
+                "total_size_bytes": total_size,
+                "compact_inventory_sha256": _sha256_bytes(_canonical_json_bytes(compact_rows)),
+                "manifest_inventory_sha256": _sha256_bytes(_canonical_json_bytes(manifest_rows)),
+                "compact_rows": compact_rows,
+                "manifest_rows": manifest_rows,
+            }
+        finally:
+            for fd in reversed(opened_directories):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
+
+_VENDOR_MANIFEST_KEYS = {
+    "schema_version",
+    "upstream_repository",
+    "upstream_branch",
+    "upstream_commit",
+    "upstream_commit_time",
+    "upstream_root_tree",
+    "upstream_subtree",
+    "license_name",
+    "license_sha256",
+    "implementation",
+    "vendor_relative_path",
+    "file_count",
+    "total_size_bytes",
+    "inventory_algorithm",
+    "canonical_inventory_sha256",
+    "files",
+}
+_VENDOR_MANIFEST_ROW_KEYS = {"relative_path", "size_bytes", "sha256", "executable", "source_role"}
+_VENDOR_SOURCE_ROLES = {
+    "p3_additional",
+    "config",
+    "environment",
+    "deployment",
+    "tool",
+    "data_adapter",
+    "model",
+    "optimization",
+    "training",
+    "runtime",
+    "package_or_documentation",
+}
+
+
+def _parse_vendor_manifest(raw: bytes) -> dict[str, Any]:
+    if b"\x00" in raw:
+        raise TrainingContractError("vendor manifest contains NUL bytes")
+    manifest = _parse_portable_json(raw, label="vendor manifest")
+    if set(manifest) != _VENDOR_MANIFEST_KEYS:
+        raise TrainingContractError("vendor manifest root schema drift")
+    exact_strings = {
+        "upstream_repository": VENDOR_UPSTREAM_REPOSITORY,
+        "upstream_branch": VENDOR_UPSTREAM_BRANCH,
+        "upstream_commit": VENDOR_UPSTREAM_COMMIT,
+        "upstream_commit_time": VENDOR_UPSTREAM_COMMIT_TIME,
+        "upstream_root_tree": VENDOR_UPSTREAM_ROOT_TREE,
+        "upstream_subtree": VENDOR_UPSTREAM_SUBTREE,
+        "license_name": VENDOR_LICENSE_NAME,
+        "implementation": "rtdetrv2_pytorch",
+        "vendor_relative_path": VENDOR_RUNTIME_RELATIVE_PATH,
+        "inventory_algorithm": VENDOR_MANIFEST_INVENTORY_ALGORITHM,
+    }
+    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+        raise TrainingContractError("vendor manifest schema version drift")
+    for key, expected in exact_strings.items():
+        if type(manifest[key]) is not str or manifest[key] != expected:
+            raise TrainingContractError(f"vendor manifest {key} drift")
+    if type(manifest["license_sha256"]) is not str or manifest["license_sha256"] != VENDOR_LICENSE_SHA256:
+        raise TrainingContractError("vendor manifest license SHA drift")
+    if type(manifest["file_count"]) is not int or manifest["file_count"] != VENDOR_RUNTIME_FILE_COUNT:
+        raise TrainingContractError("vendor manifest file count drift")
+    if type(manifest["total_size_bytes"]) is not int or manifest["total_size_bytes"] != VENDOR_RUNTIME_TOTAL_SIZE_BYTES:
+        raise TrainingContractError("vendor manifest total size drift")
+    if type(manifest["canonical_inventory_sha256"]) is not str or _SHA256.fullmatch(manifest["canonical_inventory_sha256"]) is None:
+        raise TrainingContractError("vendor manifest inventory SHA syntax drift")
+    if manifest["canonical_inventory_sha256"] != VENDOR_MANIFEST_INVENTORY_SHA256:
+        raise TrainingContractError("vendor manifest inventory SHA drift")
+    rows = manifest["files"]
+    if type(rows) is not list or len(rows) != VENDOR_RUNTIME_FILE_COUNT or rows != sorted(rows, key=lambda row: row.get("relative_path", "") if type(row) is dict else ""):
+        raise TrainingContractError("vendor manifest file rows are not canonical")
+    previous = None
+    for row in rows:
+        if type(row) is not dict or set(row) != _VENDOR_MANIFEST_ROW_KEYS:
+            raise TrainingContractError("vendor manifest row schema drift")
+        relative = _assert_relative_path(row["relative_path"], "vendor manifest relative_path")
+        if not relative.startswith(VENDOR_RUNTIME_RELATIVE_PATH + "/"):
+            raise TrainingContractError("vendor manifest path escapes vendor root")
+        if previous is not None and relative <= previous:
+            raise TrainingContractError("vendor manifest rows are duplicated or unsorted")
+        previous = relative
+        if type(row["size_bytes"]) is not int or row["size_bytes"] < 0:
+            raise TrainingContractError("vendor manifest row size type drift")
+        _assert_sha(row["sha256"], "vendor manifest row sha256")
+        if type(row["executable"]) is not bool or type(row["source_role"]) is not str or row["source_role"] not in _VENDOR_SOURCE_ROLES:
+            raise TrainingContractError("vendor manifest row metadata drift")
+    return manifest
+
+
+def _validate_vendor_inventory(
+    manifest: dict[str, Any],
+    manifest_raw: bytes,
+    inventory: dict[str, Any],
+    config: dict[str, Any],
+) -> None:
+    source = config["source_bindings"]
+    vendor_runtime = source["vendor_runtime"]
+    vendor_manifest = source["vendor_manifest"]
+    if len(manifest_raw) != vendor_manifest["size_bytes"] or _sha256_bytes(manifest_raw) != vendor_manifest["raw_sha256"]:
+        raise TrainingContractError("vendor manifest raw identity drift")
+    if manifest["upstream_commit"] != source["vendor_upstream_commit"]:
+        raise TrainingContractError("vendor upstream commit binding drift")
+    if manifest["file_count"] != vendor_runtime["file_count"] or inventory["file_count"] != vendor_runtime["file_count"]:
+        raise TrainingContractError("vendor runtime file count binding drift")
+    if inventory["directory_count_excluding_root"] != vendor_runtime["directory_count_excluding_root"]:
+        raise TrainingContractError("vendor runtime directory count binding drift")
+    if manifest["total_size_bytes"] != vendor_runtime["total_size_bytes"] or inventory["total_size_bytes"] != vendor_runtime["total_size_bytes"]:
+        raise TrainingContractError("vendor runtime total size binding drift")
+    if inventory["compact_inventory_sha256"] != vendor_runtime["compact_inventory_sha256"]:
+        raise TrainingContractError("vendor compact inventory binding drift")
+    if inventory["manifest_inventory_sha256"] != vendor_manifest["canonical_inventory_sha256"]:
+        raise TrainingContractError("vendor manifest inventory binding drift")
+    if manifest["canonical_inventory_sha256"] != vendor_manifest["canonical_inventory_sha256"]:
+        raise TrainingContractError("vendor manifest declared inventory drift")
+    if inventory["manifest_rows"] != manifest["files"]:
+        raise TrainingContractError("vendor manifest rows do not equal observed inventory")
+
 
 def _load_training_contract_from_boundary(
     repository: _VerifiedRepository, config_path: str | Path
@@ -1380,6 +1819,10 @@ def training_contract_binding(repo_root: str | Path, config_path: str | Path = T
 
     with _VerifiedRepository(repo_root) as repository:
         config, raw = _load_training_contract_from_boundary(repository, config_path)
+        manifest_raw = repository.read_file(VENDOR_MANIFEST_RELATIVE_PATH)
+        manifest = _parse_vendor_manifest(manifest_raw)
+        inventory = repository.inventory_directory(VENDOR_RUNTIME_RELATIVE_PATH)
+        _validate_vendor_inventory(manifest, manifest_raw, inventory, config)
         _validate_vendor_source_files(repository, config)
         canonical = canonical_training_contract_bytes(config)
         return {
@@ -1391,4 +1834,15 @@ def training_contract_binding(repo_root: str | Path, config_path: str | Path = T
             "raw_sha256": _sha256_bytes(raw),
             "canonical_size_bytes": len(canonical),
             "canonical_sha256": _sha256_bytes(canonical),
+            "vendor_runtime_binding": {
+                "relative_path": VENDOR_RUNTIME_RELATIVE_PATH,
+                "file_count": inventory["file_count"],
+                "directory_count_excluding_root": inventory["directory_count_excluding_root"],
+                "total_size_bytes": inventory["total_size_bytes"],
+                "compact_inventory_sha256": inventory["compact_inventory_sha256"],
+                "manifest_relative_path": VENDOR_MANIFEST_RELATIVE_PATH,
+                "manifest_size_bytes": len(manifest_raw),
+                "manifest_raw_sha256": _sha256_bytes(manifest_raw),
+                "manifest_inventory_sha256": inventory["manifest_inventory_sha256"],
+            },
         }
