@@ -54,9 +54,9 @@ CONVERSION_R3_AUTHORITY_FILES = frozenset(
     }
 )
 CONVERSION_R3_FILE_MODE = 0o600
-TRAINING_CONFIG_SIZE_BYTES = 8652
-TRAINING_CONFIG_RAW_SHA256 = "d37676b9b918134f887f9d19aa05eb4bf6479163ccc0f2808524abe40cf3b914"
-TRAINING_CONTRACT_CANONICAL_SHA256 = "fd1539298a3929c2659ecdf7a982c37a09ecc99b5aa5ef731feba968a110636c"
+TRAINING_CONFIG_SIZE_BYTES = 8513
+TRAINING_CONFIG_RAW_SHA256 = "bf6631644d218fe65998dcd4267d93a040b709a864577f7216052dd2a9e97239"
+TRAINING_CONTRACT_CANONICAL_SHA256 = "7439f0706af2bfa97d2a3b17a1b338bb00c6470b4c1268391047014370329c3f"
 BASELINE_CONFIG_SIZE_BYTES = 4316
 BASELINE_CONFIG_RAW_SHA256 = "38702c3483efcd3c3855552d087bbfd0fcfe3628fa9b1582847039f17eb083dd"
 BASELINE_CONFIG_CANONICAL_SHA256 = "c392efd44de7738401c1136261c8ca628dea3d3b0fe355b79d0d69d6ed91bfe0"
@@ -66,7 +66,6 @@ _FLOAT = ("scalar", float)
 _BOOL = ("scalar", bool)
 _STR = ("scalar", str)
 _NULL = ("scalar", type(None))
-_AMP_PLACEHOLDER = ("literal", "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY")
 
 
 def _object(**children: Any) -> tuple[str, dict[str, Any]]:
@@ -150,9 +149,9 @@ _TRAINING_CONTRACT_SCHEMA = _object(
         expected_decay_events_within_120_epochs=_INT,
     ),
     amp=_object(
-        enabled=_BOOL, scaler_type=_STR, init_scale=_AMP_PLACEHOLDER,
-        growth_factor=_AMP_PLACEHOLDER, backoff_factor=_AMP_PLACEHOLDER,
-        growth_interval=_AMP_PLACEHOLDER, nonfinite_loss_allowed=_INT,
+        enabled=_BOOL, scaler_type=_STR, init_scale=_FLOAT,
+        growth_factor=_FLOAT, backoff_factor=_FLOAT,
+        growth_interval=_INT, nonfinite_loss_allowed=_INT,
         nonfinite_gradient_allowed=_INT, optimizer_skipped_steps_allowed=_INT,
         overflow_events_allowed=_INT,
     ),
@@ -233,10 +232,6 @@ def _numeric(
 _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS = {
     "/schema_version": _numeric(int, 1, "schema_version", lower=1),
     "/source_bindings/baseline_config/size_bytes": _numeric(int, 4316, "size_bytes", lower=1),
-    "/source_bindings/vendor_runtime/file_count": _numeric(int, 124, "vendor_file_count", lower=1),
-    "/source_bindings/vendor_runtime/directory_count_excluding_root": _numeric(int, 25, "vendor_directory_count", lower=0),
-    "/source_bindings/vendor_runtime/total_size_bytes": _numeric(int, 373735, "vendor_total_size_bytes", lower=1),
-    "/source_bindings/vendor_manifest/size_bytes": _numeric(int, 33264, "vendor_manifest_size_bytes", lower=1),
     "/model/num_classes": _numeric(int, 10, "count", lower=1),
     "/model/parameter_count": _numeric(int, 20094584, "count", lower=1),
     "/model/input_size/0": _numeric(int, 640, "size", lower=1),
@@ -267,6 +262,10 @@ _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS = {
     "/learning_rate/milestones/0": _numeric(int, 1000, "epoch_milestone", lower=1),
     "/learning_rate/gamma": _numeric(float, 0.1, "scheduler_factor", lower=0.0, lower_inclusive=False, upper=1.0),
     "/learning_rate/expected_decay_events_within_120_epochs": _numeric(int, 0, "count", lower=0),
+    "/amp/init_scale": _numeric(float, 65536.0, "amp_init_scale", lower=0.0, lower_inclusive=False),
+    "/amp/growth_factor": _numeric(float, 2.0, "amp_growth_factor", lower=1.0, lower_inclusive=False),
+    "/amp/backoff_factor": _numeric(float, 0.5, "amp_backoff_factor", lower=0.0, lower_inclusive=False, upper=1.0, upper_inclusive=False),
+    "/amp/growth_interval": _numeric(int, 2000, "amp_growth_interval", lower=1),
     "/amp/nonfinite_loss_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
     "/amp/nonfinite_gradient_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
     "/amp/optimizer_skipped_steps_allowed": _numeric(int, 0, "allowed_event_count", lower=0),
@@ -298,11 +297,6 @@ _SEMANTIC_SYNTAX_OR_BINDING_POINTERS = frozenset(
         "/source_bindings/vendor_upstream_commit",
         "/source_bindings/vendor_recipe/relative_path",
         "/source_bindings/vendor_recipe/sha256",
-        "/source_bindings/vendor_runtime/relative_path",
-        "/source_bindings/vendor_runtime/compact_inventory_sha256",
-        "/source_bindings/vendor_manifest/relative_path",
-        "/source_bindings/vendor_manifest/raw_sha256",
-        "/source_bindings/vendor_manifest/canonical_inventory_sha256",
         "/source_bindings/conversion_r3/artifact_root",
         "/source_bindings/conversion_r3/completion_sha256",
         "/source_bindings/conversion_r3/artifact_inventory_sha256",
@@ -312,6 +306,26 @@ _SEMANTIC_SYNTAX_OR_BINDING_POINTERS = frozenset(
         "/source_bindings/conversion_r3/source_identity_sha256",
         *(f"/source_bindings/vendor_includes/{index}/{field}" for index in range(4) for field in ("relative_path", "sha256")),
     }
+)
+
+
+# These vendor runtime and manifest observations belong to the external
+# binding, whose exact values are checked atomically by dedicated layers.
+_EXTERNAL_BINDING_POINTERS = frozenset(
+    {
+        "/source_bindings/vendor_runtime/relative_path",
+        "/source_bindings/vendor_runtime/compact_inventory_sha256",
+        "/source_bindings/vendor_runtime/file_count",
+        "/source_bindings/vendor_runtime/directory_count_excluding_root",
+        "/source_bindings/vendor_runtime/total_size_bytes",
+        "/source_bindings/vendor_manifest/relative_path",
+        "/source_bindings/vendor_manifest/size_bytes",
+        "/source_bindings/vendor_manifest/raw_sha256",
+        "/source_bindings/vendor_manifest/canonical_inventory_sha256",
+    }
+)
+_EXTERNAL_BINDING_NUMERIC_POINTERS = frozenset(
+    pointer for pointer in _EXTERNAL_BINDING_POINTERS if pointer.endswith(("/file_count", "/directory_count_excluding_root", "/total_size_bytes", "/size_bytes"))
 )
 
 
@@ -407,10 +421,6 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
     _semantic_leaf_rule("SEM_SCHEDULER_UNIT", "/learning_rate/scheduler_step_unit", "epoch", "scheduler step unit", kind="enum", allowed=("epoch", "iteration")),
     _semantic_leaf_rule("SEM_AMP_ENABLED", "/amp/enabled", True, "AMP requirement"),
     _semantic_leaf_rule("SEM_AMP_SCALER", "/amp/scaler_type", "GradScaler", "AMP scaler", kind="enum", allowed=("GradScaler", "NoScaler")),
-    _semantic_leaf_rule("SEM_AMP_INIT_SCALE", "/amp/init_scale", "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY", "AMP unresolved placeholder"),
-    _semantic_leaf_rule("SEM_AMP_GROWTH_FACTOR", "/amp/growth_factor", "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY", "AMP unresolved placeholder"),
-    _semantic_leaf_rule("SEM_AMP_BACKOFF_FACTOR", "/amp/backoff_factor", "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY", "AMP unresolved placeholder"),
-    _semantic_leaf_rule("SEM_AMP_GROWTH_INTERVAL", "/amp/growth_interval", "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY", "AMP unresolved placeholder"),
     _semantic_leaf_rule("SEM_EMA_ENABLED", "/ema/enabled", True, "EMA requirement"),
     _semantic_leaf_rule("SEM_EMA_WARMUP_UNIT", "/ema/warmup_unit", "optimizer_updates", "EMA warmup unit", kind="enum", allowed=("optimizer_updates", "epochs")),
     _semantic_leaf_rule("SEM_EMA_DEVELOPMENT_WEIGHTS", "/ema/development_evaluation_weights", "ema", "development evaluation weights", kind="enum", allowed=("ema", "raw")),
@@ -619,17 +629,21 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
         "single formal run exactly-once policy",
     ),
     _semantic_relation_rule(
-        "REL_AMP_PLACEHOLDER_GATE",
+        "REL_AMP_EXECUTABLE_PARAMETERS",
         {
             "/amp/enabled": True,
             "/amp/scaler_type": "GradScaler",
-            "/amp/init_scale": "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY",
-            "/amp/growth_factor": "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY",
-            "/amp/backoff_factor": "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY",
-            "/amp/growth_interval": "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY",
+            "/amp/init_scale": 65536.0,
+            "/amp/growth_factor": 2.0,
+            "/amp/backoff_factor": 0.5,
+            "/amp/growth_interval": 2000,
+            "/amp/nonfinite_loss_allowed": 0,
+            "/amp/nonfinite_gradient_allowed": 0,
+            "/amp/optimizer_skipped_steps_allowed": 0,
+            "/amp/overflow_events_allowed": 0,
             "/acceptance/amp_skip_or_overflow_allowed": False,
         },
-        "AMP required state and unresolved implementation placeholders",
+        "AMP executable parameters and required state",
     ),
     _semantic_relation_rule(
         "REL_ADAMW_PARAMETER_ROLES",
@@ -825,7 +839,7 @@ def _numeric_values(value: Any, pointer: str = "") -> dict[str, int | float]:
     elif type(value) is list:
         for index, child in enumerate(value):
             rows.update(_numeric_values(child, _pointer_child(pointer, index)))
-    elif type(value) in {int, float}:
+    elif type(value) in {int, float} and pointer not in _EXTERNAL_BINDING_NUMERIC_POINTERS:
         rows[pointer] = value
     return rows
 
@@ -902,7 +916,11 @@ def _semantic_leaf_inventory(config: Any) -> dict[str, Any]:
         elif type(value) is list:
             for index, child in enumerate(value):
                 walk(child, _pointer_child(pointer, index))
-        elif pointer not in _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS and pointer not in _SEMANTIC_SYNTAX_OR_BINDING_POINTERS:
+        elif (
+            pointer not in _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS
+            and pointer not in _SEMANTIC_SYNTAX_OR_BINDING_POINTERS
+            and pointer not in _EXTERNAL_BINDING_POINTERS
+        ):
             rows[pointer] = value
 
     walk(config)
@@ -938,6 +956,7 @@ def semantic_contract_inventory(config: Any) -> dict[str, Any]:
         "sequence_rule_count": len(_semantic_sequence_rules()),
         "relation_rule_count": len(_semantic_relation_rules()),
         "excluded_pointers": tuple(sorted(_SEMANTIC_SYNTAX_OR_BINDING_POINTERS)),
+        "external_binding_pointers": tuple(sorted(_EXTERNAL_BINDING_POINTERS)),
     }
 
 

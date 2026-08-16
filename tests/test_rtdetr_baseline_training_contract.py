@@ -87,15 +87,15 @@ def _closed_object_roles(value, schema=contract._TRAINING_CONTRACT_SCHEMA, point
             yield from _closed_object_roles(value[index], child_schema, child_pointer)
 
 
-def _numeric_leaves(value, pointer=""):
+def _numeric_leaves(value, pointer="", excluded=()):
     if type(value) is dict:
         for key, child in value.items():
             child_pointer = (pointer + "/" + key) if pointer else ("/" + key)
-            yield from _numeric_leaves(child, child_pointer)
+            yield from _numeric_leaves(child, child_pointer, excluded)
     elif type(value) is list:
         for index, child in enumerate(value):
-            yield from _numeric_leaves(child, pointer + "/" + str(index))
-    elif type(value) in {int, float}:
+            yield from _numeric_leaves(child, pointer + "/" + str(index), excluded)
+    elif type(value) in {int, float} and pointer not in excluded:
         yield pointer, value
 
 
@@ -166,9 +166,9 @@ def test_positive_load_validate_canonical_and_binding():
         "training_contract_id": "rtdetrv2_r18_visdrone_baseline_training_v1",
         "baseline_id": "rtdetrv2_r18_visdrone_baseline_v1",
         "relative_path": contract.TRAINING_CONFIG_RELATIVE_PATH,
-        "raw_size_bytes": 8652,
-        "raw_sha256": "d37676b9b918134f887f9d19aa05eb4bf6479163ccc0f2808524abe40cf3b914",
-        "canonical_size_bytes": 7366,
+        "raw_size_bytes": 8513,
+        "raw_sha256": "bf6631644d218fe65998dcd4267d93a040b709a864577f7216052dd2a9e97239",
+        "canonical_size_bytes": 7227,
         "canonical_sha256": contract.TRAINING_CONTRACT_CANONICAL_SHA256,
         "vendor_runtime_binding": {
             "relative_path": "vendor/rtdetrv2_pytorch",
@@ -280,7 +280,7 @@ def test_closed_schema_rejects_non_builtin_containers():
         contract._validate_closed_schema(candidate)
 
 
-def test_closed_schema_strict_scalar_and_amp_placeholder_types():
+def test_closed_schema_strict_scalar_and_amp_executable_parameter_types():
     mutations = [
         (("schema_version",), True, "scalar type mismatch"),
         (("initialization", "seed"), False, "scalar type mismatch"),
@@ -288,11 +288,11 @@ def test_closed_schema_strict_scalar_and_amp_placeholder_types():
         (("model", "nms"), 0, "scalar type mismatch"),
         (("source_bindings", "vendor_recipe", "relative_path"), np.str_("vendor/x"), "scalar type mismatch"),
         (("source_bindings", "vendor_recipe", "sha256"), np.str_("a" * 64), "scalar type mismatch"),
-        (("amp", "init_scale"), None, "literal mismatch"),
-        (("amp", "growth_factor"), True, "literal mismatch"),
-        (("amp", "backoff_factor"), 1, "literal mismatch"),
-        (("amp", "growth_interval"), 1.0, "literal mismatch"),
-        (("amp", "init_scale"), "other", "literal mismatch"),
+        (("amp", "init_scale"), None, "scalar type mismatch"),
+        (("amp", "growth_factor"), True, "scalar type mismatch"),
+        (("amp", "backoff_factor"), 1, "scalar type mismatch"),
+        (("amp", "growth_interval"), 1.0, "scalar type mismatch"),
+        (("amp", "init_scale"), "other", "scalar type mismatch"),
     ]
     for path, bad, message in mutations:
         candidate = _training()
@@ -302,7 +302,7 @@ def test_closed_schema_strict_scalar_and_amp_placeholder_types():
 
 
 def test_numeric_registry_exactly_covers_all_builtin_numeric_leaves():
-    numeric = dict(_numeric_leaves(_training()))
+    numeric = dict(_numeric_leaves(_training(), excluded=contract._EXTERNAL_BINDING_NUMERIC_POINTERS))
     registry = contract._TRAINING_CONTRACT_NUMERIC_CONSTRAINTS
     assert len(numeric) == 54
     assert set(numeric) == set(registry)
@@ -313,6 +313,149 @@ def test_numeric_registry_exactly_covers_all_builtin_numeric_leaves():
         assert constraint["exact"] == value
         assert type(constraint["role"]) is str and constraint["role"]
     contract._validate_numeric_constraints(_training())
+
+
+def test_amp_executable_defaults_and_scalar_partition_are_frozen():
+    training = _training()
+    amp = training["amp"]
+    assert amp["init_scale"] == 65536.0
+    assert amp["growth_factor"] == 2.0
+    assert amp["backoff_factor"] == 0.5
+    assert amp["growth_interval"] == 2000
+    assert type(amp["init_scale"]) is float
+    assert type(amp["growth_factor"]) is float
+    assert type(amp["backoff_factor"]) is float
+    assert type(amp["growth_interval"]) is int
+    assert "IMPLEMENTATION_MUST_FREEZE_EXPLICITLY" not in json.dumps(training)
+
+    numeric = {
+        pointer for pointer, _ in _numeric_leaves(
+            training, excluded=contract._EXTERNAL_BINDING_NUMERIC_POINTERS
+        )
+    }
+    semantic = set(contract.semantic_contract_inventory(training)["leaf_pointers"])
+    syntax_or_binding = set(contract._SEMANTIC_SYNTAX_OR_BINDING_POINTERS)
+    external_binding = set(contract._EXTERNAL_BINDING_POINTERS)
+    assert len(numeric) == 54
+    assert len(semantic) == 123
+    assert len(syntax_or_binding) == 21
+    assert len(external_binding) == 9
+    assert len(numeric | semantic | syntax_or_binding) == 198
+    assert len(numeric | semantic | syntax_or_binding | external_binding) == 207
+    assert not numeric & semantic
+    assert not numeric & syntax_or_binding
+    assert not semantic & syntax_or_binding
+    assert not external_binding & numeric
+    assert not external_binding & semantic
+    assert not external_binding & syntax_or_binding
+    assert {"/amp/init_scale", "/amp/growth_factor", "/amp/backoff_factor", "/amp/growth_interval"} <= numeric
+    assert not {"/amp/init_scale", "/amp/growth_factor", "/amp/backoff_factor", "/amp/growth_interval"} & semantic
+
+    amp_relation = next(
+        rule for rule in contract._semantic_relation_rules()
+        if rule["rule_id"] == "REL_AMP_EXECUTABLE_PARAMETERS"
+    )
+    assert amp_relation["frozen"] == {
+        "/amp/enabled": True,
+        "/amp/scaler_type": "GradScaler",
+        "/amp/init_scale": 65536.0,
+        "/amp/growth_factor": 2.0,
+        "/amp/backoff_factor": 0.5,
+        "/amp/growth_interval": 2000,
+        "/amp/nonfinite_loss_allowed": 0,
+        "/amp/nonfinite_gradient_allowed": 0,
+        "/amp/optimizer_skipped_steps_allowed": 0,
+        "/amp/overflow_events_allowed": 0,
+        "/acceptance/amp_skip_or_overflow_allowed": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "bad"),
+    [
+        (("init_scale",), 65536),
+        (("init_scale",), True),
+        (("init_scale",), "65536.0"),
+        (("init_scale",), None),
+        (("growth_factor",), 2),
+        (("growth_factor",), False),
+        (("growth_factor",), "2.0"),
+        (("growth_factor",), None),
+        (("backoff_factor",), 0),
+        (("backoff_factor",), True),
+        (("backoff_factor",), "0.5"),
+        (("backoff_factor",), None),
+        (("growth_interval",), 2000.0),
+        (("growth_interval",), False),
+        (("growth_interval",), "2000"),
+        (("growth_interval",), None),
+    ],
+)
+def test_amp_executable_parameters_reject_wrong_builtin_types(field, bad):
+    candidate = _training()
+    _set_path(candidate, ("amp",) + field, bad)
+    with pytest.raises(contract.TrainingContractError, match=r"closed schema scalar type mismatch"):
+        contract._validate_closed_schema(candidate)
+
+
+@pytest.mark.parametrize(
+    ("field", "bad", "category"),
+    [
+        (("init_scale",), float("nan"), "nonfinite"),
+        (("init_scale",), float("inf"), "nonfinite"),
+        (("init_scale",), float("-inf"), "nonfinite"),
+        (("init_scale",), 0.0, "out_of_range"),
+        (("init_scale",), -1.0, "out_of_range"),
+        (("init_scale",), 32768.0, "frozen_literal_mismatch"),
+        (("growth_factor",), float("nan"), "nonfinite"),
+        (("growth_factor",), float("inf"), "nonfinite"),
+        (("growth_factor",), float("-inf"), "nonfinite"),
+        (("growth_factor",), 1.0, "out_of_range"),
+        (("growth_factor",), 0.5, "out_of_range"),
+        (("growth_factor",), 1.5, "frozen_literal_mismatch"),
+        (("backoff_factor",), float("nan"), "nonfinite"),
+        (("backoff_factor",), float("inf"), "nonfinite"),
+        (("backoff_factor",), float("-inf"), "nonfinite"),
+        (("backoff_factor",), 0.0, "out_of_range"),
+        (("backoff_factor",), 1.0, "out_of_range"),
+        (("backoff_factor",), 0.25, "frozen_literal_mismatch"),
+        (("growth_interval",), 0, "out_of_range"),
+        (("growth_interval",), -1, "out_of_range"),
+        (("growth_interval",), 1000, "frozen_literal_mismatch"),
+    ],
+)
+def test_amp_executable_parameters_reject_nonfinite_range_and_literal_drift(field, bad, category):
+    candidate = _training()
+    pointer = "/amp/" + field[0]
+    _set_path(candidate, ("amp",) + field, bad)
+    contract._validate_closed_schema(candidate)
+    with pytest.raises(contract.TrainingContractError, match=rf"numeric {category} at {re.escape(pointer)}"):
+        contract._validate_numeric_constraints(candidate)
+    with pytest.raises(contract.TrainingContractError) as public:
+        contract.validate_training_contract(candidate, _baseline())
+    assert "frozen content drift" not in str(public.value)
+
+
+def test_amp_relation_mutations_and_detached_validation_are_fail_closed():
+    valid = _training()
+    before = copy.deepcopy(valid)
+    detached = contract.validate_training_contract(valid, _baseline())
+    assert valid == before
+    detached["amp"]["init_scale"] = 1.0
+    assert valid == before
+
+    relation = next(
+        rule for rule in contract._semantic_relation_rules()
+        if rule["rule_id"] == "REL_AMP_EXECUTABLE_PARAMETERS"
+    )
+    for pointer, expected in relation["frozen"].items():
+        candidate = _training()
+        _set_json_pointer(candidate, pointer, _semantic_value_drift(expected))
+        with pytest.raises(contract.TrainingContractError, match=r"rule_id=REL_AMP_EXECUTABLE_PARAMETERS"):
+            contract._validate_semantic_relation_rule(candidate, relation)
+        with pytest.raises(contract.TrainingContractError) as public:
+            contract.validate_training_contract(candidate, _baseline())
+        assert "frozen content drift" not in str(public.value)
 
 
 @pytest.mark.parametrize("bad", [-1, 1, 10**100, True, 0.0])
@@ -443,15 +586,15 @@ def _semantic_value_drift(expected):
 
 def test_semantic_registry_exactly_covers_all_in_scope_non_numeric_leaves():
     inventory = contract.semantic_contract_inventory(_training())
-    assert inventory["leaf_count"] == 127
-    assert inventory["registered_leaf_count"] == 127
+    assert inventory["leaf_count"] == 123
+    assert inventory["registered_leaf_count"] == 123
     assert inventory["missing"] == ()
     assert inventory["extra"] == ()
     assert inventory["duplicate"] == ()
     assert inventory["sequence_rule_count"] == 6
     assert inventory["relation_rule_count"] == 12
     rule_ids = [rule["rule_id"] for rule in contract._TRAINING_CONTRACT_SEMANTIC_RULES]
-    assert len(rule_ids) == len(set(rule_ids)) == 145
+    assert len(rule_ids) == len(set(rule_ids)) == 141
     contract._validate_semantic_rules(_training())
 
 
@@ -797,7 +940,7 @@ def test_optimizer_tiebreaker_checkpoint_and_acceptance_mutations_are_rejected()
         (("checkpoint_policy", "atomic_write_required"), False),
         (("checkpoint_policy", "required_state"), ["raw_model"]),
         (("acceptance", "amp_skip_or_overflow_allowed"), True),
-        (("amp", "init_scale"), 65536.0),
+        (("amp", "init_scale"), 32768.0),
     ]
     for path, bad in mutations:
         candidate = _training()

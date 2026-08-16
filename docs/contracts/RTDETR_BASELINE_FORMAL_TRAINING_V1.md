@@ -13,10 +13,10 @@ The portable authority is
 and canonical training contract, baseline config, frozen vendor commit and
 recipe files, the complete vendor runtime tree, its upstream manifest,
 Conversion R3, category mapping, model identity, and allowed data roles. The
-current training config identity is raw size 8652 bytes with SHA-256
-`d37676b9b918134f887f9d19aa05eb4bf6479163ccc0f2808524abe40cf3b914`; its
-canonical identity is 7366 bytes with SHA-256
-`fd1539298a3929c2659ecdf7a982c37a09ecc99b5aa5ef731feba968a110636c`. It
+current training config identity is raw size 8513 bytes with SHA-256
+`bf6631644d218fe65998dcd4267d93a040b709a864577f7216052dd2a9e97239`; its
+canonical identity is 7227 bytes with SHA-256
+`7439f0706af2bfa97d2a3b17a1b338bb00c6470b4c1268391047014370329c3f`. It
 contains no runtime data root, host path, username, or AutoDL path.
 
 ## Frozen recipe
@@ -41,11 +41,11 @@ Linear warmup lasts 2000 optimizer steps. MultiStepLR steps once per epoch,
 has milestone 1000 and gamma 0.1, and therefore has zero decay events during
 120 epochs. Milestone 1000 must never be interpreted as an iteration.
 
-AMP and GradScaler are enabled, but init scale, growth factor, backoff factor,
-and growth interval remain `IMPLEMENTATION_MUST_FREEZE_EXPLICITLY`. No current
-PyTorch default is asserted. The implementation contract must freeze these
-before launch. Non-finite loss/gradient, overflow, and skipped optimizer steps
-are forbidden. EMA uses decay 0.9999 with a 2000-optimizer-update warmup.
+AMP and GradScaler use the owner-selected Torch 2.4.1 defaults: init scale
+`65536.0`, growth factor `2.0`, backoff factor `0.5`, and growth interval
+`2000`. These are exact executable parameters, not inferred runtime defaults.
+Non-finite loss/gradient, overflow, and skipped optimizer steps are forbidden.
+EMA uses decay 0.9999 with a 2000-optimizer-update warmup.
 Development evaluation and model selection use EMA; raw and EMA states are
 both retained.
 
@@ -183,13 +183,12 @@ and scalar roles are validated before path/SHA semantics, cross-field rules,
 and the frozen canonical digest. Missing, extra, and renamed keys fail with
 their JSON pointer. Builtin dictionary insertion order is irrelevant, while
 list length and order remain part of the frozen contract. Integer and boolean
-roles are distinct, floats must be finite, and the four GradScaler fields only
-accept `IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` until a later implementation
-contract freezes executable values.
+roles are distinct, floats must be finite, and the four GradScaler fields use
+strict builtin numeric types with exact frozen literals.
 
 All 54 builtin numeric leaves are also covered by a static JSON-pointer
 constraint registry before path, cross-field, and digest validation. Each role
-declares its exact builtin type, finite requirement, basic legal range, and T1
+declares its exact builtin type, finite requirement, basic legal range, and
 frozen literal. Errors distinguish non-finite values, values outside the legal
 domain, and in-range values that differ from the frozen decision. In
 particular, the initialization seed is exactly integer zero, not an arbitrary
@@ -199,9 +198,9 @@ blocking, and exactly-once checkpoint ownership. The final canonical digest
 remains a separate identity layer rather than a substitute for these semantic
 checks.
 
-The semantic layer is a single static registry of 145 in-scope non-numeric
+The semantic layer is a single static registry of 123 in-scope non-numeric
 leaves. It covers the contract and owner decisions, model and device modes,
-initialization source, optimizer and scheduler roles, AMP placeholders, EMA
+initialization source, optimizer and scheduler roles, AMP enabled/scaler roles, EMA
 weight selection, R18 transform identity, development-only evaluation, the
 primary evaluator gate, checkpoint ownership, and acceptance states. Path/SHA
 syntax and external source-binding values are deliberately left to their
@@ -213,8 +212,8 @@ tie-breakers, checkpoint state ownership, and acceptance-state order and set.
 Twelve stable cross-field rules reject synchronized drift as well as one-sided
 drift: random initialization cannot acquire a pretrained or checkpoint source;
 one formal run cannot resume, retry, or overwrite; required EMA evaluation and
-selection use EMA weights; AMP remains enabled while its four executable
-parameters remain unresolved placeholders; AdamW parameter-group identity is
+selection use EMA weights; AMP remains enabled with its four exact executable
+parameters and zero non-finite/overflow/skip allowances; AdamW parameter-group identity is
 audited; epoch scheduler semantics stay epoch-based; development-only
 selection keeps confirmatory and test access sealed; the uncertified primary
 evaluator keeps launch blocked; R18 augmentation remains ordered and
@@ -225,7 +224,8 @@ cross-field rules, frozen digest, then external binding. Thus changing
 `/ema/development_evaluation_weights` from `ema` to `raw` fails at the semantic
 layer rather than being accepted until the whole-contract digest.
 
-The four GradScaler placeholders remain non-numeric
-`IMPLEMENTATION_MUST_FREEZE_EXPLICITLY` values. Numeric validation does not
-make them executable, does not certify the primary evaluator, and does not
-make this contract frozen or training-launch ready.
+The four GradScaler fields are numeric contract leaves: the three scale
+parameters are exact builtin floats and growth interval is an exact builtin
+integer. Numeric validation rejects non-finite, out-of-range, and in-range but
+non-frozen alternatives before the canonical digest. This parameter decision
+does not certify the primary evaluator and does not make training-launch ready.
