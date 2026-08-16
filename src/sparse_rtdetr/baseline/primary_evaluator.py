@@ -48,6 +48,23 @@ AUTHORITY_MANIFEST_RAW_SHA256 = "71168baf15d6d945fd5a4a6c5605b5ba533524efeede2a9
 AUTHORITY_MANIFEST_CANONICAL_SIZE = 3351
 AUTHORITY_MANIFEST_CANONICAL_SHA256 = "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3"
 AUTHORITY_INVENTORY_SHA256 = "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0"
+AUTHORITY_MANIFEST_SCHEMA_VERSION = 1
+AUTHORITY_ID = "visdrone2018_det_toolkit_005445782213e20c"
+AUTHORITY_TOOLKIT_VERSION = "1.0.4"
+AUTHORITY_ALGORITHM_SEMANTICS_VERSION = "1.0.3"
+AUTHORITY_LICENSE_AND_USE_NOTICE = (
+    "The snapshot has no separate LICENSE file; its README states research-purpose use. "
+    "The offline archive is an audit reference and must not be committed into the project repository."
+)
+AUTHORITY_ARCHIVE_FILENAME = "visdrone_det_toolkit_005445782213e20c.tar"
+AUTHORITY_ARCHIVE_PREFIX = "VisDrone2018-DET-toolkit-005445782213e20c/"
+AUTHORITY_ARCHIVE_SIZE_BYTES = 40960
+AUTHORITY_ARCHIVE_SHA256 = "bf19dd9477210adf106c7cbf2a72370ed4af22dedb577f361f3dc9e77e99baa4"
+AUTHORITY_INVENTORY_FILE_COUNT = 11
+AUTHORITY_INVENTORY_TOTAL_SIZE_BYTES = 22093
+AUTHORITY_INVENTORY_CANONICALIZATION = (
+    "UTF-8 JSON of rows with ensure_ascii=true, sort_keys=true, separators=(',',':'), no trailing LF"
+)
 AUTHORITY_FILE_SHA256 = {
     "utils/saveAnnoRes.m": "3210fb8fd98aed19cab61c996e0daf1dbfdb23fd5eb2fafff29afc71bb45876d",
     "utils/dropObjectsInIgr.m": "30dee2713d76a537f5c98ec5d0804e17cfd3993d83d8a80a70b90ef9461fa4de",
@@ -502,9 +519,18 @@ def _load_strict_json(boundary: _RepositoryBoundary, relative_path: str, label: 
 def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
     _validate_builtin_json(manifest, "authority_manifest")
     _exact_keys(manifest, _MANIFEST_KEYS, "authority_manifest")
-    _exact_int(manifest["schema_version"], "authority_manifest/schema_version", minimum=1)
+    if _exact_int(manifest["schema_version"], "authority_manifest/schema_version", minimum=1) != AUTHORITY_MANIFEST_SCHEMA_VERSION:
+        _fail("authority manifest schema version drift")
     for key in ("authority_id", "repository_url", "branch", "toolkit_version", "algorithm_semantics_version", "license_and_use_notice"):
         _exact_str(manifest[key], f"authority_manifest/{key}")
+    if manifest["authority_id"] != AUTHORITY_ID:
+        _fail("authority manifest authority ID drift")
+    if manifest["toolkit_version"] != AUTHORITY_TOOLKIT_VERSION:
+        _fail("authority manifest toolkit version drift")
+    if manifest["algorithm_semantics_version"] != AUTHORITY_ALGORITHM_SEMANTICS_VERSION:
+        _fail("authority manifest algorithm semantics version drift")
+    if manifest["license_and_use_notice"] != AUTHORITY_LICENSE_AND_USE_NOTICE:
+        _fail("authority manifest license and use notice drift")
     _exact_git_oid(manifest["commit_oid"], "authority_manifest/commit_oid")
     _exact_git_oid(manifest["tree_oid"], "authority_manifest/tree_oid")
     if manifest["repository_url"] != AUTHORITY_REPOSITORY_URL or manifest["branch"] != AUTHORITY_BRANCH:
@@ -516,11 +542,25 @@ def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
     _exact_str(archive["prefix"], "authority_manifest/archive/prefix")
     _exact_int(archive["size_bytes"], "authority_manifest/archive/size_bytes", minimum=1)
     _exact_sha(archive["sha256"], "authority_manifest/archive/sha256")
+    if archive["filename"] != AUTHORITY_ARCHIVE_FILENAME:
+        _fail("authority archive filename drift")
+    if archive["prefix"] != AUTHORITY_ARCHIVE_PREFIX:
+        _fail("authority archive prefix drift")
+    if archive["size_bytes"] != AUTHORITY_ARCHIVE_SIZE_BYTES:
+        _fail("authority archive size drift")
+    if archive["sha256"] != AUTHORITY_ARCHIVE_SHA256:
+        _fail("authority archive SHA drift")
     inventory = _exact_keys(manifest["inventory"], _MANIFEST_INVENTORY_KEYS, "authority_manifest/inventory")
     file_count = _exact_int(inventory["file_count"], "authority_manifest/inventory/file_count", minimum=1)
-    _exact_int(inventory["total_size_bytes"], "authority_manifest/inventory/total_size_bytes", minimum=1)
+    total_size_bytes = _exact_int(inventory["total_size_bytes"], "authority_manifest/inventory/total_size_bytes", minimum=1)
     _exact_str(inventory["canonicalization"], "authority_manifest/inventory/canonicalization")
     _exact_sha(inventory["canonical_inventory_sha256"], "authority_manifest/inventory/canonical_inventory_sha256")
+    if file_count != AUTHORITY_INVENTORY_FILE_COUNT:
+        _fail("authority inventory file count drift")
+    if total_size_bytes != AUTHORITY_INVENTORY_TOTAL_SIZE_BYTES:
+        _fail("authority inventory total size binding drift")
+    if inventory["canonicalization"] != AUTHORITY_INVENTORY_CANONICALIZATION:
+        _fail("authority inventory canonicalization drift")
     rows = inventory["rows"]
     if type(rows) is not list or len(rows) != file_count:
         _fail("authority inventory row count drift")
@@ -543,6 +583,9 @@ def _validate_authority_manifest(manifest: dict[str, Any]) -> None:
         _fail("authority inventory canonical SHA mismatch")
     if inventory["canonical_inventory_sha256"] != AUTHORITY_INVENTORY_SHA256:
         _fail("authority inventory frozen SHA mismatch")
+    canonical_manifest = canonical_json_bytes(manifest)
+    if len(canonical_manifest) != AUTHORITY_MANIFEST_CANONICAL_SIZE or _sha(canonical_manifest) != AUTHORITY_MANIFEST_CANONICAL_SHA256:
+        _fail("authority manifest canonical identity drift")
 
 
 def _validate_contract(config: dict[str, Any], authority_manifest: dict[str, Any] | None) -> None:
@@ -1248,8 +1291,12 @@ def validate_primary_evaluator_result(result: object, input_v2: PrimaryEvaluator
 
 
 __all__ = [
-    "AUTHORITY_COMMIT", "AUTHORITY_FILE_SHA256", "AUTHORITY_INVENTORY_SHA256", "AUTHORITY_MANIFEST_CANONICAL_SHA256",
-    "AUTHORITY_MANIFEST_RAW_SHA256", "AUTHORITY_REPOSITORY_URL", "AUTHORITY_TREE", "IOU_THRESHOLDS", "MAX_DETS",
+    "AUTHORITY_ALGORITHM_SEMANTICS_VERSION", "AUTHORITY_ARCHIVE_FILENAME", "AUTHORITY_ARCHIVE_PREFIX",
+    "AUTHORITY_ARCHIVE_SHA256", "AUTHORITY_ARCHIVE_SIZE_BYTES", "AUTHORITY_COMMIT", "AUTHORITY_FILE_SHA256",
+    "AUTHORITY_ID", "AUTHORITY_INVENTORY_CANONICALIZATION", "AUTHORITY_INVENTORY_FILE_COUNT",
+    "AUTHORITY_INVENTORY_SHA256", "AUTHORITY_INVENTORY_TOTAL_SIZE_BYTES", "AUTHORITY_LICENSE_AND_USE_NOTICE",
+    "AUTHORITY_MANIFEST_CANONICAL_SHA256", "AUTHORITY_MANIFEST_RAW_SHA256", "AUTHORITY_MANIFEST_SCHEMA_VERSION",
+    "AUTHORITY_REPOSITORY_URL", "AUTHORITY_TOOLKIT_VERSION", "AUTHORITY_TREE", "IOU_THRESHOLDS", "MAX_DETS",
     "METRIC_NAMES", "PRIMARY_CONFIG_RELATIVE_PATH", "PRIMARY_EVALUATOR_ID", "PRIMARY_MANIFEST_RELATIVE_PATH",
     "PRIMARY_PROTOCOL_ID", "PRIMARY_SCHEMA_ID", "PrimaryEvaluatorContractError", "evaluate_primary_v1",
     "load_primary_evaluator_authority_manifest", "load_primary_evaluator_contract", "primary_evaluator_contract_binding",

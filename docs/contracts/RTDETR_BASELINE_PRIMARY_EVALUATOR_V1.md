@@ -58,6 +58,18 @@ frozen parent descriptor and re-fstats every retained descriptor for both the
 config and manifest observations.  All retained descriptors are closed exactly
 once on success and failure, while preserving the original contract error.
 
+The detached authority manifest is closed at two independent semantic layers.
+Its archive, repository, version, license/use, inventory count/size, and
+canonicalization literals are checked with exact builtin types and frozen
+values.  After nested keys, Git OIDs, inventory rows, totals, and the frozen
+inventory canonical SHA pass, the complete manifest is canonicalized with
+`ensure_ascii=true`, sorted keys, compact separators, and no trailing LF; both
+the canonical size `3351` and SHA-256
+`5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3` are
+required.  This validation is shared by all public contract, binding,
+evaluation, and result-recomputation paths.  The offline authority archive is
+audit evidence only and is never opened as a production runtime dependency.
+
 The evaluator accepts only the exact builtin-dict authoritative binding with
 these ten keys: `config`, `authority_manifest`,
 `config_raw_size_bytes`, `config_raw_sha256`,

@@ -46,6 +46,7 @@ from sparse_rtdetr.data_protocol.evaluation import (
     assert_primary_input,
     assert_secondary_input,
 )
+from sparse_rtdetr.data_protocol.schema import canonical_json_bytes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -267,6 +268,162 @@ def test_authority_manifest_and_contract_identities(binding):
     assert binding["authority_manifest_canonical_sha256"] == AUTHORITY_MANIFEST_CANONICAL_SHA256
     assert binding["config"]["policy"]["independent_audit_pass"] is False
     assert binding["config"]["policy"]["training_gate_open"] is False
+
+
+def _set_manifest_path(manifest, path, value):
+    current = manifest
+    for key in path[:-1]:
+        current = current[key]
+    original = current[path[-1]]
+    assert type(original) is not type(value) or original != value
+    current[path[-1]] = value
+    return original
+
+
+def test_authority_manifest_ten_effective_mutations_fail_closed(binding):
+    mutations = (
+        (("schema_version",), 2),
+        (("authority_id",), "wrong_authority"),
+        (("toolkit_version",), "9.9.9"),
+        (("algorithm_semantics_version",), "9.9.9"),
+        (("license_and_use_notice",), "wrong notice"),
+        (("archive", "filename"), "wrong.tar"),
+        (("archive", "prefix"), "wrong-prefix/"),
+        (("archive", "size_bytes"), 4166),
+        (("archive", "sha256"), "0" * 64),
+        (("inventory", "canonicalization"), "wrong canonicalization"),
+    )
+    for path, replacement in mutations:
+        bad = copy.deepcopy(binding)
+        _set_manifest_path(bad["authority_manifest"], path, replacement)
+        with pytest.raises(PrimaryEvaluatorContractError):
+            evaluate_primary_v1(_input([]), bad)
+
+
+def test_every_frozen_authority_manifest_literal_rejects_wrong_type_and_value(binding):
+    cases = (
+        (("schema_version",), True, 2),
+        (("authority_id",), 1, "wrong_authority"),
+        (("repository_url",), 1, "https://wrong.example"),
+        (("branch",), 1, "wrong"),
+        (("commit_oid",), 1, "0" * 40),
+        (("tree_oid",), 1, "0" * 40),
+        (("toolkit_version",), 1, "9.9.9"),
+        (("algorithm_semantics_version",), 1, "9.9.9"),
+        (("license_and_use_notice",), 1, "wrong notice"),
+        (("archive", "filename"), 1, "wrong.tar"),
+        (("archive", "prefix"), 1, "wrong-prefix/"),
+        (("archive", "size_bytes"), True, 4166),
+        (("archive", "sha256"), 1, "0" * 64),
+        (("inventory", "file_count"), True, 10),
+        (("inventory", "total_size_bytes"), True, 22092),
+        (("inventory", "canonicalization"), 1, "wrong canonicalization"),
+        (("inventory", "canonical_inventory_sha256"), 1, "0" * 64),
+    )
+    for path, wrong_type, wrong_value in cases:
+        typed = copy.deepcopy(binding["authority_manifest"])
+        _set_manifest_path(typed, path, wrong_type)
+        with pytest.raises(PrimaryEvaluatorContractError):
+            validate_primary_evaluator_contract(binding["config"], typed)
+        valued = copy.deepcopy(binding["authority_manifest"])
+        _set_manifest_path(valued, path, wrong_value)
+        with pytest.raises(PrimaryEvaluatorContractError):
+            validate_primary_evaluator_contract(binding["config"], valued)
+
+
+def test_authority_manifest_nested_key_closure_and_reordered_control(binding):
+    manifest = binding["authority_manifest"]
+    reordered = {key: manifest[key] for key in reversed(tuple(manifest))}
+    reordered["archive"] = {key: manifest["archive"][key] for key in reversed(tuple(manifest["archive"]))}
+    reordered["inventory"] = {key: manifest["inventory"][key] for key in reversed(tuple(manifest["inventory"]))}
+    reordered["inventory"]["rows"] = [
+        {key: row[key] for key in reversed(tuple(row))}
+        for row in manifest["inventory"]["rows"]
+    ]
+    validate_primary_evaluator_contract(binding["config"], reordered)
+
+    missing = copy.deepcopy(manifest)
+    missing["archive"].pop("filename")
+    with pytest.raises(PrimaryEvaluatorContractError):
+        validate_primary_evaluator_contract(binding["config"], missing)
+    extra = copy.deepcopy(manifest)
+    extra["inventory"]["extra"] = False
+    with pytest.raises(PrimaryEvaluatorContractError):
+        validate_primary_evaluator_contract(binding["config"], extra)
+    renamed = copy.deepcopy(manifest)
+    renamed["inventory"]["canonicalization_renamed"] = renamed["inventory"].pop("canonicalization")
+    with pytest.raises(PrimaryEvaluatorContractError):
+        validate_primary_evaluator_contract(binding["config"], renamed)
+
+
+def test_authority_manifest_coordinated_repack_is_rejected_by_frozen_identity(binding):
+    repacked = copy.deepcopy(binding["authority_manifest"])
+    repacked["archive"]["prefix"] = "VisDrone2018-DET-toolkit-repacked/"
+    repacked_raw = canonical_json_bytes(repacked)
+    coordinated = copy.deepcopy(binding)
+    coordinated["authority_manifest"] = repacked
+    coordinated["authority_manifest_canonical_size_bytes"] = len(repacked_raw)
+    coordinated["authority_manifest_canonical_sha256"] = hashlib.sha256(repacked_raw).hexdigest()
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(_input([]), coordinated)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        validate_primary_evaluator_contract(binding["config"], repacked)
+
+
+def test_authority_manifest_inventory_repack_with_local_reconciliation_is_rejected(binding):
+    repacked = copy.deepcopy(binding["authority_manifest"])
+    repacked["inventory"]["rows"][0]["size_bytes"] += 1
+    repacked["inventory"]["total_size_bytes"] += 1
+    repacked["inventory"]["canonical_inventory_sha256"] = hashlib.sha256(
+        canonical_json_bytes(repacked["inventory"]["rows"])
+    ).hexdigest()
+    with pytest.raises(PrimaryEvaluatorContractError):
+        validate_primary_evaluator_contract(binding["config"], repacked)
+
+
+def test_authority_manifest_succeeds_through_all_public_paths_and_stays_unmodified(binding, monkeypatch):
+    config_path = ROOT / evaluator_module.PRIMARY_CONFIG_RELATIVE_PATH
+    manifest_path = ROOT / evaluator_module.PRIMARY_MANIFEST_RELATIVE_PATH
+    config_before = config_path.read_bytes()
+    manifest_before = manifest_path.read_bytes()
+    loaded_manifest = load_primary_evaluator_authority_manifest(ROOT)
+    loaded_config = load_primary_evaluator_contract(ROOT)
+    assert loaded_manifest == binding["authority_manifest"]
+    assert loaded_config == binding["config"]
+    validate_primary_evaluator_contract(loaded_config, loaded_manifest)
+    value = _input([_image()], [_det()], [_gt()])
+    result = evaluate_primary_v1(value, binding)
+    validate_primary_evaluator_result(result, value, binding)
+    bad = copy.deepcopy(binding)
+    bad["authority_manifest"]["archive"]["filename"] = "wrong.tar"
+    reached = {"input": False}
+    original_validate_input = evaluator_module._validate_input
+
+    def mark_input(value):
+        reached["input"] = True
+        return original_validate_input(value)
+
+    monkeypatch.setattr(evaluator_module, "_validate_input", mark_input)
+    with pytest.raises(PrimaryEvaluatorContractError):
+        evaluate_primary_v1(value, bad)
+    assert reached["input"] is False
+    assert config_path.read_bytes() == config_before
+    assert manifest_path.read_bytes() == manifest_before
+
+
+def test_repacked_authority_manifest_is_rejected_during_result_recomputation(binding):
+    value = _input([_image()], [_det()], [_gt()])
+    result = evaluate_primary_v1(value, binding)
+    bad = copy.deepcopy(binding)
+    bad["authority_manifest"]["toolkit_version"] = "9.9.9"
+    with pytest.raises(PrimaryEvaluatorContractError):
+        validate_primary_evaluator_result(result, value, bad)
+
+
+def test_offline_authority_archive_is_not_a_production_runtime_dependency():
+    source = Path(evaluator_module.__file__).read_text(encoding="utf-8")
+    assert "upload-inbox" not in source
+    assert "visdrone_det_toolkit_005445782213e20c.tar" in source
 
 
 def test_authority_source_trace_is_exact(binding):
