@@ -145,6 +145,38 @@ validated configuration and training bytes, then reads all vendor sources
 through the same boundary; it does not resolve or reopen the training path a
 second time.
 
+## Conversion R3 runtime binding
+
+`load_training_contract` is intentionally portable: it validates the checked-in
+training and baseline declarations without scanning the 304 MB Conversion R3
+runtime closure. A complete runtime proof is provided only by
+`training_contract_binding`. That API must observe and validate
+`artifacts/data/visdrone_protocol_v2_conversion_r3` inside the same verified
+repository boundary as the training, baseline, vendor, and manifest bindings;
+if the closure or any authority file is absent, it fails closed.
+
+The frozen Conversion R3 closure is a flat directory containing exactly 25
+ordinary, single-link files, no descendant directories, and 304418794 total
+bytes. Its observed identity is bound to the training declaration by the
+completion, artifact-inventory, config, category-contract, and source-identity
+SHA-256 values. `artifact_inventory.json` contains 23 strictly sorted artifact
+rows and excludes exactly `artifact_inventory.json` and `completion.json`.
+Every row is compared with the descriptor-based observation, while the
+authority files are parsed with duplicate-key rejection, exact schemas,
+builtin-type checks, canonical JSON rules, and strict cross-file references.
+The returned `conversion_r3_runtime_binding` reports the observed counts,
+bytes, path, and authority identities; it is not a copy of the config
+declaration.
+
+Large artifacts are hashed by streaming from stable file descriptors; only the
+small authority JSON files are retained for parsing. Directory enumeration,
+file identity, metadata, device, mode, link count, and containment are checked
+before and after observation, and all open descriptors close on success and
+failure. Missing, added, renamed, repacked, self-consistent-but-nonfrozen,
+symlinked, hard-linked, special, nested, or metadata-drifting objects are
+rejected. Consequently, changing a local authority file together with its
+internal inventory references cannot establish a new Conversion R3 identity.
+
 Every object role in the portable contract is closed by one recursive static
 schema descriptor. Root objects, nested objects, objects inside lists, lists,
 and scalar roles are validated before path/SHA semantics, cross-field rules,

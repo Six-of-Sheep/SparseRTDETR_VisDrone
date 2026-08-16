@@ -33,6 +33,27 @@ VENDOR_RUNTIME_COMPACT_INVENTORY_SHA256 = "0fc6803665bc4b5720e983345b2cacb0147ec
 VENDOR_MANIFEST_SIZE_BYTES = 33264
 VENDOR_MANIFEST_RAW_SHA256 = "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae"
 VENDOR_MANIFEST_INVENTORY_SHA256 = "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
+CONVERSION_R3_RELATIVE_PATH = "artifacts/data/visdrone_protocol_v2_conversion_r3"
+CONVERSION_R3_FILE_COUNT = 25
+CONVERSION_R3_DIRECTORY_COUNT = 0
+CONVERSION_R3_TOTAL_SIZE_BYTES = 304418794
+CONVERSION_R3_COMPLETION_SHA256 = "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817"
+CONVERSION_R3_ARTIFACT_INVENTORY_SHA256 = "aaee01ce4e00749b9db8ac5e6e49cf35875a8b266e9c3efc237bdf0b8b109ae7"
+CONVERSION_R3_ENTRY_INVENTORY_SHA256 = "ddf32745302d6095e1c3dde89b1a85f05db53e6b4cc8ee85638e0d45bfa8d982"
+CONVERSION_R3_CONFIG_SHA256 = "58be8659d6d7ae6faace82b36d45523f80cd48bae1bbcc6da4586c53056ec0d0"
+CONVERSION_R3_CATEGORY_CONTRACT_SHA256 = "b4b309f357cbe130a505a610dff340cc498dc74f766384c4559b2acd900728a0"
+CONVERSION_R3_SOURCE_IDENTITY_SHA256 = "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9"
+CONVERSION_R3_EXCLUDED_FILES = ("artifact_inventory.json", "completion.json")
+CONVERSION_R3_AUTHORITY_FILES = frozenset(
+    {
+        "artifact_inventory.json",
+        "completion.json",
+        "config.json",
+        "category_contract.json",
+        "source_identity.json",
+    }
+)
+CONVERSION_R3_FILE_MODE = 0o600
 TRAINING_CONFIG_SIZE_BYTES = 8652
 TRAINING_CONFIG_RAW_SHA256 = "d37676b9b918134f887f9d19aa05eb4bf6479163ccc0f2808524abe40cf3b914"
 TRAINING_CONTRACT_CANONICAL_SHA256 = "fd1539298a3929c2659ecdf7a982c37a09ecc99b5aa5ef731feba968a110636c"
@@ -714,11 +735,13 @@ def _reject_constant(value: str) -> None:
     raise TrainingContractError(f"non-finite JSON number: {value}")
 
 
-def _parse_portable_json(raw: bytes, *, label: str) -> dict[str, Any]:
-    if raw.startswith(b"\xef\xbb\xbf"):
-        raise TrainingContractError(f"{label} must not contain a UTF-8 BOM")
-    if b"\r" in raw or not raw.endswith(b"\n") or raw.endswith(b"\n\n"):
+def _parse_strict_json(raw: bytes, *, label: str, trailing_lf: bool) -> dict[str, Any]:
+    if raw.startswith(b"\xef\xbb\xbf") or b"\x00" in raw or b"\r" in raw:
+        raise TrainingContractError(f"{label} raw format is invalid")
+    if trailing_lf and (not raw.endswith(b"\n") or raw.endswith(b"\n\n")):
         raise TrainingContractError(f"{label} must use LF and exactly one trailing LF")
+    if not trailing_lf and raw.endswith(b"\n"):
+        raise TrainingContractError(f"{label} must not have a trailing LF")
     try:
         text = raw.decode("utf-8")
         value = json.loads(
@@ -729,6 +752,10 @@ def _parse_portable_json(raw: bytes, *, label: str) -> dict[str, Any]:
     if type(value) is not dict:
         raise TrainingContractError(f"{label} must be a JSON object")
     return value
+
+
+def _parse_portable_json(raw: bytes, *, label: str) -> dict[str, Any]:
+    return _parse_strict_json(raw, label=label, trailing_lf=True)
 
 
 def _assert_json_types(value: Any, field: str = "contract") -> None:
@@ -1065,6 +1092,16 @@ def _validate_path_and_sha_fields(config: dict[str, Any]) -> None:
     for key, value in conversion.items():
         if key.endswith("sha256"):
             _assert_sha(value, f"conversion_r3.{key}")
+    if conversion != {
+        "artifact_root": CONVERSION_R3_RELATIVE_PATH,
+        "completion_sha256": CONVERSION_R3_COMPLETION_SHA256,
+        "artifact_inventory_sha256": CONVERSION_R3_ARTIFACT_INVENTORY_SHA256,
+        "entry_canonical_inventory_sha256": CONVERSION_R3_ENTRY_INVENTORY_SHA256,
+        "config_sha256": CONVERSION_R3_CONFIG_SHA256,
+        "category_contract_sha256": CONVERSION_R3_CATEGORY_CONTRACT_SHA256,
+        "source_identity_sha256": CONVERSION_R3_SOURCE_IDENTITY_SHA256,
+    }:
+        raise TrainingContractError("conversion R3 source binding drift")
 
 
 def _validate_cross_fields(config: dict[str, Any]) -> None:
@@ -1531,6 +1568,72 @@ class _VerifiedRepository:
             except OSError:
                 pass
 
+    def _read_open_file_digest(
+        self,
+        parent_fd: int,
+        name: str,
+        observed: os.stat_result,
+        relative: str,
+        directory_records: list[_DirectoryRecord],
+        *,
+        capture: bool,
+        expected_mode: int | None = None,
+    ) -> tuple[int, str, bytes | None, tuple[int, int, int, int, int, int, int]]:
+        if self._root_device is None:
+            raise TrainingContractError("repository boundary is not open")
+        if (
+            stat.S_ISLNK(observed.st_mode)
+            or not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != self._root_device
+        ):
+            raise TrainingContractError(f"repository file is not a stable ordinary file: {relative}")
+        if expected_mode is not None and stat.S_IMODE(observed.st_mode) != expected_mode:
+            raise TrainingContractError(f"repository file mode drift: {relative}")
+        file_fd = _open_at(name, self._file_flags, parent_fd)
+        try:
+            opened = _fstat_fd(file_fd)
+            if (
+                _file_snapshot(observed) != _file_snapshot(opened)
+                or not stat.S_ISREG(opened.st_mode)
+                or opened.st_nlink != 1
+                or opened.st_dev != self._root_device
+                or (expected_mode is not None and stat.S_IMODE(opened.st_mode) != expected_mode)
+            ):
+                raise TrainingContractError(f"repository file identity changed during open: {relative}")
+            expected = _file_snapshot(opened)
+            self._assert_descendant_stable(directory_records, parent_fd, name, expected)
+            digest = hashlib.sha256()
+            captured = bytearray() if capture else None
+            total_size = 0
+            while True:
+                try:
+                    chunk = os.read(file_fd, 1024 * 1024)
+                except InterruptedError:
+                    continue
+                except OSError as exc:
+                    raise TrainingContractError(f"repository file read failed: {relative}") from exc
+                if not chunk:
+                    break
+                digest.update(chunk)
+                total_size += len(chunk)
+                if captured is not None:
+                    captured.extend(chunk)
+            after = _fstat_fd(file_fd)
+            if (
+                _file_snapshot(after) != expected
+                or total_size != expected[4]
+                or (expected_mode is not None and stat.S_IMODE(after.st_mode) != expected_mode)
+            ):
+                raise TrainingContractError(f"repository file changed while reading: {relative}")
+            self._assert_descendant_stable(directory_records, parent_fd, name, expected)
+            return total_size, digest.hexdigest(), bytes(captured) if captured is not None else None, expected
+        finally:
+            try:
+                os.close(file_fd)
+            except OSError:
+                pass
+
     def _open_inventory_directory(
         self, relative: str
     ) -> tuple[int, list[_DirectoryRecord], list[int]]:
@@ -1574,6 +1677,66 @@ class _VerifiedRepository:
                 except OSError:
                     pass
             raise
+
+    def observe_flat_directory(
+        self,
+        relative: str,
+        *,
+        capture_names: frozenset[str],
+        expected_mode: int,
+    ) -> dict[str, Any]:
+        directory_fd, root_records, opened_directories = self._open_inventory_directory(relative)
+        rows: list[dict[str, Any]] = []
+        captured: dict[str, bytes] = {}
+        try:
+            before_directory = _file_snapshot(_fstat_fd(directory_fd))
+            names = sorted(_listdir_fd(directory_fd))
+            observed_entries: list[tuple[str, tuple[int, int, int, int, int, int, int]]] = []
+            for name in names:
+                observed = _lstat_at(name, directory_fd)
+                if stat.S_ISLNK(observed.st_mode):
+                    raise TrainingContractError(f"conversion R3 symlink: {name}")
+                if stat.S_ISDIR(observed.st_mode):
+                    raise TrainingContractError(f"conversion R3 nested directory: {name}")
+                if not stat.S_ISREG(observed.st_mode):
+                    raise TrainingContractError(f"conversion R3 special object: {name}")
+                if observed.st_nlink != 1 or observed.st_dev != self._root_device:
+                    raise TrainingContractError(f"conversion R3 file identity drift: {name}")
+                size, sha256, raw, snapshot = self._read_open_file_digest(
+                    directory_fd,
+                    name,
+                    observed,
+                    f"{relative}/{name}",
+                    root_records,
+                    capture=name in capture_names,
+                    expected_mode=expected_mode,
+                )
+                rows.append({"relative_path": name, "size_bytes": size, "sha256": sha256})
+                if raw is not None:
+                    captured[name] = raw
+                observed_entries.append((name, snapshot))
+            if sorted(_listdir_fd(directory_fd)) != names:
+                raise TrainingContractError("conversion R3 directory entries changed during enumeration")
+            if _file_snapshot(_fstat_fd(directory_fd)) != before_directory:
+                raise TrainingContractError("conversion R3 directory metadata changed during enumeration")
+            for name, expected in observed_entries:
+                if _file_snapshot(_lstat_at(name, directory_fd)) != expected:
+                    raise TrainingContractError(f"conversion R3 entry changed during enumeration: {name}")
+            self._assert_directory_records_stable(root_records)
+            rows.sort(key=lambda row: str(row["relative_path"]))
+            return {
+                "file_count": len(rows),
+                "directory_count_excluding_root": 0,
+                "total_size_bytes": sum(int(row["size_bytes"]) for row in rows),
+                "rows": rows,
+                "captured": captured,
+            }
+        finally:
+            for fd in reversed(opened_directories):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
 
     def inventory_directory(self, relative: str) -> dict[str, Any]:
         directory_fd, root_records, opened_directories = self._open_inventory_directory(relative)
@@ -1780,6 +1943,378 @@ def _validate_vendor_inventory(
         raise TrainingContractError("vendor manifest rows do not equal observed inventory")
 
 
+_CONVERSION_INVENTORY_KEYS = {
+    "schema_version",
+    "artifacts",
+    "canonical_inventory_sha256",
+    "excluded_from_inventory",
+}
+_CONVERSION_INVENTORY_ROW_KEYS = {"relative_path", "size_bytes", "sha256"}
+_CONVERSION_COMPLETION_KEYS = {
+    "artifact_inventory_sha256",
+    "completion_self_hash_included",
+    "config_sha256",
+    "confirmatory_metrics_accessed",
+    "dataset_test_accessed_by_this_process",
+    "input_protocol_config_sha256",
+    "metrics_access_allowed",
+    "output_path_recorded",
+    "production_conversion_executed",
+    "project_test_split_historically_observed",
+    "protocol_id",
+    "run_nonce",
+    "schema_version",
+    "selection_allowed",
+    "selection_policy",
+    "single_final_access_only",
+    "split_plan_sha256",
+    "status",
+}
+_CONVERSION_CONFIG_KEYS = {
+    "categories",
+    "confirmatory_metrics_accessed",
+    "converter_schema_version",
+    "data_identity",
+    "evaluators",
+    "parser",
+    "production_split_manifest_generated",
+    "protocol_id",
+    "real_conversion_outputs_generated",
+    "schema_version",
+    "split",
+    "test_access_allowed",
+}
+_CONVERSION_CATEGORY_KEYS = {"background_explicit", "categories", "num_classes", "raw_mappings", "schema_version"}
+_CONVERSION_SOURCE_KEYS = {
+    "audited_protocol_data_identity",
+    "dataset_test_accessed_by_this_process",
+    "project_test_split_historically_observed",
+    "protocol_config_sha256",
+    "protocol_id",
+    "schema_version",
+    "train_annotation_count",
+    "train_image_count",
+    "train_raw_manifest_sha256",
+    "val_annotation_count",
+    "val_image_count",
+    "val_raw_manifest_sha256",
+}
+_CONVERSION_DATA_IDENTITY_KEYS = {
+    "cross_split_exact_image_sha_overlap",
+    "cross_split_shared_sequence_keys",
+    "source",
+    "test_access_allowed",
+    "train",
+    "val",
+}
+_CONVERSION_SPLIT_KEYS = {
+    "confirmatory_source",
+    "development",
+    "distribution_tolerance_percentage_points",
+    "evaluated_prefix_count",
+    "feasible_prefix_count",
+    "group_unit",
+    "metrics_access_allowed",
+    "planner",
+    "salt",
+    "seed",
+    "selection_allowed",
+    "selection_policy",
+    "single_final_access_only",
+    "target_confirmatory_images",
+    "test",
+}
+_CONVERSION_FLAT_FILE_NAMES = frozenset(
+    {
+        "artifact_inventory.json",
+        "category_contract.json",
+        "completion.json",
+        "config.json",
+        "confirmatory_lineage.jsonl",
+        "confirmatory_sealed_manifest.json",
+        "conversion_audit.json",
+        "development_coco.json",
+        "development_ignore_regions.jsonl",
+        "development_lineage.jsonl",
+        "development_manifest.json",
+        "invocation.json",
+        "raw_train_manifest.part-00001.jsonl",
+        "raw_train_manifest.part-00002.jsonl",
+        "raw_train_manifest.part-00003.jsonl",
+        "raw_train_manifest.part-00004.jsonl",
+        "raw_val_manifest.jsonl",
+        "round_trip_audit.json",
+        "sequence_groups.json",
+        "source_identity.json",
+        "split_plan.json",
+        "train_core_coco.json",
+        "train_core_ignore_regions.jsonl",
+        "train_core_lineage.jsonl",
+        "train_core_manifest.json",
+    }
+)
+
+
+def _assert_flat_filename(value: Any, field: str) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or "\x00" in value
+    ):
+        raise TrainingContractError(f"{field} is not a flat portable filename")
+    return value
+
+
+def _assert_exact_keys(value: Any, expected: set[str], field: str) -> dict[str, Any]:
+    if type(value) is not dict or set(value) != expected:
+        raise TrainingContractError(f"{field} exact schema drift")
+    return value
+
+
+def _conversion_observed_row(rows: list[dict[str, Any]], name: str) -> dict[str, Any]:
+    for row in rows:
+        if row["relative_path"] == name:
+            return row
+    raise TrainingContractError(f"conversion R3 file missing: {name}")
+
+
+def _validate_conversion_inventory_document(
+    raw: bytes,
+    observed_rows: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    inventory = _parse_strict_json(raw, label="Conversion R3 artifact inventory", trailing_lf=False)
+    _assert_exact_keys(inventory, _CONVERSION_INVENTORY_KEYS, "Conversion R3 artifact inventory")
+    if type(inventory["schema_version"]) is not int or inventory["schema_version"] != 1:
+        raise TrainingContractError("Conversion R3 inventory schema version drift")
+    if inventory["excluded_from_inventory"] != list(CONVERSION_R3_EXCLUDED_FILES):
+        raise TrainingContractError("Conversion R3 inventory exclusions drift")
+    _assert_sha(inventory["canonical_inventory_sha256"], "Conversion R3 inventory canonical SHA")
+    if inventory["canonical_inventory_sha256"] != CONVERSION_R3_ENTRY_INVENTORY_SHA256:
+        raise TrainingContractError("Conversion R3 inventory canonical SHA drift")
+    artifacts = inventory["artifacts"]
+    if type(artifacts) is not list or len(artifacts) != CONVERSION_R3_FILE_COUNT - len(CONVERSION_R3_EXCLUDED_FILES):
+        raise TrainingContractError("Conversion R3 inventory rows drift")
+    previous: str | None = None
+    for row in artifacts:
+        _assert_exact_keys(row, _CONVERSION_INVENTORY_ROW_KEYS, "Conversion R3 inventory row")
+        relative = _assert_flat_filename(row["relative_path"], "Conversion R3 inventory relative_path")
+        if relative in CONVERSION_R3_EXCLUDED_FILES or relative not in _CONVERSION_FLAT_FILE_NAMES:
+            raise TrainingContractError("Conversion R3 inventory path drift")
+        if previous is not None and relative <= previous:
+            raise TrainingContractError("Conversion R3 inventory rows are not unique and sorted")
+        previous = relative
+        if type(row["size_bytes"]) is not int or row["size_bytes"] < 0:
+            raise TrainingContractError("Conversion R3 inventory size type drift")
+        _assert_sha(row["sha256"], "Conversion R3 inventory row SHA")
+    if _sha256_bytes(_canonical_json_bytes(artifacts)) != CONVERSION_R3_ENTRY_INVENTORY_SHA256:
+        raise TrainingContractError("Conversion R3 inventory canonical rows drift")
+    observed_artifacts = [
+        row for row in observed_rows if row["relative_path"] not in CONVERSION_R3_EXCLUDED_FILES
+    ]
+    if artifacts != observed_artifacts:
+        raise TrainingContractError("Conversion R3 observed rows differ from artifact inventory")
+    source = config["source_bindings"]["conversion_r3"]
+    inventory_row = _conversion_observed_row(observed_rows, "artifact_inventory.json")
+    if inventory_row["sha256"] != source["artifact_inventory_sha256"]:
+        raise TrainingContractError("Conversion R3 artifact inventory raw SHA binding drift")
+    return inventory
+
+
+def _validate_conversion_completion_document(
+    raw: bytes,
+    observed_rows: list[dict[str, Any]],
+    config: dict[str, Any],
+    source_identity: dict[str, Any],
+) -> dict[str, Any]:
+    completion = _parse_strict_json(raw, label="Conversion R3 completion", trailing_lf=False)
+    _assert_exact_keys(completion, _CONVERSION_COMPLETION_KEYS, "Conversion R3 completion")
+    fixed = {
+        "schema_version": 1,
+        "status": "COMPLETED",
+        "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V2",
+        "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
+        "selection_allowed": False,
+        "metrics_access_allowed": False,
+        "single_final_access_only": True,
+        "confirmatory_metrics_accessed": False,
+        "dataset_test_accessed_by_this_process": False,
+        "completion_self_hash_included": False,
+        "output_path_recorded": False,
+        "production_conversion_executed": True,
+        "project_test_split_historically_observed": True,
+    }
+    for key, expected in fixed.items():
+        if type(completion[key]) is not type(expected) or completion[key] != expected:
+            raise TrainingContractError(f"Conversion R3 completion {key} drift")
+    for key in ("artifact_inventory_sha256", "config_sha256", "input_protocol_config_sha256", "run_nonce", "split_plan_sha256"):
+        _assert_sha(completion[key], f"Conversion R3 completion {key}")
+    source = config["source_bindings"]["conversion_r3"]
+    if completion["artifact_inventory_sha256"] != source["artifact_inventory_sha256"]:
+        raise TrainingContractError("Conversion R3 completion inventory binding drift")
+    if completion["config_sha256"] != source["config_sha256"]:
+        raise TrainingContractError("Conversion R3 completion config binding drift")
+    if completion["input_protocol_config_sha256"] != source_identity["protocol_config_sha256"]:
+        raise TrainingContractError("Conversion R3 completion protocol binding drift")
+    if completion["split_plan_sha256"] != _conversion_observed_row(observed_rows, "split_plan.json")["sha256"]:
+        raise TrainingContractError("Conversion R3 completion split binding drift")
+    return completion
+
+
+def _validate_conversion_category_document(raw: bytes) -> dict[str, Any]:
+    category = _parse_strict_json(raw, label="Conversion R3 category contract", trailing_lf=False)
+    _assert_exact_keys(category, _CONVERSION_CATEGORY_KEYS, "Conversion R3 category contract")
+    if type(category["schema_version"]) is not int or category["schema_version"] != 1:
+        raise TrainingContractError("Conversion R3 category schema version drift")
+    if type(category["background_explicit"]) is not bool or category["background_explicit"] is not False:
+        raise TrainingContractError("Conversion R3 category background drift")
+    if type(category["num_classes"]) is not int or category["num_classes"] != 10:
+        raise TrainingContractError("Conversion R3 category count drift")
+    categories = category["categories"]
+    mappings = category["raw_mappings"]
+    if type(categories) is not list or len(categories) != 10 or type(mappings) is not list or len(mappings) != 12:
+        raise TrainingContractError("Conversion R3 category rows drift")
+    expected_names = ("pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor")
+    for index, row in enumerate(categories, 1):
+        _assert_exact_keys(row, {"id", "name"}, "Conversion R3 category row")
+        if type(row["id"]) is not int or row["id"] != index or type(row["name"]) is not str or row["name"] != expected_names[index - 1]:
+            raise TrainingContractError("Conversion R3 category row drift")
+    for row in mappings:
+        _assert_exact_keys(row, {"coco_category_id", "enters_matching", "name", "raw_category_id", "reason_code", "training_category_id"}, "Conversion R3 mapping row")
+        if type(row["raw_category_id"]) is not int or type(row["enters_matching"]) is not bool or type(row["name"]) is not str or type(row["reason_code"]) is not str:
+            raise TrainingContractError("Conversion R3 mapping type drift")
+    return category
+
+
+def _validate_conversion_source_document(raw: bytes) -> dict[str, Any]:
+    source = _parse_strict_json(raw, label="Conversion R3 source identity", trailing_lf=False)
+    _assert_exact_keys(source, _CONVERSION_SOURCE_KEYS, "Conversion R3 source identity")
+    expected = {
+        "schema_version": 1,
+        "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V2",
+        "dataset_test_accessed_by_this_process": False,
+        "project_test_split_historically_observed": True,
+        "train_annotation_count": 353550,
+        "train_image_count": 6471,
+        "val_annotation_count": 40169,
+        "val_image_count": 548,
+        "protocol_config_sha256": "f338102200c9b953ec2a047acb84c386b00c5c80da65de39320b3085abd7172b",
+        "train_raw_manifest_sha256": "8d59c5a163cf1c49f60957872768df31fcb658fbee8e27edac95701fa9d195e9",
+        "val_raw_manifest_sha256": "d28e87e61812159eb914befd181529a915ed4120d2b70f2be8d76700f01583c1",
+    }
+    for key, value in expected.items():
+        if type(source[key]) is not type(value) or source[key] != value:
+            raise TrainingContractError(f"Conversion R3 source identity {key} drift")
+    _assert_exact_keys(source["audited_protocol_data_identity"], _CONVERSION_DATA_IDENTITY_KEYS, "Conversion R3 audited identity")
+    return source
+
+
+def _validate_conversion_config_document(
+    raw: bytes,
+    category: dict[str, Any],
+    source_identity: dict[str, Any],
+) -> dict[str, Any]:
+    config = _parse_strict_json(raw, label="Conversion R3 config", trailing_lf=False)
+    _assert_exact_keys(config, _CONVERSION_CONFIG_KEYS, "Conversion R3 config")
+    fixed = {
+        "schema_version": 1,
+        "converter_schema_version": 1,
+        "protocol_id": "P3-VISDRONE-DATA-PROTOCOL-V2",
+        "confirmatory_metrics_accessed": False,
+        "production_split_manifest_generated": True,
+        "real_conversion_outputs_generated": True,
+        "test_access_allowed": False,
+    }
+    for key, expected in fixed.items():
+        if type(config[key]) is not type(expected) or config[key] != expected:
+            raise TrainingContractError(f"Conversion R3 config {key} drift")
+    data_identity = config["data_identity"]
+    _assert_exact_keys(data_identity, _CONVERSION_DATA_IDENTITY_KEYS, "Conversion R3 config data identity")
+    if data_identity != source_identity["audited_protocol_data_identity"]:
+        raise TrainingContractError("Conversion R3 config/source data identity drift")
+    categories = config["categories"]
+    if type(categories) is not dict or set(categories) != {"background_explicit", "category_0", "category_11", "num_classes", "raw_to_training", "training_to_coco"}:
+        raise TrainingContractError("Conversion R3 config category schema drift")
+    if categories["num_classes"] != category["num_classes"] or categories["background_explicit"] is not category["background_explicit"]:
+        raise TrainingContractError("Conversion R3 config/category binding drift")
+    split = config["split"]
+    _assert_exact_keys(split, _CONVERSION_SPLIT_KEYS, "Conversion R3 config split")
+    expected_split = {
+        "confirmatory_source": "official_train_only",
+        "development": "official_val",
+        "distribution_tolerance_percentage_points": 5,
+        "evaluated_prefix_count": 184,
+        "feasible_prefix_count": 64,
+        "group_unit": "sequence_key_connected_by_duplicate_image_sha",
+        "metrics_access_allowed": False,
+        "planner": "plan_confirmatory_split_v2",
+        "salt": "P3-confirmatory-v1",
+        "seed": 20260808,
+        "selection_allowed": False,
+        "selection_policy": "feasibility_first_nearest_hash_prefix_v2",
+        "single_final_access_only": True,
+        "target_confirmatory_images": 647,
+        "test": "disabled",
+    }
+    if split != expected_split:
+        raise TrainingContractError("Conversion R3 config split drift")
+    return config
+
+
+def _validate_conversion_r3_runtime(
+    repository: _VerifiedRepository,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    source = config["source_bindings"]["conversion_r3"]
+    observed = repository.observe_flat_directory(
+        source["artifact_root"],
+        capture_names=CONVERSION_R3_AUTHORITY_FILES,
+        expected_mode=CONVERSION_R3_FILE_MODE,
+    )
+    if (
+        observed["file_count"] != CONVERSION_R3_FILE_COUNT
+        or observed["directory_count_excluding_root"] != CONVERSION_R3_DIRECTORY_COUNT
+        or observed["total_size_bytes"] != CONVERSION_R3_TOTAL_SIZE_BYTES
+    ):
+        raise TrainingContractError("Conversion R3 observed count/size binding drift")
+    rows = observed["rows"]
+    if set(row["relative_path"] for row in rows) != _CONVERSION_FLAT_FILE_NAMES:
+        raise TrainingContractError("Conversion R3 observed file set drift")
+    raw = observed["captured"]
+    inventory = _validate_conversion_inventory_document(raw["artifact_inventory.json"], rows, config)
+    source_identity = _validate_conversion_source_document(raw["source_identity.json"])
+    category = _validate_conversion_category_document(raw["category_contract.json"])
+    conversion_config = _validate_conversion_config_document(raw["config.json"], category, source_identity)
+    completion = _validate_conversion_completion_document(raw["completion.json"], rows, config, source_identity)
+    fixed_rows = {
+        "completion_sha256": "completion.json",
+        "artifact_inventory_sha256": "artifact_inventory.json",
+        "config_sha256": "config.json",
+        "category_contract_sha256": "category_contract.json",
+        "source_identity_sha256": "source_identity.json",
+    }
+    for field, filename in fixed_rows.items():
+        if _conversion_observed_row(rows, filename)["sha256"] != source[field]:
+            raise TrainingContractError(f"Conversion R3 {field} binding drift")
+    if completion["config_sha256"] != _conversion_observed_row(rows, "config.json")["sha256"]:
+        raise TrainingContractError("Conversion R3 completion/config cross-file drift")
+    return {
+        "relative_path": source["artifact_root"],
+        "file_count": observed["file_count"],
+        "directory_count_excluding_root": observed["directory_count_excluding_root"],
+        "total_size_bytes": observed["total_size_bytes"],
+        "completion_sha256": _conversion_observed_row(rows, "completion.json")["sha256"],
+        "artifact_inventory_sha256": _conversion_observed_row(rows, "artifact_inventory.json")["sha256"],
+        "entry_canonical_inventory_sha256": inventory["canonical_inventory_sha256"],
+        "config_sha256": _conversion_observed_row(rows, "config.json")["sha256"],
+        "category_contract_sha256": _conversion_observed_row(rows, "category_contract.json")["sha256"],
+        "source_identity_sha256": _conversion_observed_row(rows, "source_identity.json")["sha256"],
+    }
+
+
 def _load_training_contract_from_boundary(
     repository: _VerifiedRepository, config_path: str | Path
 ) -> tuple[dict[str, Any], bytes]:
@@ -1823,6 +2358,7 @@ def training_contract_binding(repo_root: str | Path, config_path: str | Path = T
         manifest = _parse_vendor_manifest(manifest_raw)
         inventory = repository.inventory_directory(VENDOR_RUNTIME_RELATIVE_PATH)
         _validate_vendor_inventory(manifest, manifest_raw, inventory, config)
+        conversion_binding = _validate_conversion_r3_runtime(repository, config)
         _validate_vendor_source_files(repository, config)
         canonical = canonical_training_contract_bytes(config)
         return {
@@ -1845,4 +2381,5 @@ def training_contract_binding(repo_root: str | Path, config_path: str | Path = T
                 "manifest_raw_sha256": _sha256_bytes(manifest_raw),
                 "manifest_inventory_sha256": inventory["manifest_inventory_sha256"],
             },
+            "conversion_r3_runtime_binding": conversion_binding,
         }

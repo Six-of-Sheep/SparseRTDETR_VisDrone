@@ -99,7 +99,7 @@ def _numeric_leaves(value, pointer=""):
         yield pointer, value
 
 
-def _portable_root(tmp_path: Path, training_bytes: bytes) -> Path:
+def _portable_root(tmp_path: Path, training_bytes: bytes, *, include_conversion: bool = False) -> Path:
     for relative in (contract.TRAINING_CONFIG_RELATIVE_PATH, contract.BASELINE_CONFIG_RELATIVE_PATH):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +109,11 @@ def _portable_root(tmp_path: Path, training_bytes: bytes) -> Path:
     manifest_target = tmp_path / "manifests/rtdetrv2_upstream.json"
     manifest_target.parent.mkdir(parents=True, exist_ok=True)
     manifest_target.write_bytes((ROOT / "manifests/rtdetrv2_upstream.json").read_bytes())
+    if include_conversion:
+        shutil.copytree(
+            ROOT / contract.CONVERSION_R3_RELATIVE_PATH,
+            tmp_path / contract.CONVERSION_R3_RELATIVE_PATH,
+        )
     return tmp_path
 
 
@@ -116,6 +121,16 @@ def _portable_fixture(tmp_path: Path) -> Path:
     root = tmp_path / "portable-repo"
     root.mkdir(parents=True)
     return _portable_root(root, (ROOT / contract.TRAINING_CONFIG_RELATIVE_PATH).read_bytes())
+
+
+@pytest.fixture(scope="session")
+def full_portable_fixture(tmp_path_factory):
+    root = tmp_path_factory.mktemp("portable-r3")
+    return _portable_root(
+        root,
+        (ROOT / contract.TRAINING_CONFIG_RELATIVE_PATH).read_bytes(),
+        include_conversion=True,
+    )
 
 
 def _replace_with_fifo(path: Path) -> None:
@@ -165,6 +180,18 @@ def test_positive_load_validate_canonical_and_binding():
             "manifest_size_bytes": 33264,
             "manifest_raw_sha256": "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae",
             "manifest_inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7",
+        },
+        "conversion_r3_runtime_binding": {
+            "relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3",
+            "file_count": 25,
+            "directory_count_excluding_root": 0,
+            "total_size_bytes": 304418794,
+            "completion_sha256": "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817",
+            "artifact_inventory_sha256": "aaee01ce4e00749b9db8ac5e6e49cf35875a8b266e9c3efc237bdf0b8b109ae7",
+            "entry_canonical_inventory_sha256": "ddf32745302d6095e1c3dde89b1a85f05db53e6b4cc8ee85638e0d45bfa8d982",
+            "config_sha256": "58be8659d6d7ae6faace82b36d45523f80cd48bae1bbcc6da4586c53056ec0d0",
+            "category_contract_sha256": "b4b309f357cbe130a505a610dff340cc498dc74f766384c4559b2acd900728a0",
+            "source_identity_sha256": "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9",
         },
     }
 
@@ -812,9 +839,11 @@ def test_host_user_data_root_and_environment_fallback_fields_are_rejected():
 
 def test_portable_tree_needs_no_runtime_artifact(tmp_path):
     portable = _portable_root(tmp_path, (ROOT / contract.TRAINING_CONFIG_RELATIVE_PATH).read_bytes())
-    binding = contract.training_contract_binding(portable)
-    assert binding["training_contract_id"] == "rtdetrv2_r18_visdrone_baseline_training_v1"
+    loaded = contract.load_training_contract(portable)
+    assert loaded["training_contract_id"] == "rtdetrv2_r18_visdrone_baseline_training_v1"
     assert not (portable / "artifacts").exists()
+    with pytest.raises(contract.TrainingContractError):
+        contract.training_contract_binding(portable)
 
 
 def test_import_has_no_torch_cuda_model_data_or_filesystem_side_effect(tmp_path):
@@ -952,26 +981,39 @@ def test_vendor_root_and_intermediate_symlinks_are_rejected(tmp_path):
 
 @pytest.mark.parametrize("relative", _vendor_source_paths(_training()))
 @pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "missing", "bytes"])
-def test_vendor_source_object_matrix(tmp_path, relative, kind):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_source_object_matrix(full_portable_fixture, relative, kind, tmp_path):
+    portable = full_portable_fixture
     path = portable / relative
-    if kind == "symlink":
-        _replace_with_symlink(path, ROOT / relative)
-    elif kind == "hardlink":
-        _replace_with_hardlink(path, tmp_path / "vendor-hardlink-source")
-    elif kind == "directory":
-        path.unlink()
-        path.mkdir()
-    elif kind == "fifo":
-        _replace_with_fifo(path)
-    elif kind == "missing":
-        path.unlink()
-    elif kind == "bytes":
-        path.write_bytes(path.read_bytes() + b"mutation")
-    else:
-        raise AssertionError(kind)
-    with pytest.raises(contract.TrainingContractError):
-        contract.training_contract_binding(portable)
+    original = path.read_bytes()
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    hardlink_source = tmp_path / "vendor-hardlink-source"
+    try:
+        if kind == "symlink":
+            _replace_with_symlink(path, ROOT / relative)
+        elif kind == "hardlink":
+            _replace_with_hardlink(path, hardlink_source)
+        elif kind == "directory":
+            path.unlink()
+            path.mkdir()
+        elif kind == "fifo":
+            _replace_with_fifo(path)
+        elif kind == "missing":
+            path.unlink()
+        elif kind == "bytes":
+            path.write_bytes(original + b"mutation")
+        else:
+            raise AssertionError(kind)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        if path.is_symlink() or path.is_file() or path.is_fifo():
+            path.unlink()
+        elif path.is_dir():
+            path.rmdir()
+        path.write_bytes(original)
+        path.chmod(original_mode)
+        if hardlink_source.exists():
+            hardlink_source.unlink()
 
 
 def test_outside_fifo_symlink_is_rejected_without_reading_the_target(tmp_path):
@@ -1016,7 +1058,6 @@ def test_runtime_boundary_does_not_leak_file_descriptors(tmp_path):
     before = len(os.listdir("/proc/self/fd"))
     for _ in range(3):
         contract.load_training_contract(portable)
-        contract.training_contract_binding(portable)
     root_alias = tmp_path / "root-alias"
     root_alias.symlink_to(portable, target_is_directory=True)
     for _ in range(3):
@@ -1033,7 +1074,7 @@ def test_runtime_boundary_preserves_portable_tree_bytes(tmp_path):
         for path in portable.rglob("*")
         if path.is_file()
     }
-    contract.training_contract_binding(portable)
+    contract.load_training_contract(portable)
     after = {
         path.relative_to(portable): path.read_bytes()
         for path in portable.rglob("*")
@@ -1066,8 +1107,8 @@ def _write_manifest(root: Path, value: dict) -> None:
     path.write_bytes(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
 
 
-def test_vendor_runtime_binding_returns_full_observed_identity_on_portable_fixture(tmp_path):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_runtime_binding_returns_full_observed_identity_on_portable_fixture(full_portable_fixture):
+    portable = full_portable_fixture
     binding = contract.training_contract_binding(portable)
     assert binding["vendor_runtime_binding"] == {
         "relative_path": "vendor/rtdetrv2_pytorch",
@@ -1083,106 +1124,146 @@ def test_vendor_runtime_binding_returns_full_observed_identity_on_portable_fixtu
 
 
 @pytest.mark.parametrize("relative", _vendor_manifest_paths())
-def test_every_tracked_vendor_file_byte_mutation_is_bound(tmp_path, relative):
-    portable = _portable_fixture(tmp_path)
+def test_every_tracked_vendor_file_byte_mutation_is_bound(full_portable_fixture, relative):
+    portable = full_portable_fixture
     path = portable / relative
-    path.write_bytes(path.read_bytes() + b"independent-vendor-mutation")
-    with pytest.raises(contract.TrainingContractError):
-        contract.training_contract_binding(portable)
+    original = path.read_bytes()
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    try:
+        path.write_bytes(original + b"independent-vendor-mutation")
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        path.write_bytes(original)
+        path.chmod(original_mode)
 
 
 @pytest.mark.parametrize("kind", ["missing", "extra", "rename", "empty", "directory_symlink", "file_hardlink", "fifo", "socket"])
-def test_vendor_runtime_structure_mutations_are_rejected(tmp_path, kind, monkeypatch):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_runtime_structure_mutations_are_rejected(full_portable_fixture, kind, monkeypatch, tmp_path):
+    portable = full_portable_fixture
     vendor = portable / "vendor/rtdetrv2_pytorch"
     target = vendor / "LICENSE"
-    if kind == "missing":
-        target.unlink()
-    elif kind == "extra":
-        (vendor / "unbound-extra.txt").write_bytes(b"extra")
-    elif kind == "rename":
-        target.rename(vendor / "LICENSE.renamed")
-    elif kind == "empty":
-        target.write_bytes(b"")
-    elif kind == "directory_symlink":
-        directory = vendor / "references"
-        external = tmp_path / "external-references"
-        directory.rename(external)
-        directory.symlink_to(external, target_is_directory=True)
-    elif kind == "file_hardlink":
-        outside = tmp_path / "hardlink-source"
-        outside.write_bytes(target.read_bytes())
-        target.unlink()
-        os.link(outside, target)
-    elif kind == "fifo":
-        target.unlink()
-        os.mkfifo(target)
-    elif kind == "socket":
-        original_lstat = contract._lstat_at
+    original = target.read_bytes()
+    original_mode = stat.S_IMODE(target.stat().st_mode)
+    renamed = vendor / "LICENSE.renamed"
+    external = tmp_path / "external-references"
+    outside = tmp_path / "hardlink-source"
+    try:
+        if kind == "missing":
+            target.unlink()
+        elif kind == "extra":
+            (vendor / "unbound-extra.txt").write_bytes(b"extra")
+        elif kind == "rename":
+            target.rename(renamed)
+        elif kind == "empty":
+            target.write_bytes(b"")
+        elif kind == "directory_symlink":
+            directory = vendor / "references"
+            directory.rename(external)
+            directory.symlink_to(external, target_is_directory=True)
+        elif kind == "file_hardlink":
+            outside.write_bytes(original)
+            target.unlink()
+            os.link(outside, target)
+        elif kind == "fifo":
+            target.unlink()
+            os.mkfifo(target)
+        elif kind == "socket":
+            original_lstat = contract._lstat_at
 
-        def fake_lstat(name, parent_fd):
-            if name == "LICENSE":
-                return os.stat_result((stat.S_IFSOCK | 0o600, 0, 0, 1, os.getuid(), os.getgid(), 0, 0, 0, 0))
-            return original_lstat(name, parent_fd)
+            def fake_lstat(name, parent_fd):
+                if name == "LICENSE":
+                    return os.stat_result((stat.S_IFSOCK | 0o600, 0, 0, 1, os.getuid(), os.getgid(), 0, 0, 0, 0))
+                return original_lstat(name, parent_fd)
 
-        monkeypatch.setattr(contract, "_lstat_at", fake_lstat)
-    else:
-        raise AssertionError(kind)
-    with pytest.raises(contract.TrainingContractError):
-        contract.training_contract_binding(portable)
+            monkeypatch.setattr(contract, "_lstat_at", fake_lstat)
+        else:
+            raise AssertionError(kind)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        if renamed.exists():
+            renamed.rename(target)
+        if (vendor / "references").is_symlink():
+            (vendor / "references").unlink()
+        if external.exists():
+            external.rename(vendor / "references")
+        if (vendor / "unbound-extra.txt").exists():
+            (vendor / "unbound-extra.txt").unlink()
+        if target.exists() or target.is_fifo():
+            target.unlink()
+        target.write_bytes(original)
+        target.chmod(original_mode)
+        if outside.exists():
+            outside.unlink()
 
 
-def test_vendor_executable_mode_flip_is_rejected(tmp_path):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_executable_mode_flip_is_rejected(full_portable_fixture):
+    portable = full_portable_fixture
     path = portable / "vendor/rtdetrv2_pytorch/tools/onnx2trt.sh"
-    path.chmod(path.stat().st_mode ^ stat.S_IXUSR)
-    with pytest.raises(contract.TrainingContractError):
-        contract.training_contract_binding(portable)
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    try:
+        path.chmod(path.stat().st_mode ^ stat.S_IXUSR)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        path.chmod(original_mode)
 
 
 @pytest.mark.parametrize("kind", ["missing", "append", "bom", "crlf", "duplicate", "repack"])
-def test_vendor_manifest_raw_mutations_are_rejected(tmp_path, kind):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_manifest_raw_mutations_are_rejected(full_portable_fixture, kind):
+    portable = full_portable_fixture
     path = portable / "manifests/rtdetrv2_upstream.json"
     raw = path.read_bytes()
-    if kind == "missing":
-        path.unlink()
-    elif kind == "append":
-        path.write_bytes(raw + b"\n")
-    elif kind == "bom":
-        path.write_bytes(b"\xef\xbb\xbf" + raw)
-    elif kind == "crlf":
-        path.write_bytes(raw.replace(b"\n", b"\r\n"))
-    elif kind == "duplicate":
-        mutated = raw.replace(b'"schema_version": 1,', b'"schema_version": 1,\n  "schema_version": 1,', 1)
-        assert mutated != raw
-        path.write_bytes(mutated)
-    elif kind == "repack":
-        value = json.loads(raw.decode("utf-8"))
-        path.write_bytes(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
-    else:
-        raise AssertionError(kind)
-    with pytest.raises(contract.TrainingContractError):
-        contract.training_contract_binding(portable)
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    try:
+        if kind == "missing":
+            path.unlink()
+        elif kind == "append":
+            path.write_bytes(raw + b"\n")
+        elif kind == "bom":
+            path.write_bytes(b"\xef\xbb\xbf" + raw)
+        elif kind == "crlf":
+            path.write_bytes(raw.replace(b"\n", b"\r\n"))
+        elif kind == "duplicate":
+            mutated = raw.replace(b'"schema_version": 1,', b'"schema_version": 1,\n  "schema_version": 1,', 1)
+            assert mutated != raw
+            path.write_bytes(mutated)
+        elif kind == "repack":
+            value = json.loads(raw.decode("utf-8"))
+            path.write_bytes(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
+        else:
+            raise AssertionError(kind)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        path.write_bytes(raw)
+        path.chmod(original_mode)
 
 
-def test_vendor_manifest_coordinated_repack_is_still_rejected(tmp_path):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_manifest_coordinated_repack_is_still_rejected(full_portable_fixture):
+    portable = full_portable_fixture
     license_path = portable / "vendor/rtdetrv2_pytorch/LICENSE"
-    license_path.write_bytes(license_path.read_bytes() + b"coordinated mutation")
+    original_license = license_path.read_bytes()
     manifest_path = portable / "manifests/rtdetrv2_upstream.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    mutated_sha = hashlib.sha256(license_path.read_bytes()).hexdigest()
-    for row in manifest["files"]:
-        if row["relative_path"] == "vendor/rtdetrv2_pytorch/LICENSE":
-            row["size_bytes"] = license_path.stat().st_size
-            row["sha256"] = mutated_sha
-    manifest["canonical_inventory_sha256"] = hashlib.sha256(
-        json.dumps(manifest["files"], ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    _write_manifest(portable, manifest)
-    with pytest.raises(contract.TrainingContractError):
-        contract.training_contract_binding(portable)
+    original_manifest = manifest_path.read_bytes()
+    try:
+        license_path.write_bytes(original_license + b"coordinated mutation")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        mutated_sha = hashlib.sha256(license_path.read_bytes()).hexdigest()
+        for row in manifest["files"]:
+            if row["relative_path"] == "vendor/rtdetrv2_pytorch/LICENSE":
+                row["size_bytes"] = license_path.stat().st_size
+                row["sha256"] = mutated_sha
+        manifest["canonical_inventory_sha256"] = hashlib.sha256(
+            json.dumps(manifest["files"], ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        _write_manifest(portable, manifest)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        license_path.write_bytes(original_license)
+        manifest_path.write_bytes(original_manifest)
 
 
 @pytest.mark.parametrize(
@@ -1206,12 +1287,305 @@ def test_vendor_contract_declarations_fail_before_digest(path, replacement):
         contract.validate_training_contract(candidate, _baseline())
 
 
-def test_vendor_inventory_failure_routes_do_not_leak_descriptors(tmp_path):
-    portable = _portable_fixture(tmp_path)
+def test_vendor_inventory_failure_routes_do_not_leak_descriptors(full_portable_fixture):
+    portable = full_portable_fixture
     before = len(os.listdir("/proc/self/fd"))
-    (portable / "vendor/rtdetrv2_pytorch/LICENSE").write_bytes(b"bad")
-    for _ in range(3):
+    path = portable / "vendor/rtdetrv2_pytorch/LICENSE"
+    original = path.read_bytes()
+    try:
+        path.write_bytes(b"bad")
+        for _ in range(3):
+            with pytest.raises(contract.TrainingContractError):
+                contract.training_contract_binding(portable)
+        after = len(os.listdir("/proc/self/fd"))
+        assert after == before
+    finally:
+        path.write_bytes(original)
+
+
+def _conversion_file_names() -> tuple[str, ...]:
+    return tuple(sorted(contract._CONVERSION_FLAT_FILE_NAMES))
+
+
+def _flip_one_byte(path: Path) -> int | None:
+    with path.open("r+b") as handle:
+        original = handle.read(1)
+        if original:
+            handle.seek(0)
+            handle.write(bytes([original[0] ^ 1]))
+            return original[0]
+    path.write_bytes(b"x")
+    return None
+
+
+def _restore_one_byte(path: Path, original: int | None) -> None:
+    if original is None:
+        path.write_bytes(b"")
+        return
+    with path.open("r+b") as handle:
+        handle.seek(0)
+        handle.write(bytes([original]))
+
+
+def _stat_variant(value: os.stat_result, *, mode=None, nlink=None, device=None, metadata=False):
+    fields = list(value)
+    if mode is not None:
+        fields[0] = mode
+    if device is not None:
+        fields[2] = device
+    if nlink is not None:
+        fields[3] = nlink
+    if metadata:
+        fields[8] += 1
+        fields[9] += 1
+    return os.stat_result(tuple(fields))
+
+
+def test_conversion_r3_completion_missing_is_rejected(full_portable_fixture):
+    portable = full_portable_fixture
+    path = portable / contract.CONVERSION_R3_RELATIVE_PATH / "completion.json"
+    original = path.read_bytes()
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    path.unlink()
+    try:
         with pytest.raises(contract.TrainingContractError):
             contract.training_contract_binding(portable)
-    after = len(os.listdir("/proc/self/fd"))
-    assert after == before
+    finally:
+        path.write_bytes(original)
+        path.chmod(original_mode)
+
+
+@pytest.mark.parametrize("relative", _conversion_file_names())
+def test_every_conversion_r3_file_byte_mutation_is_bound(full_portable_fixture, relative):
+    portable = full_portable_fixture
+    path = portable / contract.CONVERSION_R3_RELATIVE_PATH / relative
+    original = _flip_one_byte(path)
+    try:
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        _restore_one_byte(path, original)
+
+
+@pytest.mark.parametrize("kind", ["missing", "extra", "rename", "empty", "directory", "symlink"])
+def test_conversion_r3_real_structure_mutations_are_rejected(full_portable_fixture, kind, tmp_path):
+    portable = full_portable_fixture
+    root = portable / contract.CONVERSION_R3_RELATIVE_PATH
+    target = root / "invocation.json"
+    original = target.read_bytes()
+    original_mode = stat.S_IMODE(target.stat().st_mode)
+    renamed = root / "invocation.renamed.json"
+    outside = tmp_path / "outside.json"
+    extra = root / "unbound-extra.json"
+    try:
+        if kind == "missing":
+            target.unlink()
+        elif kind == "extra":
+            extra.write_bytes(b"extra")
+        elif kind == "rename":
+            target.rename(renamed)
+        elif kind == "empty":
+            target.write_bytes(b"")
+        elif kind == "directory":
+            target.unlink()
+            target.mkdir()
+        elif kind == "symlink":
+            outside.write_bytes(original)
+            target.unlink()
+            target.symlink_to(outside)
+        else:
+            raise AssertionError(kind)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        if renamed.exists():
+            renamed.rename(target)
+        if target.is_symlink():
+            target.unlink()
+        elif target.is_dir():
+            target.rmdir()
+        if extra.exists():
+            extra.unlink()
+        target.write_bytes(original)
+        target.chmod(original_mode)
+        if outside.exists():
+            outside.unlink()
+
+
+@pytest.mark.parametrize("kind", ["hardlink", "fifo", "socket", "device", "mode", "device_drift", "metadata"])
+def test_conversion_r3_sandbox_safe_object_mutations_are_rejected(full_portable_fixture, kind, monkeypatch):
+    portable = full_portable_fixture
+    target_name = "conversion_audit.json"
+    original_lstat = contract._lstat_at
+
+    def fake_lstat(name, parent_fd):
+        observed = original_lstat(name, parent_fd)
+        if name != target_name:
+            return observed
+        if kind == "hardlink":
+            return _stat_variant(observed, nlink=2)
+        if kind == "fifo":
+            return _stat_variant(observed, mode=stat.S_IFIFO | 0o600)
+        if kind == "socket":
+            return _stat_variant(observed, mode=stat.S_IFSOCK | 0o600)
+        if kind == "device":
+            return _stat_variant(observed, mode=stat.S_IFCHR | 0o600)
+        if kind == "mode":
+            return _stat_variant(observed, mode=stat.S_IFREG | 0o644)
+        if kind == "device_drift":
+            return _stat_variant(observed, device=observed.st_dev + 1)
+        if kind == "metadata":
+            return _stat_variant(observed, metadata=True)
+        raise AssertionError(kind)
+
+    monkeypatch.setattr(contract, "_lstat_at", fake_lstat)
+    with pytest.raises(contract.TrainingContractError):
+        contract.training_contract_binding(portable)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "inventory_extra_key",
+        "inventory_missing_key",
+        "inventory_reorder",
+        "inventory_duplicate",
+        "inventory_row_path",
+        "inventory_row_size",
+        "inventory_row_sha",
+        "inventory_repack",
+        "completion_status",
+        "completion_type",
+        "completion_reference",
+        "config_type",
+        "config_split",
+        "category_type",
+        "source_missing",
+        "source_value",
+        "coordinated_repack",
+    ],
+)
+def test_conversion_r3_authority_mutations_are_rejected(full_portable_fixture, kind):
+    portable = full_portable_fixture
+    root = portable / contract.CONVERSION_R3_RELATIVE_PATH
+    paths = {
+        "inventory": root / "artifact_inventory.json",
+        "completion": root / "completion.json",
+        "config": root / "config.json",
+        "category": root / "category_contract.json",
+        "source": root / "source_identity.json",
+        "lineage": root / "train_core_lineage.jsonl",
+    }
+    originals = {name: path.read_bytes() for name, path in paths.items()}
+    try:
+        if kind.startswith("inventory_"):
+            value = json.loads(originals["inventory"].decode("utf-8"))
+            if kind == "inventory_extra_key":
+                value["extra"] = True
+            elif kind == "inventory_missing_key":
+                value.pop("artifacts")
+            elif kind == "inventory_reorder":
+                value["artifacts"] = list(reversed(value["artifacts"]))
+            elif kind == "inventory_duplicate":
+                value["artifacts"][1] = copy.deepcopy(value["artifacts"][0])
+            elif kind == "inventory_row_path":
+                value["artifacts"][0]["relative_path"] = "../escape"
+            elif kind == "inventory_row_size":
+                value["artifacts"][0]["size_bytes"] += 1
+            elif kind == "inventory_row_sha":
+                value["artifacts"][0]["sha256"] = "0" * 64
+            elif kind == "inventory_repack":
+                paths["inventory"].write_bytes(json.dumps(value, indent=2).encode("utf-8") + b"\n")
+            if kind != "inventory_repack":
+                paths["inventory"].write_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        elif kind.startswith("completion"):
+            value = json.loads(originals["completion"].decode("utf-8"))
+            if kind == "completion_status":
+                value["status"] = "FAILED"
+            elif kind == "completion_type":
+                value["schema_version"] = True
+            else:
+                value["artifact_inventory_sha256"] = "0" * 64
+            paths["completion"].write_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        elif kind.startswith("config"):
+            value = json.loads(originals["config"].decode("utf-8"))
+            if kind == "config_type":
+                value["schema_version"] = True
+            else:
+                value["split"]["seed"] = 0
+            paths["config"].write_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        elif kind == "category_type":
+            value = json.loads(originals["category"].decode("utf-8"))
+            value["num_classes"] = True
+            paths["category"].write_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        elif kind.startswith("source"):
+            value = json.loads(originals["source"].decode("utf-8"))
+            if kind == "source_missing":
+                value.pop("protocol_config_sha256")
+            else:
+                value["protocol_id"] = "OTHER"
+            paths["source"].write_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        else:
+            raw = bytearray(originals["lineage"])
+            raw[0] ^= 1
+            paths["lineage"].write_bytes(bytes(raw))
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+    finally:
+        for name, raw in originals.items():
+            paths[name].write_bytes(raw)
+
+
+def test_conversion_r3_enumeration_drift_is_rejected(full_portable_fixture, monkeypatch):
+    portable = full_portable_fixture
+    original_lstat = contract._lstat_at
+    seen = 0
+
+    def drifting_lstat(name, parent_fd):
+        nonlocal seen
+        observed = original_lstat(name, parent_fd)
+        if name == "conversion_audit.json":
+            seen += 1
+            if seen >= 2:
+                return _stat_variant(observed, metadata=True)
+        return observed
+
+    monkeypatch.setattr(contract, "_lstat_at", drifting_lstat)
+    with pytest.raises(contract.TrainingContractError):
+        contract.training_contract_binding(portable)
+
+
+def test_conversion_r3_eintr_is_recovered(full_portable_fixture, monkeypatch):
+    original_read = os.read
+    raised = False
+
+    def interrupted_once(fd, size):
+        nonlocal raised
+        if not raised:
+            raised = True
+            raise InterruptedError
+        return original_read(fd, size)
+
+    monkeypatch.setattr(os, "read", interrupted_once)
+    binding = contract.training_contract_binding(full_portable_fixture)
+    assert raised
+    assert binding["conversion_r3_runtime_binding"]["file_count"] == 25
+
+
+def test_conversion_r3_fd_leak_success_and_failure(full_portable_fixture):
+    portable = full_portable_fixture
+    completion = portable / contract.CONVERSION_R3_RELATIVE_PATH / "completion.json"
+    original = completion.read_bytes()
+    original_mode = stat.S_IMODE(completion.stat().st_mode)
+    before = len(os.listdir("/proc/self/fd"))
+    contract.training_contract_binding(portable)
+    after_success = len(os.listdir("/proc/self/fd"))
+    completion.unlink()
+    try:
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(portable)
+        after_failure = len(os.listdir("/proc/self/fd"))
+        assert after_success == before == after_failure
+    finally:
+        completion.write_bytes(original)
+        completion.chmod(original_mode)
