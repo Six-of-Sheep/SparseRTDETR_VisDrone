@@ -113,6 +113,50 @@ BASELINE_FILES = {
     "tests/test_rtdetr_baseline_training_runtime.py",
 }
 
+TRAINING_EVIDENCE_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_EVIDENCE_V1.md",
+    "src/sparse_rtdetr/baseline/training_evidence.py",
+    "tests/test_rtdetr_baseline_training_evidence.py",
+}
+TRAINING_EVIDENCE_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json"
+TRAINING_EVIDENCE_CONFIG_RAW_SIZE_BYTES = 7139
+TRAINING_EVIDENCE_CONFIG_RAW_SHA256 = "4d6bad4afbede236f1169796aa640f9d82bdcf91d06b799d39c183b20c230c9e"
+TRAINING_EVIDENCE_CONFIG_CANONICAL_SIZE_BYTES = 6069
+TRAINING_EVIDENCE_CONFIG_CANONICAL_SHA256 = "3184707c6cfa115477d007ac0be5eb142a054f78e6309a079ad1e9fab0db9bd6"
+TRAINING_EVIDENCE_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_evidence.py"
+TRAINING_EVIDENCE_MODULE_SHA256 = "a16bdd9eedab05ca367b7491491946c1e730a0b1e73b44aa5aa42035d01ed1ef"
+TRAINING_EVIDENCE_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_evidence.py"
+TRAINING_EVIDENCE_TEST_SHA256 = "50db0895817d5b8beee3dc4900a33f8ba04115ac9584f82971e7ca4cf5b4f4ca"
+TRAINING_EVIDENCE_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_EVIDENCE_V1.md"
+TRAINING_EVIDENCE_DOCUMENT_SHA256 = "7543f394824d746320d87c4c2b4622e87a6dcb2a308add2e19f7b7f3dc710015"
+TRAINING_EVIDENCE_PUBLIC_APIS = {
+    "load_training_evidence_contract",
+    "validate_training_evidence_contract",
+    "canonical_training_evidence_contract_bytes",
+    "training_evidence_contract_binding",
+    "TrainingEvidenceWriter",
+    "write_atomic_checkpoint",
+    "validate_training_evidence",
+    "validate_training_checkpoint",
+    "classify_training_evidence",
+    "TrainingEvidenceError",
+}
+TRAINING_EVIDENCE_ALLOWED_IMPORTS = {
+    "copy",
+    "errno",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "stat",
+    "pathlib",
+    "typing",
+    "sparse_rtdetr.baseline.training_contract",
+    "sparse_rtdetr.baseline.training_runtime",
+}
+TRAINING_EVIDENCE_ROOT_RELATIVE_PATH = "artifacts/training/rtdetrv2_r18_visdrone_training_evidence_v1"
+
 TRAINING_RUNTIME_PLAN_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_runtime_v1.json"
 TRAINING_RUNTIME_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_runtime.py"
 TRAINING_RUNTIME_PLAN_ID = "rtdetrv2_r18_visdrone_baseline_training_runtime_v1"
@@ -620,6 +664,84 @@ def _check_training_runtime_plan(root: Path, failures: list[str]) -> None:
         failures.append(f"training runtime source audit failure: {type(exc).__name__}")
 
 
+def _check_training_evidence(root: Path, failures: list[str]) -> None:
+    """Check the frozen T5B schema surface without importing execution code."""
+
+    expected_hashes = {
+        TRAINING_EVIDENCE_MODULE_RELATIVE_PATH: TRAINING_EVIDENCE_MODULE_SHA256,
+        TRAINING_EVIDENCE_TEST_RELATIVE_PATH: TRAINING_EVIDENCE_TEST_SHA256,
+        TRAINING_EVIDENCE_DOCUMENT_RELATIVE_PATH: TRAINING_EVIDENCE_DOCUMENT_SHA256,
+    }
+    for relative in sorted(TRAINING_EVIDENCE_FILES):
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
+            failures.append(f"missing or symlinked T5B file: {relative}")
+            continue
+        if relative in expected_hashes and _sha256(path) != expected_hashes[relative]:
+            failures.append(f"T5B file identity mismatch: {relative}")
+
+    config_path = root / TRAINING_EVIDENCE_CONFIG_RELATIVE_PATH
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != TRAINING_EVIDENCE_CONFIG_RAW_SIZE_BYTES:
+            failures.append("training evidence config raw size mismatch")
+        if _sha256(config_path) != TRAINING_EVIDENCE_CONFIG_RAW_SHA256:
+            failures.append("training evidence config raw SHA mismatch")
+        if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            failures.append("training evidence config portable bytes mismatch")
+        value = json.loads(raw.decode("utf-8"))
+        canonical = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(canonical) != TRAINING_EVIDENCE_CONFIG_CANONICAL_SIZE_BYTES:
+            failures.append("training evidence config canonical size mismatch")
+        if hashlib.sha256(canonical).hexdigest() != TRAINING_EVIDENCE_CONFIG_CANONICAL_SHA256:
+            failures.append("training evidence config canonical SHA mismatch")
+        if value.get("schema_version") != 1 or value.get("training_evidence_contract_id") != "rtdetrv2_r18_visdrone_baseline_training_evidence_v1":
+            failures.append("training evidence config semantic identity mismatch")
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        failures.append(f"training evidence config parse failure: {type(exc).__name__}")
+
+    module_path = root / TRAINING_EVIDENCE_MODULE_RELATIVE_PATH
+    try:
+        tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != TRAINING_EVIDENCE_ALLOWED_IMPORTS:
+            failures.append(
+                "training evidence import set mismatch: "
+                f"extra={sorted(imported - TRAINING_EVIDENCE_ALLOWED_IMPORTS)} "
+                f"missing={sorted(TRAINING_EVIDENCE_ALLOWED_IMPORTS - imported)}"
+            )
+        public_names = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public_names != TRAINING_EVIDENCE_PUBLIC_APIS:
+            failures.append(
+                "training evidence public API mismatch: "
+                f"extra={sorted(public_names - TRAINING_EVIDENCE_PUBLIC_APIS)} "
+                f"missing={sorted(TRAINING_EVIDENCE_PUBLIC_APIS - public_names)}"
+            )
+        all_values: list[str] = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            ):
+                all_values = ast.literal_eval(node.value)
+        if set(all_values) != TRAINING_EVIDENCE_PUBLIC_APIS:
+            failures.append("training evidence __all__ mismatch")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"training evidence source audit failure: {type(exc).__name__}")
+
+    production_root = root / TRAINING_EVIDENCE_ROOT_RELATIVE_PATH
+    if production_root.is_symlink() or production_root.exists():
+        failures.append("T5B production evidence root must not exist")
+
+
 def check_repository(root: Path) -> bool:
     failures: list[str] = []
     files, file_policy_failures = _file_policy(root)
@@ -628,6 +750,7 @@ def check_repository(root: Path) -> bool:
     vendor_files = {relative for relative in files if relative.startswith(VENDOR_PREFIX)}
     allowed_files = ALLOWED_FILES | vendor_files
     allowed_files |= BASELINE_FILES
+    allowed_files |= TRAINING_EVIDENCE_FILES
     allowed_files |= PRIMARY_EVALUATOR_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
@@ -700,6 +823,7 @@ def check_repository(root: Path) -> bool:
         failures.append(f"formal training contract validation failure: {type(exc).__name__}: {exc}")
 
     _check_training_runtime_plan(root, failures)
+    _check_training_evidence(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
