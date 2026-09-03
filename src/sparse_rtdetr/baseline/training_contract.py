@@ -54,13 +54,55 @@ CONVERSION_R3_AUTHORITY_FILES = frozenset(
     }
 )
 CONVERSION_R3_FILE_MODE = 0o600
-TRAINING_CONFIG_SIZE_BYTES = 8513
-TRAINING_CONFIG_RAW_SHA256 = "bf6631644d218fe65998dcd4267d93a040b709a864577f7216052dd2a9e97239"
-TRAINING_CONTRACT_CANONICAL_SHA256 = "7439f0706af2bfa97d2a3b17a1b338bb00c6470b4c1268391047014370329c3f"
+TRAINING_CONFIG_SIZE_BYTES = 10907
+TRAINING_CONFIG_RAW_SHA256 = "0f9ddb2e6d8ec6d2b21e42f6c419511f5bd70df287457c2c2b6109eaf8a93297"
+TRAINING_CONTRACT_CANONICAL_SHA256 = "a20c71ef90cb4ccc091a717286a1c49be8a1ebffb178156942b77798d3d7f868"
 BASELINE_CONFIG_SIZE_BYTES = 4316
 BASELINE_CONFIG_RAW_SHA256 = "38702c3483efcd3c3855552d087bbfd0fcfe3628fa9b1582847039f17eb083dd"
 BASELINE_CONFIG_CANONICAL_SHA256 = "c392efd44de7738401c1136261c8ca628dea3d3b0fe355b79d0d69d6ed91bfe0"
+PRIMARY_EVALUATOR_ID = "visdrone_official_primary_evaluator_v1"
+PRIMARY_EVALUATOR_PROTOCOL_ID = "visdrone_official_style_v1"
+PRIMARY_EVALUATOR_IMPLEMENTATION_COMMIT = "036cca4d127ddd9e10e3cc7900c3eb759b55f59f"
+PRIMARY_EVALUATOR_IMPLEMENTATION_TREE = "fbe931976f6bac7d8e4b3bb319ff1905e99c5444"
+PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH = "configs/baseline/visdrone_official_evaluator_v1.json"
+PRIMARY_EVALUATOR_CONFIG_RAW_SIZE_BYTES = 3857
+PRIMARY_EVALUATOR_CONFIG_RAW_SHA256 = "36cfa69b0ff645c47c871283f917577ca27c760daf424e9544ab363dbf080ff5"
+PRIMARY_EVALUATOR_CONFIG_CANONICAL_SIZE_BYTES = 3295
+PRIMARY_EVALUATOR_CONFIG_CANONICAL_SHA256 = "355de90bdb6007ed42ed65b3f653a1b8ea57f2184ab4fd48a9561b692b993998"
+PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH = "manifests/visdrone_det_toolkit_005445.json"
+PRIMARY_EVALUATOR_MANIFEST_RAW_SIZE_BYTES = 4166
+PRIMARY_EVALUATOR_MANIFEST_RAW_SHA256 = "71168baf15d6d945fd5a4a6c5605b5ba533524efeede2a9d4020127576c1b36f"
+PRIMARY_EVALUATOR_MANIFEST_CANONICAL_SIZE_BYTES = 3351
+PRIMARY_EVALUATOR_MANIFEST_CANONICAL_SHA256 = "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3"
+PRIMARY_EVALUATOR_ARCHIVE_SIZE_BYTES = 40960
+PRIMARY_EVALUATOR_ARCHIVE_SHA256 = "bf19dd9477210adf106c7cbf2a72370ed4af22dedb577f361f3dc9e77e99baa4"
+PRIMARY_EVALUATOR_AUTHORITY_FILE_COUNT = 11
+PRIMARY_EVALUATOR_AUTHORITY_INVENTORY_SHA256 = "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0"
+PRIMARY_EVALUATOR_AUTHORITY_FILE_SHA256 = {
+    "utils/VOCap.m": "95dd1e02c956124e777caf6f44b50b0986a2a37785bd11982ef775e696c17945",
+    "utils/calcAccuracy.m": "285508f54903acd75eeda346c11c8e53267e72facd648f2e22bce121d4f55d7f",
+    "utils/compOas.m": "3e5c2d473c07bf2ddbe0d902284af98ef7104c609e867b2ed59083d31f3ed2af",
+    "utils/createIntImg.m": "7ce3de4fc105be4f088cae5d1fcfc8f4383f3d7ffd4a551bf1afe711eff09f72",
+    "utils/dropObjectsInIgr.m": "30dee2713d76a537f5c98ec5d0804e17cfd3993d83d8a80a70b90ef9461fa4de",
+    "utils/evalRes.m": "610f0d078f1af8d7987e360e6e88665c0290587191d5542b469a9792402f539b",
+    "utils/saveAnnoRes.m": "3210fb8fd98aed19cab61c996e0daf1dbfdb23fd5eb2fafff29afc71bb45876d",
+}
+PRIMARY_EVALUATOR_AUDIT_STAGE = "P3_BASELINE_PRIMARY_EVALUATOR_V1_INDEPENDENT_AUDIT_R1"
+PRIMARY_EVALUATOR_AUDIT_CLASSIFICATION = "PRIMARY_EVALUATOR_V1_CERTIFIED"
+PRIMARY_EVALUATOR_AUDIT_RETURN_CODE = 0
+PRIMARY_EVALUATOR_AUDIT_SCRIPT_SIZE_BYTES = 51244
+PRIMARY_EVALUATOR_AUDIT_SCRIPT_SHA256 = "4182f4082756fb2e52d6969e93889f24ae9af398cc98d67a1b9d990041b5524a"
+PRIMARY_EVALUATOR_AUDIT_MUTATION_CASES_REJECTED = 129
+PRIMARY_EVALUATOR_AUDIT_INDEPENDENT_ORACLE_CASES = 100
+PRIMARY_EVALUATOR_AUDIT_EVALUATOR_TESTS_PASSED = 46
+PRIMARY_EVALUATOR_AUDIT_FULL_CPU_TESTS_PASSED = 1116
+PRIMARY_EVALUATOR_AUDIT_CLEAN_ARCHIVE_TESTS_PASSED = 46
+PRIMARY_EVALUATOR_SOURCE_FILES = (
+    ("primary_evaluator", "src/sparse_rtdetr/baseline/primary_evaluator.py", "d831fc641ac930822e693f99fbbcdd48abbe76738a618525135dd099963901bd"),
+    ("evaluation_protocol", "src/sparse_rtdetr/data_protocol/evaluation.py", "e70ad71bb834b4cfc5d25441a78d2caa5982a86ae782918488924f67a832d216"),
+)
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_GIT_OID = re.compile(r"[0-9a-f]{40}\Z")
 _INT = ("scalar", int)
 _FLOAT = ("scalar", float)
 _BOOL = ("scalar", bool)
@@ -74,6 +116,46 @@ def _object(**children: Any) -> tuple[str, dict[str, Any]]:
 
 def _list(*children: Any) -> tuple[str, tuple[Any, ...]]:
     return ("list", children)
+
+
+_PRIMARY_EVALUATOR_SOURCE_FILE_SCHEMA = _object(role=_STR, relative_path=_STR, sha256=_STR)
+_PRIMARY_EVALUATOR_CERTIFICATION_SCHEMA = _object(
+    evaluator=_object(evaluator_id=_STR, protocol_id=_STR),
+    implementation=_object(commit=_STR, tree=_STR),
+    config=_object(
+        relative_path=_STR,
+        raw_size_bytes=_INT,
+        raw_sha256=_STR,
+        canonical_size_bytes=_INT,
+        canonical_sha256=_STR,
+    ),
+    authority_manifest=_object(
+        relative_path=_STR,
+        raw_size_bytes=_INT,
+        raw_sha256=_STR,
+        canonical_size_bytes=_INT,
+        canonical_sha256=_STR,
+    ),
+    authority_archive_inventory=_object(
+        archive_size_bytes=_INT,
+        archive_sha256=_STR,
+        file_count=_INT,
+        inventory_sha256=_STR,
+    ),
+    source_files=_list(_PRIMARY_EVALUATOR_SOURCE_FILE_SCHEMA, _PRIMARY_EVALUATOR_SOURCE_FILE_SCHEMA),
+    independent_audit=_object(
+        stage=_STR,
+        classification=_STR,
+        formal_return_code=_INT,
+        script_size_bytes=_INT,
+        script_sha256=_STR,
+        mutation_cases_rejected=_INT,
+        independent_oracle_cases=_INT,
+        evaluator_tests_passed=_INT,
+        full_cpu_tests_passed=_INT,
+        clean_archive_tests_passed=_INT,
+    ),
+)
 
 
 _VENDOR_INCLUDE_ROW = _object(role=_STR, relative_path=_STR, sha256=_STR)
@@ -102,6 +184,7 @@ _TRAINING_CONTRACT_SCHEMA = _object(
         vendor_includes=_list(*(_VENDOR_INCLUDE_ROW for _ in range(4))),
         vendor_runtime=_VENDOR_RUNTIME_BINDING,
         vendor_manifest=_VENDOR_MANIFEST_BINDING,
+        primary_evaluator_certification=_PRIMARY_EVALUATOR_CERTIFICATION_SCHEMA,
         conversion_r3=_object(
             artifact_root=_STR,
             completion_sha256=_STR,
@@ -232,6 +315,19 @@ def _numeric(
 _TRAINING_CONTRACT_NUMERIC_CONSTRAINTS = {
     "/schema_version": _numeric(int, 1, "schema_version", lower=1),
     "/source_bindings/baseline_config/size_bytes": _numeric(int, 4316, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/config/raw_size_bytes": _numeric(int, PRIMARY_EVALUATOR_CONFIG_RAW_SIZE_BYTES, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/config/canonical_size_bytes": _numeric(int, PRIMARY_EVALUATOR_CONFIG_CANONICAL_SIZE_BYTES, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/authority_manifest/raw_size_bytes": _numeric(int, PRIMARY_EVALUATOR_MANIFEST_RAW_SIZE_BYTES, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/authority_manifest/canonical_size_bytes": _numeric(int, PRIMARY_EVALUATOR_MANIFEST_CANONICAL_SIZE_BYTES, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/authority_archive_inventory/archive_size_bytes": _numeric(int, PRIMARY_EVALUATOR_ARCHIVE_SIZE_BYTES, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/authority_archive_inventory/file_count": _numeric(int, PRIMARY_EVALUATOR_AUTHORITY_FILE_COUNT, "count", lower=1),
+    "/source_bindings/primary_evaluator_certification/independent_audit/formal_return_code": _numeric(int, PRIMARY_EVALUATOR_AUDIT_RETURN_CODE, "process_exit_code", lower=0),
+    "/source_bindings/primary_evaluator_certification/independent_audit/script_size_bytes": _numeric(int, PRIMARY_EVALUATOR_AUDIT_SCRIPT_SIZE_BYTES, "size_bytes", lower=1),
+    "/source_bindings/primary_evaluator_certification/independent_audit/mutation_cases_rejected": _numeric(int, PRIMARY_EVALUATOR_AUDIT_MUTATION_CASES_REJECTED, "case_count", lower=0),
+    "/source_bindings/primary_evaluator_certification/independent_audit/independent_oracle_cases": _numeric(int, PRIMARY_EVALUATOR_AUDIT_INDEPENDENT_ORACLE_CASES, "case_count", lower=0),
+    "/source_bindings/primary_evaluator_certification/independent_audit/evaluator_tests_passed": _numeric(int, PRIMARY_EVALUATOR_AUDIT_EVALUATOR_TESTS_PASSED, "test_count", lower=0),
+    "/source_bindings/primary_evaluator_certification/independent_audit/full_cpu_tests_passed": _numeric(int, PRIMARY_EVALUATOR_AUDIT_FULL_CPU_TESTS_PASSED, "test_count", lower=0),
+    "/source_bindings/primary_evaluator_certification/independent_audit/clean_archive_tests_passed": _numeric(int, PRIMARY_EVALUATOR_AUDIT_CLEAN_ARCHIVE_TESTS_PASSED, "test_count", lower=0),
     "/model/num_classes": _numeric(int, 10, "count", lower=1),
     "/model/parameter_count": _numeric(int, 20094584, "count", lower=1),
     "/model/input_size/0": _numeric(int, 640, "size", lower=1),
@@ -305,6 +401,18 @@ _SEMANTIC_SYNTAX_OR_BINDING_POINTERS = frozenset(
         "/source_bindings/conversion_r3/category_contract_sha256",
         "/source_bindings/conversion_r3/source_identity_sha256",
         *(f"/source_bindings/vendor_includes/{index}/{field}" for index in range(4) for field in ("relative_path", "sha256")),
+        "/source_bindings/primary_evaluator_certification/implementation/commit",
+        "/source_bindings/primary_evaluator_certification/implementation/tree",
+        "/source_bindings/primary_evaluator_certification/config/relative_path",
+        "/source_bindings/primary_evaluator_certification/config/raw_sha256",
+        "/source_bindings/primary_evaluator_certification/config/canonical_sha256",
+        "/source_bindings/primary_evaluator_certification/authority_manifest/relative_path",
+        "/source_bindings/primary_evaluator_certification/authority_manifest/raw_sha256",
+        "/source_bindings/primary_evaluator_certification/authority_manifest/canonical_sha256",
+        "/source_bindings/primary_evaluator_certification/authority_archive_inventory/archive_sha256",
+        "/source_bindings/primary_evaluator_certification/authority_archive_inventory/inventory_sha256",
+        *(f"/source_bindings/primary_evaluator_certification/source_files/{index}/{field}" for index in range(2) for field in ("relative_path", "sha256")),
+        "/source_bindings/primary_evaluator_certification/independent_audit/script_sha256",
     }
 )
 
@@ -384,6 +492,12 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
     _semantic_leaf_rule("SEM_TRAINING_CONTRACT_ID", "/training_contract_id", "rtdetrv2_r18_visdrone_baseline_training_v1", "contract identity"),
     _semantic_leaf_rule("SEM_BASELINE_ID", "/baseline_id", "rtdetrv2_r18_visdrone_baseline_v1", "baseline identity"),
     _semantic_leaf_rule("SEM_OWNER_DECISION", "/owner_decision", "T1_RANDOM_INITIALIZATION", "owner decision"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFICATION_EVALUATOR", "/source_bindings/primary_evaluator_certification/evaluator/evaluator_id", PRIMARY_EVALUATOR_ID, "certified evaluator identity"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFICATION_PROTOCOL", "/source_bindings/primary_evaluator_certification/evaluator/protocol_id", PRIMARY_EVALUATOR_PROTOCOL_ID, "certified protocol identity"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFICATION_SOURCE_ROLE_0", "/source_bindings/primary_evaluator_certification/source_files/0/role", "primary_evaluator", "certified evaluator source role"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFICATION_SOURCE_ROLE_1", "/source_bindings/primary_evaluator_certification/source_files/1/role", "evaluation_protocol", "certified evaluator source role"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFICATION_AUDIT_STAGE", "/source_bindings/primary_evaluator_certification/independent_audit/stage", PRIMARY_EVALUATOR_AUDIT_STAGE, "independent audit identity"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFICATION_AUDIT_CLASSIFICATION", "/source_bindings/primary_evaluator_certification/independent_audit/classification", PRIMARY_EVALUATOR_AUDIT_CLASSIFICATION, "independent audit identity"),
     _semantic_leaf_rule("SEM_VENDOR_ROLE_0", "/source_bindings/vendor_includes/0/role", "dataloader", "vendor source role", kind="enum", allowed=("dataloader", "optimizer", "model", "runtime")),
     _semantic_leaf_rule("SEM_VENDOR_ROLE_1", "/source_bindings/vendor_includes/1/role", "optimizer", "vendor source role", kind="enum", allowed=("dataloader", "optimizer", "model", "runtime")),
     _semantic_leaf_rule("SEM_VENDOR_ROLE_2", "/source_bindings/vendor_includes/2/role", "model", "vendor source role", kind="enum", allowed=("dataloader", "optimizer", "model", "runtime")),
@@ -447,8 +561,8 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
     _semantic_leaf_rule("SEM_AUGMENTATION_RUNTIME_BINDING", "/augmentation/runtime_transform_identity_and_rng_binding_required", True, "augmentation runtime binding"),
     _semantic_leaf_rule("SEM_PRIMARY_EVALUATOR", "/evaluation_and_selection/primary_evaluator", "visdrone_official_style_v1", "primary evaluator", kind="enum", allowed=("visdrone_official_style_v1", "coco_secondary_vendor_v1")),
     _semantic_leaf_rule("SEM_PRIMARY_REQUIRED", "/evaluation_and_selection/primary_evaluator_required_before_training", True, "primary evaluator gate"),
-    _semantic_leaf_rule("SEM_PRIMARY_CERTIFIED", "/evaluation_and_selection/primary_evaluator_independently_certified", False, "primary evaluator certification"),
-    _semantic_leaf_rule("SEM_TRAINING_LAUNCH_BLOCKED", "/evaluation_and_selection/training_launch_blocked", True, "training launch gate"),
+    _semantic_leaf_rule("SEM_PRIMARY_CERTIFIED", "/evaluation_and_selection/primary_evaluator_independently_certified", True, "primary evaluator certification"),
+    _semantic_leaf_rule("SEM_TRAINING_LAUNCH_BLOCKED", "/evaluation_and_selection/training_launch_blocked", False, "training launch gate"),
     _semantic_leaf_rule("SEM_SECONDARY_EVALUATOR", "/evaluation_and_selection/secondary_evaluator", "coco_secondary_vendor_v1", "secondary evaluator", kind="enum", allowed=("coco_secondary_vendor_v1", "visdrone_official_style_v1")),
     _semantic_leaf_rule("SEM_SECONDARY_DIAGNOSTIC", "/evaluation_and_selection/secondary_diagnostic_only", True, "secondary evaluator role"),
     _semantic_leaf_rule("SEM_SECONDARY_NO_CERTIFY", "/evaluation_and_selection/secondary_cannot_certify_or_select", True, "secondary evaluator role"),
@@ -509,6 +623,13 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
         "/source_bindings/vendor_includes",
         ("dataloader", "optimizer", "model", "runtime"),
         "vendor include role order",
+        member_field="role",
+    ),
+    _semantic_sequence_rule(
+        "SEM_PRIMARY_EVALUATOR_SOURCE_FILE_ORDER",
+        "/source_bindings/primary_evaluator_certification/source_files",
+        ("primary_evaluator", "evaluation_protocol"),
+        "certified evaluator source-file order",
         member_field="role",
     ),
     _semantic_sequence_rule(
@@ -587,10 +708,10 @@ _TRAINING_CONTRACT_SEMANTIC_RULES = (
         "REL_PRIMARY_EVALUATOR_LAUNCH_GATE",
         {
             "/evaluation_and_selection/primary_evaluator_required_before_training": True,
-            "/evaluation_and_selection/primary_evaluator_independently_certified": False,
-            "/evaluation_and_selection/training_launch_blocked": True,
+            "/evaluation_and_selection/primary_evaluator_independently_certified": True,
+            "/evaluation_and_selection/training_launch_blocked": False,
         },
-        "uncertified primary evaluator launch gate",
+        "certified primary evaluator launch gate",
     ),
     _semantic_relation_rule(
         "REL_DEVELOPMENT_ONLY_SELECTION",
@@ -1072,6 +1193,97 @@ def _assert_sha(value: Any, field: str) -> str:
     return value
 
 
+def _assert_git_oid(value: Any, field: str) -> str:
+    if type(value) is not str or _GIT_OID.fullmatch(value) is None:
+        raise TrainingContractError(f"{field} must be 40 lowercase hex characters")
+    return value
+
+
+def _validate_primary_evaluator_certification(config: dict[str, Any]) -> None:
+    certification = config["source_bindings"]["primary_evaluator_certification"]
+    evaluator = certification["evaluator"]
+    if evaluator != {
+        "evaluator_id": PRIMARY_EVALUATOR_ID,
+        "protocol_id": PRIMARY_EVALUATOR_PROTOCOL_ID,
+    }:
+        raise TrainingContractError("primary evaluator certification identity drift")
+    if config["evaluation_and_selection"]["primary_evaluator"] != evaluator["protocol_id"]:
+        raise TrainingContractError("primary evaluator protocol binding drift")
+
+    implementation = certification["implementation"]
+    _assert_git_oid(implementation["commit"], "primary evaluator implementation.commit")
+    _assert_git_oid(implementation["tree"], "primary evaluator implementation.tree")
+    if implementation != {
+        "commit": PRIMARY_EVALUATOR_IMPLEMENTATION_COMMIT,
+        "tree": PRIMARY_EVALUATOR_IMPLEMENTATION_TREE,
+    }:
+        raise TrainingContractError("primary evaluator implementation provenance drift")
+
+    evaluator_config = certification["config"]
+    _assert_relative_path(evaluator_config["relative_path"], "primary evaluator config.relative_path")
+    _assert_sha(evaluator_config["raw_sha256"], "primary evaluator config.raw_sha256")
+    _assert_sha(evaluator_config["canonical_sha256"], "primary evaluator config.canonical_sha256")
+    if evaluator_config != {
+        "relative_path": PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH,
+        "raw_size_bytes": PRIMARY_EVALUATOR_CONFIG_RAW_SIZE_BYTES,
+        "raw_sha256": PRIMARY_EVALUATOR_CONFIG_RAW_SHA256,
+        "canonical_size_bytes": PRIMARY_EVALUATOR_CONFIG_CANONICAL_SIZE_BYTES,
+        "canonical_sha256": PRIMARY_EVALUATOR_CONFIG_CANONICAL_SHA256,
+    }:
+        raise TrainingContractError("primary evaluator config certification identity drift")
+
+    authority_manifest = certification["authority_manifest"]
+    _assert_relative_path(authority_manifest["relative_path"], "primary evaluator authority_manifest.relative_path")
+    _assert_sha(authority_manifest["raw_sha256"], "primary evaluator authority_manifest.raw_sha256")
+    _assert_sha(authority_manifest["canonical_sha256"], "primary evaluator authority_manifest.canonical_sha256")
+    if authority_manifest != {
+        "relative_path": PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH,
+        "raw_size_bytes": PRIMARY_EVALUATOR_MANIFEST_RAW_SIZE_BYTES,
+        "raw_sha256": PRIMARY_EVALUATOR_MANIFEST_RAW_SHA256,
+        "canonical_size_bytes": PRIMARY_EVALUATOR_MANIFEST_CANONICAL_SIZE_BYTES,
+        "canonical_sha256": PRIMARY_EVALUATOR_MANIFEST_CANONICAL_SHA256,
+    }:
+        raise TrainingContractError("primary evaluator authority manifest certification identity drift")
+
+    archive_inventory = certification["authority_archive_inventory"]
+    _assert_sha(archive_inventory["archive_sha256"], "primary evaluator archive.sha256")
+    _assert_sha(archive_inventory["inventory_sha256"], "primary evaluator inventory.sha256")
+    if archive_inventory != {
+        "archive_size_bytes": PRIMARY_EVALUATOR_ARCHIVE_SIZE_BYTES,
+        "archive_sha256": PRIMARY_EVALUATOR_ARCHIVE_SHA256,
+        "file_count": PRIMARY_EVALUATOR_AUTHORITY_FILE_COUNT,
+        "inventory_sha256": PRIMARY_EVALUATOR_AUTHORITY_INVENTORY_SHA256,
+    }:
+        raise TrainingContractError("primary evaluator archive/inventory certification identity drift")
+
+    source_files = certification["source_files"]
+    expected_source_files = [
+        {"role": role, "relative_path": relative, "sha256": sha256}
+        for role, relative, sha256 in PRIMARY_EVALUATOR_SOURCE_FILES
+    ]
+    for index, row in enumerate(source_files):
+        _assert_relative_path(row["relative_path"], f"primary evaluator source_files[{index}].relative_path")
+        _assert_sha(row["sha256"], f"primary evaluator source_files[{index}].sha256")
+    if source_files != expected_source_files:
+        raise TrainingContractError("primary evaluator source-file certification identity drift")
+
+    audit = certification["independent_audit"]
+    _assert_sha(audit["script_sha256"], "primary evaluator audit.script_sha256")
+    if audit != {
+        "stage": PRIMARY_EVALUATOR_AUDIT_STAGE,
+        "classification": PRIMARY_EVALUATOR_AUDIT_CLASSIFICATION,
+        "formal_return_code": PRIMARY_EVALUATOR_AUDIT_RETURN_CODE,
+        "script_size_bytes": PRIMARY_EVALUATOR_AUDIT_SCRIPT_SIZE_BYTES,
+        "script_sha256": PRIMARY_EVALUATOR_AUDIT_SCRIPT_SHA256,
+        "mutation_cases_rejected": PRIMARY_EVALUATOR_AUDIT_MUTATION_CASES_REJECTED,
+        "independent_oracle_cases": PRIMARY_EVALUATOR_AUDIT_INDEPENDENT_ORACLE_CASES,
+        "evaluator_tests_passed": PRIMARY_EVALUATOR_AUDIT_EVALUATOR_TESTS_PASSED,
+        "full_cpu_tests_passed": PRIMARY_EVALUATOR_AUDIT_FULL_CPU_TESTS_PASSED,
+        "clean_archive_tests_passed": PRIMARY_EVALUATOR_AUDIT_CLEAN_ARCHIVE_TESTS_PASSED,
+    }:
+        raise TrainingContractError("primary evaluator independent-audit certification identity drift")
+
+
 def _validate_path_and_sha_fields(config: dict[str, Any]) -> None:
     sources = config["source_bindings"]
     baseline = sources["baseline_config"]
@@ -1121,6 +1333,7 @@ def _validate_path_and_sha_fields(config: dict[str, Any]) -> None:
         "source_identity_sha256": CONVERSION_R3_SOURCE_IDENTITY_SHA256,
     }:
         raise TrainingContractError("conversion R3 source binding drift")
+    _validate_primary_evaluator_certification(config)
 
 
 def _validate_cross_fields(config: dict[str, Any]) -> None:
@@ -1148,8 +1361,12 @@ def _validate_cross_fields(config: dict[str, Any]) -> None:
     evaluation = config["evaluation_and_selection"]
     if evaluation["evaluation_frequency_epochs"] != schedule["development_evaluation_frequency_epochs"]:
         raise TrainingContractError("development evaluation frequency drift")
-    if evaluation["primary_evaluator_independently_certified"] or not evaluation["training_launch_blocked"]:
-        raise TrainingContractError("primary evaluator launch gate must remain closed")
+    if (
+        evaluation["primary_evaluator_required_before_training"] is not True
+        or evaluation["primary_evaluator_independently_certified"] is not True
+        or evaluation["training_launch_blocked"] is not False
+    ):
+        raise TrainingContractError("primary evaluator certification gate is not open")
     if config["optimizer"]["type"] != "AdamW":
         raise TrainingContractError("optimizer type must remain AdamW")
     if config["amp"]["enabled"] is not True or config["ema"]["enabled"] is not True:
@@ -2368,6 +2585,233 @@ def _validate_vendor_source_files(repository: _VerifiedRepository, config: dict[
             raise TrainingContractError(f"vendor source identity drift: {relative}")
 
 
+_PRIMARY_EVALUATOR_CONFIG_KEYS = {
+    "schema_version",
+    "evaluator_id",
+    "protocol_id",
+    "schema_id",
+    "authority",
+    "input_contract",
+    "algorithm",
+    "output_contract",
+    "policy",
+}
+_PRIMARY_EVALUATOR_CONFIG_AUTHORITY_KEYS = {
+    "repository_url",
+    "branch",
+    "commit_oid",
+    "tree_oid",
+    "manifest_relative_path",
+    "manifest_raw_size_bytes",
+    "manifest_raw_sha256",
+    "manifest_canonical_size_bytes",
+    "manifest_canonical_sha256",
+    "inventory_canonical_sha256",
+    "authority_file_sha256",
+}
+_PRIMARY_EVALUATOR_CONFIG_POLICY_KEYS = {
+    "development_only",
+    "confirmatory_access_allowed",
+    "test_access_allowed",
+    "implementation_present",
+    "independent_audit_pass",
+    "training_gate_open",
+    "secondary_evaluator_can_certify",
+    "secondary_evaluator_can_select",
+}
+
+
+def _validate_primary_evaluator_config_document(
+    raw: bytes,
+    certification: dict[str, Any],
+) -> dict[str, Any]:
+    document = _parse_portable_json(raw, label="primary evaluator config")
+    _assert_exact_keys(document, _PRIMARY_EVALUATOR_CONFIG_KEYS, "primary evaluator config")
+    evaluator = certification["evaluator"]
+    if (
+        document["evaluator_id"] != evaluator["evaluator_id"]
+        or document["protocol_id"] != evaluator["protocol_id"]
+        or document["evaluator_id"] != PRIMARY_EVALUATOR_ID
+        or document["protocol_id"] != PRIMARY_EVALUATOR_PROTOCOL_ID
+        or document["schema_id"] != "primary_evaluator_input_v2"
+    ):
+        raise TrainingContractError("primary evaluator config evaluator/protocol identity drift")
+    authority = _assert_exact_keys(document["authority"], _PRIMARY_EVALUATOR_CONFIG_AUTHORITY_KEYS, "primary evaluator config authority")
+    if authority["repository_url"] != "https://github.com/VisDrone/VisDrone2018-DET-toolkit.git" or authority["branch"] != "master":
+        raise TrainingContractError("primary evaluator config authority repository drift")
+    _assert_git_oid(authority["commit_oid"], "primary evaluator config authority.commit_oid")
+    _assert_git_oid(authority["tree_oid"], "primary evaluator config authority.tree_oid")
+    if authority["authority_file_sha256"] != PRIMARY_EVALUATOR_AUTHORITY_FILE_SHA256:
+        raise TrainingContractError("primary evaluator config authority file identity drift")
+    manifest = certification["authority_manifest"]
+    if (
+        authority["commit_oid"] != "005445782213e20cb91bc50a597db3dd949e749a"
+        or authority["tree_oid"] != "038b9e68c6e9a93a64662a4d7a39be2cd2c0654e"
+        or authority["manifest_relative_path"] != manifest["relative_path"]
+        or authority["manifest_raw_size_bytes"] != manifest["raw_size_bytes"]
+        or authority["manifest_raw_sha256"] != manifest["raw_sha256"]
+        or authority["manifest_canonical_size_bytes"] != manifest["canonical_size_bytes"]
+        or authority["manifest_canonical_sha256"] != manifest["canonical_sha256"]
+        or authority["inventory_canonical_sha256"] != certification["authority_archive_inventory"]["inventory_sha256"]
+    ):
+        raise TrainingContractError("primary evaluator config authority manifest declaration drift")
+    policy = _assert_exact_keys(document["policy"], _PRIMARY_EVALUATOR_CONFIG_POLICY_KEYS, "primary evaluator config policy")
+    expected_policy = {
+        "development_only": True,
+        "confirmatory_access_allowed": False,
+        "test_access_allowed": False,
+        "implementation_present": True,
+        "independent_audit_pass": False,
+        "training_gate_open": False,
+        "secondary_evaluator_can_certify": False,
+        "secondary_evaluator_can_select": False,
+    }
+    if policy != expected_policy:
+        raise TrainingContractError("primary evaluator config historical policy drift")
+    return document
+
+
+_PRIMARY_EVALUATOR_MANIFEST_KEYS = {
+    "schema_version",
+    "authority_id",
+    "repository_url",
+    "branch",
+    "commit_oid",
+    "tree_oid",
+    "toolkit_version",
+    "algorithm_semantics_version",
+    "license_and_use_notice",
+    "archive",
+    "inventory",
+}
+_PRIMARY_EVALUATOR_MANIFEST_ARCHIVE_KEYS = {"filename", "prefix", "size_bytes", "sha256"}
+_PRIMARY_EVALUATOR_MANIFEST_INVENTORY_KEYS = {
+    "file_count",
+    "total_size_bytes",
+    "canonical_inventory_sha256",
+    "canonicalization",
+    "rows",
+}
+
+
+def _validate_primary_evaluator_manifest_document(
+    raw: bytes,
+    certification: dict[str, Any],
+) -> dict[str, Any]:
+    document = _parse_portable_json(raw, label="primary evaluator authority manifest")
+    _assert_exact_keys(document, _PRIMARY_EVALUATOR_MANIFEST_KEYS, "primary evaluator authority manifest")
+    if (
+        document["schema_version"] != 1
+        or document["authority_id"] != "visdrone2018_det_toolkit_005445782213e20c"
+        or document["repository_url"] != "https://github.com/VisDrone/VisDrone2018-DET-toolkit.git"
+        or document["branch"] != "master"
+        or document["toolkit_version"] != "1.0.4"
+        or document["algorithm_semantics_version"] != "1.0.3"
+    ):
+        raise TrainingContractError("primary evaluator authority manifest identity drift")
+    _assert_git_oid(document["commit_oid"], "primary evaluator authority manifest.commit_oid")
+    _assert_git_oid(document["tree_oid"], "primary evaluator authority manifest.tree_oid")
+    if document["commit_oid"] != "005445782213e20cb91bc50a597db3dd949e749a" or document["tree_oid"] != "038b9e68c6e9a93a64662a4d7a39be2cd2c0654e":
+        raise TrainingContractError("primary evaluator authority manifest Git identity drift")
+    archive = _assert_exact_keys(document["archive"], _PRIMARY_EVALUATOR_MANIFEST_ARCHIVE_KEYS, "primary evaluator authority manifest archive")
+    archive_identity = certification["authority_archive_inventory"]
+    if (
+        archive["filename"] != "visdrone_det_toolkit_005445782213e20c.tar"
+        or archive["prefix"] != "VisDrone2018-DET-toolkit-005445782213e20c/"
+        or archive["size_bytes"] != archive_identity["archive_size_bytes"]
+        or archive["sha256"] != archive_identity["archive_sha256"]
+    ):
+        raise TrainingContractError("primary evaluator authority archive declaration drift")
+    inventory = _assert_exact_keys(document["inventory"], _PRIMARY_EVALUATOR_MANIFEST_INVENTORY_KEYS, "primary evaluator authority manifest inventory")
+    if (
+        inventory["file_count"] != archive_identity["file_count"]
+        or inventory["total_size_bytes"] != 22093
+        or inventory["canonical_inventory_sha256"] != archive_identity["inventory_sha256"]
+        or inventory["canonicalization"] != "UTF-8 JSON of rows with ensure_ascii=true, sort_keys=true, separators=(',',':'), no trailing LF"
+        or type(inventory["rows"]) is not list
+        or len(inventory["rows"]) != archive_identity["file_count"]
+    ):
+        raise TrainingContractError("primary evaluator authority inventory declaration drift")
+    previous: str | None = None
+    for row in inventory["rows"]:
+        if type(row) is not dict or set(row) != {"relative_path", "git_mode", "git_blob_oid", "size_bytes", "sha256"}:
+            raise TrainingContractError("primary evaluator authority inventory row schema drift")
+        relative = _assert_relative_path(row["relative_path"], "primary evaluator authority inventory relative_path")
+        if previous is not None and relative <= previous:
+            raise TrainingContractError("primary evaluator authority inventory rows are not sorted")
+        previous = relative
+        _assert_git_oid(row["git_blob_oid"], "primary evaluator authority inventory git_blob_oid")
+        _assert_sha(row["sha256"], "primary evaluator authority inventory sha256")
+        if type(row["git_mode"]) is not str or type(row["size_bytes"]) is not int or row["size_bytes"] < 0:
+            raise TrainingContractError("primary evaluator authority inventory row type drift")
+    if sum(row["size_bytes"] for row in inventory["rows"]) != inventory["total_size_bytes"]:
+        raise TrainingContractError("primary evaluator authority inventory total drift")
+    return document
+
+
+def _validate_primary_evaluator_runtime(
+    repository: _VerifiedRepository,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    certification = config["source_bindings"]["primary_evaluator_certification"]
+    config_identity = certification["config"]
+    config_raw = repository.read_file(config_identity["relative_path"])
+    if len(config_raw) != config_identity["raw_size_bytes"] or _sha256_bytes(config_raw) != config_identity["raw_sha256"]:
+        raise TrainingContractError("primary evaluator config raw identity drift")
+    config_document = _validate_primary_evaluator_config_document(config_raw, certification)
+    config_canonical = _canonical_json_bytes(config_document)
+    if len(config_canonical) != config_identity["canonical_size_bytes"] or _sha256_bytes(config_canonical) != config_identity["canonical_sha256"]:
+        raise TrainingContractError("primary evaluator config canonical identity drift")
+
+    manifest_identity = certification["authority_manifest"]
+    manifest_raw = repository.read_file(manifest_identity["relative_path"])
+    if len(manifest_raw) != manifest_identity["raw_size_bytes"] or _sha256_bytes(manifest_raw) != manifest_identity["raw_sha256"]:
+        raise TrainingContractError("primary evaluator authority manifest raw identity drift")
+    manifest_document = _validate_primary_evaluator_manifest_document(manifest_raw, certification)
+    manifest_rows = {
+        row["relative_path"]: row["sha256"]
+        for row in manifest_document["inventory"]["rows"]
+    }
+    authority_file_sha256 = config_document["authority"]["authority_file_sha256"]
+    if {
+        relative: manifest_rows.get(relative)
+        for relative in authority_file_sha256
+    } != authority_file_sha256:
+        raise TrainingContractError("primary evaluator config/manifest authority file drift")
+    manifest_canonical = _canonical_json_bytes(manifest_document)
+    if len(manifest_canonical) != manifest_identity["canonical_size_bytes"] or _sha256_bytes(manifest_canonical) != manifest_identity["canonical_sha256"]:
+        raise TrainingContractError("primary evaluator authority manifest canonical identity drift")
+
+    source_files: list[dict[str, str]] = []
+    for source in certification["source_files"]:
+        raw = repository.read_file(source["relative_path"])
+        if _sha256_bytes(raw) != source["sha256"]:
+            raise TrainingContractError(f"primary evaluator source identity drift: {source['relative_path']}")
+        source_files.append(copy.deepcopy(source))
+
+    return {
+        "evaluator": copy.deepcopy(certification["evaluator"]),
+        "implementation": copy.deepcopy(certification["implementation"]),
+        "config": {
+            "relative_path": config_identity["relative_path"],
+            "raw_size_bytes": len(config_raw),
+            "raw_sha256": _sha256_bytes(config_raw),
+            "canonical_size_bytes": len(config_canonical),
+            "canonical_sha256": _sha256_bytes(config_canonical),
+        },
+        "authority_manifest": {
+            "relative_path": manifest_identity["relative_path"],
+            "raw_size_bytes": len(manifest_raw),
+            "raw_sha256": _sha256_bytes(manifest_raw),
+            "canonical_size_bytes": len(manifest_canonical),
+            "canonical_sha256": _sha256_bytes(manifest_canonical),
+        },
+        "authority_archive_inventory": copy.deepcopy(certification["authority_archive_inventory"]),
+        "source_files": source_files,
+        "independent_audit": copy.deepcopy(certification["independent_audit"]),
+    }
+
+
 def training_contract_binding(repo_root: str | Path, config_path: str | Path = TRAINING_CONFIG_RELATIVE_PATH) -> dict[str, Any]:
     """Return raw/canonical identities after complete validation."""
 
@@ -2377,6 +2821,7 @@ def training_contract_binding(repo_root: str | Path, config_path: str | Path = T
         manifest = _parse_vendor_manifest(manifest_raw)
         inventory = repository.inventory_directory(VENDOR_RUNTIME_RELATIVE_PATH)
         _validate_vendor_inventory(manifest, manifest_raw, inventory, config)
+        primary_evaluator_binding = _validate_primary_evaluator_runtime(repository, config)
         conversion_binding = _validate_conversion_r3_runtime(repository, config)
         _validate_vendor_source_files(repository, config)
         canonical = canonical_training_contract_bytes(config)
@@ -2400,5 +2845,6 @@ def training_contract_binding(repo_root: str | Path, config_path: str | Path = T
                 "manifest_raw_sha256": _sha256_bytes(manifest_raw),
                 "manifest_inventory_sha256": inventory["manifest_inventory_sha256"],
             },
+            "primary_evaluator_runtime_binding": primary_evaluator_binding,
             "conversion_r3_runtime_binding": conversion_binding,
         }

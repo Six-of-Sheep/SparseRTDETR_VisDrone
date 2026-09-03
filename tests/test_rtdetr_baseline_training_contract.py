@@ -109,6 +109,14 @@ def _portable_root(tmp_path: Path, training_bytes: bytes, *, include_conversion:
     manifest_target = tmp_path / "manifests/rtdetrv2_upstream.json"
     manifest_target.parent.mkdir(parents=True, exist_ok=True)
     manifest_target.write_bytes((ROOT / "manifests/rtdetrv2_upstream.json").read_bytes())
+    for relative in (
+        contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH,
+        contract.PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH,
+        *(relative for _, relative, _ in contract.PRIMARY_EVALUATOR_SOURCE_FILES),
+    ):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / relative).read_bytes())
     if include_conversion:
         shutil.copytree(
             ROOT / contract.CONVERSION_R3_RELATIVE_PATH,
@@ -166,9 +174,9 @@ def test_positive_load_validate_canonical_and_binding():
         "training_contract_id": "rtdetrv2_r18_visdrone_baseline_training_v1",
         "baseline_id": "rtdetrv2_r18_visdrone_baseline_v1",
         "relative_path": contract.TRAINING_CONFIG_RELATIVE_PATH,
-        "raw_size_bytes": 8513,
-        "raw_sha256": "bf6631644d218fe65998dcd4267d93a040b709a864577f7216052dd2a9e97239",
-        "canonical_size_bytes": 7227,
+        "raw_size_bytes": 10907,
+        "raw_sha256": "0f9ddb2e6d8ec6d2b21e42f6c419511f5bd70df287457c2c2b6109eaf8a93297",
+        "canonical_size_bytes": 9117,
         "canonical_sha256": contract.TRAINING_CONTRACT_CANONICAL_SHA256,
         "vendor_runtime_binding": {
             "relative_path": "vendor/rtdetrv2_pytorch",
@@ -193,7 +201,357 @@ def test_positive_load_validate_canonical_and_binding():
             "category_contract_sha256": "b4b309f357cbe130a505a610dff340cc498dc74f766384c4559b2acd900728a0",
             "source_identity_sha256": "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9",
         },
+        "primary_evaluator_runtime_binding": {
+            "evaluator": {
+                "evaluator_id": "visdrone_official_primary_evaluator_v1",
+                "protocol_id": "visdrone_official_style_v1",
+            },
+            "implementation": {
+                "commit": "036cca4d127ddd9e10e3cc7900c3eb759b55f59f",
+                "tree": "fbe931976f6bac7d8e4b3bb319ff1905e99c5444",
+            },
+            "config": {
+                "relative_path": "configs/baseline/visdrone_official_evaluator_v1.json",
+                "raw_size_bytes": 3857,
+                "raw_sha256": "36cfa69b0ff645c47c871283f917577ca27c760daf424e9544ab363dbf080ff5",
+                "canonical_size_bytes": 3295,
+                "canonical_sha256": "355de90bdb6007ed42ed65b3f653a1b8ea57f2184ab4fd48a9561b692b993998",
+            },
+            "authority_manifest": {
+                "relative_path": "manifests/visdrone_det_toolkit_005445.json",
+                "raw_size_bytes": 4166,
+                "raw_sha256": "71168baf15d6d945fd5a4a6c5605b5ba533524efeede2a9d4020127576c1b36f",
+                "canonical_size_bytes": 3351,
+                "canonical_sha256": "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3",
+            },
+            "authority_archive_inventory": {
+                "archive_size_bytes": 40960,
+                "archive_sha256": "bf19dd9477210adf106c7cbf2a72370ed4af22dedb577f361f3dc9e77e99baa4",
+                "file_count": 11,
+                "inventory_sha256": "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0",
+            },
+            "source_files": [
+                {
+                    "role": "primary_evaluator",
+                    "relative_path": "src/sparse_rtdetr/baseline/primary_evaluator.py",
+                    "sha256": "d831fc641ac930822e693f99fbbcdd48abbe76738a618525135dd099963901bd",
+                },
+                {
+                    "role": "evaluation_protocol",
+                    "relative_path": "src/sparse_rtdetr/data_protocol/evaluation.py",
+                    "sha256": "e70ad71bb834b4cfc5d25441a78d2caa5982a86ae782918488924f67a832d216",
+                },
+            ],
+            "independent_audit": {
+                "stage": "P3_BASELINE_PRIMARY_EVALUATOR_V1_INDEPENDENT_AUDIT_R1",
+                "classification": "PRIMARY_EVALUATOR_V1_CERTIFIED",
+                "formal_return_code": 0,
+                "script_size_bytes": 51244,
+                "script_sha256": "4182f4082756fb2e52d6969e93889f24ae9af398cc98d67a1b9d990041b5524a",
+                "mutation_cases_rejected": 129,
+                "independent_oracle_cases": 100,
+                "evaluator_tests_passed": 46,
+                "full_cpu_tests_passed": 1116,
+                "clean_archive_tests_passed": 46,
+            },
+        },
     }
+
+
+def test_primary_evaluator_certification_document_and_historical_policy_are_frozen():
+    training = _training()
+    certification = training["source_bindings"]["primary_evaluator_certification"]
+    assert set(certification) == {
+        "evaluator",
+        "implementation",
+        "config",
+        "authority_manifest",
+        "authority_archive_inventory",
+        "source_files",
+        "independent_audit",
+    }
+    evaluator_config = json.loads(
+        (ROOT / contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH).read_text(encoding="utf-8")
+    )
+    assert evaluator_config["evaluator_id"] == certification["evaluator"]["evaluator_id"]
+    assert evaluator_config["protocol_id"] == certification["evaluator"]["protocol_id"]
+    assert evaluator_config["policy"]["independent_audit_pass"] is False
+    assert evaluator_config["policy"]["training_gate_open"] is False
+    assert certification["independent_audit"] == {
+        "stage": "P3_BASELINE_PRIMARY_EVALUATOR_V1_INDEPENDENT_AUDIT_R1",
+        "classification": "PRIMARY_EVALUATOR_V1_CERTIFIED",
+        "formal_return_code": 0,
+        "script_size_bytes": 51244,
+        "script_sha256": "4182f4082756fb2e52d6969e93889f24ae9af398cc98d67a1b9d990041b5524a",
+        "mutation_cases_rejected": 129,
+        "independent_oracle_cases": 100,
+        "evaluator_tests_passed": 46,
+        "full_cpu_tests_passed": 1116,
+        "clean_archive_tests_passed": 46,
+    }
+    contract.validate_training_contract(training, _baseline())
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("source_bindings", "primary_evaluator_certification", "evaluator"),
+        ("source_bindings", "primary_evaluator_certification", "implementation"),
+        ("source_bindings", "primary_evaluator_certification", "config"),
+        ("source_bindings", "primary_evaluator_certification", "authority_manifest"),
+        ("source_bindings", "primary_evaluator_certification", "authority_archive_inventory"),
+        ("source_bindings", "primary_evaluator_certification", "source_files", 0),
+        ("source_bindings", "primary_evaluator_certification", "source_files", 1),
+        ("source_bindings", "primary_evaluator_certification", "independent_audit"),
+    ],
+)
+def test_primary_evaluator_certification_nested_objects_are_closed(path):
+    candidate = _training()
+    target = candidate
+    for token in path:
+        target = target[token] if type(target) is dict else target[token]
+    first = next(iter(target))
+    target["unexpected_key"] = "value"
+    with pytest.raises(contract.TrainingContractError, match="closed schema extra keys"):
+        contract._validate_closed_schema(candidate)
+
+    candidate = _training()
+    target = candidate
+    for token in path:
+        target = target[token] if type(target) is dict else target[token]
+    target.pop(first)
+    with pytest.raises(contract.TrainingContractError, match="closed schema missing keys"):
+        contract._validate_closed_schema(candidate)
+
+
+@pytest.mark.parametrize(
+    ("required", "certified", "blocked"),
+    [
+        (False, False, False),
+        (False, False, True),
+        (False, True, False),
+        (False, True, True),
+        (True, False, False),
+        (True, False, True),
+        (True, True, True),
+        (True, True, False),
+    ],
+)
+def test_primary_evaluator_gate_truth_table_accepts_only_certified_open(required, certified, blocked):
+    candidate = _training()
+    evaluation = candidate["evaluation_and_selection"]
+    evaluation["primary_evaluator_required_before_training"] = required
+    evaluation["primary_evaluator_independently_certified"] = certified
+    evaluation["training_launch_blocked"] = blocked
+    if (required, certified, blocked) == (True, True, False):
+        contract._validate_cross_fields(candidate)
+    else:
+        with pytest.raises(contract.TrainingContractError):
+            contract._validate_cross_fields(candidate)
+
+
+@pytest.mark.parametrize(
+    ("pointer", "bad"),
+    [
+        ("/source_bindings/primary_evaluator_certification/implementation/commit", "0" * 40),
+        ("/source_bindings/primary_evaluator_certification/implementation/tree", "0" * 40),
+        ("/source_bindings/primary_evaluator_certification/config/relative_path", "../evaluator.json"),
+        ("/source_bindings/primary_evaluator_certification/config/raw_sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/config/canonical_sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/authority_manifest/relative_path", "/manifest.json"),
+        ("/source_bindings/primary_evaluator_certification/authority_manifest/raw_sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/authority_manifest/canonical_sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/authority_archive_inventory/archive_sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/authority_archive_inventory/inventory_sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/source_files/0/relative_path", "../primary.py"),
+        ("/source_bindings/primary_evaluator_certification/source_files/0/sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/source_files/1/relative_path", "absolute/path.py"),
+        ("/source_bindings/primary_evaluator_certification/source_files/1/sha256", "0" * 64),
+        ("/source_bindings/primary_evaluator_certification/independent_audit/script_sha256", "0" * 64),
+    ],
+)
+def test_primary_evaluator_certification_path_sha_and_git_identity_mutations_reject(pointer, bad):
+    candidate = _training()
+    _set_json_pointer(candidate, pointer, bad)
+    with pytest.raises(contract.TrainingContractError):
+        contract.validate_training_contract(candidate, _baseline())
+
+
+@pytest.mark.parametrize(
+    ("pointer", "bad"),
+    [
+        ("/source_bindings/primary_evaluator_certification/evaluator/evaluator_id", None),
+        ("/source_bindings/primary_evaluator_certification/implementation/commit", None),
+        ("/source_bindings/primary_evaluator_certification/config/relative_path", 1),
+        ("/source_bindings/primary_evaluator_certification/authority_manifest/raw_sha256", False),
+        ("/source_bindings/primary_evaluator_certification/authority_archive_inventory/archive_sha256", 1),
+        ("/source_bindings/primary_evaluator_certification/source_files/0/role", 1),
+        ("/source_bindings/primary_evaluator_certification/source_files/0/sha256", None),
+        ("/source_bindings/primary_evaluator_certification/independent_audit/classification", 1),
+        ("/source_bindings/primary_evaluator_certification/independent_audit/script_sha256", None),
+    ],
+)
+def test_primary_evaluator_certification_wrong_builtin_types_reject(pointer, bad):
+    candidate = _training()
+    _set_json_pointer(candidate, pointer, bad)
+    with pytest.raises(contract.TrainingContractError):
+        contract._validate_closed_schema(candidate)
+
+
+@pytest.mark.parametrize(
+    ("relative", "kind"),
+    [
+        (contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH, "missing"),
+        (contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH, "append"),
+        (contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH, "semantic"),
+        (contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH, "repack"),
+        (contract.PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH, "missing"),
+        (contract.PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH, "append"),
+        (contract.PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH, "semantic"),
+        (contract.PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH, "repack"),
+    ],
+)
+def test_primary_evaluator_config_and_manifest_runtime_identity_mutations_reject(full_portable_fixture, relative, kind):
+    path = full_portable_fixture / relative
+    original = path.read_bytes()
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    try:
+        if kind == "missing":
+            path.unlink()
+        elif kind == "append":
+            path.write_bytes(original + b" ")
+        else:
+            value = json.loads(original.decode("utf-8"))
+            if kind == "semantic":
+                if relative == contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH:
+                    value["evaluator_id"] = "other_evaluator"
+                else:
+                    value["toolkit_version"] = "other"
+            elif kind != "repack":
+                raise AssertionError(kind)
+            path.write_bytes(json.dumps(value, ensure_ascii=True, sort_keys=True, indent=2).encode("utf-8") + b"\n")
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(full_portable_fixture)
+    finally:
+        path.write_bytes(original)
+        path.chmod(original_mode)
+
+
+def test_primary_evaluator_config_and_manifest_coordinated_repack_rejects(full_portable_fixture):
+    config_path = full_portable_fixture / contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH
+    manifest_path = full_portable_fixture / contract.PRIMARY_EVALUATOR_MANIFEST_RELATIVE_PATH
+    config_original = config_path.read_bytes()
+    manifest_original = manifest_path.read_bytes()
+    try:
+        config_path.write_bytes(config_original + b" ")
+        manifest_path.write_bytes(manifest_original + b" ")
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(full_portable_fixture)
+    finally:
+        config_path.write_bytes(config_original)
+        manifest_path.write_bytes(manifest_original)
+
+
+def _remove_test_object(path: Path) -> None:
+    try:
+        observed = path.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(observed.st_mode):
+        path.rmdir()
+    else:
+        path.unlink()
+
+
+@pytest.mark.parametrize("source_index", [0, 1])
+@pytest.mark.parametrize("kind", ["missing", "rename", "bytes", "symlink", "hardlink", "directory", "fifo"])
+def test_primary_evaluator_source_file_object_matrix_rejects(full_portable_fixture, source_index, kind, tmp_path):
+    relative = contract.PRIMARY_EVALUATOR_SOURCE_FILES[source_index][1]
+    path = full_portable_fixture / relative
+    original = path.read_bytes()
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    renamed = path.with_name(path.name + ".renamed")
+    hardlink_source = tmp_path / "source-hardlink"
+    try:
+        if kind == "missing":
+            path.unlink()
+        elif kind == "rename":
+            path.rename(renamed)
+        elif kind == "bytes":
+            path.write_bytes(original + b"source mutation")
+        elif kind == "symlink":
+            path.unlink()
+            path.symlink_to(ROOT / relative)
+        elif kind == "hardlink":
+            _replace_with_hardlink(path, hardlink_source)
+        elif kind == "directory":
+            path.unlink()
+            path.mkdir()
+        elif kind == "fifo":
+            _replace_with_fifo(path)
+        else:
+            raise AssertionError(kind)
+        with pytest.raises(contract.TrainingContractError):
+            contract.training_contract_binding(full_portable_fixture)
+    finally:
+        _remove_test_object(path)
+        _remove_test_object(renamed)
+        path.write_bytes(original)
+        path.chmod(original_mode)
+        _remove_test_object(hardlink_source)
+
+
+@pytest.mark.parametrize("source_index", [0, 1])
+def test_primary_evaluator_source_file_changed_during_read_rejects(full_portable_fixture, source_index, monkeypatch):
+    relative = contract.PRIMARY_EVALUATOR_SOURCE_FILES[source_index][1]
+    basename = Path(relative).name
+    original_lstat = contract._lstat_at
+    seen = 0
+
+    def drifting_lstat(name, parent_fd):
+        nonlocal seen
+        observed = original_lstat(name, parent_fd)
+        if name == basename:
+            seen += 1
+            if seen >= 2:
+                return _stat_variant(observed, metadata=True)
+        return observed
+
+    monkeypatch.setattr(contract, "_lstat_at", drifting_lstat)
+    with pytest.raises(contract.TrainingContractError, match="changed while reading|metadata drift|identity drift"):
+        contract.training_contract_binding(full_portable_fixture)
+    assert seen >= 2
+
+
+def test_primary_evaluator_runtime_binding_is_detached_and_does_not_read_external_provenance(full_portable_fixture, monkeypatch):
+    seen_paths = []
+    original_read_file = contract._VerifiedRepository.read_file
+
+    def recording_read_file(repository, relative):
+        seen_paths.append(relative)
+        return original_read_file(repository, relative)
+
+    monkeypatch.setattr(contract._VerifiedRepository, "read_file", recording_read_file)
+    binding = contract.training_contract_binding(full_portable_fixture)
+    snapshot = copy.deepcopy(binding["primary_evaluator_runtime_binding"])
+    binding["primary_evaluator_runtime_binding"]["source_files"][0]["sha256"] = "0" * 64
+    binding["primary_evaluator_runtime_binding"]["config"]["raw_size_bytes"] = 1
+    assert binding["primary_evaluator_runtime_binding"] != snapshot
+    second = contract.training_contract_binding(full_portable_fixture)
+    assert second["primary_evaluator_runtime_binding"] == snapshot
+    assert all(type(relative) is str and not relative.startswith("/") for relative in seen_paths)
+    assert "visdrone_det_toolkit_005445782213e20c.tar" in SOURCE.read_text(encoding="utf-8")
+
+
+def test_primary_evaluator_config_authority_file_declarations_bind_to_frozen_manifest():
+    training = _training()
+    certification = training["source_bindings"]["primary_evaluator_certification"]
+    raw = (ROOT / contract.PRIMARY_EVALUATOR_CONFIG_RELATIVE_PATH).read_bytes()
+    document = json.loads(raw.decode("utf-8"))
+    document["authority"]["authority_file_sha256"]["utils/evalRes.m"] = "0" * 64
+    mutated = json.dumps(document, ensure_ascii=True, sort_keys=True, indent=2).encode("utf-8") + b"\n"
+    with pytest.raises(contract.TrainingContractError, match="authority file identity drift"):
+        contract._validate_primary_evaluator_config_document(mutated, certification)
 
 
 def test_closed_schema_exploit_replay_rejects_before_frozen_digest():
@@ -209,7 +567,7 @@ def test_closed_schema_all_object_roles_extra_missing_and_rename():
     valid = _training()
     roles = list(_closed_object_roles(valid))
     assert tuple(pointer for pointer, _, _ in roles) == contract._closed_schema_object_roles()
-    assert len(roles) == 33
+    assert len(roles) == 42
     cases = 0
     for pointer, _, schema in roles:
         _, required = schema
@@ -235,7 +593,7 @@ def test_closed_schema_all_object_roles_extra_missing_and_rename():
         with pytest.raises(contract.TrainingContractError, match="closed schema renamed keys"):
             contract._validate_closed_schema(renamed)
         cases += 1
-    assert cases == 99
+    assert cases == 126
 
 
 def _value_at_pointer(value, pointer):
@@ -304,7 +662,7 @@ def test_closed_schema_strict_scalar_and_amp_executable_parameter_types():
 def test_numeric_registry_exactly_covers_all_builtin_numeric_leaves():
     numeric = dict(_numeric_leaves(_training(), excluded=contract._EXTERNAL_BINDING_NUMERIC_POINTERS))
     registry = contract._TRAINING_CONTRACT_NUMERIC_CONSTRAINTS
-    assert len(numeric) == 54
+    assert len(numeric) == 67
     assert set(numeric) == set(registry)
     for pointer, value in numeric.items():
         constraint = registry[pointer]
@@ -336,12 +694,12 @@ def test_amp_executable_defaults_and_scalar_partition_are_frozen():
     semantic = set(contract.semantic_contract_inventory(training)["leaf_pointers"])
     syntax_or_binding = set(contract._SEMANTIC_SYNTAX_OR_BINDING_POINTERS)
     external_binding = set(contract._EXTERNAL_BINDING_POINTERS)
-    assert len(numeric) == 54
-    assert len(semantic) == 123
-    assert len(syntax_or_binding) == 21
+    assert len(numeric) == 67
+    assert len(semantic) == 129
+    assert len(syntax_or_binding) == 36
     assert len(external_binding) == 9
-    assert len(numeric | semantic | syntax_or_binding) == 198
-    assert len(numeric | semantic | syntax_or_binding | external_binding) == 207
+    assert len(numeric | semantic | syntax_or_binding) == 232
+    assert len(numeric | semantic | syntax_or_binding | external_binding) == 241
     assert not numeric & semantic
     assert not numeric & syntax_or_binding
     assert not semantic & syntax_or_binding
@@ -586,15 +944,15 @@ def _semantic_value_drift(expected):
 
 def test_semantic_registry_exactly_covers_all_in_scope_non_numeric_leaves():
     inventory = contract.semantic_contract_inventory(_training())
-    assert inventory["leaf_count"] == 123
-    assert inventory["registered_leaf_count"] == 123
+    assert inventory["leaf_count"] == 129
+    assert inventory["registered_leaf_count"] == 129
     assert inventory["missing"] == ()
     assert inventory["extra"] == ()
     assert inventory["duplicate"] == ()
-    assert inventory["sequence_rule_count"] == 6
+    assert inventory["sequence_rule_count"] == 7
     assert inventory["relation_rule_count"] == 12
     rule_ids = [rule["rule_id"] for rule in contract._TRAINING_CONTRACT_SEMANTIC_RULES]
-    assert len(rule_ids) == len(set(rule_ids)) == 141
+    assert len(rule_ids) == len(set(rule_ids)) == 148
     contract._validate_semantic_rules(_training())
 
 
@@ -704,7 +1062,7 @@ def test_semantic_layering_distinguishes_closed_numeric_path_semantic_relation_a
         contract.validate_training_contract(semantic, _baseline())
 
     relation = _training()
-    relation["evaluation_and_selection"]["primary_evaluator_independently_certified"] = True
+    relation["evaluation_and_selection"]["primary_evaluator_required_before_training"] = False
     relation["evaluation_and_selection"]["training_launch_blocked"] = False
     with pytest.raises(contract.TrainingContractError, match="semantic"):
         contract.validate_training_contract(relation, _baseline())
@@ -742,7 +1100,7 @@ def test_numeric_semantic_layers_are_distinct():
         contract.validate_training_contract(literal, _baseline())
 
     cross = _training()
-    cross["evaluation_and_selection"]["training_launch_blocked"] = False
+    cross["evaluation_and_selection"]["training_launch_blocked"] = True
     contract._validate_numeric_constraints(cross)
     with pytest.raises(contract.TrainingContractError, match=r"semantic literal mismatch"):
         contract.validate_training_contract(cross, _baseline())
@@ -774,7 +1132,7 @@ def test_validation_layers_have_distinct_rejections():
         contract.validate_training_contract(exact, _baseline())
 
     cross = _training()
-    cross["evaluation_and_selection"]["training_launch_blocked"] = False
+    cross["evaluation_and_selection"]["training_launch_blocked"] = True
     contract._validate_closed_schema(cross)
     contract._validate_numeric_constraints(cross)
     with pytest.raises(contract.TrainingContractError, match=r"semantic literal mismatch"):

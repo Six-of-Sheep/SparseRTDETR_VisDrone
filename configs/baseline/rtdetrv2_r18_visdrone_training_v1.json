@@ -34,6 +34,60 @@
       "raw_sha256": "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae",
       "canonical_inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
     },
+    "primary_evaluator_certification": {
+      "evaluator": {
+        "evaluator_id": "visdrone_official_primary_evaluator_v1",
+        "protocol_id": "visdrone_official_style_v1"
+      },
+      "implementation": {
+        "commit": "036cca4d127ddd9e10e3cc7900c3eb759b55f59f",
+        "tree": "fbe931976f6bac7d8e4b3bb319ff1905e99c5444"
+      },
+      "config": {
+        "relative_path": "configs/baseline/visdrone_official_evaluator_v1.json",
+        "raw_size_bytes": 3857,
+        "raw_sha256": "36cfa69b0ff645c47c871283f917577ca27c760daf424e9544ab363dbf080ff5",
+        "canonical_size_bytes": 3295,
+        "canonical_sha256": "355de90bdb6007ed42ed65b3f653a1b8ea57f2184ab4fd48a9561b692b993998"
+      },
+      "authority_manifest": {
+        "relative_path": "manifests/visdrone_det_toolkit_005445.json",
+        "raw_size_bytes": 4166,
+        "raw_sha256": "71168baf15d6d945fd5a4a6c5605b5ba533524efeede2a9d4020127576c1b36f",
+        "canonical_size_bytes": 3351,
+        "canonical_sha256": "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3"
+      },
+      "authority_archive_inventory": {
+        "archive_size_bytes": 40960,
+        "archive_sha256": "bf19dd9477210adf106c7cbf2a72370ed4af22dedb577f361f3dc9e77e99baa4",
+        "file_count": 11,
+        "inventory_sha256": "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0"
+      },
+      "source_files": [
+        {
+          "role": "primary_evaluator",
+          "relative_path": "src/sparse_rtdetr/baseline/primary_evaluator.py",
+          "sha256": "d831fc641ac930822e693f99fbbcdd48abbe76738a618525135dd099963901bd"
+        },
+        {
+          "role": "evaluation_protocol",
+          "relative_path": "src/sparse_rtdetr/data_protocol/evaluation.py",
+          "sha256": "e70ad71bb834b4cfc5d25441a78d2caa5982a86ae782918488924f67a832d216"
+        }
+      ],
+      "independent_audit": {
+        "stage": "P3_BASELINE_PRIMARY_EVALUATOR_V1_INDEPENDENT_AUDIT_R1",
+        "classification": "PRIMARY_EVALUATOR_V1_CERTIFIED",
+        "formal_return_code": 0,
+        "script_size_bytes": 51244,
+        "script_sha256": "4182f4082756fb2e52d6969e93889f24ae9af398cc98d67a1b9d990041b5524a",
+        "mutation_cases_rejected": 129,
+        "independent_oracle_cases": 100,
+        "evaluator_tests_passed": 46,
+        "full_cpu_tests_passed": 1116,
+        "clean_archive_tests_passed": 46
+      }
+    },
     "conversion_r3": {
       "artifact_root": "artifacts/data/visdrone_protocol_v2_conversion_r3",
       "completion_sha256": "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817",
@@ -159,8 +213,8 @@
   "evaluation_and_selection": {
     "primary_evaluator": "visdrone_official_style_v1",
     "primary_evaluator_required_before_training": true,
-    "primary_evaluator_independently_certified": false,
-    "training_launch_blocked": true,
+    "primary_evaluator_independently_certified": true,
+    "training_launch_blocked": false,
     "secondary_evaluator": "coco_secondary_vendor_v1",
     "secondary_diagnostic_only": true,
     "secondary_cannot_certify_or_select": true,
