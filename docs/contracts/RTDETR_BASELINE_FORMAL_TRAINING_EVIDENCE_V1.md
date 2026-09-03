@@ -131,7 +131,12 @@ T5B accepts only caller-supplied detached bytes. Each state records its exact
 name, type, format, byte size, SHA-256, loadability affirmation, and synthetic
 payload representation. Raw model and EMA are separate states. The aggregate
 state inventory SHA, predecessor evidence SHA, source/data/environment
-identity, and publication status are bound in the checkpoint envelope.
+identity, and publication status are bound in the checkpoint envelope. Detached
+dictionary validation and standalone published-checkpoint validation both bind
+`training_contract_id`, `runtime_plan_id`, the frozen training-contract
+canonical SHA-256, and the frozen runtime-plan canonical SHA-256 without
+depending on an enclosing evidence-root context. Supplying a coordinated forged
+`expected` context cannot override those four authority identities.
 
 Publication uses an exclusive same-device temporary regular file, complete
 write with EINTR recovery, file fsync, no-overwrite hard-link publication,

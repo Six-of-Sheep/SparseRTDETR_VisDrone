@@ -439,6 +439,79 @@ def test_checkpoint_state_schema_mutations_fail_closed(tmp_path: Path, mutation:
         evidence.validate_training_checkpoint(candidate)
 
 
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("training_contract_id", "other-training-contract"),
+        ("runtime_plan_id", "other-runtime-plan"),
+        ("training_contract_sha256", "f" * 64),
+        ("runtime_plan_sha256", "f" * 64),
+    ],
+)
+@pytest.mark.parametrize("surface", ["detached", "published_path"])
+def test_checkpoint_authority_identity_mutations_fail_closed(tmp_path: Path, field: str, replacement: str, surface: str):
+    checkpoint_root = tmp_path / "checkpoints"
+    checkpoint_root.mkdir(mode=0o700)
+    evidence.write_atomic_checkpoint(
+        str(checkpoint_root),
+        _states(),
+        _checkpoint_metadata(),
+        loadability_probe=lambda _: True,
+    )
+    path = checkpoint_root / "checkpoint-last-0001.ckpt"
+    candidate = evidence.validate_training_checkpoint(str(path))
+    candidate[field] = replacement
+    if surface == "detached":
+        with pytest.raises(evidence.TrainingEvidenceError):
+            evidence.validate_training_checkpoint(candidate)
+        return
+    path.write_bytes(_canonical(candidate))
+    with pytest.raises(evidence.TrainingEvidenceError):
+        evidence.validate_training_checkpoint(str(path))
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("training_contract_id", "other-training-contract"),
+        ("runtime_plan_id", "other-runtime-plan"),
+        ("training_contract_sha256", "f" * 64),
+        ("runtime_plan_sha256", "f" * 64),
+    ],
+)
+def test_checkpoint_authority_identity_rejects_coordinated_expected_repack(tmp_path: Path, field: str, replacement: str):
+    checkpoint_root = tmp_path / "checkpoints"
+    checkpoint_root.mkdir(mode=0o700)
+    evidence.write_atomic_checkpoint(
+        str(checkpoint_root),
+        _states(),
+        _checkpoint_metadata(),
+        loadability_probe=lambda _: True,
+    )
+    candidate = evidence.validate_training_checkpoint(str(checkpoint_root / "checkpoint-last-0001.ckpt"))
+    candidate[field] = replacement
+    expected = {
+        name: copy.deepcopy(candidate[name])
+        for name in (
+            "training_contract_id",
+            "runtime_plan_id",
+            "mode",
+            "run_id",
+            "nonce",
+            "epoch",
+            "global_optimizer_step",
+            "role",
+            "relative_path",
+            "training_contract_sha256",
+            "runtime_plan_sha256",
+            "evaluator_id",
+            "predecessor_evidence_sha256",
+        )
+    }
+    with pytest.raises(evidence.TrainingEvidenceError):
+        evidence._validate_checkpoint_payload(candidate, expected=expected)
+
+
 def test_checkpoint_file_mutation_and_wrong_objects_are_rejected(tmp_path: Path):
     root = _success(tmp_path)
     checkpoint = root / "checkpoints/checkpoint-last-0001.ckpt"

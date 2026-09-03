@@ -21,6 +21,8 @@ EVIDENCE_CONTRACT_ID = "rtdetrv2_r18_visdrone_baseline_training_evidence_v1"
 TRAINING_CONTRACT_ID = "rtdetrv2_r18_visdrone_baseline_training_v1"
 RUNTIME_PLAN_ID = "rtdetrv2_r18_visdrone_baseline_training_runtime_v1"
 EVIDENCE_CONTRACT_SCHEMA_VERSION = 1
+TRAINING_CONTRACT_CANONICAL_SHA256 = "a20c71ef90cb4ccc091a717286a1c49be8a1ebffb178156942b77798d3d7f868"
+RUNTIME_PLAN_CANONICAL_SHA256 = "3812b04d957e1cd7c3990c8458a540651c95c6bd551c631fc51717f2f7b386ac"
 
 # Filled from the checked-in document after its bytes are frozen.
 EVIDENCE_CONTRACT_RAW_SIZE_BYTES = 7139
@@ -201,7 +203,7 @@ def _build_frozen_contract() -> dict[str, Any]:
             "id": TRAINING_CONTRACT_ID,
             "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
             "canonical_size_bytes": 9117,
-            "canonical_sha256": "a20c71ef90cb4ccc091a717286a1c49be8a1ebffb178156942b77798d3d7f868",
+            "canonical_sha256": TRAINING_CONTRACT_CANONICAL_SHA256,
             "module_relative_path": "src/sparse_rtdetr/baseline/training_contract.py",
             "module_sha256": "21599fae8312a32ddf833bf2f53557ed5b4d4122f0be167f2071f7f82008deef",
             "primary_evaluator": {
@@ -220,7 +222,7 @@ def _build_frozen_contract() -> dict[str, Any]:
             "raw_size_bytes": 12957,
             "raw_sha256": "cb6af1abae9351b4a268681587db82ad059745f1d7e198d7d8c829b4cee41aef",
             "canonical_size_bytes": 10888,
-            "canonical_sha256": "3812b04d957e1cd7c3990c8458a540651c95c6bd551c631fc51717f2f7b386ac",
+            "canonical_sha256": RUNTIME_PLAN_CANONICAL_SHA256,
             "module_relative_path": "src/sparse_rtdetr/baseline/training_runtime.py",
             "module_sha256": "735d75f612f59e6cec22dc53002980471c34c8b18601cd58704440f85741c7c9",
             "vendor_runtime": {
@@ -1439,6 +1441,14 @@ def _validate_checkpoint_payload(value: Any, *, expected: dict[str, Any] | None 
     checkpoint = _require_keys(value, _CHECKPOINT_KEYS, "checkpoint")
     if checkpoint["schema_version"] != EVIDENCE_CONTRACT_SCHEMA_VERSION or checkpoint["evidence_contract_id"] != EVIDENCE_CONTRACT_ID:
         _error("checkpoint contract identity drift")
+    if checkpoint["training_contract_id"] != TRAINING_CONTRACT_ID:
+        _error("checkpoint training-contract identity drift")
+    if checkpoint["runtime_plan_id"] != RUNTIME_PLAN_ID:
+        _error("checkpoint runtime-plan identity drift")
+    if checkpoint["training_contract_sha256"] != TRAINING_CONTRACT_CANONICAL_SHA256:
+        _error("checkpoint training-contract SHA drift")
+    if checkpoint["runtime_plan_sha256"] != RUNTIME_PLAN_CANONICAL_SHA256:
+        _error("checkpoint runtime-plan SHA drift")
     if expected is not None:
         for field in (
             "training_contract_id",
