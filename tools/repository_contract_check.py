@@ -187,6 +187,76 @@ PRIMARY_EVALUATOR_FILES = {
     "docs/contracts/RTDETR_BASELINE_PRIMARY_EVALUATOR_V1.md",
 }
 
+PREPARED_ADAPTER_FILES = {
+    "src/sparse_rtdetr/baseline/training_adapter.py",
+    "tests/test_rtdetr_baseline_training_adapter.py",
+    "docs/contracts/RTDETR_BASELINE_PREPARED_TRAINER_ADAPTER_V1.md",
+}
+PREPARED_ADAPTER_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_adapter.py"
+PREPARED_ADAPTER_MODULE_SHA256 = "3dca63c67fc2263b9f3f3006b05c8667e4457a5d1344db41f08e720e85016fd3"
+PREPARED_ADAPTER_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_adapter.py"
+PREPARED_ADAPTER_TEST_SHA256 = "6df4b0d1b57407b768472dfacb6b5ef946d8adfc319f65690b1cf0b919e9e988"
+PREPARED_ADAPTER_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_PREPARED_TRAINER_ADAPTER_V1.md"
+PREPARED_ADAPTER_DOCUMENT_SHA256 = "a5e9dafe6d4bdd608e4a83e82dd5d47a320e25c08a6e725d2f073ac3d9a01100"
+PREPARED_ADAPTER_PUBLIC_NAMES = {
+    "PreparedTrainerError",
+    "prepare_training_adapter",
+    "validate_prepared_training_adapter",
+    "run_synthetic_prepared_batch",
+}
+PREPARED_ADAPTER_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "inspect",
+    "json",
+    "math",
+    "os",
+    "pathlib",
+    "typing",
+    "sparse_rtdetr.baseline.primary_evaluator",
+    "sparse_rtdetr.baseline.training_contract",
+    "sparse_rtdetr.baseline.training_evidence",
+    "sparse_rtdetr.baseline.training_runtime",
+}
+PREPARED_ADAPTER_FORBIDDEN_IMPORT_ROOTS = {
+    "asyncio",
+    "cupy",
+    "dask",
+    "http",
+    "multiprocessing",
+    "numpy",
+    "pandas",
+    "requests",
+    "socket",
+    "subprocess",
+    "threading",
+    "torch",
+    "urllib",
+}
+PREPARED_ADAPTER_FORBIDDEN_OPERATION_NAMES = {
+    "connect",
+    "cuda",
+    "dataloader",
+    "dataset",
+    "device",
+    "eval",
+    "fork",
+    "is_available",
+    "nvidia",
+    "open",
+    "popen",
+    "post",
+    "process",
+    "request",
+    "run",
+    "sleep",
+    "spawn",
+    "start",
+    "system",
+    "thread",
+    "urlopen",
+}
+
 BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
@@ -742,6 +812,101 @@ def _check_training_evidence(root: Path, failures: list[str]) -> None:
         failures.append("T5B production evidence root must not exist")
 
 
+def _check_prepared_adapter(root: Path, failures: list[str]) -> None:
+    """Check the T5C source boundary without importing or executing it."""
+
+    expected_hashes = {
+        PREPARED_ADAPTER_MODULE_RELATIVE_PATH: PREPARED_ADAPTER_MODULE_SHA256,
+        PREPARED_ADAPTER_TEST_RELATIVE_PATH: PREPARED_ADAPTER_TEST_SHA256,
+        PREPARED_ADAPTER_DOCUMENT_RELATIVE_PATH: PREPARED_ADAPTER_DOCUMENT_SHA256,
+    }
+    for relative in sorted(PREPARED_ADAPTER_FILES):
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
+            failures.append(f"missing or symlinked T5C file: {relative}")
+            continue
+        if _sha256(path) != expected_hashes[relative]:
+            failures.append(f"T5C file identity mismatch: {relative}")
+
+    module_path = root / PREPARED_ADAPTER_MODULE_RELATIVE_PATH
+    try:
+        tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+                if any(alias.name == "*" for alias in node.names):
+                    failures.append("T5C wildcard import is forbidden")
+        if imported != PREPARED_ADAPTER_ALLOWED_IMPORTS:
+            failures.append(
+                "T5C import set mismatch: "
+                f"extra={sorted(imported - PREPARED_ADAPTER_ALLOWED_IMPORTS)} "
+                f"missing={sorted(PREPARED_ADAPTER_ALLOWED_IMPORTS - imported)}"
+            )
+        forbidden_imports = set()
+        for module in imported:
+            root_name = module.split(".", 1)[0].casefold()
+            if root_name in PREPARED_ADAPTER_FORBIDDEN_IMPORT_ROOTS:
+                forbidden_imports.add(module)
+        if forbidden_imports:
+            failures.append(f"T5C forbidden import: {sorted(forbidden_imports)}")
+
+        public_names = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and not node.name.startswith("_")
+        }
+        if public_names != PREPARED_ADAPTER_PUBLIC_NAMES:
+            failures.append(
+                "T5C public API mismatch: "
+                f"extra={sorted(public_names - PREPARED_ADAPTER_PUBLIC_NAMES)} "
+                f"missing={sorted(PREPARED_ADAPTER_PUBLIC_NAMES - public_names)}"
+            )
+        all_values: list[str] = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            ):
+                all_values = ast.literal_eval(node.value)
+        if (
+            type(all_values) is not list
+            and type(all_values) is not tuple
+        ) or len(all_values) != len(set(all_values)) or set(all_values) != PREPARED_ADAPTER_PUBLIC_NAMES:
+            failures.append("T5C __all__ mismatch")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                symbol = None
+                if isinstance(node.func, ast.Name):
+                    symbol = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    symbol = node.func.attr
+                if symbol is not None and symbol.casefold() in PREPARED_ADAPTER_FORBIDDEN_OPERATION_NAMES:
+                    failures.append(f"T5C forbidden operation call: {symbol}")
+            elif isinstance(node, ast.Attribute) and node.attr.casefold() in {
+                "cuda",
+                "dataloader",
+                "dataset",
+                "device",
+                "nvidia",
+            }:
+                failures.append(f"T5C forbidden operation attribute: {node.attr}")
+            elif isinstance(node, ast.Name) and node.id.casefold() in {
+                "torch",
+                "cupy",
+                "cuda",
+                "nvidia",
+                "dataloader",
+                "dataset",
+            }:
+                failures.append(f"T5C forbidden operation name: {node.id}")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"T5C source audit failure: {type(exc).__name__}")
+
+
 def check_repository(root: Path) -> bool:
     failures: list[str] = []
     files, file_policy_failures = _file_policy(root)
@@ -752,6 +917,7 @@ def check_repository(root: Path) -> bool:
     allowed_files |= BASELINE_FILES
     allowed_files |= TRAINING_EVIDENCE_FILES
     allowed_files |= PRIMARY_EVALUATOR_FILES
+    allowed_files |= PREPARED_ADAPTER_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -824,6 +990,7 @@ def check_repository(root: Path) -> bool:
 
     _check_training_runtime_plan(root, failures)
     _check_training_evidence(root, failures)
+    _check_prepared_adapter(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
