@@ -81,7 +81,9 @@ ALLOWED_FILES = {
 
 BASELINE_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
+    "configs/baseline/rtdetrv2_r18_visdrone_training_runtime_v1.json",
     "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_V1.md",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_RUNTIME_V1.md",
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json",
     "docs/contracts/RTDETR_BASELINE_ADAPTER_V1.md",
     "src/sparse_rtdetr/baseline/__init__.py",
@@ -96,6 +98,7 @@ BASELINE_FILES = {
     "src/sparse_rtdetr/baseline/smoke_launcher.py",
     "src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
     "src/sparse_rtdetr/baseline/training_contract.py",
+    "src/sparse_rtdetr/baseline/training_runtime.py",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json",
     "configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json",
@@ -107,6 +110,29 @@ BASELINE_FILES = {
     "docs/contracts/RTDETR_BASELINE_SMOKE_OUTER_LAUNCH_V2.md",
     "tests/test_rtdetr_baseline_smoke_outer_launcher.py",
     "tests/test_rtdetr_baseline_training_contract.py",
+    "tests/test_rtdetr_baseline_training_runtime.py",
+}
+
+TRAINING_RUNTIME_PLAN_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_runtime_v1.json"
+TRAINING_RUNTIME_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_runtime.py"
+TRAINING_RUNTIME_PLAN_ID = "rtdetrv2_r18_visdrone_baseline_training_runtime_v1"
+TRAINING_RUNTIME_PLAN_SCHEMA_VERSION = 1
+TRAINING_RUNTIME_PLAN_RAW_SIZE_BYTES = 12957
+TRAINING_RUNTIME_PLAN_RAW_SHA256 = "cb6af1abae9351b4a268681587db82ad059745f1d7e198d7d8c829b4cee41aef"
+TRAINING_RUNTIME_PUBLIC_APIS = {
+    "load_training_runtime_plan",
+    "validate_training_runtime_plan",
+    "canonical_training_runtime_plan_bytes",
+    "training_runtime_plan_binding",
+}
+TRAINING_RUNTIME_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "typing",
+    "sparse_rtdetr.baseline.training_contract",
 }
 
 PRIMARY_EVALUATOR_FILES = {
@@ -520,6 +546,80 @@ def _check_vendor(root: Path, failures: list[str]) -> None:
                 failures.append(f"vendor unreadable file: {path.relative_to(root)}")
 
 
+def _check_training_runtime_plan(root: Path, failures: list[str]) -> None:
+    """Check only the frozen T5A config/module identity and public surface."""
+
+    config_path = root / TRAINING_RUNTIME_PLAN_RELATIVE_PATH
+    module_path = root / TRAINING_RUNTIME_MODULE_RELATIVE_PATH
+    if config_path.is_symlink() or not config_path.is_file():
+        failures.append("missing or symlinked training runtime plan")
+        return
+    if module_path.is_symlink() or not module_path.is_file():
+        failures.append("missing or symlinked training runtime module")
+        return
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != TRAINING_RUNTIME_PLAN_RAW_SIZE_BYTES:
+            failures.append("training runtime plan raw size mismatch")
+        if _sha256(config_path) != TRAINING_RUNTIME_PLAN_RAW_SHA256:
+            failures.append("training runtime plan raw SHA mismatch")
+        document = json.loads(raw.decode("utf-8"))
+        if type(document) is not dict:
+            failures.append("training runtime plan root is not an object")
+        else:
+            if document.get("schema_version") != TRAINING_RUNTIME_PLAN_SCHEMA_VERSION:
+                failures.append("training runtime plan schema version mismatch")
+            if document.get("runtime_plan_id") != TRAINING_RUNTIME_PLAN_ID:
+                failures.append("training runtime plan ID mismatch")
+            if document.get("training_contract_id") != "rtdetrv2_r18_visdrone_baseline_training_v1":
+                failures.append("training runtime plan training contract ID mismatch")
+            if document.get("runtime_stage") != "pre_cuda_plan_only":
+                failures.append("training runtime plan stage mismatch")
+            source = document.get("source_bindings")
+            if not isinstance(source, dict) or source.get("training_contract", {}).get("module_sha256") != _sha256(
+                root / "src/sparse_rtdetr/baseline/training_contract.py"
+            ):
+                failures.append("training runtime plan training-contract module identity mismatch")
+    except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
+        failures.append(f"training runtime plan parse failure: {type(exc).__name__}")
+
+    try:
+        tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != TRAINING_RUNTIME_ALLOWED_IMPORTS:
+            failures.append(
+                "training runtime import set mismatch: "
+                f"extra={sorted(imported - TRAINING_RUNTIME_ALLOWED_IMPORTS)} "
+                f"missing={sorted(TRAINING_RUNTIME_ALLOWED_IMPORTS - imported)}"
+            )
+        public_functions = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_")
+        }
+        if public_functions != TRAINING_RUNTIME_PUBLIC_APIS:
+            failures.append(
+                "training runtime public API mismatch: "
+                f"extra={sorted(public_functions - TRAINING_RUNTIME_PUBLIC_APIS)} "
+                f"missing={sorted(TRAINING_RUNTIME_PUBLIC_APIS - public_functions)}"
+            )
+        all_values = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            ):
+                all_values = ast.literal_eval(node.value)
+        if set(all_values) != TRAINING_RUNTIME_PUBLIC_APIS:
+            failures.append("training runtime __all__ mismatch")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"training runtime source audit failure: {type(exc).__name__}")
+
+
 def check_repository(root: Path) -> bool:
     failures: list[str] = []
     files, file_policy_failures = _file_policy(root)
@@ -598,6 +698,8 @@ def check_repository(root: Path) -> bool:
             failures.append("formal training contract canonical identity mismatch")
     except Exception as exc:
         failures.append(f"formal training contract validation failure: {type(exc).__name__}: {exc}")
+
+    _check_training_runtime_plan(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
