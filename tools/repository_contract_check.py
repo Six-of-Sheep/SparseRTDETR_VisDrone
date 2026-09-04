@@ -257,6 +257,68 @@ PREPARED_ADAPTER_FORBIDDEN_OPERATION_NAMES = {
     "urlopen",
 }
 
+TRAINING_PROCESS_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_training_process_v1.json",
+    "src/sparse_rtdetr/baseline/training_entry.py",
+    "src/sparse_rtdetr/baseline/training_process_launcher.py",
+    "tests/test_rtdetr_baseline_training_entry.py",
+    "tests/test_rtdetr_baseline_training_process_launcher.py",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_PROCESS_LAUNCH_V1.md",
+}
+TRAINING_PROCESS_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_process_v1.json"
+TRAINING_PROCESS_CONFIG_RAW_SIZE_BYTES = 10468
+TRAINING_PROCESS_CONFIG_RAW_SHA256 = "a16ff1c31e0a935f0ab6ab9224b7c3f70c377006d00562dc5b2bc1b44f70ed89"
+TRAINING_PROCESS_CONFIG_CANONICAL_SIZE_BYTES = 9330
+TRAINING_PROCESS_CONFIG_CANONICAL_SHA256 = "8469bde5b8e87e47ef8df0b9674aa1e685bf993f90ef3bc99aa3354bbe95f19c"
+TRAINING_ENTRY_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_entry.py"
+TRAINING_ENTRY_SHA256 = "6990a1a0f2d47b034db5a0aa3928fdb1820819f8272c85f2b86c78832d464892"
+TRAINING_ENTRY_PUBLIC_NAMES = {
+    "TrainingEntryError",
+    "build_synthetic_entry_descriptor",
+    "validate_entry_descriptor",
+    "run_synthetic_entry",
+    "validate_entry_result",
+}
+TRAINING_ENTRY_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "re",
+    "stat",
+    "sys",
+    "pathlib",
+    "typing",
+    "sparse_rtdetr.baseline",
+}
+TRAINING_LAUNCHER_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_process_launcher.py"
+TRAINING_LAUNCHER_SHA256 = "7543e20ea23e9e9b526d4ca89c6c3db6f4d77127a9ba48e48cc926edb5ea54de"
+TRAINING_LAUNCHER_PUBLIC_NAMES = {
+    "TrainingProcessLauncherError",
+    "build_synthetic_launch_descriptor",
+    "validate_launch_descriptor",
+    "run_synthetic_launch",
+    "validate_launch_result",
+    "classify_launch",
+}
+TRAINING_LAUNCHER_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "inspect",
+    "json",
+    "math",
+    "os",
+    "stat",
+    "pathlib",
+    "typing",
+    "sparse_rtdetr.baseline",
+}
+TRAINING_PROCESS_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_PROCESS_LAUNCH_V1.md"
+TRAINING_PROCESS_DOCUMENT_SHA256 = "ff1d3c8b170b63e20fb62e0737a7167a87864a7b3b0e67fb49b874d3a5736523"
+TRAINING_ENTRY_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_entry.py"
+TRAINING_PROCESS_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_process_launcher.py"
+
 BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
@@ -907,6 +969,101 @@ def _check_prepared_adapter(root: Path, failures: list[str]) -> None:
         failures.append(f"T5C source audit failure: {type(exc).__name__}")
 
 
+def _check_training_process(root: Path, failures: list[str]) -> None:
+    """Check the T5D process/entry boundary without executing it."""
+
+    expected_hashes = {
+        TRAINING_PROCESS_CONFIG_RELATIVE_PATH: TRAINING_PROCESS_CONFIG_RAW_SHA256,
+        TRAINING_ENTRY_RELATIVE_PATH: TRAINING_ENTRY_SHA256,
+        TRAINING_LAUNCHER_RELATIVE_PATH: TRAINING_LAUNCHER_SHA256,
+        TRAINING_ENTRY_TEST_RELATIVE_PATH: "",
+        TRAINING_PROCESS_TEST_RELATIVE_PATH: "",
+        TRAINING_PROCESS_DOCUMENT_RELATIVE_PATH: TRAINING_PROCESS_DOCUMENT_SHA256,
+    }
+    for relative, expected in expected_hashes.items():
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
+            failures.append(f"missing or symlinked T5D file: {relative}")
+            continue
+        if expected and _sha256(path) != expected:
+            failures.append(f"T5D file identity mismatch: {relative}")
+
+    config_path = root / TRAINING_PROCESS_CONFIG_RELATIVE_PATH
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != TRAINING_PROCESS_CONFIG_RAW_SIZE_BYTES or _sha256(config_path) != TRAINING_PROCESS_CONFIG_RAW_SHA256:
+            failures.append("T5D process config raw identity mismatch")
+        if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            failures.append("T5D process config portable bytes mismatch")
+        value = json.loads(raw.decode("utf-8"))
+        canonical = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(canonical) != TRAINING_PROCESS_CONFIG_CANONICAL_SIZE_BYTES or hashlib.sha256(canonical).hexdigest() != TRAINING_PROCESS_CONFIG_CANONICAL_SHA256:
+            failures.append("T5D process config canonical identity mismatch")
+        if type(value) is not dict or value.get("schema_version") != 1 or value.get("process_contract_id") != "rtdetrv2_r18_visdrone_baseline_training_process_v1" or value.get("mode") != "synthetic":
+            failures.append("T5D process config identity mismatch")
+        readiness = value.get("readiness")
+        if not isinstance(readiness, dict) or any(readiness.get(field) is not False for field in ("production_training_authorized", "real_entry_execution_authorized", "real_process_launch_authorized", "training_implementation_ready", "training_ready", "model_selection_certified", "confirmatory_access", "test_access", "speed_measurement")):
+            failures.append("T5D readiness is not fail-closed")
+        source = value.get("source_bindings")
+        modules = source.get("repository_modules") if isinstance(source, dict) else None
+        if modules != [{"role": role, "relative_path": relative} for role, relative in _training_process_module_rows()]:
+            failures.append("T5D source module closure mismatch")
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        failures.append("T5D process config parse failure")
+
+    def source_surface(relative: str, expected_imports: set[str], expected_public: set[str]) -> None:
+        path = root / relative
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            imported: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported.update(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                    imported.add(node.module or "")
+            if imported != expected_imports:
+                failures.append(f"T5D import set mismatch: {relative}")
+            public = {
+                node.name
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+            }
+            if public != expected_public:
+                failures.append(f"T5D public API mismatch: {relative}")
+            all_values = []
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                    all_values = ast.literal_eval(node.value)
+            if set(all_values) != expected_public:
+                failures.append(f"T5D __all__ mismatch: {relative}")
+            forbidden = {"torch", "subprocess", "multiprocessing", "socket", "requests", "urllib", "vendor", "dataloader", "dataset"}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name) and node.id.casefold() in forbidden:
+                    failures.append(f"T5D forbidden source name: {relative}:{node.id}")
+        except (OSError, UnicodeError, SyntaxError, ValueError, TypeError):
+            failures.append(f"T5D source audit failure: {relative}")
+
+    source_surface(TRAINING_ENTRY_RELATIVE_PATH, TRAINING_ENTRY_ALLOWED_IMPORTS, TRAINING_ENTRY_PUBLIC_NAMES)
+    source_surface(TRAINING_LAUNCHER_RELATIVE_PATH, TRAINING_LAUNCHER_ALLOWED_IMPORTS, TRAINING_LAUNCHER_PUBLIC_NAMES)
+
+
+def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
+    return (
+        ("package", "src/sparse_rtdetr/__init__.py"),
+        ("package", "src/sparse_rtdetr/baseline/__init__.py"),
+        ("entry", "src/sparse_rtdetr/baseline/training_entry.py"),
+        ("launcher", "src/sparse_rtdetr/baseline/training_process_launcher.py"),
+        ("prepared_adapter", "src/sparse_rtdetr/baseline/training_adapter.py"),
+        ("training_contract", "src/sparse_rtdetr/baseline/training_contract.py"),
+        ("runtime_plan", "src/sparse_rtdetr/baseline/training_runtime.py"),
+        ("training_evidence", "src/sparse_rtdetr/baseline/training_evidence.py"),
+        ("primary_evaluator", "src/sparse_rtdetr/baseline/primary_evaluator.py"),
+        ("package", "src/sparse_rtdetr/data_protocol/__init__.py"),
+        ("evaluation_protocol", "src/sparse_rtdetr/data_protocol/evaluation.py"),
+        ("protocol_schema", "src/sparse_rtdetr/data_protocol/schema.py"),
+    )
+
+
 def check_repository(root: Path) -> bool:
     failures: list[str] = []
     files, file_policy_failures = _file_policy(root)
@@ -918,6 +1075,7 @@ def check_repository(root: Path) -> bool:
     allowed_files |= TRAINING_EVIDENCE_FILES
     allowed_files |= PRIMARY_EVALUATOR_FILES
     allowed_files |= PREPARED_ADAPTER_FILES
+    allowed_files |= TRAINING_PROCESS_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -991,6 +1149,7 @@ def check_repository(root: Path) -> bool:
     _check_training_runtime_plan(root, failures)
     _check_training_evidence(root, failures)
     _check_prepared_adapter(root, failures)
+    _check_training_process(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
