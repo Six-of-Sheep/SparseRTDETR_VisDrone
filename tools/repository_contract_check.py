@@ -319,6 +319,43 @@ TRAINING_PROCESS_DOCUMENT_SHA256 = "ff1d3c8b170b63e20fb62e0737a7167a87864a7b3b0e
 TRAINING_ENTRY_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_entry.py"
 TRAINING_PROCESS_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_process_launcher.py"
 
+T6A_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_training_launch_t6_v1.json",
+    "src/sparse_rtdetr/baseline/training_t6_authorization.py",
+    "tests/test_rtdetr_baseline_training_t6_authorization.py",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_LAUNCH_T6_V1.md",
+}
+T6A_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_launch_t6_v1.json"
+T6A_CONFIG_RAW_SIZE_BYTES = 11730
+T6A_CONFIG_RAW_SHA256 = "539abe556edd00a5bb0ecf0ed350195ee28e55a0af0b804404a0d92ea9830ff9"
+T6A_CONFIG_CANONICAL_SIZE_BYTES = 11729
+T6A_CONFIG_CANONICAL_SHA256 = "13a5923aa62f3048b2baefe32aaa163b9aa44d3b3e11d2a374ebceec5034ae94"
+T6A_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_t6_authorization.py"
+T6A_MODULE_SHA256 = "0542c10dfea0d925db50c4e103e96c6b5fe7a5c8fec962d5901323945f2e4d11"
+T6A_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_t6_authorization.py"
+T6A_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_LAUNCH_T6_V1.md"
+T6A_PUBLIC_NAMES = {
+    "TrainingLaunchContractError",
+    "canonical_training_launch_contract_bytes",
+    "load_training_launch_contract",
+    "validate_training_launch_contract",
+    "training_launch_contract_binding",
+    "canonical_owner_authorization_bytes",
+    "validate_owner_authorization",
+    "owner_authorization_binding",
+}
+T6A_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "re",
+    "stat",
+    "pathlib",
+    "typing",
+}
+
 BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
     "src/sparse_rtdetr/baseline/postprocessor.py",
@@ -1047,6 +1084,108 @@ def _check_training_process(root: Path, failures: list[str]) -> None:
     source_surface(TRAINING_LAUNCHER_RELATIVE_PATH, TRAINING_LAUNCHER_ALLOWED_IMPORTS, TRAINING_LAUNCHER_PUBLIC_NAMES)
 
 
+def _check_t6a_owner_authorization(root: Path, failures: list[str]) -> None:
+    """Opt-in, versioned static check for the detached T6A boundary."""
+
+    for relative in sorted(T6A_FILES):
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
+            failures.append(f"missing or symlinked T6A file: {relative}")
+
+    config_path = root / T6A_CONFIG_RELATIVE_PATH
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != T6A_CONFIG_RAW_SIZE_BYTES or _sha256(config_path) != T6A_CONFIG_RAW_SHA256:
+            failures.append("T6A config raw identity mismatch")
+        if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            failures.append("T6A config portable bytes mismatch")
+
+        def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError(f"duplicate key: {key}")
+                result[key] = value
+            return result
+
+        value = json.loads(raw[:-1].decode("utf-8"), object_pairs_hook=pairs, parse_constant=lambda name: (_ for _ in ()).throw(ValueError(name)))
+        canonical = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(canonical) != T6A_CONFIG_CANONICAL_SIZE_BYTES or hashlib.sha256(canonical).hexdigest() != T6A_CONFIG_CANONICAL_SHA256:
+            failures.append("T6A config canonical identity mismatch")
+        if type(value) is not dict:
+            failures.append("T6A config root is not an object")
+        else:
+            if value.get("schema_version") != 1 or value.get("contract_id") != "rtdetrv2_r18_visdrone_baseline_training_launch_t6_v1":
+                failures.append("T6A config semantic identity mismatch")
+            if value.get("stage") != "T6A" or value.get("status") != "DETACHED_AUTHORIZATION_REQUIRED":
+                failures.append("T6A config stage/status mismatch")
+            readiness = value.get("readiness")
+            if not isinstance(readiness, dict) or readiness.get("static_config_authorizes_production") is not False:
+                failures.append("T6A static config authorizes production")
+
+            def contains_key(item: object, key: str) -> bool:
+                if isinstance(item, dict):
+                    return key in item or any(contains_key(child, key) for child in item.values())
+                if isinstance(item, list):
+                    return any(contains_key(child, key) for child in item)
+                return False
+
+            if contains_key(value, "authorized") or contains_key(value, "nonce"):
+                failures.append("T6A static config contains detached-only field")
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        failures.append(f"T6A config parse failure: {type(exc).__name__}")
+
+    module_path = root / T6A_MODULE_RELATIVE_PATH
+    try:
+        if T6A_MODULE_SHA256.startswith("PENDING_") or _sha256(module_path) != T6A_MODULE_SHA256:
+            failures.append("T6A module identity mismatch")
+        tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != T6A_ALLOWED_IMPORTS:
+            failures.append(
+                "T6A import set mismatch: "
+                f"extra={sorted(imported - T6A_ALLOWED_IMPORTS)} "
+                f"missing={sorted(T6A_ALLOWED_IMPORTS - imported)}"
+            )
+        public_names = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public_names != T6A_PUBLIC_NAMES:
+            failures.append(
+                "T6A public API mismatch: "
+                f"extra={sorted(public_names - T6A_PUBLIC_NAMES)} "
+                f"missing={sorted(T6A_PUBLIC_NAMES - public_names)}"
+            )
+        all_values: object = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                all_values = ast.literal_eval(node.value)
+        if type(all_values) not in {list, tuple} or set(all_values) != T6A_PUBLIC_NAMES or len(all_values) != len(set(all_values)):
+            failures.append("T6A __all__ mismatch")
+        forbidden = {"torch", "subprocess", "tmux", "dataloader", "dataset", "nvidia"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id.casefold() in forbidden:
+                failures.append(f"T6A forbidden source name: {node.id}")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"T6A source audit failure: {type(exc).__name__}")
+
+    document_path = root / T6A_DOCUMENT_RELATIVE_PATH
+    test_path = root / T6A_TEST_RELATIVE_PATH
+    for path, label in ((document_path, "document"), (test_path, "test")):
+        try:
+            if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0:
+                failures.append(f"T6A {label} identity is invalid")
+        except OSError:
+            failures.append(f"T6A {label} is unavailable")
+
+
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     return (
         ("package", "src/sparse_rtdetr/__init__.py"),
@@ -1076,6 +1215,7 @@ def check_repository(root: Path) -> bool:
     allowed_files |= PRIMARY_EVALUATOR_FILES
     allowed_files |= PREPARED_ADAPTER_FILES
     allowed_files |= TRAINING_PROCESS_FILES
+    allowed_files |= T6A_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -1150,6 +1290,7 @@ def check_repository(root: Path) -> bool:
     _check_training_evidence(root, failures)
     _check_prepared_adapter(root, failures)
     _check_training_process(root, failures)
+    _check_t6a_owner_authorization(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
