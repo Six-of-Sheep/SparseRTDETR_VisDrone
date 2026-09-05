@@ -6,6 +6,7 @@ import hashlib
 import ast
 import json
 import re
+import stat
 import subprocess
 from pathlib import Path
 
@@ -355,6 +356,78 @@ T6A_ALLOWED_IMPORTS = {
     "pathlib",
     "typing",
 }
+
+T6B_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_training_t6b_v1.json",
+    "src/sparse_rtdetr/baseline/training_t6_engine.py",
+    "src/sparse_rtdetr/baseline/training_t6_entry.py",
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py",
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py",
+    "tests/test_rtdetr_baseline_training_t6b.py",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md",
+}
+T6B_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_t6b_v1.json"
+T6B_CONFIG_RAW_SIZE_BYTES = 6925
+T6B_CONFIG_RAW_SHA256 = "a152ccb7caefd42531ee2126ca194495e4af8d4a660d907c5a9acf796fefcc85"
+T6B_CONFIG_CANONICAL_SIZE_BYTES = 5565
+T6B_CONFIG_CANONICAL_SHA256 = "dfeecc7b002db9ce10b33afa9d166fab4c7f88a5f922b4862fa0d1d99ff755a1"
+T6B_SOURCE_IDENTITIES = {
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": "de7cd7943fabca593e9e4f4d1e8e0c6fa036afb69bc8a01097b48972b47d03ed",
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": "2f3782d713aee91317845179ef21757c9b9e3505ff6041ad3717e3f7f0854cbb",
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "0dd192b1137223e19baa23ec10611767428d4f422b297d5442281b6834d89aeb",
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "723fc69abe1bfb3a8660134e5477b228708ea9941acfa5021213f1f67530ed67",
+}
+T6B_PUBLIC_APIS = {
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": {
+        "TrainingEngineError",
+        "validate_training_policy",
+        "resolve_production_ports",
+        "run_training_engine",
+    },
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": {
+        "TrainingEntryError",
+        "load_t6b_config",
+        "t6b_config_binding",
+        "current_source_bindings",
+        "authorization_file_identity",
+        "validate_detached_authorization",
+        "consume_owner_authorization",
+        "validate_consumed_authorization_receipt",
+        "build_production_entry_descriptor",
+        "validate_entry_descriptor",
+        "run_production_entry",
+        "validate_entry_result",
+        "classify_entry",
+    },
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": {
+        "TrainingProcessError",
+        "build_production_process_descriptor",
+        "validate_process_descriptor",
+        "run_process_once",
+        "validate_process_result",
+        "classify_process",
+    },
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": {
+        "TrainingOuterError",
+        "build_production_outer_descriptor",
+        "validate_outer_descriptor",
+        "run_outer_once",
+        "validate_outer_result",
+        "classify_outer",
+    },
+}
+T6B_ALLOWED_IMPORTS = {
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": {"copy", "hashlib", "importlib", "json", "math", "random", "typing"},
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": {"copy", "datetime", "hashlib", "json", "math", "os", "stat", "subprocess", "sys", "pathlib", "typing", "sparse_rtdetr.baseline"},
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": {"copy", "hashlib", "inspect", "json", "math", "os", "stat", "subprocess", "sys", "pathlib", "typing", "sparse_rtdetr.baseline"},
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": {"copy", "datetime", "hashlib", "inspect", "json", "math", "os", "stat", "subprocess", "sys", "time", "pathlib", "typing", "sparse_rtdetr.baseline"},
+}
+T6B_MODULE_RELATIVE_PATHS = (
+    "src/sparse_rtdetr/baseline/training_t6_entry.py",
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py",
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py",
+    "src/sparse_rtdetr/baseline/training_t6_engine.py",
+)
 
 BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/categories.py",
@@ -1063,7 +1136,7 @@ def _check_training_process(root: Path, failures: list[str]) -> None:
             public = {
                 node.name
                 for node in tree.body
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_") and node.name != "main"
             }
             if public != expected_public:
                 failures.append(f"T5D public API mismatch: {relative}")
@@ -1186,6 +1259,156 @@ def _check_t6a_owner_authorization(root: Path, failures: list[str]) -> None:
             failures.append(f"T6A {label} is unavailable")
 
 
+def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
+    """Check the versioned T6B boundary without importing its launch code."""
+
+    expected_hashes = {
+        T6B_CONFIG_RELATIVE_PATH: T6B_CONFIG_RAW_SHA256,
+        **T6B_SOURCE_IDENTITIES,
+    }
+    for relative in sorted(T6B_FILES):
+        path = root / relative
+        try:
+            observed = path.lstat()
+            if path.is_symlink() or not path.is_file() or not stat.S_ISREG(observed.st_mode):
+                failures.append(f"T6B file is not a regular non-symlink file: {relative}")
+                continue
+            if observed.st_nlink != 1:
+                failures.append(f"T6B file nlink drift: {relative}")
+            expected = expected_hashes.get(relative)
+            if expected and not expected.startswith("PENDING_") and _sha256(path) != expected:
+                failures.append(f"T6B file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing T6B file: {relative}")
+
+    config_path = root / T6B_CONFIG_RELATIVE_PATH
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != T6B_CONFIG_RAW_SIZE_BYTES or _sha256(config_path) != T6B_CONFIG_RAW_SHA256:
+            failures.append("T6B config raw identity mismatch")
+        if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            failures.append("T6B config portable bytes mismatch")
+
+        def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError(f"duplicate key: {key}")
+                result[key] = value
+            return result
+
+        value = json.loads(raw[:-1].decode("utf-8"), object_pairs_hook=pairs, parse_constant=lambda name: (_ for _ in ()).throw(ValueError(name)))
+        canonical = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(canonical) != T6B_CONFIG_CANONICAL_SIZE_BYTES or hashlib.sha256(canonical).hexdigest() != T6B_CONFIG_CANONICAL_SHA256:
+            failures.append("T6B config canonical identity mismatch")
+        if type(value) is not dict:
+            failures.append("T6B config root is not an object")
+        else:
+            required = {"schema_version", "contract_id", "stage", "status", "t6a_binding", "repository", "source_policy", "run_identity", "targets", "environment_identity", "data_roles", "training_policy", "evidence_policy", "state_machine", "failure_policy", "invocation_policy", "readiness"}
+            if set(value) != required:
+                failures.append("T6B config key set drift")
+            if value.get("schema_version") != 1 or value.get("contract_id") != "rtdetrv2_r18_visdrone_baseline_training_t6b_v1" or value.get("stage") != "T6B" or value.get("status") != "PRODUCTION_BOUNDARY_IMPLEMENTED_DETACHED_AUTH_REQUIRED":
+                failures.append("T6B config semantic identity mismatch")
+            if value.get("t6a_binding") != {"contract_id": "rtdetrv2_r18_visdrone_baseline_training_launch_t6_v1", "config_relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_launch_t6_v1.json", "authorization_source": "external_detached_owner_artifact", "validation_api": "owner_authorization_binding", "binding_required": True}:
+                failures.append("T6B T6A binding policy mismatch")
+            if value.get("source_policy", {}).get("t6b_modules") != list(T6B_MODULE_RELATIVE_PATHS) or value.get("source_policy", {}).get("t6a_binding_required") is not True or value.get("source_policy", {}).get("launch_time_sha_required") is not True:
+                failures.append("T6B source policy mismatch")
+            if value.get("run_identity") != {"run_id_source": "detached_owner_authorization", "nonce_source": "detached_owner_authorization", "session_source": "detached_owner_authorization", "all_unique": True, "targets_absent_before_launch": True}:
+                failures.append("T6B run identity policy mismatch")
+            targets = value.get("targets")
+            expected_targets = {"training_evidence_root": "artifacts/training/rtdetrv2_r18_visdrone_training_t6b_v1", "process_evidence_root": "artifacts/process_evidence/rtdetrv2_r18_visdrone_training_t6b_v1", "outer_evidence_root": "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_training_t6b_v1", "receipt_policy": "adjacent_exclusive_mode_0600", "lock_policy": "adjacent_exclusive_mode_0600"}
+            if targets != expected_targets:
+                failures.append("T6B target policy mismatch")
+            data_roles = value.get("data_roles")
+            if type(data_roles) is not dict or data_roles.get("test") != {"role": "test", "access": "forbidden", "identity_read": "forbidden"} or data_roles.get("confirmatory") != {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}:
+                failures.append("T6B sealed data policy mismatch")
+            readiness = value.get("readiness")
+            if readiness != {"static_config_authorizes_production": False, "owner_authorization_required": True, "launch_acceptance_separate": True, "terminal_completion_separate": True, "independent_audit_required": True, "training_certification_separate": True}:
+                failures.append("T6B readiness is not fail-closed")
+            invocation = value.get("invocation_policy")
+            if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False}:
+                failures.append("T6B invocation policy mismatch")
+            state_machine = value.get("state_machine")
+            if type(state_machine) is not dict or state_machine.get("terminal_success") != "TERMINAL_COMPLETE" or state_machine.get("terminal_failure") != "PERMANENT_FAIL" or state_machine.get("no_resume_after") != "LAUNCH_ACCEPTED" or state_machine.get("no_retry_after") != "LAUNCH_ACCEPTED" or state_machine.get("no_overwrite_after") != "LAUNCH_ACCEPTED" or state_machine.get("audit_required") is not True or state_machine.get("certification_separate") is not True:
+                failures.append("T6B state-machine policy mismatch")
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        failures.append(f"T6B config parse failure: {type(exc).__name__}")
+
+    def source_surface(relative: str) -> None:
+        path = root / relative
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            imported: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported.update(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                    imported.add(node.module or "")
+            if imported != T6B_ALLOWED_IMPORTS[relative]:
+                failures.append(f"T6B import set mismatch: {relative}")
+            public = {
+                node.name
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_") and node.name != "main"
+            }
+            if public != T6B_PUBLIC_APIS[relative]:
+                failures.append(f"T6B public API mismatch: {relative}")
+            all_values: object = []
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                    all_values = ast.literal_eval(node.value)
+            if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != T6B_PUBLIC_APIS[relative]:
+                failures.append(f"T6B __all__ mismatch: {relative}")
+
+            forbidden_roots = {"torch", "cupy", "numpy", "pandas", "tensorflow", "ultralytics", "dataloader", "dataset", "vendor"}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    if any(alias.name.split(".", 1)[0].casefold() in forbidden_roots for alias in node.names):
+                        failures.append(f"T6B forbidden import: {relative}")
+                elif isinstance(node, ast.ImportFrom) and node.module and node.module.split(".", 1)[0].casefold() in forbidden_roots:
+                    failures.append(f"T6B forbidden import: {relative}")
+                elif isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Attribute) and node.func.attr == "Popen":
+                        shell = [keyword.value for keyword in node.keywords if keyword.arg == "shell"]
+                        if len(shell) != 1 or not isinstance(shell[0], ast.Constant) or shell[0].value is not False:
+                            failures.append(f"T6B Popen must use shell=False: {relative}")
+                    if isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec"}:
+                        failures.append(f"T6B dynamic execution: {relative}")
+                    if isinstance(node.func, ast.Attribute) and node.func.attr in {"system", "popen"}:
+                        failures.append(f"T6B shell operation: {relative}")
+
+            for statement in tree.body:
+                if isinstance(statement, ast.If) and isinstance(statement.test, ast.Compare) and isinstance(statement.test.left, ast.Name) and statement.test.left.id == "__name__":
+                    continue
+                if not isinstance(statement, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and any(isinstance(node, ast.Call) for node in ast.walk(statement)):
+                    failures.append(f"T6B import-time call: {relative}")
+        except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+            failures.append(f"T6B source audit failure: {relative}: {type(exc).__name__}")
+
+    for relative in T6B_MODULE_RELATIVE_PATHS:
+        source_surface(relative)
+
+    for relative in ("tests/test_rtdetr_baseline_training_t6b.py", "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md"):
+        path = root / relative
+        try:
+            if path.stat().st_size <= 0:
+                failures.append(f"empty T6B support file: {relative}")
+            expected = expected_hashes.get(relative)
+            if expected and not expected.startswith("PENDING_") and _sha256(path) != expected:
+                failures.append(f"T6B support file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing T6B support file: {relative}")
+
+    for relative in (
+        "artifacts/training/rtdetrv2_r18_visdrone_training_t6b_v1",
+        "artifacts/process_evidence/rtdetrv2_r18_visdrone_training_t6b_v1",
+        "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_training_t6b_v1",
+    ):
+        target = root / relative
+        if target.exists() or target.is_symlink():
+            failures.append(f"T6B production target must remain absent: {relative}")
+
+
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     return (
         ("package", "src/sparse_rtdetr/__init__.py"),
@@ -1216,6 +1439,7 @@ def check_repository(root: Path) -> bool:
     allowed_files |= PREPARED_ADAPTER_FILES
     allowed_files |= TRAINING_PROCESS_FILES
     allowed_files |= T6A_FILES
+    allowed_files |= T6B_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -1291,6 +1515,7 @@ def check_repository(root: Path) -> bool:
     _check_prepared_adapter(root, failures)
     _check_training_process(root, failures)
     _check_t6a_owner_authorization(root, failures)
+    _check_t6b_production_boundary(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],

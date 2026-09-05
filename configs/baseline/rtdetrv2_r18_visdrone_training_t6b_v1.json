@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "contract_id": "rtdetrv2_r18_visdrone_baseline_training_t6b_v1",
+  "stage": "T6B",
+  "status": "PRODUCTION_BOUNDARY_IMPLEMENTED_DETACHED_AUTH_REQUIRED",
+  "t6a_binding": {
+    "contract_id": "rtdetrv2_r18_visdrone_baseline_training_launch_t6_v1",
+    "config_relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_launch_t6_v1.json",
+    "authorization_source": "external_detached_owner_artifact",
+    "validation_api": "owner_authorization_binding",
+    "binding_required": true
+  },
+  "repository": {
+    "repo_root_policy": "absolute_canonical_path_required",
+    "git_identity": ["branch", "head", "tree", "parent", "upstream", "upstream_sha"],
+    "upstream_required": true,
+    "launch_time_reobserve": true
+  },
+  "source_policy": {
+    "t6b_modules": [
+      "src/sparse_rtdetr/baseline/training_t6_entry.py",
+      "src/sparse_rtdetr/baseline/training_t6_process_launcher.py",
+      "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py",
+      "src/sparse_rtdetr/baseline/training_t6_engine.py"
+    ],
+    "t6a_binding_required": true,
+    "launch_time_sha_required": true
+  },
+  "run_identity": {
+    "run_id_source": "detached_owner_authorization",
+    "nonce_source": "detached_owner_authorization",
+    "session_source": "detached_owner_authorization",
+    "all_unique": true,
+    "targets_absent_before_launch": true
+  },
+  "targets": {
+    "training_evidence_root": "artifacts/training/rtdetrv2_r18_visdrone_training_t6b_v1",
+    "process_evidence_root": "artifacts/process_evidence/rtdetrv2_r18_visdrone_training_t6b_v1",
+    "outer_evidence_root": "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_training_t6b_v1",
+    "receipt_policy": "adjacent_exclusive_mode_0600",
+    "lock_policy": "adjacent_exclusive_mode_0600"
+  },
+  "environment_identity": {
+    "python": {
+      "path_policy": "absolute_external_path_required",
+      "realpath_policy": "regular_non_symlink_binary_required",
+      "version_policy": "exact_external_identity_required",
+      "sha256_policy": "exact_external_identity_required"
+    },
+    "tmux": {
+      "path_policy": "absolute_external_path_required",
+      "realpath_policy": "regular_non_symlink_binary_required",
+      "version_policy": "exact_external_identity_required",
+      "sha256_policy": "exact_external_identity_required"
+    },
+    "gpu": {
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 4090 D",
+      "uuid": "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8",
+      "driver_policy": "exact_external_identity_required",
+      "cuda_version": "12.4",
+      "power_limit_watts": 425.0
+    },
+    "filesystem": {
+      "device_identity_required": true,
+      "mount_identity_required": true,
+      "target_parent_must_exist": true
+    }
+  },
+  "data_roles": {
+    "train_core": {
+      "role": "train_core",
+      "access": "allowed",
+      "identity_source": "detached_owner_authorization",
+      "manifest_required": true
+    },
+    "development": {
+      "role": "development",
+      "access": "allowed",
+      "identity_source": "detached_owner_authorization",
+      "manifest_required": true
+    },
+    "test": {
+      "role": "test",
+      "access": "forbidden",
+      "identity_read": "forbidden"
+    },
+    "confirmatory": {
+      "role": "confirmatory",
+      "access": "sealed_and_forbidden",
+      "identity_read": "forbidden"
+    }
+  },
+  "training_policy": {
+    "initialization": {
+      "random_initialization": true,
+      "pretrained": false,
+      "checkpoint": null,
+      "seed": 0
+    },
+    "topology": {
+      "world_size": 1,
+      "device": "cuda:0",
+      "train_batch_size": 16,
+      "development_batch_size": 32
+    },
+    "schedule": {
+      "epochs": 120,
+      "development_evaluation_every_epoch": true,
+      "checkpoint_every_epoch": true
+    },
+    "optimizer": {
+      "type": "AdamW",
+      "default_lr": 0.0001,
+      "backbone_non_norm_lr": 0.00001,
+      "betas": [0.9, 0.999],
+      "default_weight_decay": 0.0001,
+      "norm_bn_weight_decay": 0.0,
+      "clip_max_norm": 0.1
+    },
+    "learning_rate": {
+      "warmup_type": "LinearWarmup",
+      "warmup_optimizer_steps": 2000,
+      "scheduler_type": "MultiStepLR",
+      "scheduler_step_unit": "epoch",
+      "milestones": [1000],
+      "gamma": 0.1,
+      "expected_decay_events_within_120_epochs": 0
+    },
+    "amp": {
+      "enabled": true,
+      "scaler_type": "GradScaler",
+      "init_scale": 65536.0,
+      "growth_factor": 2.0,
+      "backoff_factor": 0.5,
+      "growth_interval": 2000,
+      "nonfinite_events_allowed": 0,
+      "skipped_optimizer_steps_allowed": 0,
+      "overflow_events_allowed": 0
+    },
+    "ema": {
+      "enabled": true,
+      "decay": 0.9999,
+      "warmup_optimizer_updates": 2000,
+      "development_weights": "ema",
+      "selection_weights": "ema"
+    },
+    "evaluator": {
+      "primary_id": "visdrone_official_primary_evaluator_v1",
+      "protocol_id": "visdrone_official_style_v1",
+      "role": "development_only",
+      "secondary_can_certify": false
+    },
+    "checkpoint": {
+      "roles": ["last", "best", "periodic", "final"],
+      "required_atomicity": true,
+      "required_loadability": true,
+      "append_only": true
+    },
+    "execution": {
+      "overwrite": false,
+      "resume": false,
+      "retry": false,
+      "fallback": false
+    }
+  },
+  "evidence_policy": {
+    "raw_byte_streams": ["outer_stdout", "outer_stderr", "child_stdout", "child_stderr"],
+    "immediate_snapshot": true,
+    "append_only": true,
+    "checkpoint_roles": ["last", "best", "periodic", "final"],
+    "atomicity": true,
+    "loadability": true
+  },
+  "state_machine": {
+    "states": ["DESIGN_ONLY", "OWNER_AUTHORIZED", "PREFLIGHT_PASS", "LAUNCH_ACCEPTED", "RUNNING", "TERMINAL_COMPLETE", "PERMANENT_FAIL", "INDEPENDENT_TERMINAL_AUDIT_PASS", "TRAINING_CERTIFIED"],
+    "terminal_success": "TERMINAL_COMPLETE",
+    "terminal_failure": "PERMANENT_FAIL",
+    "no_resume_after": "LAUNCH_ACCEPTED",
+    "no_retry_after": "LAUNCH_ACCEPTED",
+    "no_overwrite_after": "LAUNCH_ACCEPTED",
+    "audit_required": true,
+    "certification_separate": true
+  },
+  "failure_policy": {
+    "immutable": true,
+    "resume": false,
+    "retry": false,
+    "overwrite": false,
+    "fallback": false,
+    "permanent_events": ["signal", "timeout", "host_reboot", "nonzero_exit", "partial_write", "identity_drift", "disk_full", "incomplete_evidence", "checkpoint_not_loadable", "checkpoint_inventory_drift"]
+  },
+  "invocation_policy": {
+    "outer_calls": 1,
+    "tmux_new_session_calls": 1,
+    "child_calls": 1,
+    "shell": false,
+    "argv_sequence": true,
+    "network": false,
+    "speed_measurement": false
+  },
+  "readiness": {
+    "static_config_authorizes_production": false,
+    "owner_authorization_required": true,
+    "launch_acceptance_separate": true,
+    "terminal_completion_separate": true,
+    "independent_audit_required": true,
+    "training_certification_separate": true
+  }
+}
