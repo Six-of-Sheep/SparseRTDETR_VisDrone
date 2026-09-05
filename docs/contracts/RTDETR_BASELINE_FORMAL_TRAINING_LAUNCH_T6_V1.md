@@ -61,6 +61,25 @@ future production targets. A later stage owns the actual target absence gate.
 Conversion R3 identity is declared in the source binding but T6A does not
 read the conversion data or any test/confirmatory directory.
 
+## Contract Binding Closure
+
+`training_launch_contract_binding()` returns one closed object. Its exact
+top-level fields are `schema_version`, `contract_id`, `relative_path`,
+`raw_size_bytes`, `raw_sha256`, `canonical_size_bytes`,
+`canonical_sha256`, `contract_identity`, `source_bindings`, `targets`,
+`run_identity`, `repository_reference`, and `contract`. The authorization
+validator rejects missing, extra, renamed, flattened, reordered-container, or
+non-builtin binding structures.
+
+The validator checks the complete frozen contract and requires every binding
+copy to agree: the flattened config identity equals `contract_identity`, all
+declared `source_bindings` equal both the frozen source inventory and the
+contract copy, and `targets`, `run_identity`, and `repository_reference`
+equal their corresponding contract fields. Each source identity is therefore
+validated before authorization bytes are parsed or accepted; a whole-object
+digest is not the sole semantic gate. `owner_authorization_binding()` uses the
+same validation path and cannot bypass it.
+
 ## State Separation
 
 These are distinct states and must not be inferred from one another:

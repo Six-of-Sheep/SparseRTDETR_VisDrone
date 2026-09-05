@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+from collections import OrderedDict
 from pathlib import Path
 
 import pytest
@@ -144,6 +145,51 @@ def _valid_case(nonce: str = GOOD_NONCE) -> tuple[dict[str, object], dict[str, o
     return binding, observed, authorization, raw, file_identity
 
 
+def _reordered_builtin(value):
+    if type(value) is dict:
+        return {
+            key: _reordered_builtin(child)
+            for key, child in reversed(tuple(value.items()))
+        }
+    if type(value) is list:
+        return [_reordered_builtin(child) for child in value]
+    return value
+
+
+def _scalar_paths(value, prefix=()):
+    if type(value) is dict:
+        for key, child in value.items():
+            yield from _scalar_paths(child, prefix + (key,))
+    elif type(value) is list:
+        for index, child in enumerate(value):
+            yield from _scalar_paths(child, prefix + (index,))
+    else:
+        yield prefix
+
+
+def _replace_at_path(value, path, replacement):
+    current = value
+    for key in path[:-1]:
+        current = current[key]
+    current[path[-1]] = replacement
+
+
+def _mutated_scalar(path, value):
+    if type(value) is bool:
+        return not value
+    if type(value) is int:
+        return value + 1
+    if type(value) is float:
+        return value + 1.0
+    if value is None:
+        return "mutated"
+    if type(value) is str:
+        if "sha256" in path:
+            return "9" * 64
+        return value + "-mutated"
+    raise AssertionError(f"unexpected source-binding scalar: {path}={value!r}")
+
+
 def _validate(authorization: object, binding: dict[str, object], observed: dict[str, object], raw: bytes, file_identity: dict[str, object]) -> dict[str, object]:
     return contract.validate_owner_authorization(
         authorization,
@@ -242,6 +288,205 @@ def test_input_objects_are_not_mutated() -> None:
     assert observed == before_observed
     assert binding == before_binding
     assert file_identity == before_file_identity
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "schema_version",
+        "contract_id",
+        "relative_path",
+        "raw_size_bytes",
+        "raw_sha256",
+        "canonical_size_bytes",
+        "canonical_sha256",
+        "contract_identity",
+        "source_bindings",
+        "targets",
+        "run_identity",
+        "repository_reference",
+        "contract",
+    ],
+)
+def test_contract_binding_closed_schema_rejects_missing_extra_and_rename(field: str) -> None:
+    binding = _binding()
+
+    missing = copy.deepcopy(binding)
+    missing.pop(field)
+    _reject(lambda: contract._validate_training_launch_contract_binding(missing))
+
+    extra = copy.deepcopy(binding)
+    extra["unexpected"] = False
+    _reject(lambda: contract._validate_training_launch_contract_binding(extra))
+
+    renamed = copy.deepcopy(binding)
+    renamed[f"{field}_renamed"] = renamed.pop(field)
+    _reject(lambda: contract._validate_training_launch_contract_binding(renamed))
+
+
+def test_contract_binding_closed_schema_rejects_partial_flattened_mappings_and_accepts_reordered_control() -> None:
+    binding = _binding()
+    partials = [
+        {},
+        {"contract_identity": copy.deepcopy(binding["contract_identity"])},
+        {
+            key: copy.deepcopy(binding[key])
+            for key in (
+                "relative_path",
+                "raw_size_bytes",
+                "raw_sha256",
+                "canonical_size_bytes",
+                "canonical_sha256",
+            )
+        },
+    ]
+    for partial in partials:
+        _reject(lambda partial=partial: contract._validate_training_launch_contract_binding(partial))
+
+    reordered = _reordered_builtin(binding)
+    checked = contract._validate_training_launch_contract_binding(reordered)
+    assert checked == binding
+    assert reordered == binding
+
+    ordered = OrderedDict(binding)
+    _reject(lambda: contract._validate_training_launch_contract_binding(ordered))
+    nested_ordered = copy.deepcopy(binding)
+    nested_ordered["source_bindings"] = OrderedDict(nested_ordered["source_bindings"])
+    _reject(lambda: contract._validate_training_launch_contract_binding(nested_ordered))
+
+
+def test_auth_source_sha_exploit_replay_is_rejected_by_both_public_apis() -> None:
+    binding, observed, authorization, raw, file_identity = _valid_case()
+    mutated_binding = copy.deepcopy(binding)
+    mutated_binding["source_bindings"]["training_contract"]["module"]["sha256"] = "9" * 64
+    expected_sha = hashlib.sha256(raw).hexdigest()
+
+    with pytest.raises(contract.TrainingLaunchContractError, match="contract binding source_bindings"):
+        contract.validate_owner_authorization(
+            authorization,
+            expected_raw_size_bytes=len(raw),
+            expected_raw_sha256=expected_sha,
+            contract_binding=mutated_binding,
+            observed_binding=observed,
+            authorization_file_identity=file_identity,
+        )
+    with pytest.raises(contract.TrainingLaunchContractError, match="contract binding source_bindings"):
+        contract.owner_authorization_binding(
+            authorization,
+            expected_raw_size_bytes=len(raw),
+            expected_raw_sha256=expected_sha,
+            contract_binding=mutated_binding,
+            observed_binding=observed,
+            authorization_file_identity=file_identity,
+        )
+
+
+def test_contract_binding_mutation_is_rejected_before_authorization_parse() -> None:
+    binding, observed, _, _, file_identity = _valid_case()
+    mutated_binding = copy.deepcopy(binding)
+    mutated_binding["source_bindings"]["training_contract"]["module"]["sha256"] = "9" * 64
+    raw = b"not-json\n"
+    with pytest.raises(contract.TrainingLaunchContractError, match="contract binding source_bindings"):
+        contract.validate_owner_authorization(
+            raw,
+            expected_raw_size_bytes=len(raw),
+            expected_raw_sha256=hashlib.sha256(raw).hexdigest(),
+            contract_binding=mutated_binding,
+            observed_binding=observed,
+            authorization_file_identity=file_identity,
+        )
+
+
+def test_every_source_binding_scalar_leaf_is_semantically_bound() -> None:
+    binding = _binding()
+    source_paths = list(_scalar_paths(binding["source_bindings"]))
+    assert source_paths
+    before_sha = hashlib.sha256(contract._canonical(binding)).hexdigest()
+    for path in source_paths:
+        mutated = copy.deepcopy(binding)
+        current = mutated["source_bindings"]
+        for key in path[:-1]:
+            current = current[key]
+        original = current[path[-1]]
+        _replace_at_path(mutated["source_bindings"], path, _mutated_scalar(path, original))
+        after_sha = hashlib.sha256(contract._canonical(mutated)).hexdigest()
+        assert after_sha != before_sha, path
+        _reject(lambda mutated=mutated: contract._validate_training_launch_contract_binding(mutated))
+
+
+@pytest.mark.parametrize(
+    ("field", "contract_field"),
+    [
+        ("source_bindings", "source_bindings"),
+        ("targets", "targets"),
+        ("run_identity", "run_identity"),
+        ("repository_reference", "repository"),
+    ],
+)
+def test_contract_binding_cross_copy_mutations_fail_closed(field: str, contract_field: str) -> None:
+    binding = _binding()
+    one_side = copy.deepcopy(binding)
+    if field == "source_bindings":
+        one_side[field]["training_contract"]["module"]["sha256"] = "9" * 64
+    elif field == "targets":
+        one_side[field]["all_targets_must_be_absent"] = False
+    elif field == "run_identity":
+        one_side[field]["training_run_id"] = "mutated-run"
+    else:
+        one_side[field]["head"] = "9" * 40
+    _reject(lambda: contract._validate_training_launch_contract_binding(one_side))
+
+    synchronized = copy.deepcopy(binding)
+    if field == "source_bindings":
+        fake = synchronized[field]["training_contract"]["module"]
+        fake["sha256"] = "9" * 64
+        synchronized["contract"][contract_field]["training_contract"]["module"]["sha256"] = "9" * 64
+    elif field == "targets":
+        synchronized[field]["all_targets_must_be_absent"] = False
+        synchronized["contract"][contract_field]["all_targets_must_be_absent"] = False
+    elif field == "run_identity":
+        synchronized[field]["training_run_id"] = "mutated-run"
+        synchronized["contract"][contract_field]["training_run_id"] = "mutated-run"
+    else:
+        synchronized[field]["head"] = "9" * 40
+        synchronized["contract"][contract_field]["head"] = "9" * 40
+    _reject(lambda: contract._validate_training_launch_contract_binding(synchronized))
+
+
+def test_contract_binding_identity_and_repack_mutations_fail_without_digest_authority() -> None:
+    binding = _binding()
+    mutations = []
+
+    mutated = copy.deepcopy(binding)
+    mutated["relative_path"] = ""
+    mutations.append(mutated)
+
+    mutated = copy.deepcopy(binding)
+    mutated["raw_size_bytes"] = True
+    mutations.append(mutated)
+
+    mutated = copy.deepcopy(binding)
+    mutated["canonical_size_bytes"] = math.nan
+    mutations.append(mutated)
+
+    mutated = copy.deepcopy(binding)
+    mutated["raw_sha256"] = "not-a-sha"
+    mutations.append(mutated)
+
+    mutated = copy.deepcopy(binding)
+    mutated["contract"]["stage"] = "T6A-repacked"
+    mutations.append(mutated)
+
+    for candidate in mutations:
+        _reject(lambda candidate=candidate: contract._validate_training_launch_contract_binding(candidate))
+
+
+def test_contract_binding_validation_does_not_mutate_input() -> None:
+    binding = _binding()
+    before = copy.deepcopy(binding)
+    checked = contract._validate_training_launch_contract_binding(binding)
+    assert checked == before
+    assert binding == before
 
 
 @pytest.mark.parametrize("field", [

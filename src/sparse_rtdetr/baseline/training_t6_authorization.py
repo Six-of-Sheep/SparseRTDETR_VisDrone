@@ -1045,31 +1045,81 @@ def canonical_owner_authorization_bytes(authorization: Mapping[str, Any]) -> byt
     return _canonical(_validate_owner_authorization_shape(copy.deepcopy(authorization)))
 
 
-def _contract_identity_from_binding(value: Any) -> dict[str, Any]:
-    if type(value) is not dict:
-        _fail("expected contract binding must be a builtin dict")
-    if value.get("contract_id") not in {None, LAUNCH_CONTRACT_ID}:
-        _fail("expected contract binding ID drift")
-    identity = value.get("contract_identity")
-    if identity is None:
-        identity = {
-            "relative_path": value.get("relative_path"),
-            "raw_size_bytes": value.get("raw_size_bytes"),
-            "raw_sha256": value.get("raw_sha256"),
-            "canonical_size_bytes": value.get("canonical_size_bytes"),
-            "canonical_sha256": value.get("canonical_sha256"),
-        }
-    checked = _validate_config_identity(identity, "expected contract identity")
+def _validate_training_launch_contract_binding(value: Any) -> dict[str, Any]:
+    """Validate the complete immutable binding emitted by the factory."""
+
     expected = {
+        "schema_version",
+        "contract_id",
+        "relative_path",
+        "raw_size_bytes",
+        "raw_sha256",
+        "canonical_size_bytes",
+        "canonical_sha256",
+        "contract_identity",
+        "source_bindings",
+        "targets",
+        "run_identity",
+        "repository_reference",
+        "contract",
+    }
+    if type(value) is not dict or set(value) != expected:
+        _fail("contract binding key set drift")
+    _assert_builtin_json(value, "contract binding")
+    if type(value["schema_version"]) is not int or value["schema_version"] != LAUNCH_CONTRACT_SCHEMA_VERSION:
+        _fail("contract binding schema version drift")
+    if type(value["contract_id"]) is not str or value["contract_id"] != LAUNCH_CONTRACT_ID:
+        _fail("contract binding contract ID drift")
+
+    flattened_identity = {
+        "relative_path": value["relative_path"],
+        "raw_size_bytes": value["raw_size_bytes"],
+        "raw_sha256": value["raw_sha256"],
+        "canonical_size_bytes": value["canonical_size_bytes"],
+        "canonical_sha256": value["canonical_sha256"],
+    }
+    checked_identity = _validate_config_identity(
+        value["contract_identity"], "contract binding contract_identity"
+    )
+    expected_identity = {
         "relative_path": LAUNCH_CONTRACT_CONFIG_RELATIVE_PATH,
         "raw_size_bytes": LAUNCH_CONTRACT_RAW_SIZE_BYTES,
         "raw_sha256": LAUNCH_CONTRACT_RAW_SHA256,
         "canonical_size_bytes": LAUNCH_CONTRACT_CANONICAL_SIZE_BYTES,
         "canonical_sha256": LAUNCH_CONTRACT_CANONICAL_SHA256,
     }
-    if checked != expected:
-        _fail("expected contract identity drift")
-    return checked
+    if checked_identity != expected_identity:
+        _fail("contract binding contract identity drift")
+    if flattened_identity != checked_identity:
+        _fail("contract binding flattened identity drift")
+
+    contract = _validate_config(copy.deepcopy(value["contract"]))
+    for field, frozen in (
+        ("source_bindings", _FROZEN_SOURCE_BINDINGS),
+        ("targets", _FROZEN_TARGETS),
+        ("run_identity", _FROZEN_RUN_IDENTITY),
+        ("repository_reference", _FROZEN_REPOSITORY_REFERENCE),
+    ):
+        child = value[field]
+        if type(child) is not dict:
+            _fail(f"contract binding {field} must be a builtin dict")
+        _assert_builtin_json(child, f"contract binding.{field}")
+        if child != frozen:
+            _fail(f"contract binding {field} drift")
+
+    if value["source_bindings"] != contract["source_bindings"]:
+        _fail("contract binding source_bindings disagree with contract")
+    if value["targets"] != contract["targets"]:
+        _fail("contract binding targets disagree with contract")
+    if value["run_identity"] != contract["run_identity"]:
+        _fail("contract binding run_identity disagrees with contract")
+    if value["repository_reference"] != contract["repository"]:
+        _fail("contract binding repository_reference disagrees with contract")
+    return copy.deepcopy(value)
+
+
+def _contract_identity_from_binding(value: Any) -> dict[str, Any]:
+    return _validate_training_launch_contract_binding(value)["contract_identity"]
 
 
 def _validate_observed_binding(value: Any) -> dict[str, Any]:
@@ -1150,15 +1200,29 @@ def validate_owner_authorization(
         _fail("observed binding must be a builtin dict")
     if type(authorization_file_identity) is not dict:
         _fail("authorization file identity must be a builtin dict")
-    expected_identity = _contract_identity_from_binding(copy.deepcopy(contract_binding))
+    validated_binding = _validate_training_launch_contract_binding(copy.deepcopy(contract_binding))
     observed = _validate_observed_binding(copy.deepcopy(observed_binding))
     file_identity = _validate_authorization_file_identity(copy.deepcopy(authorization_file_identity))
     parsed, raw, _ = _authorization_raw(authorization)
     checked = _validate_owner_authorization_shape(parsed)
     if len(raw) != expected_raw_size_bytes or hashlib.sha256(raw).hexdigest() != expected_raw_sha256:
         _fail("authorization external raw identity mismatch")
-    if checked["contract_identity"] != expected_identity:
+    if checked["contract_id"] != validated_binding["contract_id"]:
+        _fail("authorization contract ID does not match external contract binding")
+    if checked["contract_identity"] != validated_binding["contract_identity"]:
         _fail("authorization contract identity does not match external contract binding")
+    if checked["source_bindings"] != validated_binding["source_bindings"]:
+        _fail("authorization source bindings do not match external contract binding")
+    if checked["targets"] != validated_binding["targets"]:
+        _fail("authorization targets do not match external contract binding")
+    if checked["training_run_id"] != validated_binding["run_identity"]["training_run_id"]:
+        _fail("authorization run ID does not match external contract binding")
+    if checked["tmux_session_name"] != validated_binding["run_identity"]["tmux_session_name"]:
+        _fail("authorization session does not match external contract binding")
+    if checked["training_policy"] != validated_binding["contract"]["training_policy"]:
+        _fail("authorization training policy does not match external contract binding")
+    if checked["state_machine"] != validated_binding["contract"]["state_machine"]:
+        _fail("authorization state machine does not match external contract binding")
     for field in (
         "repository",
         "targets",
