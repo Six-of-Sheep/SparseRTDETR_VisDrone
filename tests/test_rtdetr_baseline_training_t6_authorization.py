@@ -29,12 +29,12 @@ def _observed(binding: dict[str, object], nonce: str = GOOD_NONCE) -> dict[str, 
     return {
         "repository": {
             "repo_root": str(ROOT.resolve()),
-            "branch": "codex/p3-rtdetrv2-baseline-training-t6-authorization-contract-r1",
+            "branch": "codex/p3-rtdetrv2-baseline-training-t6b-runtime-binding-r3-repair",
             "head": "1" * 40,
             "tree": "2" * 40,
             "parent": "3" * 40,
-            "upstream": "origin/codex/p3-rtdetrv2-baseline-training-t6-authorization-contract-r1",
-            "upstream_sha": "4" * 40,
+            "upstream": "origin/codex/p3-rtdetrv2-baseline-training-t6b-runtime-binding-r3-repair",
+            "upstream_sha": "1" * 40,
         },
         "targets": copy.deepcopy(binding["targets"]),
         "target_absence": {

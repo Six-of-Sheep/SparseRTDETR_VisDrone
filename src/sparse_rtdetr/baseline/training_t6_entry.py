@@ -45,6 +45,7 @@ ENTRY_EVIDENCE_FILE_NAMES = (
     "entry_artifact_inventory.json",
     "entry_completion.json",
 )
+ENTRY_CHECKPOINT_DIRECTORY = "checkpoints"
 
 # Updated after the config is added.  Keeping these constants beside the
 # loader makes a checked-in raw/canonical identity part of the API contract.
@@ -1371,8 +1372,23 @@ def run_production_entry(
 
     result: dict[str, Any]
     try:
-        ports = dict(engine_ports) if engine_ports is not None else None
-        if ports is not None:
+        if engine_ports is None:
+            ports = dict(_engine.resolve_production_ports(
+                repo_root=checked["repository"]["repo_root"],
+                data_roles=checked["data_roles"],
+                output_root=checked["evidence_root"],
+            ))
+            ports["checkpoint_identity"] = {
+                "training_run_id": checked["training_run_id"],
+                "nonce": checked["nonce"],
+                "repository": _copy(checked["repository"]),
+                "source_bindings": _copy(checked["source_bindings"]),
+                "config_identity": _copy(checked["config_identity"]),
+                "data_roles": _copy(checked["data_roles"]),
+                "evaluator": "visdrone_official_primary_evaluator_v1/development_only",
+            }
+        else:
+            ports = dict(engine_ports)
             ports["production_authorized"] = True
             ports.setdefault("authorize_production", lambda: True)
             ports.setdefault("training_evidence_root", str(root))
@@ -1465,6 +1481,21 @@ def _entry_inventory(root: Path) -> list[dict[str, Any]]:
                 "nlink": observed.st_nlink,
             }
         )
+    checkpoint_root = root / ENTRY_CHECKPOINT_DIRECTORY
+    if checkpoint_root.exists() or checkpoint_root.is_symlink():
+        _directory(checkpoint_root, "checkpoint directory")
+        for path in sorted(checkpoint_root.iterdir(), key=lambda item: item.name):
+            observed = _regular_file(path, f"checkpoint {path.name}", expected_mode=0o600, expected_nlink=1)
+            raw = _read_stable_file(path, f"checkpoint {path.name}", mode=0o600)
+            rows.append(
+                {
+                    "relative_path": f"{ENTRY_CHECKPOINT_DIRECTORY}/{path.name}",
+                    "size_bytes": len(raw),
+                    "sha256": _sha(raw),
+                    "mode": stat.S_IMODE(observed.st_mode),
+                    "nlink": observed.st_nlink,
+                }
+            )
     return rows
 
 
@@ -1479,8 +1510,14 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
         present = {path.name for path in root.iterdir()}
         if present == {"entry_consumption.json", "entry_invocation.json"}:
             return "RUNNING"
-        if present != set(ENTRY_EVIDENCE_FILE_NAMES):
+        expected_present = set(ENTRY_EVIDENCE_FILE_NAMES)
+        if not present.issubset(expected_present | {ENTRY_CHECKPOINT_DIRECTORY}) or not expected_present.issubset(present):
             return "UNKNOWN"
+        if ENTRY_CHECKPOINT_DIRECTORY in present:
+            try:
+                _directory(root / ENTRY_CHECKPOINT_DIRECTORY, "checkpoint directory")
+            except Exception:
+                return "UNKNOWN"
         consumption, consumption_raw = _read_json(root / "entry_consumption.json", "entry consumption")
         consumption_keys = {"schema_version", "kind", "descriptor_sha256", "authorization_binding_sha256", "training_run_id", "nonce", "status", "receipt_path", "consumed_authorization_receipt_sha256", "evidence_claim_receipt_sha256", "process_pid"}
         if set(consumption) != consumption_keys or consumption_raw != _canonical(consumption):

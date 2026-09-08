@@ -29,8 +29,6 @@ LAUNCH_CONTRACT_RAW_SIZE_BYTES = 11730
 LAUNCH_CONTRACT_RAW_SHA256 = "539abe556edd00a5bb0ecf0ed350195ee28e55a0af0b804404a0d92ea9830ff9"
 LAUNCH_CONTRACT_CANONICAL_SIZE_BYTES = 11729
 LAUNCH_CONTRACT_CANONICAL_SHA256 = "13a5923aa62f3048b2baefe32aaa163b9aa44d3b3e11d2a374ebceec5034ae94"
-_T6A_LAUNCH_BRANCH = "codex/p3-rtdetrv2-baseline-training-t6-authorization-contract-r1"
-
 _SHA_RE = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _UUID_RE = re.compile(r"GPU-[0-9a-f-]{8,}\Z")
@@ -858,13 +856,17 @@ def _validate_repository_observation(value: Any, field: str) -> dict[str, Any]:
     expected = {"repo_root", "branch", "head", "tree", "parent", "upstream", "upstream_sha"}
     if type(value) is not dict or set(value) != expected:
         _fail(f"{field} key set drift")
-    _absolute_path(value["repo_root"], f"{field}.repo_root")
+    repo_root = _absolute_path(value["repo_root"], f"{field}.repo_root")
+    if repo_root != os.path.normpath(repo_root) or os.path.realpath(repo_root) != repo_root:
+        _fail(f"{field}.repo_root is not canonical")
     _branch(value["branch"], f"{field}.branch")
     for key in ("head", "tree", "parent", "upstream_sha"):
         _git_oid(value[key], f"{field}.{key}")
-    if type(value["upstream"]) is not str or not value["upstream"].startswith("origin/"):
-        _fail(f"{field}.upstream is invalid")
-    if value["branch"] != _T6A_LAUNCH_BRANCH:
+    if value["upstream"] != f"origin/{value['branch']}":
+        _fail(f"{field}.upstream is not bound to branch")
+    if value["upstream_sha"] != value["head"]:
+        _fail(f"{field}.upstream_sha is not bound to HEAD")
+    if value["branch"] == _FROZEN_REPOSITORY_REFERENCE["branch"]:
         _fail(f"{field} still identifies the pre-T6 branch")
     if value["head"] == _FROZEN_REPOSITORY_REFERENCE["head"] or value["tree"] == _FROZEN_REPOSITORY_REFERENCE["tree"]:
         _fail(f"{field} still identifies the pre-T6 reference")

@@ -47,12 +47,12 @@ def _t6a_fixture(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], 
     nonce = hashlib.sha256(b"t6b-cpu-fake-authorization").hexdigest()
     repository = {
         "repo_root": str(ROOT),
-        "branch": "codex/p3-rtdetrv2-baseline-training-t6-authorization-contract-r1",
+        "branch": "codex/p3-rtdetrv2-baseline-training-t6b-runtime-binding-r3-repair",
         "head": "1" * 40,
         "tree": "2" * 40,
         "parent": "3" * 40,
-        "upstream": "origin/t6a-test",
-        "upstream_sha": "4" * 40,
+        "upstream": "origin/codex/p3-rtdetrv2-baseline-training-t6b-runtime-binding-r3-repair",
+        "upstream_sha": "1" * 40,
     }
     data_roles = {
         "train_core": {"role": "train_core", "root": "/tmp/t6b_train_core_v1", "manifest_sha256": "5" * 64},
@@ -215,6 +215,87 @@ def _engine_ports() -> dict[str, object]:
         "backward": lambda loss: None,
         "amp_counters": lambda: {"overflow_events": 0, "skipped_optimizer_steps": 0},
     }
+
+
+def test_engine_accepts_vendor_batch_and_loss_dict_and_applies_warmup() -> None:
+    policy = entry.load_t6b_config(ROOT)["training_policy"]
+    warmup_calls: list[int] = []
+    scheduler_calls: list[int] = []
+
+    class Warmup:
+        def step(self) -> None:
+            warmup_calls.append(1)
+
+        def finished(self) -> bool:
+            return len(warmup_calls) >= 2000
+
+    class Scheduler:
+        def step(self) -> None:
+            scheduler_calls.append(1)
+
+    class Criterion:
+        weight_dict = {"loss_cls": 1.0, "loss_bbox": 1.0}
+
+        def __call__(self, outputs: object, targets: object, **kwargs: object) -> dict[str, float]:
+            assert outputs == "vendor-output"
+            assert type(targets) is list
+            assert kwargs["epoch"] >= 1
+            return {"loss_cls": 1.0, "loss_bbox": 2.0}
+
+    ports = _engine_ports()
+    ports.update(
+        {
+            "model_factory": lambda: (lambda samples, targets=None: "vendor-output"),
+            "criterion_factory": Criterion,
+            "scheduler_factory": Scheduler,
+            "warmup_scheduler_factory": Warmup,
+            "train_batches": lambda: [("vendor-samples", [{"labels": [0]}])],
+        }
+    )
+    result = engine.run_training_engine(policy, ports, mode="cpu_fake")
+    assert result["terminal"] == "TERMINAL_COMPLETE"
+    assert len(warmup_calls) == 120
+    assert scheduler_calls == []
+
+
+def test_runtime_data_role_binding_uses_exact_manifest_identity(tmp_path: Path) -> None:
+    from sparse_rtdetr.baseline import config as baseline_config
+
+    artifact_root = ROOT / "artifacts" / "data" / "visdrone_protocol_v2_conversion_r3"
+    roles = {
+        "train_core": {"role": "train_core", "root": str(tmp_path / "train_core"), "manifest_sha256": hashlib.sha256((artifact_root / "train_core_manifest.json").read_bytes()).hexdigest()},
+        "development": {"role": "development", "root": str(tmp_path / "development"), "manifest_sha256": hashlib.sha256((artifact_root / "development_manifest.json").read_bytes()).hexdigest()},
+        "test": {"role": "test", "access": "forbidden", "identity_read": "forbidden"},
+        "confirmatory": {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"},
+    }
+    Path(roles["train_core"]["root"]).mkdir()
+    Path(roles["development"]["root"]).mkdir()
+    checked = engine._validate_runtime_data_roles(str(ROOT), roles, baseline_config)
+    assert checked["train_core"]["runtime"]["runtime"]["role"] == "train_core"
+    mutated = copy.deepcopy(roles)
+    mutated["development"]["manifest_sha256"] = "0" * 64
+    with pytest.raises(engine.TrainingEngineError, match="manifest identity"):
+        engine._validate_runtime_data_roles(str(ROOT), mutated, baseline_config)
+
+
+def test_default_resolver_receives_descriptor_bindings_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    descriptor, _, _, _ = _descriptor(tmp_path)
+    observed: list[dict[str, object]] = []
+
+    def resolver(**kwargs: object) -> dict[str, object]:
+        observed.append(kwargs)
+        return _engine_ports()
+
+    monkeypatch.setattr(engine, "resolve_production_ports", resolver)
+    result = entry.run_production_entry(descriptor, engine_ports=None, process_pid=4242)
+    assert result["status"] == "TERMINAL_COMPLETE"
+    assert observed == [
+        {
+            "repo_root": descriptor["repository"]["repo_root"],
+            "data_roles": descriptor["data_roles"],
+            "output_root": descriptor["evidence_root"],
+        }
+    ]
 
 
 def _rewrite_canonical(path: Path, value: dict[str, object]) -> None:

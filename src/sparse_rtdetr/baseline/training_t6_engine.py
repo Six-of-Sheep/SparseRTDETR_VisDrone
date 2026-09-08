@@ -331,6 +331,119 @@ def _iter_batches(value: Any, field: str) -> Iterable[Any]:
         raise TrainingEngineError(f"ports.{field} must provide an iterable") from exc
 
 
+def _validate_runtime_data_roles(
+    repo_root: str,
+    data_roles: Mapping[str, Any] | None,
+    baseline_config: Any,
+) -> dict[str, dict[str, Any]]:
+    """Bind only the two owner-authorized runtime roles to frozen manifests."""
+
+    if type(data_roles) is not dict or set(data_roles) != {"train_core", "development", "test", "confirmatory"}:
+        _fail("production data roles must be a closed object")
+    if data_roles["test"] != {"role": "test", "access": "forbidden", "identity_read": "forbidden"}:
+        _fail("test data role is not sealed")
+    if data_roles["confirmatory"] != {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}:
+        _fail("confirmatory data role is not sealed")
+
+    pathlib = importlib.import_module("pathlib")
+    stat = importlib.import_module("stat")
+    root = pathlib.Path(repo_root)
+    if not root.is_absolute() or root != root.resolve(strict=True):
+        _fail("repository root is not canonical")
+    forbidden = {"test", "confirmatory", "raw", "raw_annotation", "annotations"}
+    checked: dict[str, dict[str, Any]] = {}
+    for role in ("train_core", "development"):
+        binding = data_roles[role]
+        if type(binding) is not dict or set(binding) != {"role", "root", "manifest_sha256"}:
+            _fail(f"production {role} binding is not closed")
+        if binding["role"] != role or type(binding["root"]) is not str:
+            _fail(f"production {role} binding is invalid")
+        if not binding["root"].startswith("/") or "\\" in binding["root"] or "//" in binding["root"]:
+            _fail(f"production {role} root is not canonical")
+        if any(part in {"", ".", ".."} for part in binding["root"].split("/")[1:]):
+            _fail(f"production {role} root has unsafe components")
+        if type(binding["manifest_sha256"]) is not str or len(binding["manifest_sha256"]) != 64 or any(char not in "0123456789abcdef" for char in binding["manifest_sha256"]):
+            _fail(f"production {role} manifest SHA is invalid")
+        path = pathlib.Path(binding["root"])
+        try:
+            observed = path.lstat()
+            canonical = path.resolve(strict=True)
+        except OSError as exc:
+            raise TrainingEngineError(f"production {role} root is unavailable") from exc
+        if stat.S_ISLNK(observed.st_mode) or not stat.S_ISDIR(observed.st_mode) or canonical != path:
+            _fail(f"production {role} root is not a canonical directory")
+        if any(part.casefold() in forbidden or "annotation" in part.casefold() for part in path.parts):
+            _fail(f"production {role} root points into sealed data")
+        checked[role] = {"binding": copy.deepcopy(binding), "root": path}
+    train_root = checked["train_core"]["root"]
+    development_root = checked["development"]["root"]
+    if train_root == development_root or train_root in development_root.parents or development_root in train_root.parents:
+        _fail("train_core and development roots overlap")
+
+    artifact_root = root / "artifacts" / "data" / "visdrone_protocol_v2_conversion_r3"
+    for role in ("train_core", "development"):
+        runtime = baseline_config.build_runtime_config(str(root), str(checked[role]["root"]), role)
+        if type(runtime) is not dict or type(runtime.get("dataloader")) is not dict:
+            _fail(f"production {role} runtime binding is invalid")
+        annotation = pathlib.Path(runtime["dataloader"].get("annotation_file", ""))
+        manifest = artifact_root / f"{role}_manifest.json"
+        try:
+            annotation_stat = annotation.lstat()
+            manifest_stat = manifest.lstat()
+            annotation_sha = _sha_bytes(annotation.read_bytes())
+            manifest_sha = _sha_bytes(manifest.read_bytes())
+        except OSError as exc:
+            raise TrainingEngineError(f"production {role} manifest is unavailable") from exc
+        if stat.S_ISLNK(annotation_stat.st_mode) or not stat.S_ISREG(annotation_stat.st_mode) or annotation_stat.st_nlink != 1:
+            _fail(f"production {role} annotation is not a regular unique file")
+        if stat.S_ISLNK(manifest_stat.st_mode) or not stat.S_ISREG(manifest_stat.st_mode) or manifest_stat.st_nlink != 1:
+            _fail(f"production {role} manifest is not a regular unique file")
+        if manifest_sha != checked[role]["binding"]["manifest_sha256"]:
+            _fail(f"production {role} manifest identity drift")
+        checked[role].update({"runtime": runtime, "annotation": annotation, "annotation_sha256": annotation_sha, "manifest": manifest})
+    return checked
+
+
+def _supports_keyword(callable_value: Any, keyword: str) -> bool:
+    try:
+        inspect = importlib.import_module("inspect")
+        parameters = inspect.signature(callable_value).parameters.values()
+        return any(parameter.kind is inspect.Parameter.VAR_KEYWORD or parameter.name == keyword for parameter in parameters)
+    except (TypeError, ValueError):
+        return False
+
+
+def _move_to_device(value: Any, device: Any) -> Any:
+    if type(value) is dict:
+        return {key: _move_to_device(child, device) for key, child in value.items()}
+    if type(value) is list:
+        return [_move_to_device(child, device) for child in value]
+    mover = getattr(value, "to", None)
+    if callable(mover):
+        return mover(device)
+    return value
+
+
+def _split_training_batch(batch: Any) -> tuple[Any, Any] | None:
+    if type(batch) in {tuple, list} and len(batch) == 2:
+        return batch[0], batch[1]
+    if type(batch) is dict and set(batch).issuperset({"images", "targets"}):
+        return batch["images"], batch["targets"]
+    return None
+
+
+def _loss_total(loss: Any) -> Any:
+    if type(loss) is dict:
+        if not loss:
+            _fail("criterion returned an empty loss dictionary")
+        values = list(loss.values())
+        total = values[0]
+        for value in values[1:]:
+            total = total + value
+        return total
+    return loss
+
+
 def resolve_production_ports(
     repo_root: str | None = None,
     *,
@@ -347,15 +460,18 @@ def resolve_production_ports(
 
     try:
         torch = importlib.import_module("torch")
+        pathlib_module = importlib.import_module("pathlib")
         baseline_config = importlib.import_module("sparse_rtdetr.baseline.config")
         baseline_dataset = importlib.import_module("sparse_rtdetr.baseline.dataset")
         baseline_postprocessor = importlib.import_module("sparse_rtdetr.baseline.postprocessor")
         primary_evaluator = importlib.import_module("sparse_rtdetr.baseline.primary_evaluator")
-        root = repo_root if repo_root is not None else str(baseline_config._default_repo_root())
+        root = str(pathlib_module.Path(repo_root if repo_root is not None else baseline_config._default_repo_root()).resolve(strict=True))
         vendor_root = baseline_config._vendor_root(root)
         vendor_config_path = baseline_config._vendor_config_path(root)
         with baseline_config._vendor_path(vendor_root):
             yaml_config_module = importlib.import_module("src.core.yaml_config")
+            workspace_module = importlib.import_module("src.core.workspace")
+            dataloader_module = importlib.import_module("src.data.dataloader")
             solver_module = importlib.import_module("src.solver")
             optim_module = importlib.import_module("src.optim")
             importlib.import_module("src.data")
@@ -379,6 +495,8 @@ def resolve_production_ports(
     evaluate_primary = getattr(primary_evaluator, "evaluate_primary_v1", None)
     if not callable(visdrone_dataset) or not callable(visdrone_postprocessor) or not callable(evaluate_primary):
         _fail("certified baseline runtime API surface is incomplete")
+
+    role_bindings = _validate_runtime_data_roles(root, data_roles, baseline_config)
 
     state: dict[str, Any] = {}
 
@@ -413,6 +531,9 @@ def resolve_production_ports(
     def scheduler_factory() -> Any:
         return runtime_config().lr_scheduler
 
+    def warmup_scheduler_factory() -> Any:
+        return runtime_config().lr_warmup_scheduler
+
     def scaler_factory() -> Any:
         return grad_scaler(
             init_scale=65536.0,
@@ -424,46 +545,231 @@ def resolve_production_ports(
     def ema_factory() -> Any:
         return model_ema(runtime_config().model, decay=0.9999, warmups=2000)
 
+    def _configured_component(value: Any, field: str) -> Any:
+        if type(value) is not dict:
+            _fail(f"production {field} configuration is invalid")
+        payload = copy.deepcopy(value)
+        component_type = payload.pop("type", None)
+        if type(component_type) is not str or not component_type:
+            _fail(f"production {field} type is missing")
+        return workspace_module.create(component_type, runtime_config().global_cfg, **payload)
+
     def dataset_factory(role: str) -> Any:
-        if type(data_roles) is not dict or role not in {"train_core", "development"}:
+        if role not in {"train_core", "development"}:
             _fail("production dataset factory requires detached train/development bindings")
-        binding = data_roles[role]
-        if type(binding) is not dict or type(binding.get("root")) is not str:
-            _fail(f"production {role} binding is invalid")
-        runtime = baseline_config.build_runtime_config(root, binding["root"], role)
-        return visdrone_dataset(
+        cached = state.setdefault("datasets", {}).get(role)
+        if cached is not None:
+            return cached
+        loader_name = "train_dataloader" if role == "train_core" else "val_dataloader"
+        loader_config = runtime_config().yaml_cfg.get(loader_name)
+        if type(loader_config) is not dict or type(loader_config.get("dataset")) is not dict:
+            _fail(f"production {role} dataloader configuration is invalid")
+        dataset_config = loader_config["dataset"]
+        transform = _configured_component(dataset_config.get("transforms"), f"{role} transforms")
+        runtime = role_bindings[role]["runtime"]
+        if runtime["dataloader"]["img_folder"] != str(role_bindings[role]["root"]):
+            _fail(f"production {role} runtime root binding drift")
+        dataset = visdrone_dataset(
             img_folder=runtime["dataloader"]["img_folder"],
             ann_file=runtime["dataloader"]["annotation_file"],
-            transforms=None,
+            transforms=transform,
             return_masks=False,
             remap_mscoco_category=False,
             vendor_root=vendor_root,
             role=role,
         )
+        state.setdefault("datasets", {})[role] = dataset
+        return dataset
+
+    def _loader_factory(role: str) -> Any:
+        cached = state.setdefault("loaders", {}).get(role)
+        if cached is not None:
+            return cached
+        loader_name = "train_dataloader" if role == "train_core" else "val_dataloader"
+        loader_config = runtime_config().yaml_cfg.get(loader_name)
+        if type(loader_config) is not dict:
+            _fail(f"production {role} dataloader configuration is invalid")
+        collate = _configured_component(loader_config.get("collate_fn"), f"{role} collate")
+        batch_size = runtime_config().get_rank_batch_size(loader_config)
+        loader_class = getattr(dataloader_module, "DataLoader", None)
+        if not callable(loader_class):
+            _fail("certified vendor DataLoader is unavailable")
+        loader = loader_class(
+            dataset=dataset_factory(role),
+            batch_size=batch_size,
+            num_workers=loader_config.get("num_workers", 0),
+            drop_last=loader_config.get("drop_last", role == "train_core"),
+            collate_fn=collate,
+            shuffle=loader_config.get("shuffle", role == "train_core"),
+        )
+        loader.shuffle = bool(loader_config.get("shuffle", role == "train_core"))
+        state.setdefault("loaders", {})[role] = loader
+        return loader
 
     def train_batches() -> Any:
-        return runtime_config().train_dataloader
+        return _loader_factory("train_core")
 
     def development_batches() -> Any:
-        return runtime_config().val_dataloader
+        loader = _loader_factory("development")
+        state["development_loader"] = loader
+        return loader
 
     def postprocessor_factory() -> Any:
-        return visdrone_postprocessor(vendor_root=vendor_root)
+        postprocessor = state.get("postprocessor")
+        if postprocessor is None:
+            postprocessor = visdrone_postprocessor(vendor_root=vendor_root)
+            state["postprocessor"] = postprocessor
+        return postprocessor
 
     class PrimaryEvaluator:
         role = "development_only"
 
         def evaluate(self, weights: Any, batches: Any, epoch: int) -> dict[str, Any]:
-            del weights
             del epoch
-            values = list(batches)
-            if len(values) != 1:
-                _fail("primary evaluator requires one bound development input")
             contract = state.get("primary_contract")
             if contract is None:
                 contract = primary_evaluator.load_primary_evaluator_contract(root)
                 state["primary_contract"] = contract
-            input_value = values[0]
+            torch_module = torch
+            model = getattr(weights, "module", weights)
+            if not callable(getattr(model, "__call__", None)):
+                _fail("EMA evaluation weights are not callable")
+            evaluate_mode = getattr(model, "eval", None)
+            if callable(evaluate_mode):
+                evaluate_mode()
+            loader = state.get("development_loader")
+            dataset = getattr(loader, "dataset", None)
+            protocol = importlib.import_module("sparse_rtdetr.data_protocol.evaluation")
+            images = []
+            detections = []
+            ground_truth = []
+            seen_images: set[str] = set()
+
+            def _scalar(value: Any) -> int:
+                item = getattr(value, "item", None)
+                if callable(item):
+                    value = item()
+                if type(value) is not int:
+                    _fail("development image identity is not an integer")
+                return value
+
+            def _image_identity(target: Any) -> tuple[str, int, int, int]:
+                if type(target) is not dict:
+                    _fail("development target must be a builtin dict")
+                image_value = target.get("image_id")
+                numeric_id = _scalar(image_value)
+                stable = target.get("stable_image_id")
+                image_record = None
+                if type(stable) is not str or not stable:
+                    vendor = getattr(dataset, "_vendor", None)
+                    coco = getattr(vendor, "coco", None)
+                    if coco is not None and hasattr(coco, "loadImgs"):
+                        loaded = coco.loadImgs(numeric_id)
+                        if type(loaded) is list and len(loaded) == 1 and type(loaded[0]) is dict:
+                            image_record = loaded[0]
+                            stable = image_record.get("stable_image_id")
+                    if type(stable) is not str or not stable:
+                        stable = str(numeric_id)
+                sizes = target.get("orig_size")
+                if sizes is None or len(sizes) != 2:
+                    _fail("development target orig_size is invalid")
+                width = _scalar(sizes[0])
+                height = _scalar(sizes[1])
+                if width <= 0 or height <= 0:
+                    _fail("development target dimensions are invalid")
+                if image_record is not None:
+                    if image_record.get("stable_image_id") not in {None, stable}:
+                        _fail("development stable image identity drift")
+                return stable, numeric_id, width, height
+
+            def _raw_ground_truth(numeric_id: int, stable: str, target: Any) -> list[Any]:
+                vendor = getattr(dataset, "_vendor", None)
+                coco = getattr(vendor, "coco", None)
+                raw_annotations = getattr(coco, "imgToAnns", {}).get(numeric_id, []) if coco is not None else []
+                rows = []
+                if type(raw_annotations) is list and raw_annotations:
+                    for index, annotation in enumerate(raw_annotations):
+                        if type(annotation) is not dict:
+                            _fail("development annotation row is invalid")
+                        bbox = annotation.get("bbox")
+                        if type(bbox) is not list or len(bbox) != 4:
+                            _fail("development annotation box is invalid")
+                        x, y, width, height = (float(item) for item in bbox)
+                        if width <= 0 or height <= 0:
+                            continue
+                        category = annotation.get("category_id")
+                        if type(category) is not int or category < 0 or category > 10:
+                            _fail("development annotation category is invalid")
+                        annotation_id = annotation.get("stable_annotation_id", f"{stable}:{index}")
+                        rows.append(
+                            protocol.PrimaryGroundTruth(
+                                annotation_id=str(annotation_id),
+                                image_id=stable,
+                                category_id=category,
+                                bbox_xyxy=(x, y, x + width, y + height),
+                                area=float(annotation.get("area", width * height)),
+                                ignore_region=category == 0,
+                                ignored=bool(annotation.get("ignore", False) or annotation.get("iscrowd", 0)),
+                            )
+                        )
+                    return rows
+                boxes = target.get("boxes")
+                labels = target.get("labels")
+                areas = target.get("area")
+                if boxes is None or labels is None:
+                    _fail("development target lacks evaluator ground truth")
+                for index, (box, label) in enumerate(zip(boxes, labels)):
+                    values = tuple(float(item) for item in box)
+                    if len(values) != 4 or values[2] <= values[0] or values[3] <= values[1]:
+                        _fail("development target box is invalid")
+                    label_value = _scalar(label)
+                    category = label_value + 1 if 0 <= label_value <= 9 else label_value
+                    area_value = float(areas[index].item() if areas is not None and hasattr(areas[index], "item") else (areas[index] if areas is not None else (values[2] - values[0]) * (values[3] - values[1])))
+                    rows.append(
+                        protocol.PrimaryGroundTruth(
+                            annotation_id=f"{stable}:{index}",
+                            image_id=stable,
+                            category_id=category,
+                            bbox_xyxy=values,
+                            area=area_value,
+                            ignore_region=category == 0,
+                            ignored=False,
+                        )
+                    )
+                return rows
+
+            with torch_module.no_grad():
+                for batch in batches:
+                    split = _split_training_batch(batch)
+                    if split is None:
+                        _fail("development loader yielded a vendor-shaped batch pair")
+                    samples, targets = split
+                    if type(targets) is not list:
+                        _fail("development targets must be a list")
+                    device = getattr(samples, "device", None)
+                    if device is None:
+                        device = "cuda:0"
+                    samples_for_model = samples.to(device) if callable(getattr(samples, "to", None)) else samples
+                    outputs = model(samples_for_model)
+                    sizes = torch_module.stack([target["orig_size"] for target in targets], dim=0)
+                    output_values = outputs.values() if type(outputs) is dict else ()
+                    first_output = next(iter(output_values), None)
+                    if first_output is not None and callable(getattr(sizes, "to", None)):
+                        sizes = sizes.to(getattr(first_output, "device", sizes.device))
+                    processed = postprocessor_factory()(outputs, sizes)
+                    stable_ids = []
+                    for target in targets:
+                        stable, numeric_id, width, height = _image_identity(target)
+                        if stable in seen_images:
+                            _fail("development image IDs are duplicated")
+                        seen_images.add(stable)
+                        stable_ids.append(stable)
+                        images.append(protocol.PrimaryImageV2(stable, width, height))
+                        ground_truth.extend(_raw_ground_truth(numeric_id, stable, target))
+                    detections.extend(postprocessor_factory().to_detections(processed, stable_ids))
+            if not images:
+                _fail("development loader yielded no images")
+            input_value = protocol.PrimaryEvaluatorInputV2(tuple(images), tuple(detections), tuple(ground_truth))
             result = evaluate_primary(input_value, contract)
             primary_evaluator.validate_primary_evaluator_result(result, input_value, contract)
             return {
@@ -477,23 +783,96 @@ def resolve_production_ports(
         def __init__(self) -> None:
             if type(output_root) is not str or not output_root:
                 _fail("production checkpoint writer requires an evidence root")
-            self._root = importlib.import_module("pathlib").Path(output_root)
+            pathlib = importlib.import_module("pathlib")
+            stat = importlib.import_module("stat")
+            self._root = pathlib.Path(output_root)
+            try:
+                root_stat = self._root.lstat()
+            except OSError as exc:
+                raise TrainingEngineError("production checkpoint root is unavailable") from exc
+            if stat.S_ISLNK(root_stat.st_mode) or not stat.S_ISDIR(root_stat.st_mode) or self._root != self._root.resolve(strict=True):
+                _fail("production checkpoint root is not canonical")
+            self._checkpoint_root = self._root / "checkpoints"
+            if self._checkpoint_root.exists() or self._checkpoint_root.is_symlink():
+                checkpoint_stat = self._checkpoint_root.lstat()
+                if stat.S_ISLNK(checkpoint_stat.st_mode) or not stat.S_ISDIR(checkpoint_stat.st_mode):
+                    _fail("production checkpoint directory is invalid")
+            else:
+                os_module = importlib.import_module("os")
+                os_module.mkdir(self._checkpoint_root, 0o700)
+                fsync = getattr(os_module, "fsync", None)
+                if not callable(fsync):
+                    _fail("production checkpoint fsync is unavailable")
+                directory_fd = os_module.open(self._root, os_module.O_RDONLY | getattr(os_module, "O_DIRECTORY", 0))
+                try:
+                    fsync(directory_fd)
+                finally:
+                    os_module.close(directory_fd)
+            self._records: list[dict[str, Any]] = []
+
+        def _write_exclusive(self, path: Any, payload: bytes, mode: int = 0o600) -> dict[str, Any]:
+            os_module = importlib.import_module("os")
+            stat = importlib.import_module("stat")
+            flags = os_module.O_RDWR | os_module.O_CREAT | os_module.O_EXCL | getattr(os_module, "O_CLOEXEC", 0) | getattr(os_module, "O_NOFOLLOW", 0)
+            fd = None
+            try:
+                fd = os_module.open(path, flags, mode)
+                offset = 0
+                while offset < len(payload):
+                    try:
+                        count = os_module.write(fd, payload[offset:])
+                    except InterruptedError:
+                        continue
+                    if count <= 0:
+                        _fail("checkpoint short write")
+                    offset += count
+                while True:
+                    try:
+                        os_module.fsync(fd)
+                        break
+                    except InterruptedError:
+                        continue
+                os_module.lseek(fd, 0, os_module.SEEK_SET)
+                readback = b""
+                while len(readback) < len(payload):
+                    try:
+                        chunk = os_module.read(fd, len(payload) - len(readback))
+                    except InterruptedError:
+                        continue
+                    if not chunk:
+                        _fail("checkpoint readback was truncated")
+                    readback += chunk
+                observed = os_module.fstat(fd)
+                if not stat.S_ISREG(observed.st_mode) or observed.st_nlink != 1 or stat.S_IMODE(observed.st_mode) != mode or observed.st_size != len(payload) or readback != payload:
+                    _fail("checkpoint publication metadata drift")
+                return {"size_bytes": len(payload), "sha256": _sha_bytes(payload), "mode": stat.S_IMODE(observed.st_mode), "nlink": observed.st_nlink}
+            except OSError as exc:
+                raise TrainingEngineError("checkpoint publication failed") from exc
+            finally:
+                if fd is not None:
+                    os_module.close(fd)
 
         def save_atomic(self, role: str, epoch: int, state_value: dict[str, Any]) -> dict[str, Any]:
-            if role not in {"last", "best", "periodic", "final"}:
+            if role not in {"last", "best", "periodic", "final"} or type(epoch) is not int or epoch <= 0:
                 _fail("unknown checkpoint role")
             os_module = importlib.import_module("os")
             tempfile_module = importlib.import_module("tempfile")
-            self._root.mkdir(parents=True, exist_ok=True)
-            target = self._root / f"checkpoint-{role}-{epoch:04d}.pth"
-            fd, temporary = tempfile_module.mkstemp(prefix=f".{target.name}.", dir=str(self._root))
+            target = self._checkpoint_root / f"checkpoint-{role}-{epoch:04d}.pth"
+            if target.exists() or target.is_symlink():
+                _fail("checkpoint target already exists")
+            fd, temporary = tempfile_module.mkstemp(prefix=f".{target.name}.", dir=str(self._checkpoint_root))
             try:
                 with os_module.fdopen(fd, "wb") as stream:
                     torch.save(state_value, stream)
                     stream.flush()
                     os_module.fsync(stream.fileno())
-                os_module.replace(temporary, target)
-                directory_fd = os_module.open(self._root, os_module.O_RDONLY | getattr(os_module, "O_DIRECTORY", 0))
+                temporary_path = importlib.import_module("pathlib").Path(temporary)
+                payload = temporary_path.read_bytes()
+                if target.exists() or target.is_symlink():
+                    _fail("checkpoint target appeared during publication")
+                os_module.link(temporary, target)
+                os_module.unlink(temporary)
+                directory_fd = os_module.open(self._checkpoint_root, os_module.O_RDONLY | getattr(os_module, "O_DIRECTORY", 0))
                 try:
                     os_module.fsync(directory_fd)
                 finally:
@@ -504,14 +883,66 @@ def resolve_production_ports(
                 except OSError:
                     pass
                 raise
-            return {"role": role, "epoch": epoch, "path": str(target), "state_sha256": _digest(state_value)}
+            target_raw = target.read_bytes()
+            target_stat = target.lstat()
+            if not target.is_file() or target.is_symlink() or target_stat.st_nlink != 1 or target_stat.st_size != len(target_raw):
+                _fail("checkpoint target readback metadata drift")
+            reference = {
+                "role": role,
+                "epoch": epoch,
+                "path": str(target),
+                "state_sha256": _digest(state_value),
+                "file_size_bytes": len(target_raw),
+                "file_sha256": _sha_bytes(target_raw),
+            }
+            self._records.append(copy.deepcopy(reference))
+            inventory = {
+                "schema_version": ENGINE_SCHEMA_VERSION,
+                "records": copy.deepcopy(self._records),
+                "inventory_sha256": _digest(self._records),
+            }
+            inventory_raw = _canonical(inventory)
+            inventory_path = self._checkpoint_root / f"checkpoint-inventory-{len(self._records):04d}.json"
+            self._write_exclusive(inventory_path, inventory_raw)
+            directory_fd = os_module.open(self._checkpoint_root, os_module.O_RDONLY | getattr(os_module, "O_DIRECTORY", 0))
+            try:
+                os_module.fsync(directory_fd)
+            finally:
+                os_module.close(directory_fd)
+            reference["inventory_path"] = str(inventory_path)
+            reference["inventory_sha256"] = _sha_bytes(inventory_raw)
+            return reference
 
         def is_loadable(self, reference: dict[str, Any]) -> bool:
-            path = importlib.import_module("pathlib").Path(reference.get("path", ""))
-            if not path.is_file() or path.is_symlink():
+            pathlib = importlib.import_module("pathlib")
+            stat = importlib.import_module("stat")
+            path = pathlib.Path(reference.get("path", ""))
+            try:
+                relative = path.resolve(strict=True).relative_to(self._checkpoint_root.resolve(strict=True))
+                observed = path.lstat()
+            except (OSError, ValueError):
+                return False
+            if len(relative.parts) != 1 or stat.S_ISLNK(observed.st_mode) or not stat.S_ISREG(observed.st_mode) or observed.st_nlink != 1:
                 return False
             try:
+                raw = path.read_bytes()
+                if reference.get("file_size_bytes") != len(raw) or reference.get("file_sha256") != _sha_bytes(raw):
+                    return False
                 torch.load(path, map_location="cpu", weights_only=False)
+                inventory_path = pathlib.Path(reference.get("inventory_path", ""))
+                inventory_relative = inventory_path.resolve(strict=True).relative_to(self._checkpoint_root.resolve(strict=True))
+                inventory_stat = inventory_path.lstat()
+                if len(inventory_relative.parts) != 1 or stat.S_ISLNK(inventory_stat.st_mode) or not stat.S_ISREG(inventory_stat.st_mode) or inventory_stat.st_nlink != 1:
+                    return False
+                inventory_raw = inventory_path.read_bytes()
+                if reference.get("inventory_sha256") != _sha_bytes(inventory_raw):
+                    return False
+                inventory = json.loads(inventory_raw.decode("utf-8"))
+                records = inventory.get("records") if type(inventory) is dict else None
+                if type(inventory) is not dict or type(records) is not list or inventory.get("inventory_sha256") != _digest(records):
+                    return False
+                if not any(type(record) is dict and record.get("path") == str(path) and record.get("file_sha256") == reference.get("file_sha256") for record in records):
+                    return False
             except Exception:
                 return False
             return True
@@ -530,6 +961,7 @@ def resolve_production_ports(
         "criterion_factory": criterion_factory,
         "optimizer_factory": optimizer_factory,
         "scheduler_factory": scheduler_factory,
+        "warmup_scheduler_factory": warmup_scheduler_factory,
         "scaler_factory": scaler_factory,
         "ema_factory": ema_factory,
         "train_batches": train_batches,
@@ -539,12 +971,25 @@ def resolve_production_ports(
         "dataset_factory": dataset_factory,
         "postprocessor_factory": postprocessor_factory,
         "seed": lambda seed: torch.manual_seed(seed),
+        "autocast_context": lambda enabled=True: torch.autocast(device_type="cuda", enabled=enabled, cache_enabled=True),
+        "data_bindings": {
+            role: {
+                "root": str(value["root"]),
+                "manifest_sha256": value["binding"]["manifest_sha256"],
+                "annotation_sha256": value["annotation_sha256"],
+            }
+            for role, value in role_bindings.items()
+        },
         "production_authorized": True,
     }
     return resolved
 
 
 def _loss_value(loss: Any) -> float:
+    if type(loss) is dict:
+        if not loss:
+            _fail("criterion returned an empty loss dictionary")
+        return _loss_value(_loss_total(loss))
     if type(loss) in {int, float} and not isinstance(loss, bool):
         return _finite_number(loss, "loss")
     item = getattr(loss, "item", None)
@@ -679,6 +1124,8 @@ def run_training_engine(
     criterion = _resolve_factory(ports, "criterion_factory")
     optimizer = _resolve_factory(ports, "optimizer_factory")
     scheduler = _resolve_factory(ports, "scheduler_factory")
+    warmup_value = ports.get("warmup_scheduler_factory")
+    warmup = warmup_value() if callable(warmup_value) else warmup_value
     scaler = _resolve_factory(ports, "scaler_factory")
     ema = _resolve_factory(ports, "ema_factory")
     writer = _resolve_factory(ports, "checkpoint_writer")
@@ -702,6 +1149,23 @@ def run_training_engine(
     epoch_reports: list[dict[str, Any]] = []
     checkpoint_references: list[dict[str, Any]] = []
     best_score: float | None = None
+    warmup_finished = warmup is None
+
+    def checkpoint_binding(epoch_value: int) -> dict[str, Any]:
+        runtime_identity = ports.get("checkpoint_identity")
+        if runtime_identity is None:
+            runtime_identity = {"data_bindings": ports.get("data_bindings", {})}
+        return {
+            "runtime_identity": _snapshot_value(runtime_identity),
+            "training_policy": copy.deepcopy(checked_policy),
+            "epoch": epoch_value,
+            "optimizer_type": type(optimizer).__name__,
+            "scheduler_type": type(scheduler).__name__,
+            "warmup_optimizer_updates": optimizer_steps,
+            "scaler_type": type(scaler).__name__,
+            "ema_type": type(ema).__name__,
+            "evaluator_role": "development_only",
+        }
 
     for epoch in range(1, epochs + 1):
         batches = _iter_batches(train_source, "train_batches")
@@ -715,20 +1179,54 @@ def run_training_engine(
             forward = model if callable(model) else getattr(model, "__call__", None)
             if not callable(forward):
                 _fail("model must be callable")
-            output = forward(batch)
+            split = _split_training_batch(batch)
+            if split is None:
+                model_input = batch
+                criterion_input = batch
+                output = forward(batch)
+            else:
+                samples, targets = split
+                device = getattr(samples, "device", None)
+                if device is None:
+                    parameters = getattr(model, "parameters", None)
+                    first_parameter = next(iter(parameters()), None) if callable(parameters) else None
+                    device = getattr(first_parameter, "device", "cuda:0")
+                model_input = _move_to_device(samples, device)
+                criterion_input = _move_to_device(targets, device)
+                autocast_factory = ports.get("autocast_context")
+                contextlib = importlib.import_module("contextlib")
+                context = autocast_factory(True) if mode == "production" and callable(autocast_factory) else contextlib.nullcontext()
+                with context:
+                    if _supports_keyword(forward, "targets"):
+                        output = forward(model_input, targets=criterion_input)
+                    else:
+                        output = forward(model_input)
             loss_fn = criterion if callable(criterion) else getattr(criterion, "__call__", None)
             if not callable(loss_fn):
                 _fail("criterion must be callable")
-            loss = loss_fn(output, batch)
-            value = _loss_value(loss)
+            if _supports_keyword(loss_fn, "epoch"):
+                loss = loss_fn(output, criterion_input, epoch=epoch, step=batch_count - 1, global_step=optimizer_steps)
+            else:
+                loss = loss_fn(output, criterion_input)
+            total_loss = _loss_total(loss)
+            value = _loss_value(total_loss)
             if not math.isfinite(value):
                 nonfinite_events += 1
                 _fail("non-finite training loss")
             epoch_loss += value
             scale = getattr(scaler, "scale", None)
-            scaled = scale(loss) if callable(scale) else loss
+            scaled = scale(total_loss) if callable(scale) else total_loss
             _backward(ports, scaled)
+            if callable(getattr(scaler, "unscale_", None)):
+                scaler.unscale_(optimizer)
+            clip_norm = checked_policy["optimizer"]["clip_max_norm"]
+            if clip_norm > 0:
+                torch_module = ports.get("torch")
+                parameters = getattr(model, "parameters", None)
+                if torch_module is not None and callable(parameters):
+                    torch_module.nn.utils.clip_grad_norm_(parameters(), clip_norm)
             step = getattr(scaler, "step", None)
+            scale_before = scaler.get_scale() if callable(getattr(scaler, "get_scale", None)) else None
             if callable(step):
                 step_result = step(optimizer)
                 if step_result is False:
@@ -741,18 +1239,29 @@ def run_training_engine(
             update = getattr(scaler, "update", None)
             if callable(update):
                 update()
+            scale_after = scaler.get_scale() if callable(getattr(scaler, "get_scale", None)) else None
+            if scale_before is not None and scale_after is not None and scale_after < scale_before:
+                overflow_events += 1
             optimizer_steps += 1
             ema_update = getattr(ema, "update", None)
             if not callable(ema_update):
                 _fail("EMA port must expose update")
             ema_update(model)
+            if warmup is not None:
+                warmup_step = getattr(warmup, "step", None)
+                if not callable(warmup_step):
+                    _fail("warmup scheduler must expose step")
+                warmup_step()
+                finished = getattr(warmup, "finished", None)
+                warmup_finished = bool(finished()) if callable(finished) else optimizer_steps >= checked_policy["learning_rate"]["warmup_optimizer_steps"]
         if batch_count == 0:
             _fail("train_core yielded no batches")
 
         scheduler_step = getattr(scheduler, "step", None)
         if not callable(scheduler_step):
             _fail("scheduler must expose step")
-        scheduler_step()
+        if warmup_finished:
+            scheduler_step()
 
         development_batches = _iter_batches(development_source, "development_batches")
         evaluation = evaluator.evaluate(ema, development_batches, epoch)
@@ -762,6 +1271,7 @@ def run_training_engine(
         if score is not None:
             score = _finite_number(score, "evaluation.primary_score")
         state = {"epoch": epoch, "loss": epoch_loss / batch_count, "evaluation": evaluation}
+        state["training_binding"] = checkpoint_binding(epoch)
         last = _checkpoint(writer, "last", epoch, state)
         checkpoint_references.append({"role": "last", "epoch": epoch, "reference": last})
         if epoch % 10 == 0:
@@ -775,7 +1285,9 @@ def run_training_engine(
             {"epoch": epoch, "batch_count": batch_count, "mean_loss": epoch_loss / batch_count, "evaluation": evaluation}
         )
 
-    final = _checkpoint(writer, "final", epochs, {"epoch": epochs, "epochs": epochs, "best_score": best_score})
+    final_state = {"epoch": epochs, "epochs": epochs, "best_score": best_score}
+    final_state["training_binding"] = checkpoint_binding(epochs)
+    final = _checkpoint(writer, "final", epochs, final_state)
     checkpoint_references.append({"role": "final", "epoch": epochs, "reference": final})
 
     counters = ports.get("amp_counters")

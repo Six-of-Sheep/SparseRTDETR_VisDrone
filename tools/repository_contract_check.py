@@ -332,7 +332,7 @@ T6A_CONFIG_RAW_SHA256 = "539abe556edd00a5bb0ecf0ed350195ee28e55a0af0b804404a0d92
 T6A_CONFIG_CANONICAL_SIZE_BYTES = 11729
 T6A_CONFIG_CANONICAL_SHA256 = "13a5923aa62f3048b2baefe32aaa163b9aa44d3b3e11d2a374ebceec5034ae94"
 T6A_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_t6_authorization.py"
-T6A_MODULE_SHA256 = "0c577f7eb4d2cddfb520de9e45d39d9e3e614b6fb78b949199553453c944b74c"
+T6A_MODULE_SHA256 = "7b8d0ce7cf1edfd545e35b9165c5eb0ba67d16eb7db5434c5c218dbe46dbb0b5"
 T6A_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_t6_authorization.py"
 T6A_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_LAUNCH_T6_V1.md"
 T6A_PUBLIC_NAMES = {
@@ -372,8 +372,8 @@ T6B_CONFIG_RAW_SHA256 = "a152ccb7caefd42531ee2126ca194495e4af8d4a660d907c5a9acf7
 T6B_CONFIG_CANONICAL_SIZE_BYTES = 5565
 T6B_CONFIG_CANONICAL_SHA256 = "dfeecc7b002db9ce10b33afa9d166fab4c7f88a5f922b4862fa0d1d99ff755a1"
 T6B_SOURCE_IDENTITIES = {
-    "src/sparse_rtdetr/baseline/training_t6_engine.py": "de7cd7943fabca593e9e4f4d1e8e0c6fa036afb69bc8a01097b48972b47d03ed",
-    "src/sparse_rtdetr/baseline/training_t6_entry.py": "2f3782d713aee91317845179ef21757c9b9e3505ff6041ad3717e3f7f0854cbb",
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": "b4161cbf84454ddd97873576fa2d239be0be68b3f88baffd5544380b841f20c3",
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": "5bcaf02b48668d00d7fc2fc287df19afd3ec44fc8c269ae9638e231c06e24b39",
     "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "0dd192b1137223e19baa23ec10611767428d4f422b297d5442281b6834d89aeb",
     "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "723fc69abe1bfb3a8660134e5477b228708ea9941acfa5021213f1f67530ed67",
 }

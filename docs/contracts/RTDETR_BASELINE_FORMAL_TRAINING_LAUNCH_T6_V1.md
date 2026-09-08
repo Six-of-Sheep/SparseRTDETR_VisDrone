@@ -56,6 +56,13 @@ The authorization binds all of the following to the launch-time observation:
   and no-overwrite/no-resume/no-retry/no-fallback policy;
 - state machine and permanent-failure policy.
 
+The repository object in the checked-in config is a historical reference for
+the T5D/pre-T6 implementation checkout. It is not a permanent launch branch
+allowlist. The detached owner artifact supplies the exact owner-authorized
+launch-time branch, HEAD, tree, parent, upstream and upstream SHA. The later
+T6B entry re-observes the live checkout and requires exact equality with that
+owner object, including the current repair or launch branch.
+
 The T6A validator receives these facts; it does not inspect or alter the
 future production targets. A later stage owns the actual target absence gate.
 Conversion R3 identity is declared in the source binding but T6A does not
