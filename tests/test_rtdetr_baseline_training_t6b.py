@@ -111,6 +111,8 @@ def _descriptor(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], d
     contract_binding, binding, _ = _t6a_fixture(tmp_path)
     auth_path = tmp_path / "detached-owner-authorization.json"
     auth_receipt = entry._authorization_receipt_path(auth_path)
+    auth_path.write_bytes(t6a.canonical_owner_authorization_bytes(binding["authorization"]) + b"\n")
+    os.chmod(auth_path, 0o600)
     receipt = {
         "schema_version": 1,
         "kind": "T6B_DETACHED_AUTHORIZATION_CONSUMED",
@@ -200,8 +202,6 @@ class _Evaluator:
 
 def _engine_ports() -> dict[str, object]:
     return {
-        "production_authorized": True,
-        "authorize_production": lambda: True,
         "model_factory": lambda: (lambda batch: batch),
         "criterion_factory": lambda: (lambda output, batch: 1.0),
         "optimizer_factory": _Optimizer,
@@ -258,6 +258,31 @@ def test_engine_accepts_vendor_batch_and_loss_dict_and_applies_warmup() -> None:
     assert scheduler_calls == []
 
 
+def test_loss_total_uses_vendor_already_weighted_boundary_without_reweighting() -> None:
+    policy = entry.load_t6b_config(ROOT)["training_policy"]
+    observed: list[float] = []
+
+    class Criterion:
+        weight_dict = {"loss_cls": 7.0, "loss_bbox": 11.0}
+
+        def __call__(self, outputs: object, targets: object, **kwargs: object) -> dict[str, float]:
+            del outputs, targets, kwargs
+            return {"loss_cls": 2.0, "loss_bbox": 3.0}
+
+    ports = _engine_ports()
+    ports.update(
+        {
+            "criterion_factory": Criterion,
+            "backward": lambda loss: observed.append(float(loss)),
+        }
+    )
+    result = engine.run_training_engine(policy, ports, mode="cpu_fake")
+    assert result["terminal"] == "TERMINAL_COMPLETE"
+    assert observed and observed[0] == 5.0
+    assert result["scientific_training_certified"] is False
+    assert result["engine_execution_count"] == 0
+
+
 def test_runtime_data_role_binding_uses_exact_manifest_identity(tmp_path: Path) -> None:
     from sparse_rtdetr.baseline import config as baseline_config
 
@@ -296,6 +321,39 @@ def test_default_resolver_receives_descriptor_bindings_once(tmp_path: Path, monk
             "output_root": descriptor["evidence_root"],
         }
     ]
+
+
+def test_engine_claim_is_durable_and_replay_fails_before_factories(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    descriptor, _, _, _ = _descriptor(tmp_path)
+    original = engine.run_training_engine
+    captured: list[dict[str, object]] = []
+
+    def wrapped(policy: object, ports: object, *, mode: str, authorization_context: object) -> dict[str, object]:
+        captured.append(copy.deepcopy(authorization_context))
+        return original(policy, ports, mode=mode, authorization_context=authorization_context)
+
+    monkeypatch.setattr(engine, "resolve_production_ports", lambda **kwargs: _engine_ports())
+    monkeypatch.setattr(engine, "run_training_engine", wrapped)
+    result = entry.run_production_entry(descriptor, process_pid=4242)
+    assert result["status"] == "TERMINAL_COMPLETE"
+    claim_path = Path(descriptor["evidence_root"]) / engine.ENGINE_CLAIM_FILE_NAME
+    assert claim_path.is_file()
+    assert result["engine_result"]["engine_claim_path"] == str(claim_path)
+    assert result["engine_result"]["engine_execution_count"] == 1
+    assert len(captured) == 1
+
+    monkeypatch.setattr(engine, "run_training_engine", original)
+    calls: list[int] = []
+    replay_ports = _engine_ports()
+    replay_ports["model_factory"] = lambda: calls.append(1)
+    with pytest.raises(engine.TrainingEngineError, match="claim target already exists"):
+        original(
+            entry.load_t6b_config(ROOT)["training_policy"],
+            replay_ports,
+            mode="production",
+            authorization_context=captured[0],
+        )
+    assert calls == []
 
 
 def _rewrite_canonical(path: Path, value: dict[str, object]) -> None:
@@ -425,7 +483,7 @@ def test_config_and_import_boundaries_are_closed() -> None:
 
 def test_engine_rejects_unauthorized_production_ports() -> None:
     policy = entry.load_t6b_config(ROOT)["training_policy"]
-    with pytest.raises(engine.TrainingEngineError, match="requires entry-authorized"):
+    with pytest.raises(engine.TrainingEngineError, match="bound execution context"):
         engine.run_training_engine(policy, {"model_factory": lambda: None}, mode="production")
 
 
@@ -433,8 +491,22 @@ def test_engine_rejects_forged_production_flag_without_entry_capability() -> Non
     policy = entry.load_t6b_config(ROOT)["training_policy"]
     ports = _engine_ports()
     ports["production_authorized"] = True
-    with pytest.raises(engine.TrainingEngineError, match="requires entry-authorized"):
+    with pytest.raises(engine.TrainingEngineError, match="bound execution context"):
         engine.run_training_engine(policy, ports, mode="production")
+
+
+def test_old_capability_and_keyword_are_removed() -> None:
+    policy = entry.load_t6b_config(ROOT)["training_policy"]
+    assert not hasattr(engine, "_ProductionCapability")
+    assert not hasattr(engine, "_PRODUCTION_CAPABILITY")
+    with pytest.raises(TypeError):
+        engine.run_training_engine(policy, {}, mode="production", _authorization_capability=object())  # type: ignore[call-arg]
+
+
+def test_public_production_entry_rejects_injected_fake_ports(tmp_path: Path) -> None:
+    descriptor, _, _, _ = _descriptor(tmp_path)
+    with pytest.raises(entry.TrainingEntryError, match="injected production engine ports"):
+        entry.run_production_entry(descriptor, engine_ports=_engine_ports(), process_pid=4242)
 
 
 def test_descriptor_binds_repository_to_detached_authorization_and_live_source(tmp_path: Path) -> None:
@@ -454,9 +526,10 @@ def test_descriptor_binds_repository_to_detached_authorization_and_live_source(t
         entry.validate_entry_descriptor(source_mutation)
 
 
-def test_entry_classifier_rejects_coordinated_result_repack(tmp_path: Path) -> None:
+def test_entry_classifier_rejects_coordinated_result_repack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     descriptor, _, _, _ = _descriptor(tmp_path)
-    result = entry.run_production_entry(descriptor, engine_ports=_engine_ports(), process_pid=4242)
+    monkeypatch.setattr(engine, "resolve_production_ports", lambda **kwargs: _engine_ports())
+    result = entry.run_production_entry(descriptor, process_pid=4242)
     root = Path(descriptor["evidence_root"])
     assert result["status"] == "TERMINAL_COMPLETE"
     assert entry.classify_entry(root) == "TERMINAL_COMPLETE"
@@ -566,13 +639,14 @@ def test_outer_target_absence_rejects_existing_object_types(tmp_path: Path) -> N
 
 
 
-def test_full_fake_process_chain_is_exactly_once_and_terminal(tmp_path: Path) -> None:
+def test_full_fake_process_chain_is_exactly_once_and_terminal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     descriptor, process_descriptor, _, _ = _descriptor(tmp_path)
+    monkeypatch.setattr(engine, "resolve_production_ports", lambda **kwargs: _engine_ports())
     calls: list[int] = []
 
     def child(argv: list[str], cwd: str, environment: dict[str, str], child_descriptor: dict[str, object]) -> dict[str, object]:
         calls.append(1)
-        result = entry.run_production_entry(child_descriptor, engine_ports=_engine_ports(), process_pid=4242)
+        result = entry.run_production_entry(child_descriptor, process_pid=4242)
         return {"return_code": 0, "stdout": b"child\x00stdout\xff", "stderr": b"child\x80stderr", "pid": 4242, "entry_result": result}
 
     result = process.run_process_once(process_descriptor, child)

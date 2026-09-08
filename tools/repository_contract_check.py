@@ -372,10 +372,14 @@ T6B_CONFIG_RAW_SHA256 = "a152ccb7caefd42531ee2126ca194495e4af8d4a660d907c5a9acf7
 T6B_CONFIG_CANONICAL_SIZE_BYTES = 5565
 T6B_CONFIG_CANONICAL_SHA256 = "dfeecc7b002db9ce10b33afa9d166fab4c7f88a5f922b4862fa0d1d99ff755a1"
 T6B_SOURCE_IDENTITIES = {
-    "src/sparse_rtdetr/baseline/training_t6_engine.py": "b4161cbf84454ddd97873576fa2d239be0be68b3f88baffd5544380b841f20c3",
-    "src/sparse_rtdetr/baseline/training_t6_entry.py": "5bcaf02b48668d00d7fc2fc287df19afd3ec44fc8c269ae9638e231c06e24b39",
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": "99b40f4838f05ec5e3aabb4df5a56a6f7e826ad4c3ffbe3dfcf9cfd5508454a3",
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": "d433c5fb91f933eb731ae08e3c43b7cffae9071a9c3d22d227e01791b28a16c1",
     "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "0dd192b1137223e19baa23ec10611767428d4f422b297d5442281b6834d89aeb",
     "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "723fc69abe1bfb3a8660134e5477b228708ea9941acfa5021213f1f67530ed67",
+}
+T6B_SUPPORT_IDENTITIES = {
+    "tests/test_rtdetr_baseline_training_t6b.py": "b7ce80ea8ab9b4756eded2ab163b74e5fd16250bc814a9266e228f3e0d345fcb",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "9a9edd1300f132601d14156e0ec25f01c65db2116611a28061858f0cd9935a67",
 }
 T6B_PUBLIC_APIS = {
     "src/sparse_rtdetr/baseline/training_t6_engine.py": {
@@ -417,7 +421,7 @@ T6B_PUBLIC_APIS = {
     },
 }
 T6B_ALLOWED_IMPORTS = {
-    "src/sparse_rtdetr/baseline/training_t6_engine.py": {"copy", "hashlib", "importlib", "json", "math", "random", "typing"},
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": {"copy", "hashlib", "importlib", "json", "math", "os", "pathlib", "random", "stat", "typing", "sparse_rtdetr.baseline"},
     "src/sparse_rtdetr/baseline/training_t6_entry.py": {"copy", "datetime", "hashlib", "json", "math", "os", "stat", "subprocess", "sys", "pathlib", "typing", "sparse_rtdetr.baseline"},
     "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": {"copy", "hashlib", "inspect", "json", "math", "os", "stat", "subprocess", "sys", "pathlib", "typing", "sparse_rtdetr.baseline"},
     "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": {"copy", "datetime", "hashlib", "inspect", "json", "math", "os", "stat", "subprocess", "sys", "time", "pathlib", "typing", "sparse_rtdetr.baseline"},
@@ -1265,6 +1269,7 @@ def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
     expected_hashes = {
         T6B_CONFIG_RELATIVE_PATH: T6B_CONFIG_RAW_SHA256,
         **T6B_SOURCE_IDENTITIES,
+        **T6B_SUPPORT_IDENTITIES,
     }
     for relative in sorted(T6B_FILES):
         path = root / relative
@@ -1337,7 +1342,8 @@ def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
     def source_surface(relative: str) -> None:
         path = root / relative
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            source_text = path.read_text(encoding="utf-8")
+            tree = ast.parse(source_text, filename=str(path))
             imported: set[str] = set()
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
@@ -1359,6 +1365,35 @@ def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
                     all_values = ast.literal_eval(node.value)
             if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != T6B_PUBLIC_APIS[relative]:
                 failures.append(f"T6B __all__ mismatch: {relative}")
+
+            if relative == "src/sparse_rtdetr/baseline/training_t6_engine.py":
+                forbidden_capability_names = {"_ProductionCapability", "_PRODUCTION_CAPABILITY", "_authorization_capability"}
+                if any(name in source_text for name in forbidden_capability_names):
+                    failures.append("T6B engine exposes legacy capability authorization")
+                engine_functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run_training_engine"]
+                if len(engine_functions) != 1:
+                    failures.append("T6B engine run_training_engine definition count mismatch")
+                elif not any(argument.arg == "authorization_context" for argument in engine_functions[0].args.args + engine_functions[0].args.kwonlyargs):
+                    failures.append("T6B engine lacks bound authorization_context API")
+                if "_claim_engine_execution" not in source_text or "_validate_execution_context" not in source_text:
+                    failures.append("T6B engine lacks execution context and exclusive claim gates")
+                if "production_authorized" in source_text or "authorize_production" in source_text:
+                    failures.append("T6B engine retains boolean/callback production authorization")
+                claim_calls = [
+                    node
+                    for node in ast.walk(engine_functions[0])
+                    if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "_claim_engine_execution"
+                ] if engine_functions else []
+                if not claim_calls:
+                    failures.append("T6B engine does not claim execution")
+            if relative == "src/sparse_rtdetr/baseline/training_t6_entry.py":
+                entry_source_forbidden = {"_authorization_capability", "_PRODUCTION_CAPABILITY", "production_authorized", "authorize_production"}
+                if any(name in source_text for name in entry_source_forbidden):
+                    failures.append("T6B entry retains legacy production injection authorization")
+                if "authorization_context" not in source_text or "injected production engine ports are forbidden" not in source_text:
+                    failures.append("T6B entry does not bind and close production ports")
 
             forbidden_roots = {"torch", "cupy", "numpy", "pandas", "tensorflow", "ultralytics", "dataloader", "dataset", "vendor"}
             for node in ast.walk(tree):

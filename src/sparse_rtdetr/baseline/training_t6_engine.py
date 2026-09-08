@@ -13,20 +13,20 @@ import hashlib
 import importlib
 import json
 import math
+import os
+import pathlib
 import random
+import stat
 from typing import Any, Callable, Iterable, Mapping
 
 
 ENGINE_SCHEMA_VERSION = 1
 ENGINE_ID = "rtdetrv2_r18_visdrone_training_t6_engine_v1"
 ENGINE_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_t6_engine.py"
-
-
-class _ProductionCapability:
-    """Private identity passed only by the authenticated entry boundary."""
-
-
-_PRODUCTION_CAPABILITY = _ProductionCapability
+ENGINE_CONTEXT_SCHEMA_VERSION = 1
+ENGINE_CONTEXT_KIND = "T6B_PRODUCTION_EXECUTION_CONTEXT"
+ENGINE_CLAIM_KIND = "T6B_ENGINE_EXECUTION_CLAIM"
+ENGINE_CLAIM_FILE_NAME = "engine_execution_claim.json"
 
 
 __all__ = (
@@ -128,12 +128,293 @@ def _sha_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def _sha_string(value: Any, field: str) -> str:
+    if type(value) is not str or len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+        _fail(f"{field} is not a lowercase SHA-256")
+    return value
+
+
 def _digest(value: Any) -> str:
     return _sha_bytes(_canonical(value))
 
 
 def _copy(value: Any) -> Any:
     return copy.deepcopy(value)
+
+
+def _read_context_file(path: pathlib.Path, field: str) -> tuple[dict[str, Any], bytes]:
+    """Read one canonical evidence JSON file through the entry's stable reader."""
+
+    from sparse_rtdetr.baseline import training_t6_entry as entry
+
+    try:
+        return entry._read_json(path, field)
+    except entry.TrainingEntryError as exc:
+        raise TrainingEngineError(str(exc)) from exc
+
+
+def _read_context_bytes(path: pathlib.Path, field: str, *, mode: int = 0o600) -> bytes:
+    from sparse_rtdetr.baseline import training_t6_entry as entry
+
+    try:
+        entry._regular_file(path, field, expected_mode=mode, expected_nlink=1)
+        return entry._read_stable_file(path, field, mode=mode)
+    except entry.TrainingEntryError as exc:
+        raise TrainingEngineError(str(exc)) from exc
+
+
+def _hex_bytes(value: Any, field: str) -> bytes:
+    if type(value) is not str or not value or len(value) % 2:
+        _fail(f"{field} must be an even-length hexadecimal string")
+    try:
+        return bytes.fromhex(value)
+    except ValueError as exc:
+        raise TrainingEngineError(f"{field} is not hexadecimal") from exc
+
+
+def _validate_execution_context(value: Any) -> dict[str, Any]:
+    """Revalidate the durable entry chain before any production factory runs."""
+
+    keys = {
+        "schema_version",
+        "kind",
+        "descriptor",
+        "descriptor_sha256",
+        "training_run_id",
+        "nonce",
+        "authorization",
+        "evidence",
+        "entry",
+        "repository",
+        "t6a_contract_binding",
+        "source_bindings",
+        "config_identity",
+        "environment",
+        "data_roles",
+        "training_policy",
+        "targets",
+        "cwd",
+        "argv",
+        "child_environment",
+        "evidence_root",
+        "process_evidence_root",
+        "outer_evidence_root",
+        "engine_claim_path",
+    }
+    context = _exact(value, keys, "authorization context")
+    _assert_builtin(context, "authorization context")
+    if context["schema_version"] != ENGINE_CONTEXT_SCHEMA_VERSION or context["kind"] != ENGINE_CONTEXT_KIND:
+        _fail("authorization context schema drift")
+
+    from sparse_rtdetr.baseline import training_t6_entry as entry
+
+    try:
+        descriptor = entry.validate_entry_descriptor(context["descriptor"])
+    except entry.TrainingEntryError as exc:
+        raise TrainingEngineError(str(exc)) from exc
+    if context["descriptor_sha256"] != descriptor["aggregate_sha256"]:
+        _fail("authorization context descriptor digest drift")
+    if context["training_run_id"] != descriptor["training_run_id"] or context["nonce"] != descriptor["nonce"]:
+        _fail("authorization context run identity drift")
+    for field in (
+        "repository",
+        "t6a_contract_binding",
+        "source_bindings",
+        "config_identity",
+        "environment",
+        "data_roles",
+        "training_policy",
+        "targets",
+        "cwd",
+        "argv",
+        "child_environment",
+        "evidence_root",
+        "process_evidence_root",
+        "outer_evidence_root",
+    ):
+        if context[field] != descriptor[field]:
+            _fail(f"authorization context {field} drift")
+    if context["engine_claim_path"] != str(pathlib.Path(descriptor["evidence_root"]) / ENGINE_CLAIM_FILE_NAME):
+        _fail("authorization context engine claim path drift")
+
+    authorization = _exact(
+        context["authorization"],
+        {"path", "binding", "binding_sha256", "receipt_path", "receipt_size_bytes", "receipt_sha256", "receipt_bytes_hex"},
+        "authorization context.authorization",
+    )
+    if authorization["path"] != descriptor["authorization_path"] or authorization["binding"] != descriptor["authorization_binding"] or authorization["binding_sha256"] != descriptor["authorization_binding_sha256"] or authorization["receipt_path"] != descriptor["authorization_receipt_path"]:
+        _fail("authorization context authorization binding drift")
+    authorization_artifact_path = pathlib.Path(authorization["path"])
+    authorization_artifact_raw = _read_context_bytes(authorization_artifact_path, "detached authorization artifact")
+    binding = descriptor["authorization_binding"]
+    if len(authorization_artifact_raw) != binding["raw_size_bytes"] or _sha_bytes(authorization_artifact_raw) != binding["raw_sha256"]:
+        _fail("authorization context detached artifact identity drift")
+    try:
+        authorization_value, authorization_parsed_raw = entry._read_json(authorization_artifact_path, "detached authorization artifact", trailing_lf=True)
+    except entry.TrainingEntryError as exc:
+        raise TrainingEngineError(str(exc)) from exc
+    if authorization_parsed_raw != authorization_artifact_raw or authorization_value != binding["authorization"] or _sha_bytes(entry._canonical(authorization_value)) != binding["canonical_sha256"]:
+        _fail("authorization context detached artifact bytes drift")
+    authorization_receipt_path = pathlib.Path(authorization["receipt_path"])
+    authorization_raw = _read_context_bytes(authorization_receipt_path, "authorization consumption receipt")
+    if authorization["receipt_size_bytes"] != len(authorization_raw) or authorization["receipt_sha256"] != _sha_bytes(authorization_raw) or _hex_bytes(authorization["receipt_bytes_hex"], "authorization context receipt_bytes_hex") != authorization_raw:
+        _fail("authorization context receipt identity drift")
+    try:
+        consumed = entry.validate_consumed_authorization_receipt(
+            str(authorization_receipt_path),
+            authorization_binding=descriptor["authorization_binding"],
+            authorization_path=descriptor["authorization_path"],
+        )
+    except entry.TrainingEntryError as exc:
+        raise TrainingEngineError(str(exc)) from exc
+    if consumed["receipt_sha256"] != authorization["receipt_sha256"]:
+        _fail("authorization context consumed receipt drift")
+
+    evidence = _exact(
+        context["evidence"],
+        {"root", "receipt_path", "receipt_size_bytes", "receipt_sha256", "receipt_bytes_hex"},
+        "authorization context.evidence",
+    )
+    if evidence["root"] != descriptor["evidence_root"] or evidence["receipt_path"] != descriptor["evidence_receipt_path"]:
+        _fail("authorization context evidence binding drift")
+    evidence_path = pathlib.Path(evidence["receipt_path"])
+    evidence_raw = _read_context_bytes(evidence_path, "training evidence claim receipt")
+    if evidence["receipt_size_bytes"] != len(evidence_raw) or evidence["receipt_sha256"] != _sha_bytes(evidence_raw) or _hex_bytes(evidence["receipt_bytes_hex"], "authorization context evidence_bytes_hex") != evidence_raw:
+        _fail("authorization context evidence receipt identity drift")
+    claim, claim_raw = _read_context_file(evidence_path, "training evidence claim receipt")
+    expected_claim = {
+        "schema_version": 1,
+        "kind": "T6B_ENTRY_EVIDENCE_CLAIM",
+        "descriptor_sha256": descriptor["aggregate_sha256"],
+        "descriptor": descriptor,
+        "training_run_id": descriptor["training_run_id"],
+        "nonce": descriptor["nonce"],
+        "status": "CLAIMED",
+    }
+    if claim_raw != _canonical(claim) or claim != expected_claim or _sha_bytes(claim_raw) != evidence["receipt_sha256"]:
+        _fail("authorization context evidence claim drift")
+
+    entry_evidence = _exact(
+        context["entry"],
+        {
+            "consumption_path",
+            "consumption_size_bytes",
+            "consumption_sha256",
+            "consumption_bytes_hex",
+            "invocation_path",
+            "invocation_size_bytes",
+            "invocation_sha256",
+            "invocation_bytes_hex",
+        },
+        "authorization context.entry",
+    )
+    root = pathlib.Path(descriptor["evidence_root"])
+    expected_consumption_path = root / "entry_consumption.json"
+    expected_invocation_path = root / "entry_invocation.json"
+    if entry_evidence["consumption_path"] != str(expected_consumption_path) or entry_evidence["invocation_path"] != str(expected_invocation_path):
+        _fail("authorization context entry path drift")
+    consumption_raw = _read_context_bytes(expected_consumption_path, "entry consumption")
+    invocation_raw = _read_context_bytes(expected_invocation_path, "entry invocation")
+    if entry_evidence["consumption_size_bytes"] != len(consumption_raw) or entry_evidence["consumption_sha256"] != _sha_bytes(consumption_raw) or _hex_bytes(entry_evidence["consumption_bytes_hex"], "authorization context consumption_bytes_hex") != consumption_raw:
+        _fail("authorization context consumption identity drift")
+    if entry_evidence["invocation_size_bytes"] != len(invocation_raw) or entry_evidence["invocation_sha256"] != _sha_bytes(invocation_raw) or _hex_bytes(entry_evidence["invocation_bytes_hex"], "authorization context invocation_bytes_hex") != invocation_raw:
+        _fail("authorization context invocation identity drift")
+    consumption, parsed_consumption_raw = _read_context_file(expected_consumption_path, "entry consumption")
+    invocation, parsed_invocation_raw = _read_context_file(expected_invocation_path, "entry invocation")
+    if parsed_consumption_raw != consumption_raw or parsed_invocation_raw != invocation_raw:
+        _fail("authorization context entry readback drift")
+    consumption_expected = {
+        "schema_version": 1,
+        "kind": "T6B_ENTRY_INVOCATION",
+        "descriptor_sha256": descriptor["aggregate_sha256"],
+        "authorization_binding_sha256": descriptor["authorization_binding_sha256"],
+        "training_run_id": descriptor["training_run_id"],
+        "nonce": descriptor["nonce"],
+        "status": "CLAIMED",
+        "receipt_path": str(expected_consumption_path),
+        "consumed_authorization_receipt_sha256": authorization["receipt_sha256"],
+        "evidence_claim_receipt_sha256": evidence["receipt_sha256"],
+        "process_pid": consumption.get("process_pid"),
+    }
+    if consumption != consumption_expected or type(consumption["process_pid"]) is not int or consumption["process_pid"] < 0:
+        _fail("authorization context entry consumption drift")
+    invocation_expected = {
+        "schema_version": 1,
+        "status": "RUNNING",
+        "descriptor_sha256": descriptor["aggregate_sha256"],
+        "process_pid": consumption["process_pid"],
+    }
+    if invocation != invocation_expected:
+        _fail("authorization context entry invocation drift")
+    return _copy(context)
+
+
+def _claim_engine_execution(context: dict[str, Any]) -> dict[str, Any]:
+    """Exclusively publish the one engine-consumption claim before factories."""
+
+    from sparse_rtdetr.baseline import training_t6_entry as entry
+
+    root = pathlib.Path(context["evidence_root"])
+    claim_path = pathlib.Path(context["engine_claim_path"])
+    if claim_path != root / ENGINE_CLAIM_FILE_NAME or not root.is_dir() or root.is_symlink() or claim_path.exists() or claim_path.is_symlink():
+        _fail("engine execution claim target already exists or is unsafe")
+    try:
+        root_stat = root.lstat()
+        parent_stat = root.parent.lstat()
+        if root.resolve(strict=True) != root or not stat.S_ISDIR(root_stat.st_mode) or root_stat.st_uid != os.getuid() or root_stat.st_gid != os.getgid() or root_stat.st_dev != parent_stat.st_dev:
+            _fail("engine execution evidence root metadata drift")
+    except OSError as exc:
+        raise TrainingEngineError("engine execution evidence root is unavailable") from exc
+    payload = {
+        "schema_version": ENGINE_CONTEXT_SCHEMA_VERSION,
+        "kind": ENGINE_CLAIM_KIND,
+        "engine_id": ENGINE_ID,
+        "context_sha256": _digest(context),
+        "descriptor_sha256": context["descriptor_sha256"],
+        "training_run_id": context["training_run_id"],
+        "nonce": context["nonce"],
+        "evidence_root": context["evidence_root"],
+        "status": "CLAIMED",
+        "context": _copy(context),
+    }
+    raw = _canonical(payload)
+    published = False
+    try:
+        entry._write_new(claim_path, raw, "engine execution claim")
+        entry._fsync_directory(root, "engine execution claim parent")
+        observed = claim_path.lstat()
+        root_observed = root.lstat()
+        if stat.S_ISLNK(observed.st_mode) or not stat.S_ISREG(observed.st_mode) or observed.st_nlink != 1 or stat.S_IMODE(observed.st_mode) != 0o600 or observed.st_uid != os.getuid() or observed.st_gid != os.getgid() or observed.st_dev != root_observed.st_dev:
+            _fail("engine execution claim metadata drift")
+        if _read_context_bytes(claim_path, "engine execution claim") != raw:
+            _fail("engine execution claim readback drift")
+        published = True
+    except Exception:
+        if not published:
+            try:
+                if claim_path.exists() and not claim_path.is_symlink():
+                    claim_path.unlink()
+                    entry._fsync_directory(root, "engine execution claim cleanup")
+            except Exception:
+                pass
+        raise
+    return {
+        "path": str(claim_path),
+        "size_bytes": len(raw),
+        "sha256": _sha_bytes(raw),
+        "context_sha256": payload["context_sha256"],
+    }
+
+
+def _validate_engine_claim(path: pathlib.Path, *, expected_context_sha256: str, expected_descriptor_sha256: str, expected_root: str) -> dict[str, Any]:
+    claim, raw = _read_context_file(path, "engine execution claim")
+    expected = {"schema_version", "kind", "engine_id", "context_sha256", "descriptor_sha256", "training_run_id", "nonce", "evidence_root", "status", "context"}
+    claim = _exact(claim, expected, "engine execution claim")
+    observed = _read_context_bytes(path, "engine execution claim")
+    if observed != raw or claim["schema_version"] != ENGINE_CONTEXT_SCHEMA_VERSION or claim["kind"] != ENGINE_CLAIM_KIND or claim["engine_id"] != ENGINE_ID or claim["context_sha256"] != expected_context_sha256 or claim["descriptor_sha256"] != expected_descriptor_sha256 or claim["evidence_root"] != expected_root or claim["status"] != "CLAIMED" or _digest(claim["context"]) != expected_context_sha256:
+        _fail("engine execution claim identity drift")
+    _validate_execution_context(claim["context"])
+    return {"claim": claim, "raw": raw, "sha256": _sha_bytes(raw)}
 
 
 def validate_training_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
@@ -980,7 +1261,6 @@ def resolve_production_ports(
             }
             for role, value in role_bindings.items()
         },
-        "production_authorized": True,
     }
     return resolved
 
@@ -1058,6 +1338,11 @@ def _validate_engine_result(value: Any) -> dict[str, Any]:
         "checkpoint_references",
         "terminal",
         "scientific_training_certified",
+        "execution_context_sha256",
+        "engine_claim_path",
+        "engine_claim_size_bytes",
+        "engine_claim_sha256",
+        "engine_execution_count",
         "engine_result_sha256",
     }
     result = _exact(value, keys, "engine result")
@@ -1074,6 +1359,16 @@ def _validate_engine_result(value: Any) -> dict[str, Any]:
             _fail(f"engine result {field} must remain false")
     if result["evaluator_role"] != "development_only" or result["terminal"] != "TERMINAL_COMPLETE" or type(result["epoch_reports"]) is not list or type(result["checkpoint_references"]) is not list:
         _fail("engine result terminal evidence drift")
+    if result["mode"] == "production":
+        _sha_string(result["execution_context_sha256"], "engine result execution_context_sha256")
+        if type(result["engine_claim_path"]) is not str or not result["engine_claim_path"].startswith("/"):
+            _fail("engine result claim path drift")
+        _sha_string(result["engine_claim_sha256"], "engine result engine_claim_sha256")
+        if type(result["engine_claim_size_bytes"]) is not int or result["engine_claim_size_bytes"] <= 0 or result["engine_execution_count"] != 1:
+            _fail("engine result execution claim drift")
+    else:
+        if result["execution_context_sha256"] is not None or result["engine_claim_path"] is not None or result["engine_claim_sha256"] is not None or result["engine_claim_size_bytes"] != 0 or result["engine_execution_count"] != 0:
+            _fail("cpu fake mode published production evidence")
     _sha = result["engine_result_sha256"]
     if type(_sha) is not str or len(_sha) != 64 or any(char not in "0123456789abcdef" for char in _sha):
         _fail("engine result digest drift")
@@ -1089,7 +1384,7 @@ def run_training_engine(
     ports: Mapping[str, Any] | None = None,
     *,
     mode: str = "production",
-    _authorization_capability: object | None = None,
+    authorization_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute the frozen 120-epoch loop through explicit runtime ports.
 
@@ -1100,17 +1395,28 @@ def run_training_engine(
     checked_policy = validate_training_policy(policy)
     if mode not in {"production", "cpu_fake"}:
         _fail("unknown engine mode")
+    checked_context: dict[str, Any] | None = None
+    execution_claim: dict[str, Any] | None = None
+    if mode == "production":
+        if authorization_context is None:
+            _fail("production engine requires a bound execution context")
+        checked_context = _validate_execution_context(authorization_context)
+        if ports is None:
+            ports = resolve_production_ports(
+                repo_root=checked_context["repository"]["repo_root"],
+                data_roles=checked_context["data_roles"],
+                output_root=checked_context["evidence_root"],
+            )
+        if type(ports) is not dict:
+            _fail("production resolver must return a builtin dict")
+        execution_claim = _claim_engine_execution(checked_context)
+    elif authorization_context is not None:
+        _fail("cpu fake mode rejects a production authorization context")
     if ports is None:
-        ports = resolve_production_ports()
+        _fail("cpu fake mode requires injected CPU ports")
     if type(ports) is not dict:
         _fail("ports must be a builtin dict")
     _assert_builtin({key: _snapshot_value(value) for key, value in ports.items()}, "ports")
-    authorizer = ports.get("authorize_production")
-    if callable(authorizer) and authorizer() is not True:
-        _fail("production port authorization was not granted by the entry boundary")
-    if mode == "production":
-        if ports.get("production_authorized") is not True or _authorization_capability is not _PRODUCTION_CAPABILITY:
-            _fail("production engine requires entry-authorized ports")
 
     seed = ports.get("seed")
     if seed is None:
@@ -1327,6 +1633,11 @@ def run_training_engine(
         "checkpoint_references": checkpoint_references,
         "terminal": "TERMINAL_COMPLETE",
         "scientific_training_certified": False,
+        "execution_context_sha256": _digest(checked_context) if checked_context is not None else None,
+        "engine_claim_path": execution_claim["path"] if execution_claim is not None else None,
+        "engine_claim_size_bytes": execution_claim["size_bytes"] if execution_claim is not None else 0,
+        "engine_claim_sha256": execution_claim["sha256"] if execution_claim is not None else None,
+        "engine_execution_count": 1 if execution_claim is not None else 0,
     }
     _assert_builtin(body, "engine result")
     result = {**body, "engine_result_sha256": _digest(body)}

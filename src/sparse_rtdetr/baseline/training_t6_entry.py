@@ -41,6 +41,14 @@ PERSISTENCE_FAILURE_MARKER_SUFFIX = ".t6b-entry-persistence-failure.json"
 ENTRY_EVIDENCE_FILE_NAMES = (
     "entry_consumption.json",
     "entry_invocation.json",
+    "engine_execution_claim.json",
+    "entry_result.json",
+    "entry_artifact_inventory.json",
+    "entry_completion.json",
+)
+ENTRY_REQUIRED_EVIDENCE_FILE_NAMES = (
+    "entry_consumption.json",
+    "entry_invocation.json",
     "entry_result.json",
     "entry_artifact_inventory.json",
     "entry_completion.json",
@@ -1112,6 +1120,75 @@ def _entry_receipt_payload(descriptor: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_engine_execution_context(
+    descriptor: dict[str, Any],
+    consumed: Mapping[str, Any],
+    evidence_claim: Mapping[str, Any],
+    root: Path,
+) -> dict[str, Any]:
+    """Bind all pre-engine entry bytes into one immutable in-memory context."""
+
+    authorization_path = Path(descriptor["authorization_receipt_path"])
+    evidence_path = Path(descriptor["evidence_receipt_path"])
+    consumption_path = root / "entry_consumption.json"
+    invocation_path = root / "entry_invocation.json"
+    authorization_raw = _read_stable_file(authorization_path, "authorization consumption receipt", mode=0o600)
+    evidence_raw = _read_stable_file(evidence_path, "training evidence claim receipt", mode=0o600)
+    consumption_raw = _read_stable_file(consumption_path, "entry consumption", mode=0o600)
+    invocation_raw = _read_stable_file(invocation_path, "entry invocation", mode=0o600)
+    if consumed["receipt_sha256"] != _sha(authorization_raw) or evidence_claim["receipt_sha256"] != _sha(evidence_raw):
+        _fail("engine execution context source receipt drift")
+    return {
+        "schema_version": _engine.ENGINE_CONTEXT_SCHEMA_VERSION,
+        "kind": _engine.ENGINE_CONTEXT_KIND,
+        "descriptor": _copy(descriptor),
+        "descriptor_sha256": descriptor["aggregate_sha256"],
+        "training_run_id": descriptor["training_run_id"],
+        "nonce": descriptor["nonce"],
+        "authorization": {
+            "path": descriptor["authorization_path"],
+            "binding": _copy(descriptor["authorization_binding"]),
+            "binding_sha256": descriptor["authorization_binding_sha256"],
+            "receipt_path": descriptor["authorization_receipt_path"],
+            "receipt_size_bytes": len(authorization_raw),
+            "receipt_sha256": _sha(authorization_raw),
+            "receipt_bytes_hex": authorization_raw.hex(),
+        },
+        "evidence": {
+            "root": descriptor["evidence_root"],
+            "receipt_path": descriptor["evidence_receipt_path"],
+            "receipt_size_bytes": len(evidence_raw),
+            "receipt_sha256": _sha(evidence_raw),
+            "receipt_bytes_hex": evidence_raw.hex(),
+        },
+        "entry": {
+            "consumption_path": str(consumption_path),
+            "consumption_size_bytes": len(consumption_raw),
+            "consumption_sha256": _sha(consumption_raw),
+            "consumption_bytes_hex": consumption_raw.hex(),
+            "invocation_path": str(invocation_path),
+            "invocation_size_bytes": len(invocation_raw),
+            "invocation_sha256": _sha(invocation_raw),
+            "invocation_bytes_hex": invocation_raw.hex(),
+        },
+        "repository": _copy(descriptor["repository"]),
+        "t6a_contract_binding": _copy(descriptor["t6a_contract_binding"]),
+        "source_bindings": _copy(descriptor["source_bindings"]),
+        "config_identity": _copy(descriptor["config_identity"]),
+        "environment": _copy(descriptor["environment"]),
+        "data_roles": _copy(descriptor["data_roles"]),
+        "training_policy": _copy(descriptor["training_policy"]),
+        "targets": _copy(descriptor["targets"]),
+        "cwd": descriptor["cwd"],
+        "argv": _copy(descriptor["argv"]),
+        "child_environment": _copy(descriptor["child_environment"]),
+        "evidence_root": descriptor["evidence_root"],
+        "process_evidence_root": descriptor["process_evidence_root"],
+        "outer_evidence_root": descriptor["outer_evidence_root"],
+        "engine_claim_path": str(root / _engine.ENGINE_CLAIM_FILE_NAME),
+    }
+
+
 def _ensure_process_root(root: Path) -> None:
     _directory(root, "process evidence root")
     if stat.S_IMODE(root.lstat().st_mode) not in {0o700, 0o755}:
@@ -1349,6 +1426,8 @@ def run_production_entry(
     """Run one authorized child entry and publish a terminal result."""
 
     checked = validate_entry_descriptor(dict(descriptor))
+    if engine_ports is not None:
+        _fail("injected production engine ports are forbidden")
     _validate_launch_git_identity(checked)
     consumed = validate_consumed_authorization_receipt(
         checked["authorization_receipt_path"],
@@ -1372,31 +1451,26 @@ def run_production_entry(
 
     result: dict[str, Any]
     try:
-        if engine_ports is None:
-            ports = dict(_engine.resolve_production_ports(
-                repo_root=checked["repository"]["repo_root"],
-                data_roles=checked["data_roles"],
-                output_root=checked["evidence_root"],
-            ))
-            ports["checkpoint_identity"] = {
-                "training_run_id": checked["training_run_id"],
-                "nonce": checked["nonce"],
-                "repository": _copy(checked["repository"]),
-                "source_bindings": _copy(checked["source_bindings"]),
-                "config_identity": _copy(checked["config_identity"]),
-                "data_roles": _copy(checked["data_roles"]),
-                "evaluator": "visdrone_official_primary_evaluator_v1/development_only",
-            }
-        else:
-            ports = dict(engine_ports)
-            ports["production_authorized"] = True
-            ports.setdefault("authorize_production", lambda: True)
-            ports.setdefault("training_evidence_root", str(root))
+        ports = dict(_engine.resolve_production_ports(
+            repo_root=checked["repository"]["repo_root"],
+            data_roles=checked["data_roles"],
+            output_root=checked["evidence_root"],
+        ))
+        ports["checkpoint_identity"] = {
+            "training_run_id": checked["training_run_id"],
+            "nonce": checked["nonce"],
+            "repository": _copy(checked["repository"]),
+            "source_bindings": _copy(checked["source_bindings"]),
+            "config_identity": _copy(checked["config_identity"]),
+            "data_roles": _copy(checked["data_roles"]),
+            "evaluator": "visdrone_official_primary_evaluator_v1/development_only",
+        }
+        authorization_context = _build_engine_execution_context(checked, consumed, evidence_claim, root)
         engine_result = _engine.run_training_engine(
             checked["training_policy"],
             ports,
             mode="production",
-            _authorization_capability=_engine._PRODUCTION_CAPABILITY,
+            authorization_context=authorization_context,
         )
         body = {
             "schema_version": T6B_SCHEMA_VERSION,
@@ -1468,7 +1542,10 @@ def run_production_entry(
 
 def _entry_inventory(root: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for name in sorted(set(ENTRY_EVIDENCE_FILE_NAMES) - {"entry_artifact_inventory.json", "entry_completion.json"}):
+    names = set(ENTRY_REQUIRED_EVIDENCE_FILE_NAMES) - {"entry_artifact_inventory.json", "entry_completion.json"}
+    if (root / _engine.ENGINE_CLAIM_FILE_NAME).exists() or (root / _engine.ENGINE_CLAIM_FILE_NAME).is_symlink():
+        names.add(_engine.ENGINE_CLAIM_FILE_NAME)
+    for name in sorted(names):
         path = root / name
         observed = _regular_file(path, name, expected_mode=0o600, expected_nlink=1)
         raw = _read_stable_file(path, name, mode=0o600)
@@ -1510,8 +1587,9 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
         present = {path.name for path in root.iterdir()}
         if present == {"entry_consumption.json", "entry_invocation.json"}:
             return "RUNNING"
-        expected_present = set(ENTRY_EVIDENCE_FILE_NAMES)
-        if not present.issubset(expected_present | {ENTRY_CHECKPOINT_DIRECTORY}) or not expected_present.issubset(present):
+        expected_present = set(ENTRY_REQUIRED_EVIDENCE_FILE_NAMES)
+        allowed_present = expected_present | {ENTRY_CHECKPOINT_DIRECTORY, _engine.ENGINE_CLAIM_FILE_NAME}
+        if not present.issubset(allowed_present) or not expected_present.issubset(present):
             return "UNKNOWN"
         if ENTRY_CHECKPOINT_DIRECTORY in present:
             try:
@@ -1528,6 +1606,18 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
         validate_entry_result(result)
         if result["training_evidence_root"] != str(root) or result["evidence_receipt_path"] != str(_evidence_receipt_path(root)):
             return "UNKNOWN"
+        if result["status"] == "TERMINAL_COMPLETE":
+            claim_path = root / _engine.ENGINE_CLAIM_FILE_NAME
+            if not claim_path.exists() or claim_path.is_symlink():
+                return "UNKNOWN"
+            claim_info = _engine._validate_engine_claim(
+                claim_path,
+                expected_context_sha256=result["engine_result"]["execution_context_sha256"],
+                expected_descriptor_sha256=result["descriptor_sha256"],
+                expected_root=str(root),
+            )
+            if claim_info["sha256"] != result["engine_result"]["engine_claim_sha256"] or len(claim_info["raw"]) != result["engine_result"]["engine_claim_size_bytes"]:
+                return "UNKNOWN"
         if consumption["schema_version"] != T6B_SCHEMA_VERSION or consumption["kind"] != "T6B_ENTRY_INVOCATION" or consumption["descriptor_sha256"] != result["descriptor_sha256"] or consumption["authorization_binding_sha256"] != result["authorization_binding_sha256"] or consumption["training_run_id"] != result["training_run_id"] or consumption["nonce"] != result["nonce"] or consumption["status"] != "CLAIMED" or consumption["receipt_path"] != str(root / "entry_consumption.json") or result["entry_receipt_sha256"] != _sha(consumption_raw):
             return "UNKNOWN"
         claim, claim_raw = _read_json(Path(result["evidence_receipt_path"]), "training evidence claim receipt")

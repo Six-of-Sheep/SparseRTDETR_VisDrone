@@ -43,10 +43,20 @@ YAML default dataset paths. `test` and `confirmatory` are permanently sealed
 for this stage. No path resolver in the T6B modules accepts those roles, raw
 annotations, or speed measurement.
 
-The training engine exposes a private entry capability for production mode;
-the public CPU fake port cannot self-authorize a production run.  The actual
-runtime libraries and vendor/model/data/evaluator ports are resolved lazily
-only after the detached authorization and descriptor gates.
+The training engine accepts no private identity token for production mode.
+Instead, the checked entry constructs a closed, content-addressed production
+execution context binding the complete descriptor, detached authorization and
+consumption receipt, entry evidence bytes, live repository/source/config/data
+identities, policy and evidence roots.  The engine independently revalidates
+that context and exclusively publishes one durable
+`engine_execution_claim.json` under the claimed training evidence root before
+resolving or calling any runtime factory.  A copied object, module attribute,
+boolean, callback, forged mapping, repacked JSON or replayed claim cannot
+authorize production.  The public CPU fake path accepts only non-production
+ports, never creates a production claim and never certifies training.  The
+actual runtime libraries and vendor/model/data/evaluator ports are resolved
+lazily only after the detached authorization, descriptor, evidence and claim
+gates.
 
 The training policy is random initialization with seed 0, one GPU and one
 world process, batch sizes 16 and 32, and 120 epochs.  AMP GradScaler values,
