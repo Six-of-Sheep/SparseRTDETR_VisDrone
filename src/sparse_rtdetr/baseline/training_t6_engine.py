@@ -378,26 +378,23 @@ def _claim_engine_execution(context: dict[str, Any]) -> dict[str, Any]:
         "context": _copy(context),
     }
     raw = _canonical(payload)
-    published = False
-    try:
-        entry._write_new(claim_path, raw, "engine execution claim")
-        entry._fsync_directory(root, "engine execution claim parent")
-        observed = claim_path.lstat()
-        root_observed = root.lstat()
-        if stat.S_ISLNK(observed.st_mode) or not stat.S_ISREG(observed.st_mode) or observed.st_nlink != 1 or stat.S_IMODE(observed.st_mode) != 0o600 or observed.st_uid != os.getuid() or observed.st_gid != os.getgid() or observed.st_dev != root_observed.st_dev:
-            _fail("engine execution claim metadata drift")
-        if _read_context_bytes(claim_path, "engine execution claim") != raw:
-            _fail("engine execution claim readback drift")
-        published = True
-    except Exception:
-        if not published:
-            try:
-                if claim_path.exists() and not claim_path.is_symlink():
-                    claim_path.unlink()
-                    entry._fsync_directory(root, "engine execution claim cleanup")
-            except Exception:
-                pass
-        raise
+    # _write_new uses O_EXCL and the final pathname is the irreversible
+    # reservation. Once it exists, every later failure must retain it so a
+    # replay cannot regain access to the production factories.
+    entry._write_new(claim_path, raw, "engine execution claim")
+    entry._fsync_directory(root, "engine execution claim parent")
+    observed = claim_path.lstat()
+    root_observed = root.lstat()
+    if stat.S_ISLNK(observed.st_mode) or not stat.S_ISREG(observed.st_mode) or observed.st_nlink != 1 or stat.S_IMODE(observed.st_mode) != 0o600 or observed.st_uid != os.getuid() or observed.st_gid != os.getgid() or observed.st_dev != root_observed.st_dev:
+        _fail("engine execution claim metadata drift")
+    if _read_context_bytes(claim_path, "engine execution claim") != raw:
+        _fail("engine execution claim readback drift")
+    _validate_engine_claim(
+        claim_path,
+        expected_context_sha256=payload["context_sha256"],
+        expected_descriptor_sha256=context["descriptor_sha256"],
+        expected_root=context["evidence_root"],
+    )
     return {
         "path": str(claim_path),
         "size_bytes": len(raw),

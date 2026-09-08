@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 
 import pytest
 
@@ -215,6 +216,182 @@ def _engine_ports() -> dict[str, object]:
         "backward": lambda loss: None,
         "amp_counters": lambda: {"overflow_events": 0, "skipped_optimizer_steps": 0},
     }
+
+
+def _minimal_claim_context(root: Path) -> dict[str, object]:
+    return {
+        "evidence_root": str(root),
+        "engine_claim_path": str(root / engine.ENGINE_CLAIM_FILE_NAME),
+        "descriptor_sha256": "d" * 64,
+        "training_run_id": "t6b-claim-durability-test",
+        "nonce": "n" * 32,
+    }
+
+
+@pytest.mark.parametrize(
+    "failure_kind",
+    (
+        "write_after_create",
+        "directory_fsync",
+        "claim_lstat",
+        "root_lstat",
+        "claim_readback_exception",
+        "claim_readback_mismatch",
+        "final_validation",
+    ),
+)
+def test_engine_claim_post_creation_failures_retain_irreversible_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_kind: str,
+) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    context = _minimal_claim_context(root)
+    claim_path = root / engine.ENGINE_CLAIM_FILE_NAME
+    created = False
+    original_write = entry._write_new
+
+    def mark_created_write(path: Path, payload: bytes, field: str) -> object:
+        nonlocal created
+        observed = original_write(path, payload, field)
+        created = True
+        return observed
+
+    if failure_kind == "write_after_create":
+        def write_then_fail(path: Path, payload: bytes, field: str) -> object:
+            observed = mark_created_write(path, payload, field)
+            raise engine.TrainingEngineError("injected post-create writer failure")
+
+        monkeypatch.setattr(entry, "_write_new", write_then_fail)
+    elif failure_kind == "directory_fsync":
+        def fsync_then_fail(path: Path, field: str) -> None:
+            raise engine.TrainingEngineError("injected directory fsync failure")
+
+        monkeypatch.setattr(entry, "_fsync_directory", fsync_then_fail)
+    elif failure_kind == "claim_lstat":
+        monkeypatch.setattr(entry, "_write_new", mark_created_write)
+        original_lstat = Path.lstat
+        failed = False
+
+        def claim_lstat_then_fail(path: Path) -> os.stat_result:
+            nonlocal failed
+            if created and not failed and path == claim_path:
+                failed = True
+                raise OSError("injected claim lstat failure")
+            return original_lstat(path)
+
+        monkeypatch.setattr(Path, "lstat", claim_lstat_then_fail)
+    elif failure_kind == "root_lstat":
+        monkeypatch.setattr(entry, "_write_new", mark_created_write)
+        original_lstat = Path.lstat
+        failed = False
+
+        def root_lstat_then_fail(path: Path) -> os.stat_result:
+            nonlocal failed
+            if created and not failed and path == root:
+                failed = True
+                raise OSError("injected root lstat failure")
+            return original_lstat(path)
+
+        monkeypatch.setattr(Path, "lstat", root_lstat_then_fail)
+    elif failure_kind == "claim_readback_exception":
+        monkeypatch.setattr(entry, "_write_new", mark_created_write)
+
+        def readback_then_fail(path: Path, field: str, **kwargs: object) -> bytes:
+            raise engine.TrainingEngineError("injected claim readback failure")
+
+        monkeypatch.setattr(engine, "_read_context_bytes", readback_then_fail)
+    elif failure_kind == "claim_readback_mismatch":
+        monkeypatch.setattr(entry, "_write_new", mark_created_write)
+
+        def readback_mismatch(path: Path, field: str, **kwargs: object) -> bytes:
+            return b"mutated claim bytes"
+
+        monkeypatch.setattr(engine, "_read_context_bytes", readback_mismatch)
+    else:
+        monkeypatch.setattr(entry, "_write_new", mark_created_write)
+
+        def final_validation_then_fail(*args: object, **kwargs: object) -> dict[str, object]:
+            raise engine.TrainingEngineError("injected final claim validation failure")
+
+        monkeypatch.setattr(engine, "_validate_engine_claim", final_validation_then_fail)
+
+    with pytest.raises(Exception):
+        engine._claim_engine_execution(context)
+
+    assert claim_path.is_file()
+    assert not claim_path.is_symlink()
+
+    factory_calls: list[str] = []
+
+    def replay_then_factory() -> None:
+        engine._claim_engine_execution(context)
+        factory_calls.append("model_factory")
+
+    with pytest.raises(engine.TrainingEngineError, match="claim target already exists"):
+        replay_then_factory()
+    assert factory_calls == []
+
+
+def test_engine_claim_pre_creation_failure_leaves_claim_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    context = _minimal_claim_context(root)
+
+    def fail_before_create(path: Path, payload: bytes, field: str) -> object:
+        raise engine.TrainingEngineError("injected pre-creation failure")
+
+    monkeypatch.setattr(entry, "_write_new", fail_before_create)
+    with pytest.raises(engine.TrainingEngineError, match="pre-creation"):
+        engine._claim_engine_execution(context)
+    assert not os.path.lexists(context["engine_claim_path"])
+
+
+def test_engine_claim_never_unlinks_racing_object(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    context = _minimal_claim_context(root)
+    claim_path = root / engine.ENGINE_CLAIM_FILE_NAME
+
+    def create_racing_object_then_fail(path: Path, payload: bytes, field: str) -> object:
+        path.write_bytes(b"object created by a race")
+        raise engine.TrainingEngineError("injected race after object appearance")
+
+    monkeypatch.setattr(entry, "_write_new", create_racing_object_then_fail)
+    with pytest.raises(engine.TrainingEngineError, match="race"):
+        engine._claim_engine_execution(context)
+    assert claim_path.read_bytes() == b"object created by a race"
+
+
+@pytest.mark.parametrize("object_kind", ("regular", "directory", "symlink", "hardlink", "fifo"))
+def test_engine_claim_rejects_existing_objects_without_deletion(tmp_path: Path, object_kind: str) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    context = _minimal_claim_context(root)
+    claim_path = root / engine.ENGINE_CLAIM_FILE_NAME
+    if object_kind == "regular":
+        claim_path.write_bytes(b"occupied")
+    elif object_kind == "directory":
+        claim_path.mkdir()
+    elif object_kind == "symlink":
+        target = root / "target"
+        target.write_bytes(b"target")
+        claim_path.symlink_to(target)
+    elif object_kind == "hardlink":
+        source = root / "source"
+        source.write_bytes(b"occupied")
+        os.link(source, claim_path)
+    else:
+        os.mkfifo(claim_path)
+
+    before = claim_path.lstat()
+    with pytest.raises(engine.TrainingEngineError, match="claim target already exists"):
+        engine._claim_engine_execution(context)
+    after = claim_path.lstat()
+    assert (after.st_dev, after.st_ino, after.st_mode, after.st_nlink) == (before.st_dev, before.st_ino, before.st_mode, before.st_nlink)
+    if stat.S_ISREG(before.st_mode):
+        assert claim_path.read_bytes() == b"occupied"
 
 
 def test_engine_accepts_vendor_batch_and_loss_dict_and_applies_warmup() -> None:

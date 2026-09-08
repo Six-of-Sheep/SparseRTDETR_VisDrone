@@ -58,6 +58,14 @@ actual runtime libraries and vendor/model/data/evaluator ports are resolved
 lazily only after the detached authorization, descriptor, evidence and claim
 gates.
 
+The final claim pathname is the irreversible execution reservation.  Once
+exclusive creation has created that pathname, every later publication or
+verification failure, including directory fsync, metadata, readback, close or
+final validation failure, retains an object at the exact final pathname and
+permanently blocks replay.  No post-creation failure path may unlink, replace,
+truncate or rewrite that pathname; a retained invalid or partial object is a
+permanent failure rather than reusable authorization.
+
 The training policy is random initialization with seed 0, one GPU and one
 world process, batch sizes 16 and 32, and 120 epochs.  AMP GradScaler values,
 EMA, AdamW/warmup/scheduler policy, development-only primary evaluator and

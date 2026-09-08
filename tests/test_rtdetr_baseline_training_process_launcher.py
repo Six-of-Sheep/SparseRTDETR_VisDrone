@@ -7,6 +7,7 @@ import copy
 import importlib
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -362,12 +363,62 @@ def test_launcher_import_surface_and_parent_torch_sentinel() -> None:
     imported.update((node.module or "").split(".", 1)[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module != "__future__")
     assert not imported.intersection({"torch", "subprocess", "multiprocessing", "socket", "requests", "urllib", "vendor"})
     sentinel = object()
+    had_torch = "torch" in sys.modules
+    previous = sys.modules.get("torch")
     sys.modules["torch"] = sentinel
     try:
         assert sys.modules["torch"] is sentinel
         assert launcher.LAUNCHER_MODE == "synthetic"
     finally:
-        sys.modules.pop("torch", None)
+        if had_torch:
+            sys.modules["torch"] = previous
+        else:
+            sys.modules.pop("torch", None)
+    assert ("torch" in sys.modules) is had_torch
+    assert sys.modules.get("torch") is previous
+
+
+def test_preloaded_torch_survives_sentinel_test_and_remains_cpu_only() -> None:
+    script = """
+import importlib
+import sys
+
+import pytest
+torch = importlib.import_module("torch")
+
+original = sys.modules["torch"]
+exit_code = pytest.main([
+    "-p", "no:cacheprovider",
+    "-q",
+    "tests/test_rtdetr_baseline_training_process_launcher.py::test_launcher_import_surface_and_parent_torch_sentinel",
+])
+if int(exit_code) != 0:
+    raise SystemExit(int(exit_code))
+assert sys.modules["torch"] is original
+assert importlib.import_module("torch") is original
+assert hasattr(torch, "_C")
+assert importlib.import_module("torch.nn") is torch.nn
+assert torch.tensor([1, 2], device="cpu").sum().item() == 3
+assert not torch.cuda.is_initialized()
+"""
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "CUDA_VISIBLE_DEVICES": "",
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPATH": str(ROOT / "src"),
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
 
 
 def test_future_production_targets_remain_absent() -> None:
