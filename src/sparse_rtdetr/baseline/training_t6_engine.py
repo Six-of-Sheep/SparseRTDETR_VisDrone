@@ -409,8 +409,16 @@ def _validate_engine_claim(path: pathlib.Path, *, expected_context_sha256: str, 
     claim = _exact(claim, expected, "engine execution claim")
     observed = _read_context_bytes(path, "engine execution claim")
     if observed != raw or claim["schema_version"] != ENGINE_CONTEXT_SCHEMA_VERSION or claim["kind"] != ENGINE_CLAIM_KIND or claim["engine_id"] != ENGINE_ID or claim["context_sha256"] != expected_context_sha256 or claim["descriptor_sha256"] != expected_descriptor_sha256 or claim["evidence_root"] != expected_root or claim["status"] != "CLAIMED" or _digest(claim["context"]) != expected_context_sha256:
-        _fail("engine execution claim identity drift")
-    _validate_execution_context(claim["context"])
+        _fail("engine execution claim identity/run-identity drift")
+    checked_context = _validate_execution_context(claim["context"])
+    if (
+        claim["descriptor_sha256"] != checked_context["descriptor_sha256"]
+        or claim["training_run_id"] != checked_context["training_run_id"]
+        or claim["nonce"] != checked_context["nonce"]
+        or claim["evidence_root"] != checked_context["evidence_root"]
+        or claim["context_sha256"] != _digest(checked_context)
+    ):
+        _fail("engine execution claim identity/run-identity drift")
     return {"claim": claim, "raw": raw, "sha256": _sha_bytes(raw)}
 
 

@@ -533,6 +533,106 @@ def test_engine_claim_is_durable_and_replay_fails_before_factories(tmp_path: Pat
     assert calls == []
 
 
+def _valid_claim_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, object], Path, bytes]:
+    descriptor, _, _, _ = _descriptor(tmp_path)
+    monkeypatch.setattr(engine, "resolve_production_ports", lambda **kwargs: _engine_ports())
+    result = entry.run_production_entry(descriptor, process_pid=4242)
+    assert result["status"] == "TERMINAL_COMPLETE"
+    claim_path = Path(descriptor["evidence_root"]) / engine.ENGINE_CLAIM_FILE_NAME
+    original_raw = claim_path.read_bytes()
+    return descriptor, claim_path, original_raw
+
+
+@pytest.mark.parametrize("field", ("descriptor_sha256", "training_run_id", "nonce", "evidence_root"))
+def test_engine_claim_top_level_identity_mutations_are_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    descriptor, claim_path, original_raw = _valid_claim_site(tmp_path, monkeypatch)
+    original_claim = json.loads(original_raw)
+    mutated = copy.deepcopy(original_claim)
+    replacements = {
+        "descriptor_sha256": "0" * 64,
+        "training_run_id": "t6b-mutated-run-id",
+        "nonce": "x" * 64,
+        "evidence_root": str(tmp_path / "mutated-root"),
+    }
+    mutated[field] = replacements[field]
+    mutated_raw = engine._canonical(mutated)
+    assert mutated_raw != original_raw
+    claim_path.write_bytes(mutated_raw)
+    with pytest.raises(engine.TrainingEngineError, match="identity/run-identity drift"):
+        engine._validate_engine_claim(
+            claim_path,
+            expected_context_sha256=original_claim["context_sha256"],
+            expected_descriptor_sha256=descriptor["aggregate_sha256"],
+            expected_root=descriptor["evidence_root"],
+        )
+
+
+def test_engine_claim_valid_positive_control_preserves_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    descriptor, claim_path, original_raw = _valid_claim_site(tmp_path, monkeypatch)
+    original_claim = json.loads(original_raw)
+    input_claim = copy.deepcopy(original_claim)
+    validated = engine._validate_engine_claim(
+        claim_path,
+        expected_context_sha256=original_claim["context_sha256"],
+        expected_descriptor_sha256=descriptor["aggregate_sha256"],
+        expected_root=descriptor["evidence_root"],
+    )
+    assert validated["claim"] == input_claim
+    assert claim_path.read_bytes() == original_raw
+
+
+def test_engine_claim_synchronized_identity_repack_rejected_by_external_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    descriptor, claim_path, original_raw = _valid_claim_site(tmp_path, monkeypatch)
+    original_claim = json.loads(original_raw)
+    mutated = copy.deepcopy(original_claim)
+    mutated["training_run_id"] = "t6b-repacked-run-id"
+    mutated["context"]["training_run_id"] = mutated["training_run_id"]
+    mutated["context_sha256"] = engine._digest(mutated["context"])
+    mutated_raw = engine._canonical(mutated)
+    assert mutated_raw != original_raw
+    claim_path.write_bytes(mutated_raw)
+    with pytest.raises(engine.TrainingEngineError):
+        engine._validate_engine_claim(
+            claim_path,
+            expected_context_sha256=original_claim["context_sha256"],
+            expected_descriptor_sha256=descriptor["aggregate_sha256"],
+            expected_root=descriptor["evidence_root"],
+        )
+
+
+def test_entry_classifier_rejects_claim_run_identity_repack_after_derived_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    descriptor, claim_path, original_raw = _valid_claim_site(tmp_path, monkeypatch)
+    root = Path(descriptor["evidence_root"])
+    claim = json.loads(original_raw)
+    claim["training_run_id"] = "t6b-classifier-mutated-run-id"
+    mutated_raw = engine._canonical(claim)
+    assert mutated_raw != original_raw
+    claim_path.write_bytes(mutated_raw)
+
+    result_path = root / "entry_result.json"
+    persisted = json.loads(result_path.read_text(encoding="utf-8"))
+    engine_result = persisted["engine_result"]
+    engine_result["engine_claim_size_bytes"] = len(mutated_raw)
+    engine_result["engine_claim_sha256"] = entry._sha(mutated_raw)
+    engine_result_body = {key: value for key, value in engine_result.items() if key != "engine_result_sha256"}
+    engine_result["engine_result_sha256"] = entry._digest(engine_result_body)
+    result_body = {key: value for key, value in persisted.items() if key != "aggregate_result_sha256"}
+    persisted["aggregate_result_sha256"] = entry._digest(result_body)
+    _rewrite_canonical(result_path, persisted)
+    _refresh_entry_evidence(root)
+    assert entry.classify_entry(root) == "UNKNOWN"
+
+
 def _rewrite_canonical(path: Path, value: dict[str, object]) -> None:
     path.write_bytes(entry._canonical(value))
 

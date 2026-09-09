@@ -372,14 +372,14 @@ T6B_CONFIG_RAW_SHA256 = "a152ccb7caefd42531ee2126ca194495e4af8d4a660d907c5a9acf7
 T6B_CONFIG_CANONICAL_SIZE_BYTES = 5565
 T6B_CONFIG_CANONICAL_SHA256 = "dfeecc7b002db9ce10b33afa9d166fab4c7f88a5f922b4862fa0d1d99ff755a1"
 T6B_SOURCE_IDENTITIES = {
-    "src/sparse_rtdetr/baseline/training_t6_engine.py": "23c97c786d8db86cfcad5041fce11ffcbb3d2a342dfab7de37c0aad5321bc4d8",
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": "63ce8f37d406295eef224cd6e84dcbfe6780aea1a72e95de60f4a704e6cf48b5",
     "src/sparse_rtdetr/baseline/training_t6_entry.py": "d433c5fb91f933eb731ae08e3c43b7cffae9071a9c3d22d227e01791b28a16c1",
     "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "0dd192b1137223e19baa23ec10611767428d4f422b297d5442281b6834d89aeb",
     "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "723fc69abe1bfb3a8660134e5477b228708ea9941acfa5021213f1f67530ed67",
 }
 T6B_SUPPORT_IDENTITIES = {
-    "tests/test_rtdetr_baseline_training_t6b.py": "6673cdd0b0dc3a6fe3d7b03065d3c73b38dfdbad24832999228af6e24adc451f",
-    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "d777dd1652cf0b038d8ac2163e9f67ed94577ae8d13aa7b5f8061ab13156cbc4",
+    "tests/test_rtdetr_baseline_training_t6b.py": "e6f5cff4821c74595f8f309c2c8ae231b46b227060fd0eb4fe24349e84c353c7",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "4cb3eab76459f0b0c2cf04a834af28e24f6a7fb7c2e3842a3bfa3b3cf3918693",
 }
 T6B_PUBLIC_APIS = {
     "src/sparse_rtdetr/baseline/training_t6_engine.py": {
@@ -1388,6 +1388,68 @@ def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
                 ] if engine_functions else []
                 if not claim_calls:
                     failures.append("T6B engine does not claim execution")
+                claim_validators = [
+                    node
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.FunctionDef) and node.name == "_validate_engine_claim"
+                ]
+                if len(claim_validators) != 1:
+                    failures.append("T6B engine claim validator definition count mismatch")
+                else:
+                    validator = claim_validators[0]
+
+                    def field_ref(node: ast.AST, base: str) -> str | None:
+                        if not isinstance(node, ast.Subscript) or not isinstance(node.value, ast.Name) or node.value.id != base:
+                            return None
+                        if not isinstance(node.slice, ast.Constant) or not isinstance(node.slice.value, str):
+                            return None
+                        return node.slice.value
+
+                    checked_context_assignments = [
+                        node
+                        for node in ast.walk(validator)
+                        if isinstance(node, ast.Assign)
+                        and any(isinstance(target, ast.Name) and target.id == "checked_context" for target in node.targets)
+                        and isinstance(node.value, ast.Call)
+                        and isinstance(node.value.func, ast.Name)
+                        and node.value.func.id == "_validate_execution_context"
+                        and len(node.value.args) == 1
+                        and field_ref(node.value.args[0], "claim") == "context"
+                    ]
+                    if len(checked_context_assignments) != 1:
+                        failures.append("T6B claim validator does not bind checked execution context")
+
+                    bound_fields: set[str] = set()
+                    for node in ast.walk(validator):
+                        if not isinstance(node, ast.Compare):
+                            continue
+                        operands = [node.left, *node.comparators]
+                        for left, right in zip(operands, operands[1:]):
+                            left_field = field_ref(left, "claim")
+                            right_field = field_ref(right, "checked_context")
+                            if left_field in {"descriptor_sha256", "training_run_id", "nonce", "evidence_root"} and right_field == left_field:
+                                bound_fields.add(left_field)
+                            if right_field in {"descriptor_sha256", "training_run_id", "nonce", "evidence_root"} and left_field == right_field:
+                                bound_fields.add(right_field)
+                    if bound_fields != {"descriptor_sha256", "training_run_id", "nonce", "evidence_root"}:
+                        failures.append("T6B claim validator missing duplicated identity cross-binding")
+                    digest_checks = [
+                        node
+                        for node in ast.walk(validator)
+                        if isinstance(node, ast.Compare)
+                        and any(field_ref(operand, "claim") == "context_sha256" for operand in [node.left, *node.comparators])
+                        and any(
+                            isinstance(operand, ast.Call)
+                            and isinstance(operand.func, ast.Name)
+                            and operand.func.id == "_digest"
+                            and len(operand.args) == 1
+                            and isinstance(operand.args[0], ast.Name)
+                            and operand.args[0].id == "checked_context"
+                            for operand in [node.left, *node.comparators]
+                        )
+                    ]
+                    if len(digest_checks) != 1:
+                        failures.append("T6B claim validator missing checked-context digest binding")
             if relative == "src/sparse_rtdetr/baseline/training_t6_entry.py":
                 entry_source_forbidden = {"_authorization_capability", "_PRODUCTION_CAPABILITY", "production_authorized", "authorize_production"}
                 if any(name in source_text for name in entry_source_forbidden):

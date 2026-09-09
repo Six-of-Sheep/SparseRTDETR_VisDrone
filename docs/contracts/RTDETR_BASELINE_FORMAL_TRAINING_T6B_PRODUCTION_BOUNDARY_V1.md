@@ -66,6 +66,14 @@ permanently blocks replay.  No post-creation failure path may unlink, replace,
 truncate or rewrite that pathname; a retained invalid or partial object is a
 permanent failure rather than reusable authorization.
 
+The claim's duplicated top-level identity is also bound to the fully
+revalidated inner execution context.  `descriptor_sha256`, `training_run_id`,
+`nonce`, `evidence_root` and `context_sha256` must each equal the corresponding
+value from the checked context, with `context_sha256` recomputed from that
+checked context.  A canonical rewrite that changes either copy, even when
+local derived evidence summaries are refreshed, is rejected by the production
+claim validator before any runtime factory is reached.
+
 The training policy is random initialization with seed 0, one GPU and one
 world process, batch sizes 16 and 32, and 120 epochs.  AMP GradScaler values,
 EMA, AdamW/warmup/scheduler policy, development-only primary evaluator and
