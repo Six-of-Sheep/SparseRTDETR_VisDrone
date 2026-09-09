@@ -367,19 +367,19 @@ T6B_FILES = {
     "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md",
 }
 T6B_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_training_t6b_v1.json"
-T6B_CONFIG_RAW_SIZE_BYTES = 6925
-T6B_CONFIG_RAW_SHA256 = "a152ccb7caefd42531ee2126ca194495e4af8d4a660d907c5a9acf796fefcc85"
-T6B_CONFIG_CANONICAL_SIZE_BYTES = 5565
-T6B_CONFIG_CANONICAL_SHA256 = "dfeecc7b002db9ce10b33afa9d166fab4c7f88a5f922b4862fa0d1d99ff755a1"
+T6B_CONFIG_RAW_SIZE_BYTES = 7325
+T6B_CONFIG_RAW_SHA256 = "87467339ec759abe89ab162c67395d0b34e50ffe1033adcd6dc9a4bc4413951d"
+T6B_CONFIG_CANONICAL_SIZE_BYTES = 5930
+T6B_CONFIG_CANONICAL_SHA256 = "ed71970ff3e14476763ca8c72d89bff5c58e3848ce76ad98cc209b62e66d312a"
 T6B_SOURCE_IDENTITIES = {
     "src/sparse_rtdetr/baseline/training_t6_engine.py": "63ce8f37d406295eef224cd6e84dcbfe6780aea1a72e95de60f4a704e6cf48b5",
-    "src/sparse_rtdetr/baseline/training_t6_entry.py": "d433c5fb91f933eb731ae08e3c43b7cffae9071a9c3d22d227e01791b28a16c1",
-    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "0dd192b1137223e19baa23ec10611767428d4f422b297d5442281b6834d89aeb",
-    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "723fc69abe1bfb3a8660134e5477b228708ea9941acfa5021213f1f67530ed67",
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": "3bea87bcd7da7c6976183a50f5199c94343dfb835fc0ab480f3857787e3e1e66",
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "36f815a2be1a87f6b8a1d21394bc9f8b7b24c02899a2a29512ef40fb8b9171a9",
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "96816697e31ec8cdb663797226758ca3e954b83d8c950f50b1bd366c784c4cbf",
 }
 T6B_SUPPORT_IDENTITIES = {
-    "tests/test_rtdetr_baseline_training_t6b.py": "e6f5cff4821c74595f8f309c2c8ae231b46b227060fd0eb4fe24349e84c353c7",
-    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "4cb3eab76459f0b0c2cf04a834af28e24f6a7fb7c2e3842a3bfa3b3cf3918693",
+    "tests/test_rtdetr_baseline_training_t6b.py": "577631318a56b48d605ebec011b0dc5f584c6a42320cbb68e7e9de9d11dbfc90",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "3c5120c34f5973f653c36e75d74d39086037808843cffe31ded0efad275bb14d",
 }
 T6B_PUBLIC_APIS = {
     "src/sparse_rtdetr/baseline/training_t6_engine.py": {
@@ -1331,7 +1331,7 @@ def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
             if readiness != {"static_config_authorizes_production": False, "owner_authorization_required": True, "launch_acceptance_separate": True, "terminal_completion_separate": True, "independent_audit_required": True, "training_certification_separate": True}:
                 failures.append("T6B readiness is not fail-closed")
             invocation = value.get("invocation_policy")
-            if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False}:
+            if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False, "entry_module": "sparse_rtdetr.baseline.training_t6_entry", "process_module": "sparse_rtdetr.baseline.training_t6_process_launcher", "entry_descriptor_filename": "entry_descriptor.json", "process_descriptor_filename": "process_descriptor.json", "descriptor_persistence_order": ["process_descriptor", "outer_invocation", "tmux", "entry_descriptor", "process_invocation", "child"]}:
                 failures.append("T6B invocation policy mismatch")
             state_machine = value.get("state_machine")
             if type(state_machine) is not dict or state_machine.get("terminal_success") != "TERMINAL_COMPLETE" or state_machine.get("terminal_failure") != "PERMANENT_FAIL" or state_machine.get("no_resume_after") != "LAUNCH_ACCEPTED" or state_machine.get("no_retry_after") != "LAUNCH_ACCEPTED" or state_machine.get("no_overwrite_after") != "LAUNCH_ACCEPTED" or state_machine.get("audit_required") is not True or state_machine.get("certification_separate") is not True:

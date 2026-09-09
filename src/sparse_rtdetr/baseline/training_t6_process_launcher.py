@@ -28,10 +28,13 @@ PROCESS_CONTRACT_ID = _entry.T6B_CONTRACT_ID
 PROCESS_LAUNCHER_ID = "rtdetrv2_r18_visdrone_training_t6_process_launcher_v1"
 PROCESS_MODE = "production"
 PROCESS_MODULE_RELATIVE_PATH = _entry.PROCESS_MODULE_RELATIVE_PATH
+PROCESS_MODULE_NAME = "sparse_rtdetr.baseline.training_t6_process_launcher"
+PROCESS_DESCRIPTOR_FILE_NAME = "process_descriptor.json"
 PROCESS_RECEIPT_SUFFIX = _entry.PROCESS_RECEIPT_SUFFIX
 PROCESS_STREAM_RECEIPT_SUFFIX = ".t6b-process-streams.json"
 PERSISTENCE_FAILURE_MARKER_SUFFIX = ".t6b-process-persistence-failure.json"
 PROCESS_EVIDENCE_FILE_NAMES = (
+    "entry_descriptor.json",
     "invocation.json",
     "stdout.bin",
     "stderr.bin",
@@ -40,6 +43,7 @@ PROCESS_EVIDENCE_FILE_NAMES = (
     "completion.json",
 )
 JSON_FILE_NAMES = (
+    "entry_descriptor.json",
     "invocation.json",
     "entry_consumption.json",
     "entry_invocation.json",
@@ -84,6 +88,8 @@ DESCRIPTOR_KEYS = {
     "entry_descriptor",
     "entry_evidence_root",
     "entry_descriptor_sha256",
+    "entry_descriptor_path",
+    "entry_descriptor_identity",
     "argv",
     "cwd",
     "environment",
@@ -102,6 +108,8 @@ RESULT_KEYS = {
     "nonce",
     "descriptor_sha256",
     "entry_descriptor_sha256",
+    "entry_descriptor_path",
+    "entry_descriptor_identity",
     "authorization_binding_sha256",
     "argv",
     "cwd",
@@ -258,6 +266,23 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         _fail("process run identity drift")
     if descriptor["entry_evidence_root"] != entry["evidence_root"]:
         _fail("process entry evidence root drift")
+    entry_descriptor_path = _absolute(descriptor["entry_descriptor_path"], "descriptor.entry_descriptor_path")
+    expected_entry_descriptor_path = str(Path(descriptor["process_evidence_root"]) / _entry.ENTRY_DESCRIPTOR_FILE_NAME)
+    if entry_descriptor_path != expected_entry_descriptor_path:
+        _fail("process entry descriptor path drift")
+    entry_raw = _canonical(entry)
+    identity = _exact(descriptor["entry_descriptor_identity"], {"relative_path", "raw_size_bytes", "raw_sha256", "canonical_size_bytes", "canonical_sha256", "mode", "nlink"}, "entry descriptor identity")
+    expected_identity = {
+        "relative_path": _entry.ENTRY_DESCRIPTOR_FILE_NAME,
+        "raw_size_bytes": len(entry_raw),
+        "raw_sha256": _sha(entry_raw),
+        "canonical_size_bytes": len(entry_raw),
+        "canonical_sha256": _sha(entry_raw),
+        "mode": 0o600,
+        "nlink": 1,
+    }
+    if identity != expected_identity:
+        _fail("process entry descriptor identity drift")
     argv = descriptor["argv"]
     if type(argv) is not list or not argv or any(type(item) is not str or not item for item in argv) or argv != entry["argv"]:
         _fail("process argv drift")
@@ -301,6 +326,17 @@ def build_production_process_descriptor(entry_descriptor: Mapping[str, Any]) -> 
     source = _module_identity(root)
     process_root = entry["process_evidence_root"]
     receipt = str(Path(process_root).parent / f".{Path(process_root).name}{PROCESS_RECEIPT_SUFFIX}")
+    entry_descriptor_path = str(Path(process_root) / _entry.ENTRY_DESCRIPTOR_FILE_NAME)
+    entry_raw = _canonical(entry)
+    entry_identity = {
+        "relative_path": _entry.ENTRY_DESCRIPTOR_FILE_NAME,
+        "raw_size_bytes": len(entry_raw),
+        "raw_sha256": _sha(entry_raw),
+        "canonical_size_bytes": len(entry_raw),
+        "canonical_sha256": _sha(entry_raw),
+        "mode": 0o600,
+        "nlink": 1,
+    }
     body = {
         "schema_version": PROCESS_SCHEMA_VERSION,
         "contract_id": PROCESS_CONTRACT_ID,
@@ -312,6 +348,8 @@ def build_production_process_descriptor(entry_descriptor: Mapping[str, Any]) -> 
         "entry_descriptor": entry,
         "entry_evidence_root": entry["evidence_root"],
         "entry_descriptor_sha256": entry["aggregate_sha256"],
+        "entry_descriptor_path": entry_descriptor_path,
+        "entry_descriptor_identity": entry_identity,
         "argv": list(entry["argv"]),
         "cwd": entry["cwd"],
         "environment": _copy(entry["environment"]["variables"]),
@@ -325,6 +363,28 @@ def build_production_process_descriptor(entry_descriptor: Mapping[str, Any]) -> 
 
 def validate_process_descriptor(value: Any) -> dict[str, Any]:
     return _validate_descriptor_shape(value)
+
+
+def _publish_entry_descriptor(root: Path, descriptor: dict[str, Any]) -> None:
+    path = Path(descriptor["entry_descriptor_path"])
+    if path.parent != root or path.name != _entry.ENTRY_DESCRIPTOR_FILE_NAME:
+        _fail("entry descriptor publication path drift")
+    raw = _canonical(descriptor["entry_descriptor"])
+    _entry._write_new(path, raw, "entry descriptor")
+    _entry._fsync_directory(root, "entry descriptor parent")
+    observed = _entry._regular_file(path, "entry descriptor", expected_mode=0o600, expected_nlink=1)
+    readback = _entry._read_stable_file(path, "entry descriptor", mode=0o600)
+    identity = descriptor["entry_descriptor_identity"]
+    if readback != raw or {
+        "relative_path": path.name,
+        "raw_size_bytes": len(readback),
+        "raw_sha256": _sha(readback),
+        "canonical_size_bytes": len(raw),
+        "canonical_sha256": _sha(raw),
+        "mode": stat.S_IMODE(observed.st_mode),
+        "nlink": observed.st_nlink,
+    } != identity:
+        _fail("entry descriptor publication identity drift")
 
 
 def _claim_process_root(descriptor: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
@@ -546,6 +606,8 @@ def _make_result(descriptor: dict[str, Any], payload: dict[str, Any], receipt: d
         "nonce": descriptor["nonce"],
         "descriptor_sha256": descriptor["aggregate_sha256"],
         "entry_descriptor_sha256": descriptor["entry_descriptor_sha256"],
+        "entry_descriptor_path": descriptor["entry_descriptor_path"],
+        "entry_descriptor_identity": _copy(descriptor["entry_descriptor_identity"]),
         "entry_evidence_root": descriptor["entry_evidence_root"],
         "authorization_binding_sha256": descriptor["entry_descriptor"]["authorization_binding_sha256"],
         "argv": list(descriptor["argv"]),
@@ -641,6 +703,8 @@ def validate_process_result(value: Any, expected_descriptor: Any | None = None) 
         descriptor = validate_process_descriptor(expected_descriptor)
         if result["descriptor_sha256"] != descriptor["aggregate_sha256"] or result["entry_descriptor_sha256"] != descriptor["entry_descriptor_sha256"]:
             _fail("process result descriptor binding drift")
+        if result["entry_descriptor_path"] != descriptor["entry_descriptor_path"] or result["entry_descriptor_identity"] != descriptor["entry_descriptor_identity"]:
+            _fail("process result entry descriptor identity drift")
         if result["entry_evidence_root"] != descriptor["entry_evidence_root"]:
             _fail("process result entry evidence binding drift")
         if result["authorization_binding_sha256"] != descriptor["entry_descriptor"]["authorization_binding_sha256"] or result["argv"] != descriptor["argv"] or result["cwd"] != descriptor["cwd"] or result["environment"] != descriptor["environment"] or result["process_evidence_root"] != descriptor["process_evidence_root"] or result["process_receipt_path"] != descriptor["process_receipt_path"]:
@@ -718,6 +782,7 @@ def run_process_once(
         raise TrainingProcessError(str(exc)) from exc
     root, receipt = _claim_process_root(checked)
     try:
+        _publish_entry_descriptor(root, checked)
         _publish(
             root,
             "invocation.json",
@@ -726,11 +791,13 @@ def run_process_once(
                 "status": "RUNNING",
                 "descriptor_sha256": checked["aggregate_sha256"],
                 "entry_descriptor_sha256": checked["entry_descriptor_sha256"],
+                "entry_descriptor_path": checked["entry_descriptor_path"],
+                "entry_descriptor_identity": _copy(checked["entry_descriptor_identity"]),
                 "child_invocation_count": 0,
             },
         )
     except Exception as exc:
-        _record_persistence_failure(root, checked, "process_invocation", exc)
+        _record_persistence_failure(root, checked, "process_descriptor_or_invocation", exc)
         if isinstance(exc, TrainingProcessError):
             raise
         raise TrainingProcessError("process invocation evidence could not be published") from exc
@@ -818,7 +885,7 @@ def classify_process(process_evidence_root: str | os.PathLike[str]) -> str:
         names = {path.name for path in root.iterdir()}
         if names == {"invocation.json"}:
             return "RUNNING"
-        mandatory = {"invocation.json", "stdout.bin", "stderr.bin", "result.json", "artifact_inventory.json", "completion.json"}
+        mandatory = {"entry_descriptor.json", "invocation.json", "stdout.bin", "stderr.bin", "result.json", "artifact_inventory.json", "completion.json"}
         if names != mandatory:
             return "UNKNOWN"
         result_raw = _read_bytes(root, "result.json")
@@ -863,7 +930,21 @@ def classify_process(process_evidence_root: str | os.PathLike[str]) -> str:
         if len(stdout) != result["stdout_size_bytes"] or _sha(stdout) != result["stdout_sha256"] or len(stderr) != result["stderr_size_bytes"] or _sha(stderr) != result["stderr_sha256"]:
             return "UNKNOWN"
         invocation, invocation_raw = _entry._read_json(root / "invocation.json", "invocation.json")
-        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": PROCESS_SCHEMA_VERSION, "status": "RUNNING", "descriptor_sha256": result["descriptor_sha256"], "entry_descriptor_sha256": result["entry_descriptor_sha256"], "child_invocation_count": 0}:
+        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": PROCESS_SCHEMA_VERSION, "status": "RUNNING", "descriptor_sha256": result["descriptor_sha256"], "entry_descriptor_sha256": result["entry_descriptor_sha256"], "entry_descriptor_path": result["entry_descriptor_path"], "entry_descriptor_identity": result["entry_descriptor_identity"], "child_invocation_count": 0}:
+            return "UNKNOWN"
+        entry_descriptor, entry_descriptor_raw = _entry._read_json(root / _entry.ENTRY_DESCRIPTOR_FILE_NAME, "entry descriptor")
+        if entry_descriptor_raw != _canonical(entry_descriptor) or entry_descriptor != claim_descriptor["entry_descriptor"]:
+            return "UNKNOWN"
+        observed_entry = _entry._regular_file(root / _entry.ENTRY_DESCRIPTOR_FILE_NAME, "entry descriptor", expected_mode=0o600, expected_nlink=1)
+        if result["entry_descriptor_path"] != str(root / _entry.ENTRY_DESCRIPTOR_FILE_NAME) or result["entry_descriptor_identity"] != {
+            "relative_path": _entry.ENTRY_DESCRIPTOR_FILE_NAME,
+            "raw_size_bytes": len(entry_descriptor_raw),
+            "raw_sha256": _sha(entry_descriptor_raw),
+            "canonical_size_bytes": len(_canonical(entry_descriptor)),
+            "canonical_sha256": _sha(_canonical(entry_descriptor)),
+            "mode": stat.S_IMODE(observed_entry.st_mode),
+            "nlink": observed_entry.st_nlink,
+        }:
             return "UNKNOWN"
         completion, _ = _entry._read_json(root / "completion.json", "completion.json")
         inventory, _ = _entry._read_json(root / "artifact_inventory.json", "artifact_inventory.json")

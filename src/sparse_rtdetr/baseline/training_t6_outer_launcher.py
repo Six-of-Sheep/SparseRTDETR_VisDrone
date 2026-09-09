@@ -31,10 +31,12 @@ OUTER_CONTRACT_ID = _entry.T6B_CONTRACT_ID
 OUTER_LAUNCHER_ID = "rtdetrv2_r18_visdrone_training_t6_outer_launcher_v1"
 OUTER_MODE = "production"
 OUTER_MODULE_RELATIVE_PATH = _entry.OUTER_MODULE_RELATIVE_PATH
+OUTER_PROCESS_DESCRIPTOR_FILE_NAME = "process_descriptor.json"
+PROCESS_MODULE_NAME = "sparse_rtdetr.baseline.training_t6_process_launcher"
 OUTER_RECEIPT_SUFFIX = ".t6b-outer-receipt.json"
 OUTER_STREAM_RECEIPT_SUFFIX = ".t6b-outer-streams.json"
 PERSISTENCE_FAILURE_MARKER_SUFFIX = ".t6b-outer-persistence-failure.json"
-OUTER_FILE_NAMES = ("invocation.json", "snapshot.json", "stdout.bin", "stderr.bin", "result.json", "artifact_inventory.json", "completion.json")
+OUTER_FILE_NAMES = ("process_descriptor.json", "invocation.json", "snapshot.json", "stdout.bin", "stderr.bin", "result.json", "artifact_inventory.json", "completion.json")
 OUTER_JSON_NAMES = ("invocation.json", "snapshot.json", "result.json", "artifact_inventory.json", "completion.json")
 OUTER_BINARY_NAMES = ("stdout.bin", "stderr.bin")
 TMUX_RESULT_KEYS = {"return_code", "stdout", "stderr", "pid"}
@@ -49,6 +51,9 @@ DESCRIPTOR_KEYS = {
     "tmux_session_name",
     "process_descriptor",
     "process_descriptor_sha256",
+    "process_descriptor_path",
+    "process_descriptor_identity",
+    "process_launcher_argv",
     "authorization_path",
     "authorization_receipt_path",
     "authorization_binding",
@@ -75,6 +80,9 @@ RESULT_KEYS = {
     "tmux_session_name",
     "descriptor_sha256",
     "process_descriptor_sha256",
+    "process_descriptor_path",
+    "process_descriptor_identity",
+    "process_launcher_argv",
     "authorization_binding_sha256",
     "repository",
     "environment",
@@ -263,6 +271,34 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         _fail("outer evidence root drift")
     if descriptor["outer_evidence_root"] in {entry["evidence_root"], entry["process_evidence_root"]}:
         _fail("outer evidence root is not distinct")
+    process_descriptor_path = _absolute(descriptor["process_descriptor_path"], "descriptor.process_descriptor_path")
+    expected_process_descriptor_path = str(Path(descriptor["outer_evidence_root"]) / OUTER_PROCESS_DESCRIPTOR_FILE_NAME)
+    if process_descriptor_path != expected_process_descriptor_path:
+        _fail("outer process descriptor path drift")
+    process_raw = _canonical(process)
+    identity = _exact(descriptor["process_descriptor_identity"], {"relative_path", "raw_size_bytes", "raw_sha256", "canonical_size_bytes", "canonical_sha256", "mode", "nlink"}, "process descriptor identity")
+    expected_identity = {
+        "relative_path": OUTER_PROCESS_DESCRIPTOR_FILE_NAME,
+        "raw_size_bytes": len(process_raw),
+        "raw_sha256": _sha(process_raw),
+        "canonical_size_bytes": len(process_raw),
+        "canonical_sha256": _sha(process_raw),
+        "mode": 0o600,
+        "nlink": 1,
+    }
+    if identity != expected_identity:
+        _fail("outer process descriptor identity drift")
+    process_launcher_argv = descriptor["process_launcher_argv"]
+    expected_process_launcher_argv = [
+        entry["environment"]["python"]["realpath"],
+        "-B",
+        "-m",
+        PROCESS_MODULE_NAME,
+        "--descriptor",
+        process_descriptor_path,
+    ]
+    if process_launcher_argv != expected_process_launcher_argv:
+        _fail("outer process launcher argv drift")
     receipt = _absolute(descriptor["outer_receipt_path"], "descriptor.outer_receipt_path")
     expected_receipt = str(Path(descriptor["outer_evidence_root"]).parent / f".{Path(descriptor['outer_evidence_root']).name}{OUTER_RECEIPT_SUFFIX}")
     if receipt != expected_receipt:
@@ -273,7 +309,8 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
     argv = descriptor["tmux_argv"]
     if type(argv) is not list or not argv or any(type(item) is not str or not item for item in argv):
         _fail("outer tmux argv drift")
-    if not argv[0].startswith("/") or "new-session" not in argv:
+    expected_tmux_argv = [entry["environment"]["tmux"]["realpath"], "new-session", "-d", "-s", descriptor["tmux_session_name"], *process_launcher_argv]
+    if argv != expected_tmux_argv:
         _fail("outer tmux argv is not the exact sequence")
     machine = _exact(descriptor["state_machine"], {"states", "trace", "exactly_once", "durable_evidence_required"}, "outer state_machine")
     if machine["states"] != list(_entry.STATE_SEQUENCE) or machine["exactly_once"] is not True or machine["durable_evidence_required"] is not True:
@@ -304,7 +341,26 @@ def build_production_outer_descriptor(process_descriptor: Mapping[str, Any]) -> 
     root = Path(entry["repository"]["repo_root"])
     outer_root = entry["outer_evidence_root"]
     outer_receipt = str(Path(outer_root).parent / f".{Path(outer_root).name}{OUTER_RECEIPT_SUFFIX}")
-    tmux_argv = ["/usr/bin/tmux", "new-session", "-d", "-s", entry["tmux_session_name"], *process["argv"]]
+    process_descriptor_path = str(Path(outer_root) / OUTER_PROCESS_DESCRIPTOR_FILE_NAME)
+    process_raw = _canonical(process)
+    process_identity = {
+        "relative_path": OUTER_PROCESS_DESCRIPTOR_FILE_NAME,
+        "raw_size_bytes": len(process_raw),
+        "raw_sha256": _sha(process_raw),
+        "canonical_size_bytes": len(process_raw),
+        "canonical_sha256": _sha(process_raw),
+        "mode": 0o600,
+        "nlink": 1,
+    }
+    process_launcher_argv = [
+        entry["environment"]["python"]["realpath"],
+        "-B",
+        "-m",
+        PROCESS_MODULE_NAME,
+        "--descriptor",
+        process_descriptor_path,
+    ]
+    tmux_argv = [entry["environment"]["tmux"]["realpath"], "new-session", "-d", "-s", entry["tmux_session_name"], *process_launcher_argv]
     body = {
         "schema_version": OUTER_SCHEMA_VERSION,
         "contract_id": OUTER_CONTRACT_ID,
@@ -315,6 +371,9 @@ def build_production_outer_descriptor(process_descriptor: Mapping[str, Any]) -> 
         "tmux_session_name": entry["tmux_session_name"],
         "process_descriptor": process,
         "process_descriptor_sha256": process["aggregate_sha256"],
+        "process_descriptor_path": process_descriptor_path,
+        "process_descriptor_identity": process_identity,
+        "process_launcher_argv": process_launcher_argv,
         "authorization_path": entry["authorization_path"],
         "authorization_receipt_path": entry["authorization_receipt_path"],
         "authorization_binding": _copy(entry["authorization_binding"]),
@@ -335,6 +394,28 @@ def build_production_outer_descriptor(process_descriptor: Mapping[str, Any]) -> 
 
 def validate_outer_descriptor(value: Any) -> dict[str, Any]:
     return _validate_descriptor_shape(value)
+
+
+def _publish_process_descriptor(root: Path, descriptor: dict[str, Any]) -> None:
+    path = Path(descriptor["process_descriptor_path"])
+    if path.parent != root or path.name != OUTER_PROCESS_DESCRIPTOR_FILE_NAME:
+        _fail("process descriptor publication path drift")
+    raw = _canonical(descriptor["process_descriptor"])
+    _entry._write_new(path, raw, "process descriptor")
+    _entry._fsync_directory(root, "process descriptor parent")
+    observed = _entry._regular_file(path, "process descriptor", expected_mode=0o600, expected_nlink=1)
+    readback = _entry._read_stable_file(path, "process descriptor", mode=0o600)
+    identity = descriptor["process_descriptor_identity"]
+    if readback != raw or {
+        "relative_path": path.name,
+        "raw_size_bytes": len(readback),
+        "raw_sha256": _sha(readback),
+        "canonical_size_bytes": len(raw),
+        "canonical_sha256": _sha(raw),
+        "mode": stat.S_IMODE(observed.st_mode),
+        "nlink": observed.st_nlink,
+    } != identity:
+        _fail("process descriptor publication identity drift")
 
 
 def _claim_root(descriptor: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
@@ -478,6 +559,9 @@ def _make_result(descriptor: dict[str, Any], payload: dict[str, Any], snapshot: 
         "tmux_session_name": descriptor["tmux_session_name"],
         "descriptor_sha256": descriptor["aggregate_sha256"],
         "process_descriptor_sha256": descriptor["process_descriptor_sha256"],
+        "process_descriptor_path": descriptor["process_descriptor_path"],
+        "process_descriptor_identity": _copy(descriptor["process_descriptor_identity"]),
+        "process_launcher_argv": list(descriptor["process_launcher_argv"]),
         "authorization_binding_sha256": descriptor["authorization_binding_sha256"],
         "repository": _copy(descriptor["repository"]),
         "environment": _copy(descriptor["environment"]),
@@ -566,6 +650,8 @@ def validate_outer_result(value: Any, expected_descriptor: Any | None = None) ->
         descriptor = validate_outer_descriptor(expected_descriptor)
         if result["descriptor_sha256"] != descriptor["aggregate_sha256"] or result["process_descriptor_sha256"] != descriptor["process_descriptor_sha256"]:
             _fail("outer result descriptor binding drift")
+        if result["process_descriptor_path"] != descriptor["process_descriptor_path"] or result["process_descriptor_identity"] != descriptor["process_descriptor_identity"] or result["process_launcher_argv"] != descriptor["process_launcher_argv"]:
+            _fail("outer result process descriptor identity drift")
         if result["authorization_binding_sha256"] != descriptor["authorization_binding_sha256"] or result["outer_evidence_root"] != descriptor["outer_evidence_root"]:
             _fail("outer result authorization or root binding drift")
         if result["tmux_argv"] != descriptor["tmux_argv"] or result["environment"] != descriptor["environment"] or result["data_roles"] != descriptor["data_roles"]:
@@ -604,9 +690,10 @@ def run_outer_once(
         _entry._directory(path.parent, "target parent")
     root, receipt = _claim_root(checked)
     try:
-        _publish(root, "invocation.json", {"schema_version": OUTER_SCHEMA_VERSION, "status": "PREPARED", "descriptor_sha256": checked["aggregate_sha256"], "tmux_new_session_count": 0})
+        _publish_process_descriptor(root, checked)
+        _publish(root, "invocation.json", {"schema_version": OUTER_SCHEMA_VERSION, "status": "PREPARED", "descriptor_sha256": checked["aggregate_sha256"], "process_descriptor_path": checked["process_descriptor_path"], "process_descriptor_identity": _copy(checked["process_descriptor_identity"]), "process_launcher_argv": list(checked["process_launcher_argv"]), "tmux_new_session_count": 0})
     except Exception as exc:
-        _record_persistence_failure(root, checked, "outer_invocation", exc)
+        _record_persistence_failure(root, checked, "outer_descriptor_or_invocation", exc)
         if isinstance(exc, TrainingOuterError):
             raise
         raise TrainingOuterError("outer invocation evidence could not be published") from exc
@@ -647,7 +734,7 @@ def run_outer_once(
         failure_class = "RUNNER_EXCEPTION"
         payload = {"return_code": 2, "stdout": b"", "stderr": b"", "pid": 0}
     try:
-        snapshot = {"schema_version": OUTER_SCHEMA_VERSION, "monotonic_ns": time.monotonic_ns(), "utc": _datetime.datetime.now(_datetime.timezone.utc).isoformat(), "tmux_return_code": payload["return_code"], "tmux_pid": payload["pid"], "stdout_size_bytes": len(payload["stdout"]), "stdout_sha256": _sha(payload["stdout"]), "stderr_size_bytes": len(payload["stderr"]), "stderr_sha256": _sha(payload["stderr"])}
+        snapshot = {"schema_version": OUTER_SCHEMA_VERSION, "monotonic_ns": time.monotonic_ns(), "utc": _datetime.datetime.now(_datetime.timezone.utc).isoformat(), "process_descriptor_path": checked["process_descriptor_path"], "process_descriptor_identity": _copy(checked["process_descriptor_identity"]), "process_launcher_argv": list(checked["process_launcher_argv"]), "tmux_return_code": payload["return_code"], "tmux_pid": payload["pid"], "stdout_size_bytes": len(payload["stdout"]), "stdout_sha256": _sha(payload["stdout"]), "stderr_size_bytes": len(payload["stderr"]), "stderr_sha256": _sha(payload["stderr"])}
         _publish(root, "snapshot.json", snapshot)
         stream_receipt = {
             "schema_version": OUTER_SCHEMA_VERSION,
@@ -703,6 +790,20 @@ def classify_outer(outer_evidence_root: str | os.PathLike[str]) -> str:
         if set(claim) != {"schema_version", "kind", "descriptor_sha256", "descriptor", "training_run_id", "nonce", "status"} or claim_raw != _canonical(claim):
             return "UNKNOWN"
         claim_descriptor = validate_outer_descriptor(claim["descriptor"])
+        process_descriptor, process_descriptor_raw = _entry._read_json(root / OUTER_PROCESS_DESCRIPTOR_FILE_NAME, "process descriptor")
+        if process_descriptor_raw != _canonical(process_descriptor) or process_descriptor != claim_descriptor["process_descriptor"]:
+            return "UNKNOWN"
+        observed_process = _entry._regular_file(root / OUTER_PROCESS_DESCRIPTOR_FILE_NAME, "process descriptor", expected_mode=0o600, expected_nlink=1)
+        if result["process_descriptor_path"] != str(root / OUTER_PROCESS_DESCRIPTOR_FILE_NAME) or result["process_descriptor_identity"] != {
+            "relative_path": OUTER_PROCESS_DESCRIPTOR_FILE_NAME,
+            "raw_size_bytes": len(process_descriptor_raw),
+            "raw_sha256": _sha(process_descriptor_raw),
+            "canonical_size_bytes": len(_canonical(process_descriptor)),
+            "canonical_sha256": _sha(_canonical(process_descriptor)),
+            "mode": stat.S_IMODE(observed_process.st_mode),
+            "nlink": observed_process.st_nlink,
+        }:
+            return "UNKNOWN"
         expected_claim = {
             "schema_version": OUTER_SCHEMA_VERSION,
             "kind": "T6B_OUTER_CLAIM",
@@ -736,14 +837,16 @@ def classify_outer(outer_evidence_root: str | os.PathLike[str]) -> str:
         if len(stdout) != result["stdout_size_bytes"] or _sha(stdout) != result["stdout_sha256"] or len(stderr) != result["stderr_size_bytes"] or _sha(stderr) != result["stderr_sha256"]:
             return "UNKNOWN"
         snapshot, snapshot_raw = _entry._read_json(root / "snapshot.json", "outer snapshot")
-        if set(snapshot) != {"schema_version", "monotonic_ns", "utc", "tmux_return_code", "tmux_pid", "stdout_size_bytes", "stdout_sha256", "stderr_size_bytes", "stderr_sha256"} or snapshot["schema_version"] != OUTER_SCHEMA_VERSION:
+        if set(snapshot) != {"schema_version", "monotonic_ns", "utc", "process_descriptor_path", "process_descriptor_identity", "process_launcher_argv", "tmux_return_code", "tmux_pid", "stdout_size_bytes", "stdout_sha256", "stderr_size_bytes", "stderr_sha256"} or snapshot["schema_version"] != OUTER_SCHEMA_VERSION:
+            return "UNKNOWN"
+        if snapshot["process_descriptor_path"] != result["process_descriptor_path"] or snapshot["process_descriptor_identity"] != result["process_descriptor_identity"] or snapshot["process_launcher_argv"] != result["process_launcher_argv"]:
             return "UNKNOWN"
         if snapshot["monotonic_ns"] != result["snapshot_monotonic_ns"] or snapshot["utc"] != result["snapshot_utc"] or snapshot["stdout_size_bytes"] != result["stdout_size_bytes"] or snapshot["stdout_sha256"] != result["stdout_sha256"] or snapshot["stderr_size_bytes"] != result["stderr_size_bytes"] or snapshot["stderr_sha256"] != result["stderr_sha256"]:
             return "UNKNOWN"
         if snapshot["tmux_return_code"] != result["return_code"] or snapshot["tmux_pid"] != result["pid"]:
             return "UNKNOWN"
         invocation, invocation_raw = _entry._read_json(root / "invocation.json", "outer invocation")
-        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": OUTER_SCHEMA_VERSION, "status": "PREPARED", "descriptor_sha256": result["descriptor_sha256"], "tmux_new_session_count": 0}:
+        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": OUTER_SCHEMA_VERSION, "status": "PREPARED", "descriptor_sha256": result["descriptor_sha256"], "process_descriptor_path": result["process_descriptor_path"], "process_descriptor_identity": result["process_descriptor_identity"], "process_launcher_argv": result["process_launcher_argv"], "tmux_new_session_count": 0}:
             return "UNKNOWN"
         inventory, _ = _entry._read_json(root / "artifact_inventory.json", "outer inventory")
         if type(inventory) is not dict or set(inventory) != {"schema_version", "excluded", "files", "canonical_inventory_sha256"} or inventory["canonical_inventory_sha256"] != _digest(inventory["files"]):

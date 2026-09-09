@@ -36,6 +36,18 @@ The descriptor also binds the config raw and canonical identities, Python and
 tmux identity, GPU UUID/driver/CUDA/power limit, filesystem device and mount,
 and the detached `train_core` and `development` manifests.
 
+The production call chain has distinct, content-addressed command ownership.
+The outer layer publishes `process_descriptor.json` in its outer evidence root
+and invokes `python -B -m sparse_rtdetr.baseline.training_t6_process_launcher
+--descriptor <outer-root>/process_descriptor.json` through the one tmux request.
+The process layer publishes `entry_descriptor.json` in its process evidence
+root and invokes `python -B -m sparse_rtdetr.baseline.training_t6_entry
+--descriptor <process-root>/entry_descriptor.json` exactly once. The two
+descriptor paths, canonical/raw sizes and SHA-256 identities, mode `0600`,
+nlink `1`, embedded descriptor digests, Python identity and module names are
+recorded in descriptor, result, receipt, invocation and snapshot evidence.
+Neither layer may construct its child command from the other layer's argv.
+
 The only permitted data roles are `train_core` and `development`.  The
 runtime resolver constructs the role-specific datasets and loaders from those
 exact owner-bound roots and manifest identities; it does not use the vendor
@@ -106,6 +118,13 @@ All JSON evidence is canonical, closed and append-only.  Each root uses
 exclusive creation, durable writes, directory fsync and byte-for-byte
 readback.  Inventory, completion and aggregate digests bind the actual files;
 raw stdout/stderr anchors are checked independently of JSON repacking.
+
+Descriptor publication is part of the irreversible transaction. After the
+owning evidence root is claimed, the descriptor is exclusively created,
+fsynced, read back through a stable descriptor read, and identity-revalidated
+before the invocation record and the sole child call. A persistence or
+validation failure after a root or descriptor pathname is claimed is a
+permanent failure; the target is never unlinked, retried, resumed or reused.
 
 ## State machine
 

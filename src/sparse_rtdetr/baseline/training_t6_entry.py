@@ -29,6 +29,8 @@ T6B_SCHEMA_VERSION = 1
 T6B_CONTRACT_ID = "rtdetrv2_r18_visdrone_baseline_training_t6b_v1"
 ENTRY_ID = "rtdetrv2_r18_visdrone_training_t6_entry_v1"
 ENTRY_MODE = "production"
+ENTRY_DESCRIPTOR_FILE_NAME = "entry_descriptor.json"
+ENTRY_MODULE_NAME = "sparse_rtdetr.baseline.training_t6_entry"
 ENTRY_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_t6_entry.py"
 PROCESS_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_t6_process_launcher.py"
 OUTER_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py"
@@ -57,10 +59,10 @@ ENTRY_CHECKPOINT_DIRECTORY = "checkpoints"
 
 # Updated after the config is added.  Keeping these constants beside the
 # loader makes a checked-in raw/canonical identity part of the API contract.
-CONFIG_RAW_SIZE_BYTES = 6925
-CONFIG_RAW_SHA256 = "a152ccb7caefd42531ee2126ca194495e4af8d4a660d907c5a9acf796fefcc85"
-CONFIG_CANONICAL_SIZE_BYTES = 5565
-CONFIG_CANONICAL_SHA256 = "dfeecc7b002db9ce10b33afa9d166fab4c7f88a5f922b4862fa0d1d99ff755a1"
+CONFIG_RAW_SIZE_BYTES = 7325
+CONFIG_RAW_SHA256 = "87467339ec759abe89ab162c67395d0b34e50ffe1033adcd6dc9a4bc4413951d"
+CONFIG_CANONICAL_SIZE_BYTES = 5930
+CONFIG_CANONICAL_SHA256 = "ed71970ff3e14476763ca8c72d89bff5c58e3848ce76ad98cc209b62e66d312a"
 
 TARGET_RELATIVE_PATHS = {
     "training_evidence_root": "artifacts/training/rtdetrv2_r18_visdrone_training_t6b_v1",
@@ -464,8 +466,8 @@ def _parse_config_semantics(value: dict[str, Any]) -> dict[str, Any]:
     failure = _exact(config["failure_policy"], {"immutable", "resume", "retry", "overwrite", "fallback", "permanent_events"}, "T6B failure_policy")
     if failure["immutable"] is not True or failure["resume"] is not False or failure["retry"] is not False or failure["overwrite"] is not False or failure["fallback"] is not False or type(failure["permanent_events"]) is not list:
         _fail("T6B failure policy drift")
-    invocation = _exact(config["invocation_policy"], {"outer_calls", "tmux_new_session_calls", "child_calls", "shell", "argv_sequence", "network", "speed_measurement"}, "T6B invocation_policy")
-    if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False}:
+    invocation = _exact(config["invocation_policy"], {"outer_calls", "tmux_new_session_calls", "child_calls", "shell", "argv_sequence", "network", "speed_measurement", "entry_module", "process_module", "entry_descriptor_filename", "process_descriptor_filename", "descriptor_persistence_order"}, "T6B invocation_policy")
+    if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False, "entry_module": ENTRY_MODULE_NAME, "process_module": "sparse_rtdetr.baseline.training_t6_process_launcher", "entry_descriptor_filename": ENTRY_DESCRIPTOR_FILE_NAME, "process_descriptor_filename": "process_descriptor.json", "descriptor_persistence_order": ["process_descriptor", "outer_invocation", "tmux", "entry_descriptor", "process_invocation", "child"]}:
         _fail("T6B invocation policy drift")
     readiness = _exact(config["readiness"], {"static_config_authorizes_production", "owner_authorization_required", "launch_acceptance_separate", "terminal_completion_separate", "independent_audit_required", "training_certification_separate"}, "T6B readiness")
     if readiness != {"static_config_authorizes_production": False, "owner_authorization_required": True, "launch_acceptance_separate": True, "terminal_completion_separate": True, "independent_audit_required": True, "training_certification_separate": True}:
@@ -1009,8 +1011,16 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
     argv = descriptor["argv"]
     if type(argv) is not list or not argv or any(type(item) is not str or not item for item in argv):
         _fail("descriptor argv is not a string sequence")
-    if not argv[0].startswith("/"):
-        _fail("descriptor python argv is not absolute")
+    expected_argv = [
+        descriptor["environment"]["python"]["realpath"],
+        "-B",
+        "-m",
+        ENTRY_MODULE_NAME,
+        "--descriptor",
+        str(Path(descriptor["process_evidence_root"]) / ENTRY_DESCRIPTOR_FILE_NAME),
+    ]
+    if argv != expected_argv:
+        _fail("descriptor entry argv is not the frozen derived sequence")
     _validate_state_machine(descriptor["state_machine"])
     invocation = _exact(descriptor["invocation_policy"], {"outer_calls", "tmux_new_session_calls", "child_calls", "shell", "argv_sequence", "network", "retry", "resume", "overwrite", "fallback"}, "invocation_policy")
     if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "retry": False, "resume": False, "overwrite": False, "fallback": False}:
@@ -1057,7 +1067,7 @@ def build_production_entry_descriptor(
     environment: Mapping[str, Any],
     data_roles: Mapping[str, Any],
     cwd: str | os.PathLike[str],
-    argv: list[str],
+    argv: list[str] | None = None,
     targets: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     root = _canonical_root(repo_root, "repo_root")
@@ -1069,6 +1079,17 @@ def build_production_entry_descriptor(
     if checked_repository != authorization["repository"] or checked_repository["repo_root"] != str(root):
         _fail("descriptor repository is not bound to repo root and authorization")
     actual_targets = dict(targets) if targets is not None else {key: str(root / relative) for key, relative in TARGET_RELATIVE_PATHS.items()}
+    process_evidence_root = actual_targets["process_evidence_root"]
+    derived_argv = [
+        environment["python"]["realpath"],
+        "-B",
+        "-m",
+        ENTRY_MODULE_NAME,
+        "--descriptor",
+        str(Path(process_evidence_root) / ENTRY_DESCRIPTOR_FILE_NAME),
+    ]
+    if argv is not None and list(argv) != derived_argv:
+        _fail("caller-selected entry argv is forbidden")
     body = {
         "schema_version": T6B_SCHEMA_VERSION,
         "contract_id": T6B_CONTRACT_ID,
@@ -1091,7 +1112,7 @@ def build_production_entry_descriptor(
         "training_policy": _validate_policy(load_t6b_config(root)["training_policy"]),
         "targets": actual_targets,
         "cwd": _absolute_path(os.fspath(cwd), "cwd"),
-        "argv": list(argv),
+        "argv": derived_argv,
         "child_environment": _copy(dict(environment)["variables"]),
         "state_machine": {"states": list(STATE_SEQUENCE), "trace": _state_trace(["DESIGN_ONLY", "OWNER_AUTHORIZED", "PREFLIGHT_PASS", "LAUNCH_ACCEPTED"]), "exactly_once": True, "durable_evidence_required": True},
         "invocation_policy": {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "retry": False, "resume": False, "overwrite": False, "fallback": False},

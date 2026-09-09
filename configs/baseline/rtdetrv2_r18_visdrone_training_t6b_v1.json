@@ -197,7 +197,12 @@
     "shell": false,
     "argv_sequence": true,
     "network": false,
-    "speed_measurement": false
+    "speed_measurement": false,
+    "entry_module": "sparse_rtdetr.baseline.training_t6_entry",
+    "process_module": "sparse_rtdetr.baseline.training_t6_process_launcher",
+    "entry_descriptor_filename": "entry_descriptor.json",
+    "process_descriptor_filename": "process_descriptor.json",
+    "descriptor_persistence_order": ["process_descriptor", "outer_invocation", "tmux", "entry_descriptor", "process_invocation", "child"]
   },
   "readiness": {
     "static_config_authorizes_production": false,

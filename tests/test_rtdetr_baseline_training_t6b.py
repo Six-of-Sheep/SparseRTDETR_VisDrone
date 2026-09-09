@@ -142,7 +142,6 @@ def _descriptor(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], d
         environment=_environment(),
         data_roles={"train_core": {"role": "train_core", "root": "/tmp/t6b_train_core_runtime_v1", "manifest_sha256": "b" * 64}, "development": {"role": "development", "root": "/tmp/t6b_development_runtime_v1", "manifest_sha256": "c" * 64}, "test": {"role": "test", "access": "forbidden", "identity_read": "forbidden"}, "confirmatory": {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}},
         cwd=ROOT,
-        argv=["/usr/bin/python", "-m", "sparse_rtdetr.baseline.training_t6_entry"],
         targets=targets,
     )
     process_descriptor = process.build_production_process_descriptor(descriptor)
@@ -938,6 +937,98 @@ def test_full_fake_process_chain_is_exactly_once_and_terminal(tmp_path: Path, mo
         process.run_process_once(process_descriptor, child)
     assert calls == [1]
     assert descriptor["mode"] == "production"
+
+
+def test_distinct_layer_argv_and_durable_descriptor_handoffs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    descriptor, process_descriptor, outer_descriptor, _ = _descriptor(tmp_path)
+    monkeypatch.setattr(engine, "resolve_production_ports", lambda **kwargs: _engine_ports())
+    observed: dict[str, object] = {}
+
+    expected_entry_argv = [
+        descriptor["environment"]["python"]["realpath"],
+        "-B",
+        "-m",
+        entry.ENTRY_MODULE_NAME,
+        "--descriptor",
+        process_descriptor["entry_descriptor_path"],
+    ]
+    expected_process_argv = [
+        descriptor["environment"]["python"]["realpath"],
+        "-B",
+        "-m",
+        outer.PROCESS_MODULE_NAME,
+        "--descriptor",
+        outer_descriptor["process_descriptor_path"],
+    ]
+    assert process_descriptor["argv"] == expected_entry_argv
+    assert outer_descriptor["process_launcher_argv"] == expected_process_argv
+    assert outer_descriptor["tmux_argv"] == [
+        descriptor["environment"]["tmux"]["realpath"],
+        "new-session",
+        "-d",
+        "-s",
+        descriptor["tmux_session_name"],
+        *expected_process_argv,
+    ]
+    assert entry.ENTRY_MODULE_NAME not in outer_descriptor["tmux_argv"][5:]
+    assert outer.PROCESS_MODULE_NAME in outer_descriptor["tmux_argv"][5:]
+
+    def child(argv, cwd, environment, child_descriptor):
+        observed["entry_descriptor_before_child"] = (Path(process_descriptor["entry_descriptor_path"]).read_bytes() == entry._canonical(child_descriptor))
+        result = entry.run_production_entry(child_descriptor, process_pid=4242)
+        return {"return_code": 0, "stdout": b"entry", "stderr": b"", "pid": 4242, "entry_result": result}
+
+    def tmux(argv, cwd, environment, outer_descriptor_value):
+        observed["process_descriptor_before_tmux"] = Path(outer_descriptor["process_descriptor_path"]).read_bytes() == entry._canonical(outer_descriptor_value["process_descriptor"])
+        persisted, _ = entry._read_json(Path(outer_descriptor["process_descriptor_path"]), "process descriptor")
+        observed["process_result"] = process.run_process_once(persisted, child)
+        return {"return_code": 0, "stdout": b"tmux", "stderr": b"", "pid": 8181}
+
+    outer_result = outer.run_outer_once(outer_descriptor, tmux)
+    assert outer_result["status"] == "TMUX_ACCEPTED"
+    assert observed["entry_descriptor_before_child"] is True
+    assert observed["process_descriptor_before_tmux"] is True
+    assert observed["process_result"]["status"] == "TERMINAL_COMPLETE"
+    assert process.classify_process(process_descriptor["process_evidence_root"]) == "TERMINAL_COMPLETE"
+    assert entry.classify_entry(descriptor["evidence_root"]) == "TERMINAL_COMPLETE"
+
+
+def test_caller_selected_entry_argv_is_rejected(tmp_path: Path) -> None:
+    contract_binding, binding, _ = _t6a_fixture(tmp_path)
+    auth_path = tmp_path / "authorization.json"
+    auth_receipt = entry._authorization_receipt_path(auth_path)
+    auth_path.write_bytes(t6a.canonical_owner_authorization_bytes(binding["authorization"]) + b"\n")
+    os.chmod(auth_path, 0o600)
+    receipt = {
+        "schema_version": 1,
+        "kind": "T6B_DETACHED_AUTHORIZATION_CONSUMED",
+        "authorization_id": binding["authorization_id"],
+        "training_run_id": binding["authorization"]["training_run_id"],
+        "tmux_session_name": binding["authorization"]["tmux_session_name"],
+        "nonce": binding["authorization"]["nonce"],
+        "authorization_path": str(auth_path),
+        "authorization_binding_sha256": entry._digest(binding),
+        "raw_size_bytes": binding["raw_size_bytes"],
+        "raw_sha256": binding["raw_sha256"],
+        "canonical_size_bytes": binding["canonical_size_bytes"],
+        "canonical_sha256": binding["canonical_sha256"],
+        "consumed": True,
+    }
+    entry._write_new(auth_receipt, entry._canonical(receipt), "test authorization receipt")
+    with pytest.raises(entry.TrainingEntryError, match="caller-selected entry argv"):
+        entry.build_production_entry_descriptor(
+            ROOT,
+            authorization_binding=binding,
+            authorization_path=auth_path,
+            authorization_receipt_path=auth_receipt,
+            t6a_contract_binding=contract_binding,
+            repository=binding["authorization"]["repository"],
+            environment=_environment(),
+            data_roles={"train_core": {"role": "train_core", "root": "/tmp/train", "manifest_sha256": "b" * 64}, "development": {"role": "development", "root": "/tmp/development", "manifest_sha256": "c" * 64}, "test": {"role": "test", "access": "forbidden", "identity_read": "forbidden"}, "confirmatory": {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}},
+            cwd=ROOT,
+            argv=["/usr/bin/python", "-m", "forged"],
+            targets={"training_evidence_root": str(tmp_path / "training"), "process_evidence_root": str(tmp_path / "process"), "outer_evidence_root": str(tmp_path / "outer")},
+        )
 
 
 def test_process_failures_publish_permanent_failure_without_entry_result(tmp_path: Path) -> None:
