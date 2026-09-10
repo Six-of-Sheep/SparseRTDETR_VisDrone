@@ -373,13 +373,13 @@ T6B_CONFIG_CANONICAL_SIZE_BYTES = 5930
 T6B_CONFIG_CANONICAL_SHA256 = "ed71970ff3e14476763ca8c72d89bff5c58e3848ce76ad98cc209b62e66d312a"
 T6B_SOURCE_IDENTITIES = {
     "src/sparse_rtdetr/baseline/training_t6_engine.py": "63ce8f37d406295eef224cd6e84dcbfe6780aea1a72e95de60f4a704e6cf48b5",
-    "src/sparse_rtdetr/baseline/training_t6_entry.py": "3bea87bcd7da7c6976183a50f5199c94343dfb835fc0ab480f3857787e3e1e66",
-    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "36f815a2be1a87f6b8a1d21394bc9f8b7b24c02899a2a29512ef40fb8b9171a9",
-    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "96816697e31ec8cdb663797226758ca3e954b83d8c950f50b1bd366c784c4cbf",
+    "src/sparse_rtdetr/baseline/training_t6_entry.py": "0ec5fb1990c53e444da2ba975f8722f9a329764b136e2264788cb46736dd5c57",
+    "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "8d36f01acd05c89e9f8c4ee916484d7750eb21e0f6e5f3c5a12071e369ea6da3",
+    "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "5139cd124b1bd8460a16ad02c98c9045594df408a015e8f3f26f8a9cd6079590",
 }
 T6B_SUPPORT_IDENTITIES = {
-    "tests/test_rtdetr_baseline_training_t6b.py": "577631318a56b48d605ebec011b0dc5f584c6a42320cbb68e7e9de9d11dbfc90",
-    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "3c5120c34f5973f653c36e75d74d39086037808843cffe31ded0efad275bb14d",
+    "tests/test_rtdetr_baseline_training_t6b.py": "bea60a3b3959e6975cb334e0b1d2f0e81a5ca65caf56d5a635a54c56adb47c65",
+    "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_T6B_PRODUCTION_BOUNDARY_V1.md": "4c888731104c918fa118fda1d458c3ca5838350c985e25f1f40284a40b758423",
 }
 T6B_PUBLIC_APIS = {
     "src/sparse_rtdetr/baseline/training_t6_engine.py": {

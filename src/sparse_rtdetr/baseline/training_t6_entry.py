@@ -421,57 +421,54 @@ def _parse_config_semantics(value: dict[str, Any]) -> dict[str, Any]:
         "readiness",
     }
     config = _exact(value, expected, "T6B config")
-    if config["schema_version"] != T6B_SCHEMA_VERSION or config["contract_id"] != T6B_CONTRACT_ID or config["stage"] != "T6B":
-        _fail("T6B config identity drift")
-    if config["status"] != "PRODUCTION_BOUNDARY_IMPLEMENTED_DETACHED_AUTH_REQUIRED":
-        _fail("T6B config status drift")
+    _integer(config["schema_version"], "T6B config.schema_version")
+    _strict_equal(config["schema_version"], T6B_SCHEMA_VERSION, "T6B config.schema_version")
+    _strict_equal(config["contract_id"], T6B_CONTRACT_ID, "T6B config.contract_id")
+    _strict_equal(config["stage"], "T6B", "T6B config.stage")
+    _strict_equal(config["status"], "PRODUCTION_BOUNDARY_IMPLEMENTED_DETACHED_AUTH_REQUIRED", "T6B config.status")
     t6a = _exact(config["t6a_binding"], {"contract_id", "config_relative_path", "authorization_source", "validation_api", "binding_required"}, "T6B t6a_binding")
     _strict_equal(t6a, {"contract_id": _t6a.LAUNCH_CONTRACT_ID, "config_relative_path": _t6a.LAUNCH_CONTRACT_CONFIG_RELATIVE_PATH, "authorization_source": "external_detached_owner_artifact", "validation_api": "owner_authorization_binding", "binding_required": True}, "T6B t6a_binding")
     repository = _exact(config["repository"], {"repo_root_policy", "git_identity", "upstream_required", "launch_time_reobserve"}, "T6B repository")
     _strict_equal(repository, {"repo_root_policy": "absolute_canonical_path_required", "git_identity": ["branch", "head", "tree", "parent", "upstream", "upstream_sha"], "upstream_required": True, "launch_time_reobserve": True}, "T6B repository")
     source = _exact(config["source_policy"], {"t6b_modules", "t6a_binding_required", "launch_time_sha_required"}, "T6B source_policy")
-    if type(source["t6b_modules"]) is not list or len(source["t6b_modules"]) != 4 or source["t6b_modules"] != [ENTRY_MODULE_RELATIVE_PATH, PROCESS_MODULE_RELATIVE_PATH, OUTER_MODULE_RELATIVE_PATH, ENGINE_MODULE_RELATIVE_PATH]:
-        _fail("T6B source module policy drift")
-    if source["t6a_binding_required"] is not True or source["launch_time_sha_required"] is not True:
-        _fail("T6B source binding policy drift")
+    _strict_equal(source["t6b_modules"], [ENTRY_MODULE_RELATIVE_PATH, PROCESS_MODULE_RELATIVE_PATH, OUTER_MODULE_RELATIVE_PATH, ENGINE_MODULE_RELATIVE_PATH], "T6B source_policy.t6b_modules")
+    _strict_equal(source["t6a_binding_required"], True, "T6B source_policy.t6a_binding_required")
+    _strict_equal(source["launch_time_sha_required"], True, "T6B source_policy.launch_time_sha_required")
     run_identity = _exact(config["run_identity"], {"run_id_source", "nonce_source", "session_source", "all_unique", "targets_absent_before_launch"}, "T6B run_identity")
     _strict_equal(run_identity, {"run_id_source": "detached_owner_authorization", "nonce_source": "detached_owner_authorization", "session_source": "detached_owner_authorization", "all_unique": True, "targets_absent_before_launch": True}, "T6B run_identity")
     targets = _exact(config["targets"], {"training_evidence_root", "process_evidence_root", "outer_evidence_root", "receipt_policy", "lock_policy"}, "T6B targets")
-    if targets["training_evidence_root"] != TARGET_RELATIVE_PATHS["training_evidence_root"] or targets["process_evidence_root"] != TARGET_RELATIVE_PATHS["process_evidence_root"] or targets["outer_evidence_root"] != TARGET_RELATIVE_PATHS["outer_evidence_root"]:
-        _fail("T6B target path drift")
-    if targets["receipt_policy"] != "adjacent_exclusive_mode_0600" or targets["lock_policy"] != "adjacent_exclusive_mode_0600":
-        _fail("T6B target claim policy drift")
+    _strict_equal(targets, {**TARGET_RELATIVE_PATHS, "receipt_policy": "adjacent_exclusive_mode_0600", "lock_policy": "adjacent_exclusive_mode_0600"}, "T6B targets")
     environment = _exact(config["environment_identity"], {"python", "tmux", "gpu", "filesystem"}, "T6B environment_identity")
     for name in ("python", "tmux"):
         executable = _exact(environment[name], {"path_policy", "realpath_policy", "version_policy", "sha256_policy"}, f"T6B environment_identity.{name}")
-        if executable["path_policy"] != "absolute_external_path_required" or executable["realpath_policy"] != "regular_non_symlink_binary_required":
-            _fail(f"T6B {name} policy drift")
+        _strict_equal(executable["path_policy"], "absolute_external_path_required", f"T6B environment_identity.{name}.path_policy")
+        _strict_equal(executable["realpath_policy"], "regular_non_symlink_binary_required", f"T6B environment_identity.{name}.realpath_policy")
     gpu = _exact(environment["gpu"], {"index", "name", "uuid", "driver_policy", "cuda_version", "power_limit_watts"}, "T6B gpu")
-    if gpu != {"index": 0, "name": "NVIDIA GeForce RTX 4090 D", "uuid": "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8", "driver_policy": "exact_external_identity_required", "cuda_version": "12.4", "power_limit_watts": 425.0}:
-        _fail("T6B GPU policy drift")
+    _strict_equal(gpu, {"index": 0, "name": "NVIDIA GeForce RTX 4090 D", "uuid": "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8", "driver_policy": "exact_external_identity_required", "cuda_version": "12.4", "power_limit_watts": 425.0}, "T6B GPU policy")
     filesystem = _exact(environment["filesystem"], {"device_identity_required", "mount_identity_required", "target_parent_must_exist"}, "T6B filesystem")
-    if filesystem != {"device_identity_required": True, "mount_identity_required": True, "target_parent_must_exist": True}:
-        _fail("T6B filesystem policy drift")
+    _strict_equal(filesystem, {"device_identity_required": True, "mount_identity_required": True, "target_parent_must_exist": True}, "T6B filesystem policy")
     data = _exact(config["data_roles"], {"train_core", "development", "test", "confirmatory"}, "T6B data_roles")
-    if data["train_core"] != {"role": "train_core", "access": "allowed", "identity_source": "detached_owner_authorization", "manifest_required": True} or data["development"] != {"role": "development", "access": "allowed", "identity_source": "detached_owner_authorization", "manifest_required": True}:
-        _fail("T6B train/development role drift")
-    if data["test"] != {"role": "test", "access": "forbidden", "identity_read": "forbidden"} or data["confirmatory"] != {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}:
-        _fail("T6B sealed data role drift")
+    _strict_equal(data["train_core"], {"role": "train_core", "access": "allowed", "identity_source": "detached_owner_authorization", "manifest_required": True}, "T6B data_roles.train_core")
+    _strict_equal(data["development"], {"role": "development", "access": "allowed", "identity_source": "detached_owner_authorization", "manifest_required": True}, "T6B data_roles.development")
+    _strict_equal(data["test"], {"role": "test", "access": "forbidden", "identity_read": "forbidden"}, "T6B data_roles.test")
+    _strict_equal(data["confirmatory"], {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}, "T6B data_roles.confirmatory")
     _engine.validate_training_policy(config["training_policy"])
     evidence = _exact(config["evidence_policy"], {"raw_byte_streams", "immediate_snapshot", "append_only", "checkpoint_roles", "atomicity", "loadability"}, "T6B evidence_policy")
-    if evidence != {"raw_byte_streams": ["outer_stdout", "outer_stderr", "child_stdout", "child_stderr"], "immediate_snapshot": True, "append_only": True, "checkpoint_roles": ["last", "best", "periodic", "final"], "atomicity": True, "loadability": True}:
-        _fail("T6B evidence policy drift")
+    _strict_equal(evidence, {"raw_byte_streams": ["outer_stdout", "outer_stderr", "child_stdout", "child_stderr"], "immediate_snapshot": True, "append_only": True, "checkpoint_roles": ["last", "best", "periodic", "final"], "atomicity": True, "loadability": True}, "T6B evidence policy")
     machine = _exact(config["state_machine"], {"states", "terminal_success", "terminal_failure", "no_resume_after", "no_retry_after", "no_overwrite_after", "audit_required", "certification_separate"}, "T6B state_machine")
     _strict_equal(machine, {"states": list(STATE_SEQUENCE), "terminal_success": "TERMINAL_COMPLETE", "terminal_failure": "PERMANENT_FAIL", "no_resume_after": "LAUNCH_ACCEPTED", "no_retry_after": "LAUNCH_ACCEPTED", "no_overwrite_after": "LAUNCH_ACCEPTED", "audit_required": True, "certification_separate": True}, "T6B state_machine")
     failure = _exact(config["failure_policy"], {"immutable", "resume", "retry", "overwrite", "fallback", "permanent_events"}, "T6B failure_policy")
-    if failure["immutable"] is not True or failure["resume"] is not False or failure["retry"] is not False or failure["overwrite"] is not False or failure["fallback"] is not False or type(failure["permanent_events"]) is not list:
-        _fail("T6B failure policy drift")
+    _strict_equal(failure["immutable"], True, "T6B failure_policy.immutable")
+    _strict_equal(failure["resume"], False, "T6B failure_policy.resume")
+    _strict_equal(failure["retry"], False, "T6B failure_policy.retry")
+    _strict_equal(failure["overwrite"], False, "T6B failure_policy.overwrite")
+    _strict_equal(failure["fallback"], False, "T6B failure_policy.fallback")
+    if type(failure["permanent_events"]) is not list:
+        _fail("T6B failure policy permanent_events drift")
     invocation = _exact(config["invocation_policy"], {"outer_calls", "tmux_new_session_calls", "child_calls", "shell", "argv_sequence", "network", "speed_measurement", "entry_module", "process_module", "entry_descriptor_filename", "process_descriptor_filename", "descriptor_persistence_order"}, "T6B invocation_policy")
-    if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False, "entry_module": ENTRY_MODULE_NAME, "process_module": "sparse_rtdetr.baseline.training_t6_process_launcher", "entry_descriptor_filename": ENTRY_DESCRIPTOR_FILE_NAME, "process_descriptor_filename": "process_descriptor.json", "descriptor_persistence_order": ["process_descriptor", "outer_invocation", "tmux", "entry_descriptor", "process_invocation", "child"]}:
-        _fail("T6B invocation policy drift")
+    _strict_equal(invocation, {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "speed_measurement": False, "entry_module": ENTRY_MODULE_NAME, "process_module": "sparse_rtdetr.baseline.training_t6_process_launcher", "entry_descriptor_filename": ENTRY_DESCRIPTOR_FILE_NAME, "process_descriptor_filename": "process_descriptor.json", "descriptor_persistence_order": ["process_descriptor", "outer_invocation", "tmux", "entry_descriptor", "process_invocation", "child"]}, "T6B invocation_policy")
     readiness = _exact(config["readiness"], {"static_config_authorizes_production", "owner_authorization_required", "launch_acceptance_separate", "terminal_completion_separate", "independent_audit_required", "training_certification_separate"}, "T6B readiness")
-    if readiness != {"static_config_authorizes_production": False, "owner_authorization_required": True, "launch_acceptance_separate": True, "terminal_completion_separate": True, "independent_audit_required": True, "training_certification_separate": True}:
-        _fail("T6B readiness policy drift")
+    _strict_equal(readiness, {"static_config_authorizes_production": False, "owner_authorization_required": True, "launch_acceptance_separate": True, "terminal_completion_separate": True, "independent_audit_required": True, "training_certification_separate": True}, "T6B readiness")
     return _copy(config)
 
 
@@ -564,8 +561,9 @@ def _validate_authorization_binding(value: Any) -> dict[str, Any]:
     expected = {"schema_version", "authorization_id", "authorized", "raw_size_bytes", "raw_sha256", "canonical_size_bytes", "canonical_sha256", "authorization", "authorization_file_identity"}
     binding = _exact(value, expected, "authorization binding")
     _assert_builtin(binding, "authorization binding")
-    if binding["schema_version"] != 1 or binding["authorized"] is not True:
-        _fail("authorization binding is not authorized")
+    _integer(binding["schema_version"], "authorization binding.schema_version")
+    _strict_equal(binding["schema_version"], 1, "authorization binding.schema_version")
+    _strict_equal(binding["authorized"], True, "authorization binding.authorized")
     _string(binding["authorization_id"], "authorization binding.authorization_id")
     for field in ("raw_size_bytes", "canonical_size_bytes"):
         _integer(binding[field], f"authorization binding.{field}", minimum=1)
@@ -589,8 +587,7 @@ def _validate_authorization_binding(value: Any) -> dict[str, Any]:
     _string(authorization.get("tmux_session_name"), "authorization.tmux_session_name")
     _string(authorization.get("nonce"), "authorization.nonce")
     identity = _exact(binding["authorization_file_identity"], {"regular", "symlink", "mode", "uid", "gid", "nlink"}, "authorization file identity")
-    if identity != {"regular": True, "symlink": False, "mode": 384, "uid": 1000, "gid": 1000, "nlink": 1}:
-        _fail("authorization file identity drift")
+    _strict_equal(identity, {"regular": True, "symlink": False, "mode": 384, "uid": 1000, "gid": 1000, "nlink": 1}, "authorization file identity")
     return _copy(binding)
 
 
@@ -773,17 +770,18 @@ def validate_consumed_authorization_receipt(
     }
     receipt = _exact(value, expected, "authorization consumption receipt")
     binding = _validate_authorization_binding(authorization_binding)
-    if raw != _canonical(receipt) or receipt["schema_version"] != T6B_SCHEMA_VERSION or receipt["kind"] != "T6B_DETACHED_AUTHORIZATION_CONSUMED" or receipt["consumed"] is not True:
+    if raw != _canonical(receipt):
         _fail("authorization consumption receipt bytes drift")
+    _strict_equal(receipt["schema_version"], T6B_SCHEMA_VERSION, "authorization receipt.schema_version")
+    _strict_equal(receipt["kind"], "T6B_DETACHED_AUTHORIZATION_CONSUMED", "authorization receipt.kind")
+    _strict_equal(receipt["consumed"], True, "authorization receipt.consumed")
     authorization = binding["authorization"]
     if receipt["authorization_path"] != _absolute_path(os.fspath(authorization_path), "authorization_path") or receipt["authorization_binding_sha256"] != _digest(binding) or receipt["authorization_id"] != binding["authorization_id"] or receipt["training_run_id"] != authorization["training_run_id"] or receipt["tmux_session_name"] != authorization["tmux_session_name"] or receipt["nonce"] != authorization["nonce"]:
         _fail("authorization consumption receipt binding drift")
     for field in ("raw_size_bytes", "canonical_size_bytes"):
-        if receipt[field] != binding[field]:
-            _fail(f"authorization receipt {field} drift")
+        _strict_equal(receipt[field], binding[field], f"authorization receipt {field}")
     for field in ("raw_sha256", "canonical_sha256"):
-        if receipt[field] != binding[field]:
-            _fail(f"authorization receipt {field} drift")
+        _strict_equal(receipt[field], binding[field], f"authorization receipt {field}")
     return {"receipt": _copy(receipt), "receipt_sha256": _sha(raw)}
 
 
@@ -887,8 +885,8 @@ def _validate_data_roles(value: Any) -> dict[str, Any]:
             _fail(f"data_roles.{role} points into sealed data")
     if data["train_core"]["root"] == data["development"]["root"]:
         _fail("train_core and development roots must be distinct")
-    if data["test"] != {"role": "test", "access": "forbidden", "identity_read": "forbidden"} or data["confirmatory"] != {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}:
-        _fail("sealed data role drift")
+    _strict_equal(data["test"], {"role": "test", "access": "forbidden", "identity_read": "forbidden"}, "data_roles.test")
+    _strict_equal(data["confirmatory"], {"role": "confirmatory", "access": "sealed_and_forbidden", "identity_read": "forbidden"}, "data_roles.confirmatory")
     return _copy(data)
 
 
@@ -901,8 +899,14 @@ def _validate_environment(value: Any) -> dict[str, Any]:
         _string(item["version"], f"environment.{name}.version")
         _sha_string(item["sha256"], f"environment.{name}.sha256")
     gpu = _exact(environment["gpu"], {"index", "name", "uuid", "driver_version", "cuda_version", "power_limit_watts"}, "environment.gpu")
-    if gpu["index"] != 0 or gpu["name"] != "NVIDIA GeForce RTX 4090 D" or gpu["uuid"] != "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8" or gpu["cuda_version"] != "12.4" or type(gpu["power_limit_watts"]) is not float or gpu["power_limit_watts"] != 425.0:
-        _fail("environment GPU identity drift")
+    _integer(gpu["index"], "environment.gpu.index", minimum=0)
+    _strict_equal(gpu["index"], 0, "environment.gpu.index")
+    _strict_equal(gpu["name"], "NVIDIA GeForce RTX 4090 D", "environment.gpu.name")
+    _strict_equal(gpu["uuid"], "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8", "environment.gpu.uuid")
+    _strict_equal(gpu["cuda_version"], "12.4", "environment.gpu.cuda_version")
+    if type(gpu["power_limit_watts"]) is not float:
+        _fail("environment.gpu.power_limit_watts must be builtin float")
+    _strict_equal(gpu["power_limit_watts"], 425.0, "environment.gpu.power_limit_watts")
     _string(gpu["driver_version"], "environment.gpu.driver_version")
     filesystem = _exact(environment["filesystem"], {"device", "mount"}, "environment.filesystem")
     _integer(filesystem["device"], "environment.filesystem.device", minimum=0)
@@ -937,13 +941,15 @@ def _state_trace(states: list[str]) -> list[dict[str, Any]]:
 
 def _validate_state_machine(value: Any) -> dict[str, Any]:
     machine = _exact(value, {"states", "trace", "exactly_once", "durable_evidence_required"}, "state_machine")
-    if machine["states"] != list(STATE_SEQUENCE) or machine["exactly_once"] is not True or machine["durable_evidence_required"] is not True:
-        _fail("entry state machine policy drift")
+    _strict_equal(machine["states"], list(STATE_SEQUENCE), "entry state_machine.states")
+    _strict_equal(machine["exactly_once"], True, "entry state_machine.exactly_once")
+    _strict_equal(machine["durable_evidence_required"], True, "entry state_machine.durable_evidence_required")
     trace = machine["trace"]
     if type(trace) is not list or len(trace) != 4 or [row.get("state") for row in trace] != ["DESIGN_ONLY", "OWNER_AUTHORIZED", "PREFLIGHT_PASS", "LAUNCH_ACCEPTED"]:
         _fail("entry prepared state trace drift")
     for index, row in enumerate(trace):
         row = _exact(row, {"sequence", "state", "predecessor_sha256"}, f"state_machine.trace[{index}]")
+        _integer(row["sequence"], f"state_machine.trace[{index}].sequence")
         if row["sequence"] != index or (index == 0 and row["predecessor_sha256"] is not None) or (index > 0 and row["predecessor_sha256"] != _digest(trace[index - 1])):
             _fail("entry state predecessor drift")
     return _copy(machine)
@@ -959,8 +965,11 @@ def _validate_policy(value: Any) -> dict[str, Any]:
 def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
     _assert_builtin(value, "entry descriptor")
     descriptor = _exact(value, DESCRIPTOR_KEYS, "entry descriptor")
-    if descriptor["schema_version"] != T6B_SCHEMA_VERSION or descriptor["contract_id"] != T6B_CONTRACT_ID or descriptor["entry_id"] != ENTRY_ID or descriptor["mode"] != ENTRY_MODE:
-        _fail("entry descriptor identity drift")
+    _integer(descriptor["schema_version"], "descriptor.schema_version")
+    _strict_equal(descriptor["schema_version"], T6B_SCHEMA_VERSION, "descriptor.schema_version")
+    _strict_equal(descriptor["contract_id"], T6B_CONTRACT_ID, "descriptor.contract_id")
+    _strict_equal(descriptor["entry_id"], ENTRY_ID, "descriptor.entry_id")
+    _strict_equal(descriptor["mode"], ENTRY_MODE, "descriptor.mode")
     _string(descriptor["training_run_id"], "descriptor.training_run_id")
     _string(descriptor["nonce"], "descriptor.nonce")
     _string(descriptor["tmux_session_name"], "descriptor.tmux_session_name")
@@ -992,15 +1001,23 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         _validate_module_identity(modules[index], f"descriptor.source_bindings.t6b_modules[{index}]", expected_path)
     if type(source["t6a_source_binding"]) is not dict:
         _fail("descriptor T6A source binding is not a dict")
+    try:
+        live_t6a_source = _t6a.training_launch_contract_binding(repository["repo_root"])["source_bindings"]
+    except _t6a.TrainingLaunchContractError as exc:
+        raise TrainingEntryError("descriptor T6A source binding could not be observed") from exc
+    _strict_equal(source["t6a_source_binding"], live_t6a_source, "descriptor.source_bindings.t6a_source_binding")
     config = _exact(descriptor["config_identity"], {"relative_path", "raw_size_bytes", "raw_sha256", "canonical_size_bytes", "canonical_sha256", "mode"}, "descriptor.config_identity")
     _string(config["relative_path"], "descriptor.config_identity.relative_path")
-    if config["relative_path"] != CONFIG_RELATIVE_PATH or config["raw_size_bytes"] <= 0 or config["canonical_size_bytes"] <= 0 or config["mode"] not in {0o644, 0o664}:
-        _fail("descriptor config identity drift")
+    _strict_equal(config["relative_path"], CONFIG_RELATIVE_PATH, "descriptor.config_identity.relative_path")
+    _integer(config["raw_size_bytes"], "descriptor.config_identity.raw_size_bytes", minimum=1)
+    _integer(config["canonical_size_bytes"], "descriptor.config_identity.canonical_size_bytes", minimum=1)
+    _integer(config["mode"], "descriptor.config_identity.mode")
+    if config["mode"] not in {0o644, 0o664}:
+        _fail("descriptor config identity mode drift")
     _sha_string(config["raw_sha256"], "descriptor.config_identity.raw_sha256")
     _sha_string(config["canonical_sha256"], "descriptor.config_identity.canonical_sha256")
     _validate_environment(descriptor["environment"])
-    if descriptor["child_environment"] != descriptor["environment"]["variables"]:
-        _fail("descriptor child environment drift")
+    _strict_equal(descriptor["child_environment"], descriptor["environment"]["variables"], "descriptor.child_environment")
     data = _validate_data_roles(descriptor["data_roles"])
     policy = _validate_policy(descriptor["training_policy"])
     targets = _validate_targets(descriptor["targets"])
@@ -1019,12 +1036,10 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         "--descriptor",
         str(Path(descriptor["process_evidence_root"]) / ENTRY_DESCRIPTOR_FILE_NAME),
     ]
-    if argv != expected_argv:
-        _fail("descriptor entry argv is not the frozen derived sequence")
+    _strict_equal(argv, expected_argv, "descriptor argv")
     _validate_state_machine(descriptor["state_machine"])
     invocation = _exact(descriptor["invocation_policy"], {"outer_calls", "tmux_new_session_calls", "child_calls", "shell", "argv_sequence", "network", "retry", "resume", "overwrite", "fallback"}, "invocation_policy")
-    if invocation != {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "retry": False, "resume": False, "overwrite": False, "fallback": False}:
-        _fail("descriptor invocation policy drift")
+    _strict_equal(invocation, {"outer_calls": 1, "tmux_new_session_calls": 1, "child_calls": 1, "shell": False, "argv_sequence": True, "network": False, "retry": False, "resume": False, "overwrite": False, "fallback": False}, "descriptor invocation policy")
     for field in ("evidence_root", "process_evidence_root", "outer_evidence_root"):
         _absolute_path(descriptor[field], f"descriptor.{field}")
     if len({descriptor["evidence_root"], descriptor["process_evidence_root"], descriptor["outer_evidence_root"]}) != 3:
@@ -1043,8 +1058,7 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
 def _live_source_check(descriptor: dict[str, Any]) -> None:
     root = _canonical_root(descriptor["repository"]["repo_root"], "descriptor.repository.repo_root")
     current = current_source_bindings(root)
-    if current != {"t6b_modules": descriptor["source_bindings"]["t6b_modules"]}:
-        _fail("T6B source identity drift")
+    _strict_equal(current, {"t6b_modules": descriptor["source_bindings"]["t6b_modules"]}, "T6B source identity")
     observed_config = t6b_config_binding(root)
     if observed_config != descriptor["config_identity"]:
         _fail("T6B config identity drift")
@@ -1275,8 +1289,9 @@ def _has_valid_persistence_failure_marker(root: Path) -> bool:
             "failure_class": "EVIDENCE_FAILURE",
             "status": "PERMANENT_FAIL",
         }
-        if observed is None or raw != _canonical(value) or set(value) != set(expected) or value != expected:
+        if observed is None or raw != _canonical(value) or set(value) != set(expected):
             return False
+        _strict_equal(value, expected, "entry persistence failure marker")
         return _sha_string(value["descriptor_sha256"], "entry marker descriptor") is not None and all(
             type(value[field]) is str and bool(value[field]) for field in ("training_run_id", "nonce", "phase", "exception_type")
         )
@@ -1362,8 +1377,11 @@ def _entry_failure(
 def validate_entry_result(value: Any, expected_descriptor: Any | None = None) -> dict[str, Any]:
     result = _exact(value, RESULT_KEYS, "entry result")
     _assert_builtin(result, "entry result")
-    if result["schema_version"] != T6B_SCHEMA_VERSION or result["contract_id"] != T6B_CONTRACT_ID or result["entry_id"] != ENTRY_ID or result["mode"] != ENTRY_MODE:
-        _fail("entry result identity drift")
+    _integer(result["schema_version"], "result.schema_version")
+    _strict_equal(result["schema_version"], T6B_SCHEMA_VERSION, "result.schema_version")
+    _strict_equal(result["contract_id"], T6B_CONTRACT_ID, "result.contract_id")
+    _strict_equal(result["entry_id"], ENTRY_ID, "result.entry_id")
+    _strict_equal(result["mode"], ENTRY_MODE, "result.mode")
     _string(result["training_run_id"], "result.training_run_id")
     _string(result["nonce"], "result.nonce")
     _sha_string(result["descriptor_sha256"], "result.descriptor_sha256")
@@ -1388,14 +1406,22 @@ def validate_entry_result(value: Any, expected_descriptor: Any | None = None) ->
     if result["evidence_receipt_path"] != str(_evidence_receipt_path(Path(result["training_evidence_root"]))):
         _fail("result evidence receipt path drift")
     _integer(result["return_code"], "result.return_code", minimum=0, maximum=255)
-    if result["status"] not in {"TERMINAL_COMPLETE", "PERMANENT_FAIL"} or result["classification"] != result["status"]:
+    _integer(result["return_code"], "result.return_code", minimum=0, maximum=255)
+    _strict_equal(result["classification"], result["status"], "result.classification")
+    if result["status"] not in {"TERMINAL_COMPLETE", "PERMANENT_FAIL"}:
         _fail("entry result terminal state drift")
     if result["status"] == "TERMINAL_COMPLETE":
-        if result["failure_class"] != "NONE" or result["return_code"] != 0 or result["production_training_authorized"] is not True or result["real_process_launch_authorized"] is not True or result["entry_receipt_sha256"] is None:
-            _fail("entry successful result semantics drift")
+        _strict_equal(result["failure_class"], "NONE", "result.failure_class")
+        _strict_equal(result["return_code"], 0, "result.return_code")
+        _strict_equal(result["production_training_authorized"], True, "result.production_training_authorized")
+        _strict_equal(result["real_process_launch_authorized"], True, "result.real_process_launch_authorized")
+        if result["entry_receipt_sha256"] is None:
+            _fail("entry successful result missing receipt")
     else:
-        if result["failure_class"] not in PERMANENT_FAILURE_CLASSES or result["production_training_authorized"] is not False or result["real_process_launch_authorized"] is not False:
-            _fail("entry permanent failure semantics drift")
+        if result["failure_class"] not in PERMANENT_FAILURE_CLASSES:
+            _fail("entry permanent failure class drift")
+        _strict_equal(result["production_training_authorized"], False, "result.production_training_authorized")
+        _strict_equal(result["real_process_launch_authorized"], False, "result.real_process_launch_authorized")
     _sha_string(result["aggregate_result_sha256"], "result.aggregate_result_sha256")
     body = _copy(result)
     del body["aggregate_result_sha256"]
@@ -1403,12 +1429,11 @@ def validate_entry_result(value: Any, expected_descriptor: Any | None = None) ->
         _fail("entry result aggregate identity drift")
     if expected_descriptor is not None:
         descriptor = validate_entry_descriptor(expected_descriptor)
-        if result["descriptor_sha256"] != descriptor["aggregate_sha256"] or result["training_run_id"] != descriptor["training_run_id"] or result["nonce"] != descriptor["nonce"]:
-            _fail("entry result descriptor binding drift")
-        if result["evidence_receipt_path"] != descriptor["evidence_receipt_path"]:
-            _fail("entry result evidence receipt binding drift")
-        if result["training_evidence_root"] != descriptor["evidence_root"]:
-            _fail("entry result training evidence root binding drift")
+        _strict_equal(result["descriptor_sha256"], descriptor["aggregate_sha256"], "entry result descriptor SHA")
+        _strict_equal(result["training_run_id"], descriptor["training_run_id"], "entry result training_run_id")
+        _strict_equal(result["nonce"], descriptor["nonce"], "entry result nonce")
+        _strict_equal(result["evidence_receipt_path"], descriptor["evidence_receipt_path"], "entry result evidence receipt path")
+        _strict_equal(result["training_evidence_root"], descriptor["evidence_root"], "entry result training evidence root")
         for field in (
             "authorization_binding_sha256",
             "authorization_receipt_path",
@@ -1433,8 +1458,7 @@ def validate_entry_result(value: Any, expected_descriptor: Any | None = None) ->
                 expected_value = descriptor["training_policy"]
             else:
                 expected_value = descriptor[descriptor_field]
-            if result[field] != expected_value:
-                _fail(f"entry result {field} binding drift")
+            _strict_equal(result[field], expected_value, f"entry result {field}")
     return _copy(result)
 
 
@@ -1639,7 +1663,28 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
             )
             if claim_info["sha256"] != result["engine_result"]["engine_claim_sha256"] or len(claim_info["raw"]) != result["engine_result"]["engine_claim_size_bytes"]:
                 return "UNKNOWN"
-        if consumption["schema_version"] != T6B_SCHEMA_VERSION or consumption["kind"] != "T6B_ENTRY_INVOCATION" or consumption["descriptor_sha256"] != result["descriptor_sha256"] or consumption["authorization_binding_sha256"] != result["authorization_binding_sha256"] or consumption["training_run_id"] != result["training_run_id"] or consumption["nonce"] != result["nonce"] or consumption["status"] != "CLAIMED" or consumption["receipt_path"] != str(root / "entry_consumption.json") or result["entry_receipt_sha256"] != _sha(consumption_raw):
+        expected_consumption = {
+            "schema_version": T6B_SCHEMA_VERSION,
+            "kind": "T6B_ENTRY_INVOCATION",
+            "descriptor_sha256": result["descriptor_sha256"],
+            "authorization_binding_sha256": result["authorization_binding_sha256"],
+            "training_run_id": result["training_run_id"],
+            "nonce": result["nonce"],
+            "status": "CLAIMED",
+            "receipt_path": str(root / "entry_consumption.json"),
+            "consumed_authorization_receipt_sha256": consumption["consumed_authorization_receipt_sha256"],
+            "evidence_claim_receipt_sha256": consumption["evidence_claim_receipt_sha256"],
+            "process_pid": consumption["process_pid"],
+        }
+        if result["entry_receipt_sha256"] != _sha(consumption_raw):
+            return "UNKNOWN"
+        try:
+            _strict_equal(consumption["schema_version"], expected_consumption["schema_version"], "entry consumption.schema_version")
+            _strict_equal(consumption["kind"], expected_consumption["kind"], "entry consumption.kind")
+            for field in ("descriptor_sha256", "authorization_binding_sha256", "training_run_id", "nonce", "status", "receipt_path"):
+                _strict_equal(consumption[field], expected_consumption[field], f"entry consumption.{field}")
+            _integer(consumption["process_pid"], "entry consumption.process_pid", minimum=0)
+        except TrainingEntryError:
             return "UNKNOWN"
         claim, claim_raw = _read_json(Path(result["evidence_receipt_path"]), "training evidence claim receipt")
         expected_claim = {
@@ -1659,12 +1704,12 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
             claim_descriptor = validate_entry_descriptor(claim["descriptor"])
         except Exception:
             return "UNKNOWN"
-        if (
-            claim != {**expected_claim, "descriptor": claim_descriptor}
-            or claim_descriptor["aggregate_sha256"] != result["descriptor_sha256"]
-            or claim_descriptor["training_run_id"] != result["training_run_id"]
-            or claim_descriptor["nonce"] != result["nonce"]
-        ):
+        try:
+            _strict_equal(claim, {**expected_claim, "descriptor": claim_descriptor}, "entry evidence claim")
+            _strict_equal(claim_descriptor["aggregate_sha256"], result["descriptor_sha256"], "entry claim descriptor SHA")
+            _strict_equal(claim_descriptor["training_run_id"], result["training_run_id"], "entry claim training_run_id")
+            _strict_equal(claim_descriptor["nonce"], result["nonce"], "entry claim nonce")
+        except TrainingEntryError:
             return "UNKNOWN"
         try:
             validate_entry_result(result, claim_descriptor)
@@ -1674,12 +1719,21 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
         if authorization_receipt_raw != _canonical(authorization_receipt) or authorization_receipt.get("authorization_binding_sha256") != result["authorization_binding_sha256"] or authorization_receipt.get("consumed") is not True or consumption["consumed_authorization_receipt_sha256"] != _sha(authorization_receipt_raw):
             return "UNKNOWN"
         invocation, invocation_raw = _read_json(root / "entry_invocation.json", "entry invocation")
-        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": T6B_SCHEMA_VERSION, "status": "RUNNING", "descriptor_sha256": result["descriptor_sha256"], "process_pid": consumption["process_pid"]}:
+        expected_invocation = {"schema_version": T6B_SCHEMA_VERSION, "status": "RUNNING", "descriptor_sha256": result["descriptor_sha256"], "process_pid": consumption["process_pid"]}
+        if invocation_raw != _canonical(invocation):
+            return "UNKNOWN"
+        try:
+            _strict_equal(invocation, expected_invocation, "entry invocation")
+        except TrainingEntryError:
             return "UNKNOWN"
         inventory, inventory_raw = _read_json(root / "entry_artifact_inventory.json", "entry artifact inventory")
         if type(inventory) is not dict or set(inventory) != {"schema_version", "excluded", "files", "canonical_inventory_sha256"} or inventory["canonical_inventory_sha256"] != _digest(inventory["files"]):
             return "UNKNOWN"
-        if inventory["files"] != _entry_inventory(root):
+        try:
+            _integer(inventory["schema_version"], "entry inventory.schema_version")
+            _strict_equal(inventory["schema_version"], T6B_SCHEMA_VERSION, "entry inventory.schema_version")
+            _strict_equal(inventory["files"], _entry_inventory(root), "entry inventory.files")
+        except TrainingEntryError:
             return "UNKNOWN"
         receipt_raw = _read_stable_file(Path(result["evidence_receipt_path"]), "training evidence receipt", mode=0o600)
         if result["entry_receipt_sha256"] != _sha(_read_stable_file(root / "entry_consumption.json", "entry consumption", mode=0o600)):
@@ -1696,7 +1750,9 @@ def classify_entry(process_evidence_root: str | os.PathLike[str]) -> str:
             "evidence_receipt_sha256": _sha(receipt_raw),
             "failure_class": result["failure_class"],
         }
-        if completion != expected_completion:
+        try:
+            _strict_equal(completion, expected_completion, "entry completion")
+        except TrainingEntryError:
             return "UNKNOWN"
         return result["status"]
     except Exception:

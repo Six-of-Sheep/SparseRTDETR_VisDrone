@@ -194,6 +194,27 @@ def _copy(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
+def _strict_equal(actual: Any, expected: Any, field: str) -> None:
+    """Compare JSON values without allowing bool/int equality aliases."""
+
+    if type(actual) is not type(expected):
+        _fail(f"{field} type drift")
+    if type(actual) is dict:
+        if set(actual) != set(expected):
+            _fail(f"{field} key set drift")
+        for key in expected:
+            _strict_equal(actual[key], expected[key], f"{field}.{key}")
+        return
+    if type(actual) is list:
+        if len(actual) != len(expected):
+            _fail(f"{field} length drift")
+        for index, (left, right) in enumerate(zip(actual, expected)):
+            _strict_equal(left, right, f"{field}[{index}]")
+        return
+    if actual != expected:
+        _fail(f"{field} value drift")
+
+
 def _exact(value: Any, keys: set[str], field: str) -> dict[str, Any]:
     if type(value) is not dict:
         _fail(f"{field} must be a builtin dict")
@@ -243,16 +264,18 @@ def _module_identity(root: Path) -> dict[str, Any]:
 
 def _validate_runner_contract(value: Any) -> dict[str, Any]:
     contract = _exact(value, {"parameters", "return_keys", "synchronous", "max_calls", "argv_sequence", "shell"}, "runner_contract")
-    if contract["parameters"] != list(RUNNER_PARAMETERS) or contract["return_keys"] != sorted(RUNNER_RETURN_KEYS) or contract["synchronous"] is not True or contract["max_calls"] != 1 or contract["argv_sequence"] is not True or contract["shell"] is not False:
-        _fail("runner contract drift")
+    _strict_equal(contract, {"parameters": list(RUNNER_PARAMETERS), "return_keys": sorted(RUNNER_RETURN_KEYS), "synchronous": True, "max_calls": 1, "argv_sequence": True, "shell": False}, "runner_contract")
     return _copy(contract)
 
 
 def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
     _assert_builtin(value, "process descriptor")
     descriptor = _exact(value, DESCRIPTOR_KEYS, "process descriptor")
-    if descriptor["schema_version"] != PROCESS_SCHEMA_VERSION or descriptor["contract_id"] != PROCESS_CONTRACT_ID or descriptor["launcher_id"] != PROCESS_LAUNCHER_ID or descriptor["mode"] != PROCESS_MODE:
-        _fail("process descriptor identity drift")
+    _integer(descriptor["schema_version"], "descriptor.schema_version")
+    _strict_equal(descriptor["schema_version"], PROCESS_SCHEMA_VERSION, "descriptor.schema_version")
+    _strict_equal(descriptor["contract_id"], PROCESS_CONTRACT_ID, "descriptor.contract_id")
+    _strict_equal(descriptor["launcher_id"], PROCESS_LAUNCHER_ID, "descriptor.launcher_id")
+    _strict_equal(descriptor["mode"], PROCESS_MODE, "descriptor.mode")
     _string(descriptor["training_run_id"], "descriptor.training_run_id")
     _string(descriptor["nonce"], "descriptor.nonce")
     _string(descriptor["tmux_session_name"], "descriptor.tmux_session_name")
@@ -281,17 +304,18 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         "mode": 0o600,
         "nlink": 1,
     }
-    if identity != expected_identity:
-        _fail("process entry descriptor identity drift")
+    _strict_equal(identity, expected_identity, "process entry descriptor identity")
     argv = descriptor["argv"]
-    if type(argv) is not list or not argv or any(type(item) is not str or not item for item in argv) or argv != entry["argv"]:
+    if type(argv) is not list or not argv or any(type(item) is not str or not item for item in argv):
         _fail("process argv drift")
+    _strict_equal(argv, entry["argv"], "process argv")
     cwd = _absolute(descriptor["cwd"], "descriptor.cwd")
     if cwd != entry["cwd"]:
         _fail("process cwd drift")
     environment = descriptor["environment"]
-    if type(environment) is not dict or environment != entry["environment"]["variables"]:
+    if type(environment) is not dict:
         _fail("process environment drift")
+    _strict_equal(environment, entry["environment"]["variables"], "process environment")
     root = _absolute(descriptor["process_evidence_root"], "descriptor.process_evidence_root")
     if root != entry["process_evidence_root"]:
         _fail("process evidence root drift")
@@ -301,13 +325,15 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         _fail("process receipt path drift")
     _validate_runner_contract(descriptor["runner_contract"])
     machine = _exact(descriptor["state_machine"], {"states", "trace", "exactly_once", "durable_evidence_required"}, "process state_machine")
-    if machine["states"] != list(_entry.STATE_SEQUENCE) or machine["exactly_once"] is not True or machine["durable_evidence_required"] is not True:
-        _fail("process state machine policy drift")
+    _strict_equal(machine["states"], list(_entry.STATE_SEQUENCE), "process state_machine.states")
+    _strict_equal(machine["exactly_once"], True, "process state_machine.exactly_once")
+    _strict_equal(machine["durable_evidence_required"], True, "process state_machine.durable_evidence_required")
     trace = machine["trace"]
     if type(trace) is not list or len(trace) != 4 or [row.get("state") for row in trace] != ["DESIGN_ONLY", "OWNER_AUTHORIZED", "PREFLIGHT_PASS", "LAUNCH_ACCEPTED"]:
         _fail("process prepared trace drift")
     for index, row in enumerate(trace):
         row = _exact(row, {"sequence", "state", "predecessor_sha256"}, f"process trace[{index}]")
+        _integer(row["sequence"], f"process trace[{index}].sequence")
         if row["sequence"] != index or (index == 0 and row["predecessor_sha256"] is not None) or (index > 0 and row["predecessor_sha256"] != _digest(trace[index - 1])):
             _fail("process state predecessor drift")
     aggregate = _string(descriptor["aggregate_sha256"], "descriptor.aggregate_sha256")
@@ -484,8 +510,9 @@ def _has_valid_persistence_failure_marker(root: Path) -> bool:
             "failure_class": "PERSISTENCE_FAILURE",
             "status": "PERMANENT_FAIL",
         }
-        if raw != _canonical(value) or set(value) != set(expected) or value != expected:
+        if raw != _canonical(value) or set(value) != set(expected):
             return False
+        _strict_equal(value, expected, "process persistence failure marker")
         return all(type(value[field]) is str and bool(value[field]) for field in ("descriptor_sha256", "training_run_id", "nonce", "phase", "exception_type")) and len(value["descriptor_sha256"]) == 64
     except Exception:
         return False
@@ -641,8 +668,11 @@ def _make_result(descriptor: dict[str, Any], payload: dict[str, Any], receipt: d
 def validate_process_result(value: Any, expected_descriptor: Any | None = None) -> dict[str, Any]:
     result = _exact(value, RESULT_KEYS, "process result")
     _assert_builtin(result, "process result")
-    if result["schema_version"] != PROCESS_SCHEMA_VERSION or result["contract_id"] != PROCESS_CONTRACT_ID or result["launcher_id"] != PROCESS_LAUNCHER_ID or result["mode"] != PROCESS_MODE:
-        _fail("process result identity drift")
+    _integer(result["schema_version"], "result.schema_version")
+    _strict_equal(result["schema_version"], PROCESS_SCHEMA_VERSION, "result.schema_version")
+    _strict_equal(result["contract_id"], PROCESS_CONTRACT_ID, "result.contract_id")
+    _strict_equal(result["launcher_id"], PROCESS_LAUNCHER_ID, "result.launcher_id")
+    _strict_equal(result["mode"], PROCESS_MODE, "result.mode")
     _string(result["training_run_id"], "result.training_run_id")
     _string(result["nonce"], "result.nonce")
     for field in ("descriptor_sha256", "entry_descriptor_sha256", "authorization_binding_sha256", "stdout_sha256", "stderr_sha256", "state_transition_sha256", "aggregate_result_sha256"):
@@ -693,8 +723,10 @@ def validate_process_result(value: Any, expected_descriptor: Any | None = None) 
         row = _exact(row, {"sequence", "state", "predecessor_sha256"}, f"result.state_sequence[{index}]")
         if row["sequence"] != index or (index == 0 and row["predecessor_sha256"] is not None) or (index > 0 and row["predecessor_sha256"] != _digest(trace[index - 1])):
             _fail("process state predecessor drift")
-    if result["state_transition_sha256"] != _digest(trace) or result["child_invocation_count"] != 1 or result["shell_used"] is not False:
-        _fail("process invocation semantics drift")
+    _strict_equal(result["state_transition_sha256"], _digest(trace), "result.state_transition_sha256")
+    _integer(result["child_invocation_count"], "result.child_invocation_count")
+    _strict_equal(result["child_invocation_count"], 1, "result.child_invocation_count")
+    _strict_equal(result["shell_used"], False, "result.shell_used")
     body = _copy(result)
     del body["aggregate_result_sha256"]
     if _digest(body) != result["aggregate_result_sha256"]:
@@ -703,12 +735,16 @@ def validate_process_result(value: Any, expected_descriptor: Any | None = None) 
         descriptor = validate_process_descriptor(expected_descriptor)
         if result["descriptor_sha256"] != descriptor["aggregate_sha256"] or result["entry_descriptor_sha256"] != descriptor["entry_descriptor_sha256"]:
             _fail("process result descriptor binding drift")
-        if result["entry_descriptor_path"] != descriptor["entry_descriptor_path"] or result["entry_descriptor_identity"] != descriptor["entry_descriptor_identity"]:
-            _fail("process result entry descriptor identity drift")
+        _strict_equal(result["entry_descriptor_path"], descriptor["entry_descriptor_path"], "process result entry_descriptor_path")
+        _strict_equal(result["entry_descriptor_identity"], descriptor["entry_descriptor_identity"], "process result entry descriptor identity")
         if result["entry_evidence_root"] != descriptor["entry_evidence_root"]:
             _fail("process result entry evidence binding drift")
-        if result["authorization_binding_sha256"] != descriptor["entry_descriptor"]["authorization_binding_sha256"] or result["argv"] != descriptor["argv"] or result["cwd"] != descriptor["cwd"] or result["environment"] != descriptor["environment"] or result["process_evidence_root"] != descriptor["process_evidence_root"] or result["process_receipt_path"] != descriptor["process_receipt_path"]:
-            _fail("process result invocation binding drift")
+        _strict_equal(result["authorization_binding_sha256"], descriptor["entry_descriptor"]["authorization_binding_sha256"], "process result authorization binding")
+        _strict_equal(result["argv"], descriptor["argv"], "process result argv")
+        _strict_equal(result["cwd"], descriptor["cwd"], "process result cwd")
+        _strict_equal(result["environment"], descriptor["environment"], "process result environment")
+        _strict_equal(result["process_evidence_root"], descriptor["process_evidence_root"], "process result evidence root")
+        _strict_equal(result["process_receipt_path"], descriptor["process_receipt_path"], "process result receipt path")
         if result["training_run_id"] != descriptor["training_run_id"] or result["nonce"] != descriptor["nonce"]:
             _fail("process result run identity drift")
     return _copy(result)
@@ -905,7 +941,10 @@ def classify_process(process_evidence_root: str | os.PathLike[str]) -> str:
             "nonce": result["nonce"],
             "status": "CLAIMED",
         }
-        if claim != expected_claim or claim_descriptor["aggregate_sha256"] != result["descriptor_sha256"]:
+        try:
+            _strict_equal(claim, expected_claim, "process claim")
+            _strict_equal(claim_descriptor["aggregate_sha256"], result["descriptor_sha256"], "process claim descriptor SHA")
+        except TrainingProcessError:
             return "UNKNOWN"
         validate_process_result(result, claim_descriptor)
         stream_receipt_path = root.parent / f".{root.name}{PROCESS_STREAM_RECEIPT_SUFFIX}"
@@ -923,17 +962,30 @@ def classify_process(process_evidence_root: str | os.PathLike[str]) -> str:
             "stderr_size_bytes": result["stderr_size_bytes"],
             "stderr_sha256": result["stderr_sha256"],
         }
-        if stream_receipt != expected_stream_receipt or stream_receipt_raw != _canonical(stream_receipt):
+        if stream_receipt_raw != _canonical(stream_receipt):
+            return "UNKNOWN"
+        try:
+            _strict_equal(stream_receipt, expected_stream_receipt, "process stream receipt")
+        except TrainingProcessError:
             return "UNKNOWN"
         stdout = _read_bytes(root, "stdout.bin")
         stderr = _read_bytes(root, "stderr.bin")
         if len(stdout) != result["stdout_size_bytes"] or _sha(stdout) != result["stdout_sha256"] or len(stderr) != result["stderr_size_bytes"] or _sha(stderr) != result["stderr_sha256"]:
             return "UNKNOWN"
         invocation, invocation_raw = _entry._read_json(root / "invocation.json", "invocation.json")
-        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": PROCESS_SCHEMA_VERSION, "status": "RUNNING", "descriptor_sha256": result["descriptor_sha256"], "entry_descriptor_sha256": result["entry_descriptor_sha256"], "entry_descriptor_path": result["entry_descriptor_path"], "entry_descriptor_identity": result["entry_descriptor_identity"], "child_invocation_count": 0}:
+        expected_invocation = {"schema_version": PROCESS_SCHEMA_VERSION, "status": "RUNNING", "descriptor_sha256": result["descriptor_sha256"], "entry_descriptor_sha256": result["entry_descriptor_sha256"], "entry_descriptor_path": result["entry_descriptor_path"], "entry_descriptor_identity": result["entry_descriptor_identity"], "child_invocation_count": 0}
+        if invocation_raw != _canonical(invocation):
+            return "UNKNOWN"
+        try:
+            _strict_equal(invocation, expected_invocation, "process invocation")
+        except TrainingProcessError:
             return "UNKNOWN"
         entry_descriptor, entry_descriptor_raw = _entry._read_json(root / _entry.ENTRY_DESCRIPTOR_FILE_NAME, "entry descriptor")
-        if entry_descriptor_raw != _canonical(entry_descriptor) or entry_descriptor != claim_descriptor["entry_descriptor"]:
+        if entry_descriptor_raw != _canonical(entry_descriptor):
+            return "UNKNOWN"
+        try:
+            _strict_equal(entry_descriptor, claim_descriptor["entry_descriptor"], "process entry descriptor")
+        except TrainingProcessError:
             return "UNKNOWN"
         observed_entry = _entry._regular_file(root / _entry.ENTRY_DESCRIPTOR_FILE_NAME, "entry descriptor", expected_mode=0o600, expected_nlink=1)
         if result["entry_descriptor_path"] != str(root / _entry.ENTRY_DESCRIPTOR_FILE_NAME) or result["entry_descriptor_identity"] != {
@@ -950,7 +1002,11 @@ def classify_process(process_evidence_root: str | os.PathLike[str]) -> str:
         inventory, _ = _entry._read_json(root / "artifact_inventory.json", "artifact_inventory.json")
         if type(inventory) is not dict or set(inventory) != {"schema_version", "excluded", "files", "canonical_inventory_sha256"} or inventory["canonical_inventory_sha256"] != _digest(inventory["files"]):
             return "UNKNOWN"
-        if inventory["files"] != _inventory(root):
+        try:
+            _integer(inventory["schema_version"], "process inventory.schema_version")
+            _strict_equal(inventory["schema_version"], PROCESS_SCHEMA_VERSION, "process inventory.schema_version")
+            _strict_equal(inventory["files"], _inventory(root), "process inventory.files")
+        except TrainingProcessError:
             return "UNKNOWN"
         if result["entry_result"] is not None:
             entry_result, entry_result_raw = _entry._read_json(Path(result["entry_evidence_root"]) / "entry_result.json", "entry result")
@@ -977,7 +1033,9 @@ def classify_process(process_evidence_root: str | os.PathLike[str]) -> str:
         }
         receipt_raw = _entry._read_stable_file(Path(result["process_receipt_path"]), "process receipt", mode=0o600)
         expected_completion["receipt_sha256"] = _sha(receipt_raw)
-        if completion != expected_completion:
+        try:
+            _strict_equal(completion, expected_completion, "process completion")
+        except TrainingProcessError:
             return "UNKNOWN"
         return result["status"]
     except Exception:

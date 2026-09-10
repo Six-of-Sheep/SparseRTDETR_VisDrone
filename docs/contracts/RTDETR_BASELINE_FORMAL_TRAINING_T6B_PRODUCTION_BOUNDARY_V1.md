@@ -126,6 +126,14 @@ before the invocation record and the sole child call. A persistence or
 validation failure after a root or descriptor pathname is claimed is a
 permanent failure; the target is never unlinked, retried, resumed or reused.
 
+Strict scalar validation distinguishes builtin `bool` from builtin `int`.
+Descriptor, result, receipt and classifier durable JSON use type-aware
+validation for every integer and boolean leaf. Frozen and dynamic dict/list
+comparisons recursively validate leaf types; recomputing an aggregate digest
+after a mutation does not make that mutation valid, because the semantic and
+type layers must still reject it. This strict-scalar rule covers the entry,
+process and outer layers.
+
 ## State machine
 
 ```text

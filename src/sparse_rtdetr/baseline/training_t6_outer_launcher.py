@@ -170,6 +170,27 @@ def _copy(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
+def _strict_equal(actual: Any, expected: Any, field: str) -> None:
+    """Compare JSON values without allowing bool/int equality aliases."""
+
+    if type(actual) is not type(expected):
+        _fail(f"{field} type drift")
+    if type(actual) is dict:
+        if set(actual) != set(expected):
+            _fail(f"{field} key set drift")
+        for key in expected:
+            _strict_equal(actual[key], expected[key], f"{field}.{key}")
+        return
+    if type(actual) is list:
+        if len(actual) != len(expected):
+            _fail(f"{field} length drift")
+        for index, (left, right) in enumerate(zip(actual, expected)):
+            _strict_equal(left, right, f"{field}[{index}]")
+        return
+    if actual != expected:
+        _fail(f"{field} value drift")
+
+
 def _exact(value: Any, keys: set[str], field: str) -> dict[str, Any]:
     if type(value) is not dict:
         _fail(f"{field} must be a builtin dict")
@@ -236,35 +257,38 @@ def _validate_targets(value: Any) -> dict[str, str]:
 
 def _validate_tmux_contract(value: Any) -> dict[str, Any]:
     contract = _exact(value, {"argv_sequence", "shell", "max_calls", "synchronous", "new_session_once"}, "tmux contract")
-    if contract != {"argv_sequence": True, "shell": False, "max_calls": 1, "synchronous": True, "new_session_once": True}:
-        _fail("tmux contract drift")
+    _strict_equal(contract, {"argv_sequence": True, "shell": False, "max_calls": 1, "synchronous": True, "new_session_once": True}, "tmux contract")
     return _copy(contract)
 
 
 def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
     _assert_builtin(value, "outer descriptor")
     descriptor = _exact(value, DESCRIPTOR_KEYS, "outer descriptor")
-    if descriptor["schema_version"] != OUTER_SCHEMA_VERSION or descriptor["contract_id"] != OUTER_CONTRACT_ID or descriptor["launcher_id"] != OUTER_LAUNCHER_ID or descriptor["mode"] != OUTER_MODE:
-        _fail("outer descriptor identity drift")
+    _integer(descriptor["schema_version"], "descriptor.schema_version")
+    _strict_equal(descriptor["schema_version"], OUTER_SCHEMA_VERSION, "descriptor.schema_version")
+    _strict_equal(descriptor["contract_id"], OUTER_CONTRACT_ID, "descriptor.contract_id")
+    _strict_equal(descriptor["launcher_id"], OUTER_LAUNCHER_ID, "descriptor.launcher_id")
+    _strict_equal(descriptor["mode"], OUTER_MODE, "descriptor.mode")
     _string(descriptor["training_run_id"], "descriptor.training_run_id")
     _string(descriptor["nonce"], "descriptor.nonce")
     _string(descriptor["tmux_session_name"], "descriptor.tmux_session_name")
-    process = _process.validate_process_descriptor(descriptor["process_descriptor"])
+    try:
+        process = _process.validate_process_descriptor(descriptor["process_descriptor"])
+    except _process.TrainingProcessError as exc:
+        raise TrainingOuterError(str(exc)) from exc
     if descriptor["process_descriptor_sha256"] != process["aggregate_sha256"]:
         _fail("outer process descriptor digest drift")
     entry = process["entry_descriptor"]
     if descriptor["training_run_id"] != entry["training_run_id"] or descriptor["nonce"] != entry["nonce"] or descriptor["tmux_session_name"] != entry["tmux_session_name"]:
         _fail("outer run identity drift")
-    if descriptor["authorization_binding"] != entry["authorization_binding"] or descriptor["authorization_binding_sha256"] != entry["authorization_binding_sha256"]:
-        _fail("outer authorization binding drift")
+    _strict_equal(descriptor["authorization_binding"], entry["authorization_binding"], "outer authorization binding")
+    _strict_equal(descriptor["authorization_binding_sha256"], entry["authorization_binding_sha256"], "outer authorization binding SHA")
     _absolute(descriptor["authorization_path"], "descriptor.authorization_path")
     _absolute(descriptor["authorization_receipt_path"], "descriptor.authorization_receipt_path")
     _validate_environment(descriptor["environment"])
-    if descriptor["environment"] != entry["environment"]:
-        _fail("outer environment drift")
+    _strict_equal(descriptor["environment"], entry["environment"], "outer environment")
     _validate_data(descriptor["data_roles"])
-    if descriptor["data_roles"] != entry["data_roles"]:
-        _fail("outer data role drift")
+    _strict_equal(descriptor["data_roles"], entry["data_roles"], "outer data roles")
     _validate_targets(descriptor["targets"])
     _absolute(descriptor["outer_evidence_root"], "descriptor.outer_evidence_root")
     if descriptor["outer_evidence_root"] != entry["outer_evidence_root"]:
@@ -286,8 +310,7 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         "mode": 0o600,
         "nlink": 1,
     }
-    if identity != expected_identity:
-        _fail("outer process descriptor identity drift")
+    _strict_equal(identity, expected_identity, "outer process descriptor identity")
     process_launcher_argv = descriptor["process_launcher_argv"]
     expected_process_launcher_argv = [
         entry["environment"]["python"]["realpath"],
@@ -297,8 +320,7 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
         "--descriptor",
         process_descriptor_path,
     ]
-    if process_launcher_argv != expected_process_launcher_argv:
-        _fail("outer process launcher argv drift")
+    _strict_equal(process_launcher_argv, expected_process_launcher_argv, "outer process launcher argv")
     receipt = _absolute(descriptor["outer_receipt_path"], "descriptor.outer_receipt_path")
     expected_receipt = str(Path(descriptor["outer_evidence_root"]).parent / f".{Path(descriptor['outer_evidence_root']).name}{OUTER_RECEIPT_SUFFIX}")
     if receipt != expected_receipt:
@@ -310,21 +332,21 @@ def _validate_descriptor_shape(value: Any) -> dict[str, Any]:
     if type(argv) is not list or not argv or any(type(item) is not str or not item for item in argv):
         _fail("outer tmux argv drift")
     expected_tmux_argv = [entry["environment"]["tmux"]["realpath"], "new-session", "-d", "-s", descriptor["tmux_session_name"], *process_launcher_argv]
-    if argv != expected_tmux_argv:
-        _fail("outer tmux argv is not the exact sequence")
+    _strict_equal(argv, expected_tmux_argv, "outer tmux argv")
     machine = _exact(descriptor["state_machine"], {"states", "trace", "exactly_once", "durable_evidence_required"}, "outer state_machine")
-    if machine["states"] != list(_entry.STATE_SEQUENCE) or machine["exactly_once"] is not True or machine["durable_evidence_required"] is not True:
-        _fail("outer state machine policy drift")
+    _strict_equal(machine["states"], list(_entry.STATE_SEQUENCE), "outer state_machine.states")
+    _strict_equal(machine["exactly_once"], True, "outer state_machine.exactly_once")
+    _strict_equal(machine["durable_evidence_required"], True, "outer state_machine.durable_evidence_required")
     trace = machine["trace"]
     if type(trace) is not list or len(trace) != 3 or [row.get("state") for row in trace] != ["DESIGN_ONLY", "OWNER_AUTHORIZED", "PREFLIGHT_PASS"]:
         _fail("outer prepared state trace drift")
     for index, row in enumerate(trace):
         row = _exact(row, {"sequence", "state", "predecessor_sha256"}, f"outer trace[{index}]")
+        _integer(row["sequence"], f"outer trace[{index}].sequence")
         if row["sequence"] != index or (index == 0 and row["predecessor_sha256"] is not None) or (index > 0 and row["predecessor_sha256"] != _digest(trace[index - 1])):
             _fail("outer state predecessor drift")
     invocation = _validate_tmux_contract(descriptor["invocation_policy"])
-    if invocation != {"argv_sequence": True, "shell": False, "max_calls": 1, "synchronous": True, "new_session_once": True}:
-        _fail("outer invocation policy drift")
+    _strict_equal(invocation, {"argv_sequence": True, "shell": False, "max_calls": 1, "synchronous": True, "new_session_once": True}, "outer invocation policy")
     aggregate = _string(descriptor["aggregate_sha256"], "descriptor.aggregate_sha256")
     if len(aggregate) != 64 or any(char not in "0123456789abcdef" for char in aggregate):
         _fail("outer descriptor aggregate is not SHA-256")
@@ -515,8 +537,9 @@ def _has_valid_persistence_failure_marker(root: Path) -> bool:
             "failure_class": "PERSISTENCE_FAILURE",
             "status": "PERMANENT_FAIL",
         }
-        if raw != _canonical(value) or set(value) != set(expected) or value != expected:
+        if raw != _canonical(value) or set(value) != set(expected):
             return False
+        _strict_equal(value, expected, "outer persistence failure marker")
         return all(type(value[field]) is str and bool(value[field]) for field in ("descriptor_sha256", "training_run_id", "nonce", "phase", "exception_type")) and len(value["descriptor_sha256"]) == 64
     except Exception:
         return False
@@ -598,8 +621,11 @@ def _make_result(descriptor: dict[str, Any], payload: dict[str, Any], snapshot: 
 def validate_outer_result(value: Any, expected_descriptor: Any | None = None) -> dict[str, Any]:
     result = _exact(value, RESULT_KEYS, "outer result")
     _assert_builtin(result, "outer result")
-    if result["schema_version"] != OUTER_SCHEMA_VERSION or result["contract_id"] != OUTER_CONTRACT_ID or result["launcher_id"] != OUTER_LAUNCHER_ID or result["mode"] != OUTER_MODE:
-        _fail("outer result identity drift")
+    _integer(result["schema_version"], "result.schema_version")
+    _strict_equal(result["schema_version"], OUTER_SCHEMA_VERSION, "result.schema_version")
+    _strict_equal(result["contract_id"], OUTER_CONTRACT_ID, "result.contract_id")
+    _strict_equal(result["launcher_id"], OUTER_LAUNCHER_ID, "result.launcher_id")
+    _strict_equal(result["mode"], OUTER_MODE, "result.mode")
     for field in ("training_run_id", "nonce", "tmux_session_name"):
         _string(result[field], f"result.{field}")
     for field in ("descriptor_sha256", "process_descriptor_sha256", "authorization_binding_sha256", "stdout_sha256", "stderr_sha256", "state_transition_sha256", "aggregate_result_sha256"):
@@ -640,8 +666,12 @@ def validate_outer_result(value: Any, expected_descriptor: Any | None = None) ->
         row = _exact(row, {"sequence", "state", "predecessor_sha256"}, f"result.state_sequence[{index}]")
         if row["sequence"] != index or (index == 0 and row["predecessor_sha256"] is not None) or (index > 0 and row["predecessor_sha256"] != _digest(trace[index - 1])):
             _fail("outer state predecessor drift")
-    if result["state_transition_sha256"] != _digest(trace) or result["outer_invocation_count"] != 1 or result["tmux_new_session_count"] != 1 or result["shell_used"] is not False:
-        _fail("outer invocation semantics drift")
+    _strict_equal(result["state_transition_sha256"], _digest(trace), "result.state_transition_sha256")
+    _integer(result["outer_invocation_count"], "result.outer_invocation_count")
+    _strict_equal(result["outer_invocation_count"], 1, "result.outer_invocation_count")
+    _integer(result["tmux_new_session_count"], "result.tmux_new_session_count")
+    _strict_equal(result["tmux_new_session_count"], 1, "result.tmux_new_session_count")
+    _strict_equal(result["shell_used"], False, "result.shell_used")
     body = _copy(result)
     del body["aggregate_result_sha256"]
     if _digest(body) != result["aggregate_result_sha256"]:
@@ -650,8 +680,9 @@ def validate_outer_result(value: Any, expected_descriptor: Any | None = None) ->
         descriptor = validate_outer_descriptor(expected_descriptor)
         if result["descriptor_sha256"] != descriptor["aggregate_sha256"] or result["process_descriptor_sha256"] != descriptor["process_descriptor_sha256"]:
             _fail("outer result descriptor binding drift")
-        if result["process_descriptor_path"] != descriptor["process_descriptor_path"] or result["process_descriptor_identity"] != descriptor["process_descriptor_identity"] or result["process_launcher_argv"] != descriptor["process_launcher_argv"]:
-            _fail("outer result process descriptor identity drift")
+        _strict_equal(result["process_descriptor_path"], descriptor["process_descriptor_path"], "outer result process descriptor path")
+        _strict_equal(result["process_descriptor_identity"], descriptor["process_descriptor_identity"], "outer result process descriptor identity")
+        _strict_equal(result["process_launcher_argv"], descriptor["process_launcher_argv"], "outer result process launcher argv")
         if result["authorization_binding_sha256"] != descriptor["authorization_binding_sha256"] or result["outer_evidence_root"] != descriptor["outer_evidence_root"]:
             _fail("outer result authorization or root binding drift")
         if result["tmux_argv"] != descriptor["tmux_argv"] or result["environment"] != descriptor["environment"] or result["data_roles"] != descriptor["data_roles"]:
@@ -813,7 +844,10 @@ def classify_outer(outer_evidence_root: str | os.PathLike[str]) -> str:
             "nonce": result["nonce"],
             "status": "CLAIMED",
         }
-        if claim != expected_claim or claim_descriptor["aggregate_sha256"] != result["descriptor_sha256"]:
+        try:
+            _strict_equal(claim, expected_claim, "outer claim")
+            _strict_equal(claim_descriptor["aggregate_sha256"], result["descriptor_sha256"], "outer claim descriptor SHA")
+        except TrainingOuterError:
             return "UNKNOWN"
         validate_outer_result(result, claim_descriptor)
         stream_receipt_path = root.parent / f".{root.name}{OUTER_STREAM_RECEIPT_SUFFIX}"
@@ -830,32 +864,54 @@ def classify_outer(outer_evidence_root: str | os.PathLike[str]) -> str:
             "stderr_size_bytes": result["stderr_size_bytes"],
             "stderr_sha256": result["stderr_sha256"],
         }
-        if stream_receipt != expected_stream_receipt or stream_receipt_raw != _canonical(stream_receipt):
+        if stream_receipt_raw != _canonical(stream_receipt):
+            return "UNKNOWN"
+        try:
+            _strict_equal(stream_receipt, expected_stream_receipt, "outer stream receipt")
+        except TrainingOuterError:
             return "UNKNOWN"
         stdout = _entry._read_stable_file(root / "stdout.bin", "outer stdout")
         stderr = _entry._read_stable_file(root / "stderr.bin", "outer stderr")
         if len(stdout) != result["stdout_size_bytes"] or _sha(stdout) != result["stdout_sha256"] or len(stderr) != result["stderr_size_bytes"] or _sha(stderr) != result["stderr_sha256"]:
             return "UNKNOWN"
         snapshot, snapshot_raw = _entry._read_json(root / "snapshot.json", "outer snapshot")
-        if set(snapshot) != {"schema_version", "monotonic_ns", "utc", "process_descriptor_path", "process_descriptor_identity", "process_launcher_argv", "tmux_return_code", "tmux_pid", "stdout_size_bytes", "stdout_sha256", "stderr_size_bytes", "stderr_sha256"} or snapshot["schema_version"] != OUTER_SCHEMA_VERSION:
+        if set(snapshot) != {"schema_version", "monotonic_ns", "utc", "process_descriptor_path", "process_descriptor_identity", "process_launcher_argv", "tmux_return_code", "tmux_pid", "stdout_size_bytes", "stdout_sha256", "stderr_size_bytes", "stderr_sha256"}:
             return "UNKNOWN"
-        if snapshot["process_descriptor_path"] != result["process_descriptor_path"] or snapshot["process_descriptor_identity"] != result["process_descriptor_identity"] or snapshot["process_launcher_argv"] != result["process_launcher_argv"]:
+        try:
+            _strict_equal(snapshot["schema_version"], OUTER_SCHEMA_VERSION, "outer snapshot.schema_version")
+            _integer(snapshot["monotonic_ns"], "outer snapshot.monotonic_ns", minimum=1)
+            _strict_equal(snapshot["process_descriptor_path"], result["process_descriptor_path"], "outer snapshot process descriptor path")
+            _strict_equal(snapshot["process_descriptor_identity"], result["process_descriptor_identity"], "outer snapshot process descriptor identity")
+            _strict_equal(snapshot["process_launcher_argv"], result["process_launcher_argv"], "outer snapshot process launcher argv")
+        except TrainingOuterError:
             return "UNKNOWN"
         if snapshot["monotonic_ns"] != result["snapshot_monotonic_ns"] or snapshot["utc"] != result["snapshot_utc"] or snapshot["stdout_size_bytes"] != result["stdout_size_bytes"] or snapshot["stdout_sha256"] != result["stdout_sha256"] or snapshot["stderr_size_bytes"] != result["stderr_size_bytes"] or snapshot["stderr_sha256"] != result["stderr_sha256"]:
             return "UNKNOWN"
         if snapshot["tmux_return_code"] != result["return_code"] or snapshot["tmux_pid"] != result["pid"]:
             return "UNKNOWN"
         invocation, invocation_raw = _entry._read_json(root / "invocation.json", "outer invocation")
-        if invocation_raw != _canonical(invocation) or invocation != {"schema_version": OUTER_SCHEMA_VERSION, "status": "PREPARED", "descriptor_sha256": result["descriptor_sha256"], "process_descriptor_path": result["process_descriptor_path"], "process_descriptor_identity": result["process_descriptor_identity"], "process_launcher_argv": result["process_launcher_argv"], "tmux_new_session_count": 0}:
+        expected_invocation = {"schema_version": OUTER_SCHEMA_VERSION, "status": "PREPARED", "descriptor_sha256": result["descriptor_sha256"], "process_descriptor_path": result["process_descriptor_path"], "process_descriptor_identity": result["process_descriptor_identity"], "process_launcher_argv": result["process_launcher_argv"], "tmux_new_session_count": 0}
+        if invocation_raw != _canonical(invocation):
+            return "UNKNOWN"
+        try:
+            _strict_equal(invocation, expected_invocation, "outer invocation")
+        except TrainingOuterError:
             return "UNKNOWN"
         inventory, _ = _entry._read_json(root / "artifact_inventory.json", "outer inventory")
         if type(inventory) is not dict or set(inventory) != {"schema_version", "excluded", "files", "canonical_inventory_sha256"} or inventory["canonical_inventory_sha256"] != _digest(inventory["files"]):
             return "UNKNOWN"
-        if inventory["files"] != _inventory(root):
+        try:
+            _integer(inventory["schema_version"], "outer inventory.schema_version")
+            _strict_equal(inventory["schema_version"], OUTER_SCHEMA_VERSION, "outer inventory.schema_version")
+            _strict_equal(inventory["files"], _inventory(root), "outer inventory.files")
+        except TrainingOuterError:
             return "UNKNOWN"
         completion, _ = _entry._read_json(root / "completion.json", "outer completion")
         receipt_raw = _entry._read_stable_file(Path(result["outer_receipt_path"]), "outer receipt", mode=0o600)
-        if completion != {"schema_version": OUTER_SCHEMA_VERSION, "status": result["status"], "classification": result["classification"], "exit_code": result["return_code"], "descriptor_sha256": result["descriptor_sha256"], "result_sha256": _sha(result_raw), "inventory_sha256": _sha(_canonical(inventory)), "snapshot_sha256": _sha(snapshot_raw), "stdout_size_bytes": result["stdout_size_bytes"], "stdout_sha256": result["stdout_sha256"], "stderr_size_bytes": result["stderr_size_bytes"], "stderr_sha256": result["stderr_sha256"], "receipt_sha256": _sha(receipt_raw), "stream_receipt_sha256": _sha(stream_receipt_raw) }:
+        expected_completion = {"schema_version": OUTER_SCHEMA_VERSION, "status": result["status"], "classification": result["classification"], "exit_code": result["return_code"], "descriptor_sha256": result["descriptor_sha256"], "result_sha256": _sha(result_raw), "inventory_sha256": _sha(_canonical(inventory)), "snapshot_sha256": _sha(snapshot_raw), "stdout_size_bytes": result["stdout_size_bytes"], "stdout_sha256": result["stdout_sha256"], "stderr_size_bytes": result["stderr_size_bytes"], "stderr_sha256": result["stderr_sha256"], "receipt_sha256": _sha(receipt_raw), "stream_receipt_sha256": _sha(stream_receipt_raw) }
+        try:
+            _strict_equal(completion, expected_completion, "outer completion")
+        except TrainingOuterError:
             return "UNKNOWN"
         return "LAUNCH_ACCEPTED" if result["status"] == "TMUX_ACCEPTED" else "PERMANENT_FAIL"
     except Exception:

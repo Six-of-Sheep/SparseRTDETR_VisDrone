@@ -149,6 +149,121 @@ def _descriptor(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], d
     return descriptor, process_descriptor, outer_descriptor, auth_receipt
 
 
+def _reaggregate(module: object, value: dict[str, object]) -> None:
+    body = {key: item for key, item in value.items() if key not in {"aggregate_sha256"}}
+    value["aggregate_sha256"] = module._digest(body)  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("label", "owner", "field"),
+    (
+        ("entry.schema_version", "entry", "schema_version"),
+        ("process.schema_version", "process", "schema_version"),
+        ("process.runner_contract.max_calls", "process", "runner_contract.max_calls"),
+        ("process.entry_descriptor_identity.nlink", "process", "entry_descriptor_identity.nlink"),
+        ("outer.schema_version", "outer", "schema_version"),
+        ("outer.invocation_policy.max_calls", "outer", "invocation_policy.max_calls"),
+        ("outer.process_descriptor_identity.nlink", "outer", "process_descriptor_identity.nlink"),
+    ),
+)
+def test_strict_scalar_exact_seven_exploit_replay(
+    tmp_path: Path,
+    label: str,
+    owner: str,
+    field: str,
+) -> None:
+    case_root = tmp_path / label.replace(".", "-")
+    case_root.mkdir()
+    descriptor, process_descriptor, outer_descriptor, _ = _descriptor(case_root)
+    if owner == "entry":
+        candidate = copy.deepcopy(descriptor)
+        candidate[field] = True
+        _reaggregate(entry, candidate)
+        assert entry._canonical(candidate) != entry._canonical(descriptor)
+        with pytest.raises(entry.TrainingEntryError):
+            entry.validate_entry_descriptor(candidate)
+    elif owner == "process":
+        candidate = copy.deepcopy(process_descriptor)
+        if field == "schema_version":
+            candidate[field] = True
+        elif field == "runner_contract.max_calls":
+            candidate["runner_contract"]["max_calls"] = True
+        else:
+            candidate["entry_descriptor_identity"]["nlink"] = True
+        _reaggregate(process, candidate)
+        assert process._canonical(candidate) != process._canonical(process_descriptor)
+        with pytest.raises(process.TrainingProcessError):
+            process.validate_process_descriptor(candidate)
+    else:
+        candidate = copy.deepcopy(outer_descriptor)
+        if field == "schema_version":
+            candidate[field] = True
+        elif field == "outer.invocation_policy.max_calls":
+            candidate["invocation_policy"]["max_calls"] = True
+        else:
+            candidate["process_descriptor_identity"]["nlink"] = True
+        _reaggregate(outer, candidate)
+        assert outer._canonical(candidate) != outer._canonical(outer_descriptor)
+        with pytest.raises(outer.TrainingOuterError):
+            outer.validate_outer_descriptor(candidate)
+
+
+def _scalar_leaves(value: object, path: str = "") -> list[tuple[str, type[object], object]]:
+    found: list[tuple[str, type[object], object]] = []
+    if type(value) is dict:
+        for key, child in value.items():
+            found.extend(_scalar_leaves(child, f"{path}.{key}" if path else str(key)))
+    elif type(value) is list:
+        for index, child in enumerate(value):
+            found.extend(_scalar_leaves(child, f"{path}[{index}]"))
+    elif type(value) in {int, bool}:
+        found.append((path, type(value), value))
+    return found
+
+
+def _set_path(value: object, path: str, replacement: object) -> None:
+    tokens = path.replace("]", "").replace("[", ".").split(".")
+    current = value
+    for token in tokens[:-1]:
+        current = current[int(token)] if type(current) is list else current[token]  # type: ignore[index]
+    token = tokens[-1]
+    if type(current) is list:
+        current[int(token)] = replacement
+    else:
+        current[token] = replacement  # type: ignore[index]
+
+
+def test_strict_scalar_descriptor_owner_registry_rejects_all_direct_leaves(tmp_path: Path) -> None:
+    descriptor, process_descriptor, outer_descriptor, _ = _descriptor(tmp_path)
+    cases = ((entry, descriptor, entry.TrainingEntryError), (process, process_descriptor, process.TrainingProcessError), (outer, outer_descriptor, outer.TrainingOuterError))
+    observed = 0
+    for module, original, error_type in cases:
+        for path, value_type, original_value in _scalar_leaves(original):
+            if ".entry_descriptor." in path or ".process_descriptor." in path:
+                continue
+            candidate = copy.deepcopy(original)
+            replacement = (not original_value) if value_type is bool else True
+            _set_path(candidate, path, replacement)
+            if module is entry:
+                _reaggregate(entry, candidate)
+                validator = entry.validate_entry_descriptor
+            elif module is process:
+                _reaggregate(process, candidate)
+                validator = process.validate_process_descriptor
+            else:
+                _reaggregate(outer, candidate)
+                validator = outer.validate_outer_descriptor
+            assert module._canonical(candidate) != module._canonical(original)
+            try:
+                validator(candidate)
+            except error_type:
+                pass
+            else:
+                pytest.fail(f"accepted scalar mutation: {module.__name__}:{path}")
+            observed += 1
+    assert observed >= 7
+
+
 class _Optimizer:
     def __init__(self) -> None:
         self.zero_grad_calls = 0
