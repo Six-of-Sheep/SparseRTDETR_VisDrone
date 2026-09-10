@@ -372,7 +372,7 @@ T6B_CONFIG_RAW_SHA256 = "87467339ec759abe89ab162c67395d0b34e50ffe1033adcd6dc9a4b
 T6B_CONFIG_CANONICAL_SIZE_BYTES = 5930
 T6B_CONFIG_CANONICAL_SHA256 = "ed71970ff3e14476763ca8c72d89bff5c58e3848ce76ad98cc209b62e66d312a"
 T6B_SOURCE_IDENTITIES = {
-    "src/sparse_rtdetr/baseline/training_t6_engine.py": "dba15644ed1a393dc60236f2fd91fabe272f77e4439ca9725bdf2659b3e71258",
+    "src/sparse_rtdetr/baseline/training_t6_engine.py": "6bc7fa8c6a97004f0d698143af8189cf5db1a9bb6c0b4a631ec307532d7d37de",
     "src/sparse_rtdetr/baseline/training_t6_entry.py": "0ec5fb1990c53e444da2ba975f8722f9a329764b136e2264788cb46736dd5c57",
     "src/sparse_rtdetr/baseline/training_t6_process_launcher.py": "8d36f01acd05c89e9f8c4ee916484d7750eb21e0f6e5f3c5a12071e369ea6da3",
     "src/sparse_rtdetr/baseline/training_t6_outer_launcher.py": "5139cd124b1bd8460a16ad02c98c9045594df408a015e8f3f26f8a9cd6079590",

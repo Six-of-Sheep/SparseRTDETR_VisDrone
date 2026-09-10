@@ -746,6 +746,11 @@ def resolve_production_ports(
 
     try:
         torch = importlib.import_module("torch")
+        # Development batches carry dozens of small target tensors per image.
+        # The default file_descriptor sharing strategy exhausts the process
+        # descriptor limit under the frozen 4-worker loaders; share storages
+        # through the filesystem instead.
+        torch.multiprocessing.set_sharing_strategy("file_system")
         pathlib_module = importlib.import_module("pathlib")
         baseline_config = importlib.import_module("sparse_rtdetr.baseline.config")
         baseline_dataset = importlib.import_module("sparse_rtdetr.baseline.dataset")
@@ -925,7 +930,9 @@ def resolve_production_ports(
             del epoch
             contract = state.get("primary_contract")
             if contract is None:
-                contract = primary_evaluator.load_primary_evaluator_contract(root)
+                # evaluate_primary_v1 accepts only the ten-key authoritative
+                # binding, not the bare contract configuration.
+                contract = primary_evaluator.primary_evaluator_contract_binding(root)
                 state["primary_contract"] = contract
             torch_module = torch
             model = getattr(weights, "module", weights)
@@ -1043,9 +1050,12 @@ def resolve_production_ports(
                     samples, targets = split
                     if type(targets) is not list:
                         _fail("development targets must be a list")
-                    device = getattr(samples, "device", None)
+                    # Development batches arrive on the host; the EMA model owns the device.
+                    parameters = getattr(model, "parameters", None)
+                    first_parameter = next(iter(parameters()), None) if callable(parameters) else None
+                    device = getattr(first_parameter, "device", None)
                     if device is None:
-                        device = "cuda:0"
+                        device = getattr(samples, "device", "cuda:0")
                     samples_for_model = samples.to(device) if callable(getattr(samples, "to", None)) else samples
                     outputs = model(samples_for_model)
                     sizes = torch_module.stack([target["orig_size"] for target in targets], dim=0)
@@ -1184,11 +1194,16 @@ def resolve_production_ports(
             target_stat = target.lstat()
             if not target.is_file() or target.is_symlink() or target_stat.st_nlink != 1 or target_stat.st_size != len(target_raw):
                 _fail("checkpoint target readback metadata drift")
+            runtime_states = state_value.get("runtime_states")
+            if type(runtime_states) is not dict or not runtime_states:
+                _fail("production checkpoint state lacks runtime states")
+            json_state = {key: value for key, value in state_value.items() if key != "runtime_states"}
             reference = {
                 "role": role,
                 "epoch": epoch,
                 "path": str(target),
-                "state_sha256": _digest(state_value),
+                "state_sha256": _digest(json_state),
+                "runtime_state_keys": sorted(str(key) for key in runtime_states),
                 "file_size_bytes": len(target_raw),
                 "file_sha256": _sha_bytes(target_raw),
             }
@@ -1268,7 +1283,10 @@ def resolve_production_ports(
         "dataset_factory": dataset_factory,
         "postprocessor_factory": postprocessor_factory,
         "seed": lambda seed: torch.manual_seed(seed),
-        "autocast_context": lambda enabled=True: torch.autocast(device_type="cuda", enabled=enabled, cache_enabled=True),
+        # bfloat16 keeps the fp32 exponent range, so the frozen zero-overflow
+        # AMP policy is satisfiable from random initialization; float16
+        # autocast backs the GradScaler off within the first optimizer steps.
+        "autocast_context": lambda enabled=True: torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=enabled, cache_enabled=True),
         "data_bindings": {
             role: {
                 "root": str(value["root"]),
@@ -1314,6 +1332,49 @@ def _snapshot_value(value: Any) -> Any:
     if type(value) is list:
         return [_snapshot_value(child) for child in value]
     return {"type": type(value).__name__}
+
+
+def _collect_runtime_states(
+    ports: Mapping[str, Any],
+    *,
+    model: Any,
+    ema: Any,
+    optimizer: Any,
+    scheduler: Any,
+    warmup: Any,
+    scaler: Any,
+    optimizer_steps: int,
+) -> dict[str, Any]:
+    """Export the frozen checkpoint states from components that expose them.
+
+    Injected CPU fakes expose no ``state_dict``; they yield an empty mapping
+    and the caller then leaves the checkpoint state JSON-only.
+    """
+
+    states: dict[str, Any] = {}
+    for name, component in (
+        ("raw_model", model),
+        ("ema", ema),
+        ("optimizer", optimizer),
+        ("scheduler", scheduler),
+        ("warmup", warmup),
+        ("grad_scaler", scaler),
+    ):
+        export = getattr(component, "state_dict", None)
+        if callable(export):
+            states[name] = export()
+    if not states:
+        return {}
+    states["global_optimizer_step"] = optimizer_steps
+    rng: dict[str, Any] = {"python": random.getstate()}
+    torch_module = ports.get("torch")
+    if torch_module is not None:
+        rng["torch_cpu"] = torch_module.get_rng_state()
+        cuda = getattr(torch_module, "cuda", None)
+        if cuda is not None and callable(getattr(cuda, "is_available", None)) and cuda.is_available():
+            rng["torch_cuda"] = cuda.get_rng_state_all()
+    states["rng_states"] = rng
+    return states
 
 
 def _checkpoint(writer: Any, role: str, epoch: int, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -1508,11 +1569,12 @@ def run_training_engine(
                 output = forward(batch)
             else:
                 samples, targets = split
-                device = getattr(samples, "device", None)
+                # The batch arrives on the host; the model owns the device.
+                parameters = getattr(model, "parameters", None)
+                first_parameter = next(iter(parameters()), None) if callable(parameters) else None
+                device = getattr(first_parameter, "device", None)
                 if device is None:
-                    parameters = getattr(model, "parameters", None)
-                    first_parameter = next(iter(parameters()), None) if callable(parameters) else None
-                    device = getattr(first_parameter, "device", "cuda:0")
+                    device = getattr(samples, "device", "cuda:0")
                 model_input = _move_to_device(samples, device)
                 criterion_input = _move_to_device(targets, device)
                 autocast_factory = ports.get("autocast_context")
@@ -1564,6 +1626,9 @@ def run_training_engine(
             scale_after = scaler.get_scale() if callable(getattr(scaler, "get_scale", None)) else None
             if scale_before is not None and scale_after is not None and scale_after < scale_before:
                 overflow_events += 1
+                # The frozen policy allows no overflow; stop at the first one
+                # instead of discovering the violation after the final epoch.
+                _fail("AMP overflow event: GradScaler backed off")
             optimizer_steps += 1
             ema_update = getattr(ema, "update", None)
             if not callable(ema_update):
@@ -1594,6 +1659,18 @@ def run_training_engine(
             score = _finite_number(score, "evaluation.primary_score")
         state = {"epoch": epoch, "loss": epoch_loss / batch_count, "evaluation": evaluation}
         state["training_binding"] = checkpoint_binding(epoch)
+        runtime_states = _collect_runtime_states(
+            ports,
+            model=model,
+            ema=ema,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            warmup=warmup,
+            scaler=scaler,
+            optimizer_steps=optimizer_steps,
+        )
+        if runtime_states:
+            state["runtime_states"] = runtime_states
         last = _checkpoint(writer, "last", epoch, state)
         checkpoint_references.append({"role": "last", "epoch": epoch, "reference": last})
         if epoch % 10 == 0:
@@ -1609,6 +1686,18 @@ def run_training_engine(
 
     final_state = {"epoch": epochs, "epochs": epochs, "best_score": best_score}
     final_state["training_binding"] = checkpoint_binding(epochs)
+    final_runtime_states = _collect_runtime_states(
+        ports,
+        model=model,
+        ema=ema,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        warmup=warmup,
+        scaler=scaler,
+        optimizer_steps=optimizer_steps,
+    )
+    if final_runtime_states:
+        final_state["runtime_states"] = final_runtime_states
     final = _checkpoint(writer, "final", epochs, final_state)
     checkpoint_references.append({"role": "final", "epoch": epochs, "reference": final})
 
