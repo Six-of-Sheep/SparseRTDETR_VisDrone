@@ -838,7 +838,18 @@ def resolve_production_ports(
         component_type = payload.pop("type", None)
         if type(component_type) is not str or not component_type:
             _fail(f"production {field} type is missing")
-        return workspace_module.create(component_type, runtime_config().global_cfg, **payload)
+        global_cfg = runtime_config().global_cfg
+        descriptor = global_cfg.get(component_type)
+        if type(descriptor) is not dict or "_kwargs" not in descriptor:
+            _fail(f"production {field} type is not a registered vendor component")
+        # Vendor ``create`` ignores keyword arguments for a registered class
+        # descriptor; configuration must be loaded into the descriptor first,
+        # exactly as the vendor ``_inject`` path does for nested components.
+        for key in [key for key in descriptor if not key.startswith("_")]:
+            del descriptor[key]
+        descriptor.update(copy.deepcopy(descriptor["_kwargs"]))
+        descriptor.update(payload)
+        return workspace_module.create(component_type, global_cfg)
 
     def dataset_factory(role: str) -> Any:
         if role not in {"train_core", "development"}:
