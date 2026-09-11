@@ -114,6 +114,44 @@ BASELINE_FILES = {
     "tests/test_rtdetr_baseline_training_runtime.py",
 }
 
+V2A_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
+    "src/sparse_rtdetr/baseline/training_v2a_contract.py",
+    "tests/test_rtdetr_baseline_training_v2a_contract.py",
+    "docs/contracts/RTDETR_BASELINE_V2A_FORMAL_TRAINING_V1.md",
+}
+V2A_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json"
+V2A_CONFIG_RAW_SIZE_BYTES = 12751
+V2A_CONFIG_RAW_SHA256 = "40800725fa0409ac440f463d1df08ce647714aa7fa715a05f7e98878403ae407"
+V2A_CONFIG_CANONICAL_SIZE_BYTES = 10198
+V2A_CONFIG_CANONICAL_SHA256 = "96db5c69286775fb2b2b6a1a6997e58fe9d6019040eeca7328c02c7c2426ab0e"
+V2A_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_v2a_contract.py"
+V2A_MODULE_SHA256 = "5c5d5647f85100b301d9de533e92b1725a7e7b101d84cf657b9ab275cae35a96"
+V2A_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_v2a_contract.py"
+V2A_TEST_SHA256 = "b438ebb182d9cfd8208136d504cf8c733bb8849698345cc473633e920b24297f"
+V2A_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_V2A_FORMAL_TRAINING_V1.md"
+V2A_DOCUMENT_SHA256 = "3dae6d85a7180d30aaaf58993a6c71568589ba2cc34a9d7b32133cced6b2998d"
+V2A_PUBLIC_NAMES = {
+    "TrainingV2AContractError",
+    "load_training_v2a_contract",
+    "validate_training_v2a_contract",
+    "canonical_training_v2a_contract_bytes",
+    "training_v2a_contract_binding",
+    "audit_optimizer_parameter_groups",
+    "resolve_optimizer_parameter_group",
+}
+V2A_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "re",
+    "stat",
+    "pathlib",
+    "typing",
+}
+
 TRAINING_EVIDENCE_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
     "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_EVIDENCE_V1.md",
@@ -1496,14 +1534,156 @@ def _check_t6b_production_boundary(root: Path, failures: list[str]) -> None:
         except OSError:
             failures.append(f"missing T6B support file: {relative}")
 
-    for relative in (
-        "artifacts/training/rtdetrv2_r18_visdrone_training_t6b_v1",
-        "artifacts/process_evidence/rtdetrv2_r18_visdrone_training_t6b_v1",
-        "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_training_t6b_v1",
-    ):
-        target = root / relative
-        if target.exists() or target.is_symlink():
-            failures.append(f"T6B production target must remain absent: {relative}")
+def _check_training_v2a_contract(root: Path, failures: list[str]) -> None:
+    """Check the detached, pre-runtime baseline-v2a contract surface."""
+
+    expected_hashes = {
+        V2A_MODULE_RELATIVE_PATH: V2A_MODULE_SHA256,
+        V2A_TEST_RELATIVE_PATH: V2A_TEST_SHA256,
+        V2A_DOCUMENT_RELATIVE_PATH: V2A_DOCUMENT_SHA256,
+    }
+    for relative in sorted(V2A_FILES):
+        path = root / relative
+        try:
+            observed = path.lstat()
+            if path.is_symlink() or not path.is_file() or not stat.S_ISREG(observed.st_mode):
+                failures.append(f"v2a file is not a regular non-symlink file: {relative}")
+                continue
+            if observed.st_nlink != 1:
+                failures.append(f"v2a file nlink drift: {relative}")
+            expected = expected_hashes.get(relative)
+            if expected and not expected.startswith("PENDING_") and _sha256(path) != expected:
+                failures.append(f"v2a file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing v2a file: {relative}")
+
+    config_path = root / V2A_CONFIG_RELATIVE_PATH
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != V2A_CONFIG_RAW_SIZE_BYTES or _sha256(config_path) != V2A_CONFIG_RAW_SHA256:
+            failures.append("v2a config raw identity mismatch")
+        if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            failures.append("v2a config portable bytes mismatch")
+
+        def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError(f"duplicate key: {key}")
+                result[key] = value
+            return result
+
+        value = json.loads(
+            raw[:-1].decode("utf-8"),
+            object_pairs_hook=pairs,
+            parse_constant=lambda name: (_ for _ in ()).throw(ValueError(name)),
+        )
+        canonical = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(canonical) != V2A_CONFIG_CANONICAL_SIZE_BYTES or hashlib.sha256(canonical).hexdigest() != V2A_CONFIG_CANONICAL_SHA256:
+            failures.append("v2a config canonical identity mismatch")
+        if type(value) is not dict:
+            failures.append("v2a config root is not an object")
+        else:
+            if value.get("schema_version") != 1 or value.get("contract_id") != "rtdetrv2_r18_visdrone_baseline_training_v2a" or value.get("baseline_id") != "rtdetrv2_r18_visdrone_baseline_v2a":
+                failures.append("v2a config identity mismatch")
+            if value.get("stage") != "T7B_BASELINE_V2A_FROZEN_CONTRACT":
+                failures.append("v2a config stage mismatch")
+            if value.get("model", {}).get("input_size") != [640, 640] or value.get("topology", {}).get("train_micro_batch") != 16 or value.get("topology", {}).get("development_batch") != 32:
+                failures.append("v2a B1 input/batch binding mismatch")
+            authority = value.get("source_bindings", {}).get("pretrained_authority", {})
+            weight = authority.get("weight", {})
+            manifest = authority.get("manifest", {})
+            if weight.get("size_bytes") != 44878642 or weight.get("sha256") != "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720":
+                failures.append("v2a pretrained weight binding mismatch")
+            if manifest.get("size_bytes") != 1608 or manifest.get("sha256") != "f290281d7c9f1589e2f6da3aca2251e351df48dbad82317ee59e4381ecb01dd0":
+                failures.append("v2a pretrained manifest binding mismatch")
+            amp = value.get("amp", {})
+            if amp.get("autocast_dtype") != "bfloat16" or amp.get("grad_scaler_enabled") is not False:
+                failures.append("v2a AMP/scaler policy mismatch")
+            if any(key in amp for key in ("init_scale", "growth_factor", "backoff_factor", "growth_interval", "scaler_type")):
+                failures.append("v2a config retains forbidden scaler parameters")
+            groups = value.get("optimizer", {}).get("parameter_groups", [])
+            if [group.get("name") for group in groups] != ["norm_or_bn", "default"]:
+                failures.append("v2a optimizer group order mismatch")
+            if value.get("source_bindings", {}).get("data_roles", {}).get("confirmatory", {}).get("status") != "sealed_and_forbidden" or value.get("source_bindings", {}).get("data_roles", {}).get("test", {}).get("status") != "forbidden":
+                failures.append("v2a sealed/test data policy mismatch")
+            if any(
+                type(requirement) is not dict
+                or requirement.get("required") is not True
+                or requirement.get("implemented") is not False
+                or requirement.get("independently_certified") is not False
+                for requirement in value.get("runtime_closure", {}).values()
+            ) or len(value.get("runtime_closure", {})) != 5:
+                failures.append("v2a runtime closure state mismatch")
+            readiness = value.get("readiness", {})
+            if readiness.get("training_implementation_ready") is not False or readiness.get("training_ready") is not False:
+                failures.append("v2a readiness is not fail-closed")
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        failures.append(f"v2a config parse failure: {type(exc).__name__}")
+
+    parent_path = root / "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json"
+    try:
+        parent_raw = parent_path.read_bytes()
+        if len(parent_raw) != 10907 or _sha256(parent_path) != "0f9ddb2e6d8ec6d2b21e42f6c419511f5bd70df287457c2c2b6109eaf8a93297":
+            failures.append("v2a parent v1 raw identity mismatch")
+    except OSError:
+        failures.append("v2a parent v1 config unavailable")
+
+    module_path = root / V2A_MODULE_RELATIVE_PATH
+    try:
+        tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != V2A_ALLOWED_IMPORTS:
+            failures.append(
+                "v2a import set mismatch: "
+                f"extra={sorted(imported - V2A_ALLOWED_IMPORTS)} "
+                f"missing={sorted(V2A_ALLOWED_IMPORTS - imported)}"
+            )
+        public = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public != V2A_PUBLIC_NAMES:
+            failures.append(
+                "v2a public API mismatch: "
+                f"extra={sorted(public - V2A_PUBLIC_NAMES)} missing={sorted(V2A_PUBLIC_NAMES - public)}"
+            )
+        all_values: object = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                all_values = ast.literal_eval(node.value)
+        if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != V2A_PUBLIC_NAMES:
+            failures.append("v2a __all__ mismatch")
+        forbidden_roots = {"torch", "numpy", "pandas", "tensorflow", "cupy", "dataloader", "dataset", "subprocess", "requests"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(alias.name.split(".", 1)[0].casefold() in forbidden_roots for alias in node.names):
+                failures.append("v2a forbidden import")
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".", 1)[0].casefold() in forbidden_roots:
+                failures.append("v2a forbidden import")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"v2a source audit failure: {type(exc).__name__}")
+
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("p3_training_v2a_contract_check", module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("v2a module spec unavailable")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if module.V2A_CONFIG_RAW_SIZE_BYTES != V2A_CONFIG_RAW_SIZE_BYTES or module.V2A_CONFIG_CANONICAL_SHA256 != V2A_CONFIG_CANONICAL_SHA256:
+            failures.append("v2a module/config identity constants mismatch")
+        validated = module.validate_training_v2a_contract(value)
+        if validated != value:
+            failures.append("v2a detached validation is not identity-preserving")
+    except Exception as exc:
+        failures.append(f"v2a detached validation failure: {type(exc).__name__}: {exc}")
 
 
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
@@ -1537,6 +1717,7 @@ def check_repository(root: Path) -> bool:
     allowed_files |= TRAINING_PROCESS_FILES
     allowed_files |= T6A_FILES
     allowed_files |= T6B_FILES
+    allowed_files |= V2A_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -1613,6 +1794,7 @@ def check_repository(root: Path) -> bool:
     _check_training_process(root, failures)
     _check_t6a_owner_authorization(root, failures)
     _check_t6b_production_boundary(root, failures)
+    _check_training_v2a_contract(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
