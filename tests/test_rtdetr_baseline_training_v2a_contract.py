@@ -347,6 +347,9 @@ def _clean_candidate_archive(tmp_path: Path) -> Path:
         "docs/contracts/RTDETR_BASELINE_V2A_PRODUCTION_BOUNDARY_T7D.md",
         "src/sparse_rtdetr/baseline/training_v2a_production.py",
         "tests/test_rtdetr_baseline_training_v2a_production.py",
+        "docs/contracts/RTDETR_BASELINE_V2A_EXACTLY_ONCE_LAUNCH_T7E.md",
+        "src/sparse_rtdetr/baseline/training_v2a_launcher.py",
+        "tests/test_rtdetr_baseline_training_v2a_launcher.py",
         "tools/repository_contract_check.py",
     ):
         destination = archive_root / relative

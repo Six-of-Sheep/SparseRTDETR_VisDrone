@@ -34,6 +34,10 @@ The descriptor, context, and plan are written with `O_EXCL`, mode `0600`, and
 file plus parent-directory fsync. They are read back and checked before the
 authorization can be consumed. A consumption receipt is created exactly once;
 existing objects, symlinks, hardlinks, metadata drift, and replay are rejected.
+In production mode the authorization identity is normalized to the receipt's
+closed five-field file-reference schema: canonical path, size, SHA-256, mode,
+and link count. Richer internal inode observations cannot leak into that
+durable schema or make a valid first consumption impossible.
 
 ## Ordering
 

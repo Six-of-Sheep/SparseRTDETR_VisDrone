@@ -323,6 +323,23 @@ def test_authorization_file_identity_rejects_symlink_and_hardlink(tmp_path: Path
         launcher._authorization_file_identity(source)
 
 
+def test_production_authorization_identity_matches_receipt_schema(auth_plan: tuple[dict, dict]) -> None:
+    authorization, plan = auth_plan
+    path = Path(authorization["authorization_path"])
+    path.write_bytes(launcher.canonical_v2a_launcher_bytes(authorization))
+    path.chmod(0o600)
+    identity = launcher._authorization_file_identity(path)
+    assert set(identity) == {"path", "size_bytes", "sha256", "mode", "nlink"}
+    receipt = launcher.consume_v2a_authorization(
+        authorization,
+        plan,
+        mode="production",
+        owner_file_identity=identity,
+    )
+    assert receipt["authorization_file_identity"] == identity
+    assert receipt["consumed"] is True
+
+
 def test_ast_and_real_call_boundary_are_closed() -> None:
     source = (ROOT / launcher.MODULE_RELATIVE_PATH).read_text(encoding="utf-8")
     assert "shell=False" in source

@@ -840,7 +840,14 @@ def _preflight(
 
 
 def _authorization_file_identity(path: pathlib.Path) -> dict[str, Any]:
-    return _file_identity(path, "T7E owner authorization", mode=0o600)
+    observed = _file_identity(path, "T7E owner authorization", mode=0o600)
+    return {
+        "path": str(path),
+        "size_bytes": observed["size_bytes"],
+        "sha256": observed["sha256"],
+        "mode": observed["mode"],
+        "nlink": observed["nlink"],
+    }
 
 
 def _receipt_digest(value: Mapping[str, Any]) -> str:
