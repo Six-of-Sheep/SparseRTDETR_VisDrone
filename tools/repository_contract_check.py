@@ -238,6 +238,44 @@ T7D_ALLOWED_IMPORTS = {
     "sparse_rtdetr.baseline",
 }
 
+T7E_FILES = {
+    "src/sparse_rtdetr/baseline/training_v2a_launcher.py",
+    "tests/test_rtdetr_baseline_training_v2a_launcher.py",
+    "docs/contracts/RTDETR_BASELINE_V2A_EXACTLY_ONCE_LAUNCH_T7E.md",
+}
+T7E_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_v2a_launcher.py"
+T7E_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_v2a_launcher.py"
+T7E_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_V2A_EXACTLY_ONCE_LAUNCH_T7E.md"
+T7E_MODULE_SHA256 = "ddbf7757df876207202fe733848596022a9191c4b05f1bb283a72c1fd4e03055"
+T7E_TEST_SHA256 = "bca816b7025396e974ab90d9ce7fc897c33fbf02fd3a0c3be5d3b335e6214862"
+T7E_DOCUMENT_SHA256 = "8114b77929d60d5622c9d4643f882b0c802321d0a30cf0f06d0ca7a09d642aa4"
+T7E_PUBLIC_NAMES = {
+    "V2ALauncherError",
+    "canonical_v2a_launcher_bytes",
+    "build_v2a_owner_authorization",
+    "validate_v2a_owner_authorization",
+    "build_v2a_launch_plan",
+    "validate_v2a_launch_plan",
+    "consume_v2a_authorization",
+    "validate_v2a_consumption_receipt",
+    "validate_v2a_immediate_launch_result",
+    "run_v2a_cpu_fake_launch",
+    "run_v2a_production_launch",
+}
+T7E_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "json",
+    "math",
+    "os",
+    "pathlib",
+    "stat",
+    "subprocess",
+    "sys",
+    "typing",
+    "sparse_rtdetr.baseline",
+}
+
 TRAINING_EVIDENCE_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
     "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_EVIDENCE_V1.md",
@@ -1936,6 +1974,92 @@ def _check_t7d_production_boundary(root: Path, failures: list[str]) -> None:
             failures.append(f"missing T7D support file: {relative}")
 
 
+def _check_t7e_exactly_once_launcher(root: Path, failures: list[str]) -> None:
+    """Check the T7E schema and keep real subprocess calls behind private owners."""
+
+    expected_hashes = {
+        T7E_MODULE_RELATIVE_PATH: T7E_MODULE_SHA256,
+        T7E_TEST_RELATIVE_PATH: T7E_TEST_SHA256,
+        T7E_DOCUMENT_RELATIVE_PATH: T7E_DOCUMENT_SHA256,
+    }
+    for relative in sorted(T7E_FILES):
+        path = root / relative
+        try:
+            observed = path.lstat()
+            if path.is_symlink() or not path.is_file() or not stat.S_ISREG(observed.st_mode):
+                failures.append(f"t7e file is not a regular non-symlink file: {relative}")
+                continue
+            if observed.st_nlink != 1:
+                failures.append(f"t7e file nlink drift: {relative}")
+            expected = expected_hashes[relative]
+            if not expected.startswith("PENDING_") and _sha256(path) != expected:
+                failures.append(f"t7e file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing t7e file: {relative}")
+
+    module_path = root / T7E_MODULE_RELATIVE_PATH
+    try:
+        source_text = module_path.read_text(encoding="utf-8")
+        tree = ast.parse(source_text, filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != T7E_ALLOWED_IMPORTS:
+            failures.append(
+                "t7e import set mismatch: "
+                f"extra={sorted(imported - T7E_ALLOWED_IMPORTS)} "
+                f"missing={sorted(T7E_ALLOWED_IMPORTS - imported)}"
+            )
+        public = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public != T7E_PUBLIC_NAMES:
+            failures.append(
+                "t7e public API mismatch: "
+                f"extra={sorted(public - T7E_PUBLIC_NAMES)} missing={sorted(T7E_PUBLIC_NAMES - public)}"
+            )
+        all_values: object = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                all_values = ast.literal_eval(node.value)
+        if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != T7E_PUBLIC_NAMES:
+            failures.append("t7e __all__ mismatch")
+        forbidden_roots = {"torch", "numpy", "pandas", "tensorflow", "cupy", "requests", "training_t6", "training_v1"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(alias.name.split(".", 1)[0].casefold() in forbidden_roots for alias in node.names):
+                failures.append("t7e forbidden import")
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".", 1)[0].casefold() in forbidden_roots:
+                failures.append("t7e forbidden import")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec"}:
+                failures.append("t7e dynamic execution")
+        if "O_EXCL" not in source_text or "os.fsync" not in source_text or "shell=False" not in source_text:
+            failures.append("t7e durability or shell boundary is incomplete")
+        if "TMUX_ACCEPTED" not in source_text or "training_ready" not in source_text:
+            failures.append("t7e readiness boundary is incomplete")
+        for statement in tree.body:
+            if isinstance(statement, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            if isinstance(statement, ast.If) and isinstance(statement.test, ast.Compare) and isinstance(statement.test.left, ast.Name) and statement.test.left.id == "__name__":
+                continue
+            if any(isinstance(node, ast.Call) for node in ast.walk(statement)):
+                failures.append("t7e import-time call")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"t7e source audit failure: {type(exc).__name__}")
+
+    for relative in (T7E_TEST_RELATIVE_PATH, T7E_DOCUMENT_RELATIVE_PATH):
+        path = root / relative
+        try:
+            if path.stat().st_size <= 0:
+                failures.append(f"empty T7E support file: {relative}")
+        except OSError:
+            failures.append(f"missing T7E file: {relative}")
+
+
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     return (
         ("package", "src/sparse_rtdetr/__init__.py"),
@@ -1972,6 +2096,9 @@ def check_repository(root: Path) -> bool:
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
         allowed_files |= T7D_FILES
+    t7e_files_present = files & T7E_FILES
+    if t7e_files_present:
+        allowed_files |= T7E_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -2052,6 +2179,8 @@ def check_repository(root: Path) -> bool:
     _check_t7c_runtime(root, failures)
     if t7d_files_present:
         _check_t7d_production_boundary(root, failures)
+    if t7e_files_present:
+        _check_t7e_exactly_once_launcher(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
