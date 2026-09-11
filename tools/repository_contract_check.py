@@ -128,7 +128,7 @@ V2A_CONFIG_CANONICAL_SHA256 = "96db5c69286775fb2b2b6a1a6997e58fe9d6019040eeca732
 V2A_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_v2a_contract.py"
 V2A_MODULE_SHA256 = "5c5d5647f85100b301d9de533e92b1725a7e7b101d84cf657b9ab275cae35a96"
 V2A_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_v2a_contract.py"
-V2A_TEST_SHA256 = "b438ebb182d9cfd8208136d504cf8c733bb8849698345cc473633e920b24297f"
+V2A_TEST_SHA256 = "3974a3d46b0eec98e3d09ba692f47636c1f8d17e203e946719f7db4247a68bf6"
 V2A_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_V2A_FORMAL_TRAINING_V1.md"
 V2A_DOCUMENT_SHA256 = "3dae6d85a7180d30aaaf58993a6c71568589ba2cc34a9d7b32133cced6b2998d"
 V2A_PUBLIC_NAMES = {
@@ -150,6 +150,52 @@ V2A_ALLOWED_IMPORTS = {
     "stat",
     "pathlib",
     "typing",
+}
+
+T7C_FILES = {
+    "src/sparse_rtdetr/baseline/training_v2a_runtime.py",
+    "tests/test_rtdetr_baseline_training_v2a_runtime.py",
+    "docs/contracts/RTDETR_BASELINE_V2A_RUNTIME_INTEGRATION_T7C.md",
+}
+T7C_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_v2a_runtime.py"
+T7C_MODULE_SHA256 = "e9a0f39a7972ea19fd132298530c21959f7fd5fce51279ea5e3f3ea897f3a387"
+T7C_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_v2a_runtime.py"
+T7C_TEST_SHA256 = "1fb62d0a3cb8674f7ae2f1718ad05c874f1e69612ba2ca3d84f3101fac484b1d"
+T7C_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_V2A_RUNTIME_INTEGRATION_T7C.md"
+T7C_DOCUMENT_SHA256 = "b625a1afb872ffb46beb503fba17d2d4f5e3a93df5076a823ae436abe78b3274"
+T7C_PUBLIC_NAMES = {
+    "V2ARuntimeError",
+    "build_v2a_runtime_policy",
+    "bind_training_parent_identity",
+    "bind_authorized_data_roots",
+    "bind_environment_identity",
+    "load_v2a_pretrained_backbone",
+    "audit_v2a_optimizer_parameters",
+    "build_v2a_optimizer",
+    "build_v2a_runtime_components",
+    "v2a_bf16_autocast_context",
+    "select_v2a_development_candidate",
+    "build_v2a_checkpoint",
+    "validate_v2a_checkpoint",
+    "EpochProgressWriter",
+    "parse_v2a_terminal_stdout",
+    "validate_v2a_runtime_closure",
+    "run_v2a_fake_runtime",
+}
+T7C_ALLOWED_IMPORTS = {
+    "contextlib",
+    "copy",
+    "hashlib",
+    "importlib",
+    "inspect",
+    "json",
+    "math",
+    "os",
+    "pathlib",
+    "stat",
+    "sys",
+    "typing",
+    "sparse_rtdetr.baseline",
 }
 
 TRAINING_EVIDENCE_FILES = {
@@ -1686,6 +1732,80 @@ def _check_training_v2a_contract(root: Path, failures: list[str]) -> None:
         failures.append(f"v2a detached validation failure: {type(exc).__name__}: {exc}")
 
 
+def _check_t7c_runtime(root: Path, failures: list[str]) -> None:
+    """Check the independent CPU/fake v2a runtime surface."""
+
+    expected_hashes = {
+        T7C_MODULE_RELATIVE_PATH: T7C_MODULE_SHA256,
+        T7C_TEST_RELATIVE_PATH: T7C_TEST_SHA256,
+        T7C_DOCUMENT_RELATIVE_PATH: T7C_DOCUMENT_SHA256,
+    }
+    for relative in sorted(T7C_FILES):
+        path = root / relative
+        try:
+            observed = path.lstat()
+            if path.is_symlink() or not path.is_file() or not stat.S_ISREG(observed.st_mode):
+                failures.append(f"t7c file is not a regular non-symlink file: {relative}")
+                continue
+            if observed.st_nlink != 1:
+                failures.append(f"t7c file nlink drift: {relative}")
+            expected = expected_hashes[relative]
+            if not expected.startswith("PENDING_") and _sha256(path) != expected:
+                failures.append(f"t7c file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing t7c file: {relative}")
+
+    module_path = root / T7C_MODULE_RELATIVE_PATH
+    try:
+        source_text = module_path.read_text(encoding="utf-8")
+        tree = ast.parse(source_text, filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != T7C_ALLOWED_IMPORTS:
+            failures.append(
+                "t7c import set mismatch: "
+                f"extra={sorted(imported - T7C_ALLOWED_IMPORTS)} "
+                f"missing={sorted(T7C_ALLOWED_IMPORTS - imported)}"
+            )
+        public = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public != T7C_PUBLIC_NAMES:
+            failures.append(
+                "t7c public API mismatch: "
+                f"extra={sorted(public - T7C_PUBLIC_NAMES)} missing={sorted(T7C_PUBLIC_NAMES - public)}"
+            )
+        all_values: object = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                all_values = ast.literal_eval(node.value)
+        if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != T7C_PUBLIC_NAMES:
+            failures.append("t7c __all__ mismatch")
+        forbidden_roots = {"torch", "numpy", "pandas", "tensorflow", "cupy", "dataloader", "dataset", "subprocess", "requests"}
+        if "GradScaler" in source_text or "training_t6_engine" in source_text:
+            failures.append("t7c source retains forbidden scaler or T6 engine surface")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(alias.name.split(".", 1)[0].casefold() in forbidden_roots for alias in node.names):
+                failures.append("t7c forbidden import")
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".", 1)[0].casefold() in forbidden_roots:
+                failures.append("t7c forbidden import")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec"}:
+                failures.append("t7c dynamic execution")
+        for statement in tree.body:
+            if isinstance(statement, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            if isinstance(statement, ast.Assign) and any(isinstance(node, ast.Call) for node in ast.walk(statement)):
+                failures.append("t7c import-time call")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"t7c source audit failure: {type(exc).__name__}")
+
+
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     return (
         ("package", "src/sparse_rtdetr/__init__.py"),
@@ -1718,6 +1838,7 @@ def check_repository(root: Path) -> bool:
     allowed_files |= T6A_FILES
     allowed_files |= T6B_FILES
     allowed_files |= V2A_FILES
+    allowed_files |= T7C_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -1795,6 +1916,7 @@ def check_repository(root: Path) -> bool:
     _check_t6a_owner_authorization(root, failures)
     _check_t6b_production_boundary(root, failures)
     _check_training_v2a_contract(root, failures)
+    _check_t7c_runtime(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
