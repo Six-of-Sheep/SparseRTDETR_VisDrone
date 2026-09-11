@@ -43,9 +43,11 @@ result:
    line is selected after preceding vendor log lines.
 2. The existing `artifacts/training` parent identity is captured while the
    independent T7C target is required to be absent before the run.
-3. Only the independent `train_core` and `development` roots and their
-   declared annotation layouts are bound. Confirmatory and test roots are
-   never read.
+3. Only the independent `train_core` and `development` raw-image roots are
+   bound. Their COCO annotations are resolved through the frozen Conversion
+   R3 artifact binding, never by appending annotation names to image roots.
+   The canonical annotation path and object identity are carried into the
+   runtime policy. Confirmatory and test roots are never read.
 4. The supplied fake environment observation must match the frozen GPU/CUDA
    identity, remain at or below the 1500 MHz clock cap, and report an
    exclusive host with no other training load. No hardware probe is run.

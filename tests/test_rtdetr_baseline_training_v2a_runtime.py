@@ -148,11 +148,21 @@ def test_policy_reads_binding_and_binds_all_input_closures(tmp_path: Path, monke
     assert policy["contract_binding"] == frozen_binding
     assert policy["topology"]["train_micro_batch"] == 16
     assert policy["topology"]["effective_train_batch"] == 16
+    assert policy["topology"]["train_workers"] == 4
+    assert policy["topology"]["development_batch"] == 32
+    assert policy["topology"]["development_workers"] == 4
+    assert policy["topology"]["drop_last_train"] is True
+    assert policy["topology"]["drop_last_development"] is False
     assert policy["optimizer"]["parameter_groups"][0]["weight_decay"] == 0.0
     assert policy["optimizer"]["parameter_groups"][1]["learning_rate"] == 1e-4
     assert policy["amp"]["grad_scaler_enabled"] is False
     assert policy["data_roots"]["confirmatory_read"] is False
     assert policy["data_roots"]["test_read"] is False
+    for role in ("train_core", "development"):
+        role_binding = policy["data_roots"]["roles"][role]
+        assert Path(role_binding["annotation_path"]).parent == ROOT / "artifacts/data/visdrone_protocol_v2_conversion_r3"
+        assert Path(role_binding["annotation_path"]).name == role_binding["annotation"]
+        assert Path(role_binding["annotation_path"]).parent != Path(role_binding["root"])
     assert policy["environment_identity"]["hardware_probe_executed"] is False
     assert policy["production"]["formal_training_executed"] is False
 
@@ -160,7 +170,11 @@ def test_policy_reads_binding_and_binds_all_input_closures(tmp_path: Path, monke
 def test_parent_data_and_environment_mutations_fail_closed(tmp_path: Path, frozen_binding):
     roots = _data_roots(tmp_path)
     with pytest.raises(runtime.V2ARuntimeError):
-        runtime.bind_authorized_data_roots(frozen_binding, {"train_core": roots["train_core"], "development": roots["train_core"]})
+        runtime.bind_authorized_data_roots(
+            frozen_binding,
+            {"train_core": roots["train_core"], "development": roots["train_core"]},
+            repo_root=ROOT,
+        )
     with pytest.raises(runtime.V2ARuntimeError):
         runtime.bind_environment_identity(frozen_binding, {**_environment(), "graphics_clock_mhz": 1501})
     with pytest.raises(runtime.V2ARuntimeError):

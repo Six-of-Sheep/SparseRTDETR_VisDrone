@@ -283,8 +283,10 @@ def _validate_parent_after(snapshot: Mapping[str, Any]) -> dict[str, Any]:
 def bind_authorized_data_roots(
     binding: Mapping[str, Any],
     data_roots: Mapping[str, str | os.PathLike[str]],
+    *,
+    repo_root: str | os.PathLike[str],
 ) -> dict[str, Any]:
-    """Bind only the independent train-core and development layouts."""
+    """Bind raw image roots to the frozen Conversion R3 annotations."""
 
     contract = _contract_from(binding)
     if type(data_roots) is not dict or set(data_roots) != {"train_core", "development"}:
@@ -302,13 +304,22 @@ def bind_authorized_data_roots(
         annotation = declared[role]["annotation"]
         if type(annotation) is not str or not annotation or "/" in annotation or annotation in {".", ".."}:
             _fail(f"{role} annotation declaration drift")
-        annotation_path = root / annotation
+        baseline_config = importlib.import_module("sparse_rtdetr.baseline.config")
+        runtime_config = baseline_config.build_runtime_config(repo_root, root, role)
+        annotation_path = pathlib.Path(runtime_config["dataloader"]["annotation_file"])
+        try:
+            resolved_annotation = annotation_path.resolve(strict=True)
+        except OSError as exc:
+            raise V2ARuntimeError(f"{role} annotation is unavailable") from exc
+        if resolved_annotation != annotation_path or annotation_path.name != annotation:
+            _fail(f"{role} annotation path binding drift")
         annotation_identity = _regular_identity(annotation_path, f"{role} annotation")
         result[role] = {
             "role": role,
             "root": str(root),
             "identity": identity,
             "annotation": annotation,
+            "annotation_path": str(annotation_path),
             "annotation_identity": annotation_identity,
         }
     return {"roles": result, "confirmatory_read": False, "test_read": False}
@@ -377,10 +388,19 @@ def _policy_parts(binding: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "model": _copy(contract["model"]),
         "topology": {
+            "device_type": topology["device_type"],
+            "visible_devices": topology["visible_devices"],
+            "world_size": topology["world_size"],
+            "distributed": topology["distributed"],
+            "sync_bn": topology["sync_bn"],
             "train_micro_batch": topology["train_micro_batch"],
             "gradient_accumulation_steps": topology["gradient_accumulation_steps"],
             "effective_train_batch": topology["effective_train_batch"],
+            "train_workers": topology["train_workers"],
             "development_batch": topology["development_batch"],
+            "development_workers": topology["development_workers"],
+            "drop_last_train": topology["drop_last_train"],
+            "drop_last_development": topology["drop_last_development"],
             "runtime_batch_adaptation_forbidden": topology["runtime_batch_adaptation_forbidden"],
         },
         "optimizer": _copy(optimizer),
@@ -404,7 +424,11 @@ def build_v2a_runtime_policy(
     binding = _contract.training_v2a_contract_binding(repo_root)
     parts = _policy_parts(binding)
     parent = bind_training_parent_identity(repo_root, target_root)
-    data_binding = bind_authorized_data_roots(binding, data_roots) if data_roots is not None else None
+    data_binding = (
+        bind_authorized_data_roots(binding, data_roots, repo_root=repo_root)
+        if data_roots is not None
+        else None
+    )
     environment_binding = bind_environment_identity(binding, environment_identity) if environment_identity is not None else None
     return {
         "schema_version": RUNTIME_SCHEMA_VERSION,

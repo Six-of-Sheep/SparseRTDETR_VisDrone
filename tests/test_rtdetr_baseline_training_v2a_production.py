@@ -324,3 +324,42 @@ def test_bf16_context_has_no_scaler_construction_or_source_surface(policy: dict)
     with production._production_autocast(FakeTorch, policy["runtime_policy"]["contract_binding"]):
         pass
     assert not hasattr(FakeTorch, "GradScaler")
+
+
+def test_production_loss_uses_vendor_weight_dict_exactly_once() -> None:
+    class Criterion:
+        weight_dict = {"classification": 2.0, "boxes": 5.0}
+
+    assert production._weighted_loss(
+        Criterion(),
+        {"classification": 3.0, "boxes": 4.0, "diagnostic": 1000.0},
+    ) == 26.0
+    with pytest.raises(production.V2AProductionError, match="weight dictionary"):
+        production._weighted_loss(object(), {"classification": 3.0})
+
+
+def test_production_device_transfer_is_recursive() -> None:
+    calls: list[str] = []
+
+    class TensorLike:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def to(self, device: str):
+            calls.append(f"{self.name}:{device}")
+            return self
+
+    value = {"a": TensorLike("a"), "b": [TensorLike("b")], "c": (TensorLike("c"),)}
+    assert production._move_to_device(value, "cuda:0") == value
+    assert calls == ["a:cuda:0", "b:cuda:0", "c:cuda:0"]
+
+
+def test_real_runtime_source_has_bound_data_evaluator_and_binary_checkpoints() -> None:
+    source = (ROOT / production.PRODUCTION_MODULE_RELATIVE_PATH).read_text(encoding="utf-8")
+    assert "primary development evaluator adapter was not supplied" not in source
+    assert "_build_runtime_ports" in source
+    assert "_evaluate_primary_metrics" in source
+    assert "_weighted_loss" in source
+    assert "clip_grad_norm_" in source
+    assert "torch_save_v1" in source
+    assert 'set_sharing_strategy("file_system")' in source

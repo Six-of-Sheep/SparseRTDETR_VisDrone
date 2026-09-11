@@ -51,17 +51,32 @@ operation and reject overwrite, resume, and duplicate execution.
 ## Training semantics and durable evidence
 
 All training values come from the T7C policy. The real model factory uses the
-T7C strict pretrained loader before optimizer creation. AMP is CUDA bfloat16
-autocast with no GradScaler object, state, calls, or checkpoint fields. Every
-valid micro-batch produces one direct optimizer step, followed by EMA update;
-development evaluation uses only the frozen primary evaluator and EMA state.
+T7C strict pretrained loader before optimizer creation. The real loaders are
+bound to the owner-authorized `train_core` and `development` raw-image roots.
+Their annotation file paths are the canonical Conversion R3 paths carried by
+the T7C identity binding, never paths synthesized under the raw-image roots.
+The isolated production process selects PyTorch's `file_system` tensor-sharing
+strategy before constructing four-worker loaders, avoiding file-descriptor
+exhaustion under the host's fixed descriptor limit.
+Samples and targets are transferred to the
+model device; vendor criterion outputs are aggregated with its `weight_dict`;
+and gradients are clipped at the frozen maximum norm. The vendor 2,000-update
+linear warmup precedes the inert 1,000-epoch milestone scheduler. AMP is CUDA
+bfloat16 autocast with no GradScaler object, state, calls, or checkpoint
+fields. Every valid micro-batch produces one direct optimizer step, followed
+by EMA update; development evaluation uses the independently certified
+VisDrone primary evaluator over EMA state and returns unrounded `AP`, `AP50`,
+and `AR500` for deterministic selection.
 
-Epoch progress is canonical JSONL flushed and fsynced per record. Last, best,
-periodic, and final checkpoints bind raw and EMA model state, optimizer,
-scheduler, RNG, no-scaler semantics, source, contract, environment, data, and
-run identities. Terminal result and stdout carry recomputable byte and digest
-identities. Success, failure, exception, and signal outcomes are classified
-without accepting a second terminal object.
+Epoch progress is canonical JSONL flushed and fsynced per record. Production
+last, best, periodic, and final checkpoints are durable `torch.save` artifacts
+that bind raw and EMA model state, optimizer, scheduler, warmup, RNG,
+no-scaler semantics, source, contract, environment, data, and run identities.
+Every checkpoint is fsynced, read back for loadability, and recorded in an
+append-only inventory; CPU-fake checkpoints remain canonical JSON fixtures.
+Terminal result and stdout carry recomputable byte and digest identities.
+Success, failure, exception, and signal outcomes are classified without
+accepting a second terminal object.
 
 ## Readiness boundary
 

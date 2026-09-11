@@ -410,7 +410,7 @@ def _bound_data_roots_shape(value: Any, field: str) -> dict[str, Any]:
     for role in ("train_core", "development"):
         item = _exact(
             roles[role],
-            {"role", "root", "identity", "annotation", "annotation_identity"},
+            {"role", "root", "identity", "annotation", "annotation_path", "annotation_identity"},
             f"{field}.roles.{role}",
         )
         if item["role"] != role:
@@ -419,6 +419,9 @@ def _bound_data_roots_shape(value: Any, field: str) -> dict[str, Any]:
         _string(item["annotation"], f"{field}.roles.{role}.annotation")
         if "/" in item["annotation"]:
             _fail(f"{field}.roles.{role}.annotation is not a basename")
+        annotation_path = _absolute_path(item["annotation_path"], f"{field}.roles.{role}.annotation_path")
+        if annotation_path.name != item["annotation"]:
+            _fail(f"{field}.roles.{role}.annotation path binding drift")
         for identity_name in ("identity", "annotation_identity"):
             identity = item[identity_name]
             if type(identity) is not dict:
@@ -792,6 +795,40 @@ def _loss_total(value: Any) -> Any:
     return value
 
 
+def _move_to_device(value: Any, device: Any) -> Any:
+    if type(value) is dict:
+        return {key: _move_to_device(child, device) for key, child in value.items()}
+    if type(value) is list:
+        return [_move_to_device(child, device) for child in value]
+    if type(value) is tuple:
+        return tuple(_move_to_device(child, device) for child in value)
+    mover = getattr(value, "to", None)
+    return mover(device) if callable(mover) else value
+
+
+def _weighted_loss(criterion: Any, losses: Any) -> Any:
+    """Apply the vendor criterion's frozen weight dictionary exactly once."""
+
+    if type(losses) is not dict:
+        return losses
+    weights = getattr(criterion, "weight_dict", None)
+    if type(weights) is not dict or not weights:
+        _fail("production criterion weight dictionary is unavailable")
+    selected = []
+    for name, value in losses.items():
+        if name in weights:
+            weight = weights[name]
+            if type(weight) not in {int, float} or type(weight) is bool or not math.isfinite(float(weight)):
+                _fail("production criterion weight is not finite")
+            selected.append(value * weight)
+    if not selected:
+        _fail("production criterion returned no weighted losses")
+    total = selected[0]
+    for value in selected[1:]:
+        total = total + value
+    return total
+
+
 def _state_payload(value: Any, field: str) -> Any:
     if callable(value):
         value = value()
@@ -1016,7 +1053,12 @@ class _CapabilityToken:
 
 
 class _ProductionCapability:
-    __slots__ = ("policy", "mode", "model", "optimizer", "ema", "evaluator", "batches", "compute_loss", "backward", "scheduler", "rng_state", "source_identity", "torch_module", "call_order", "raw_model_state", "ema_state")
+    __slots__ = (
+        "policy", "mode", "model", "optimizer", "ema", "evaluator", "batches",
+        "compute_loss", "backward", "scheduler", "warmup", "checkpoint_writer",
+        "rng_state", "source_identity", "torch_module", "call_order",
+        "raw_model_state", "ema_state",
+    )
 
     def __init__(self, token: object, **values: Any) -> None:
         if token is not _CAPABILITY_TOKEN:
@@ -1072,6 +1114,8 @@ def _make_fake_capability(policy: Mapping[str, Any], ports: Mapping[str, Any], c
         compute_loss=compute_loss,
         backward=backward,
         scheduler=scheduler,
+        warmup=None,
+        checkpoint_writer=None,
         rng_state=rng_state,
         source_identity=_copy(policy["source_identity"]),
         torch_module=None,
@@ -1083,6 +1127,92 @@ def _make_fake_capability(policy: Mapping[str, Any], ports: Mapping[str, Any], c
 
 def _production_autocast(torch_module: Any, binding: Mapping[str, Any]) -> Any:
     return _runtime.v2a_bf16_autocast_context(binding, torch_module=torch_module)
+
+
+def _required_state_dict(value: Any, field: str) -> Any:
+    state_dict = getattr(value, "state_dict", None)
+    if not callable(state_dict):
+        _fail(f"{field} does not expose state_dict")
+    try:
+        return state_dict()
+    except Exception as exc:
+        raise V2AProductionError(f"{field} state_dict failed") from exc
+
+
+def _production_runtime_states(capability: _ProductionCapability) -> dict[str, Any]:
+    torch_module = capability.torch_module
+    random_module = importlib.import_module("random")
+    cuda = getattr(torch_module, "cuda", None)
+    cuda_states = []
+    get_cuda_states = getattr(cuda, "get_rng_state_all", None)
+    if callable(get_cuda_states):
+        cuda_states = get_cuda_states()
+    scheduler_state = (
+        _required_state_dict(capability.scheduler, "production scheduler")
+        if capability.scheduler is not None
+        else {"state": "absent"}
+    )
+    warmup_state = (
+        _required_state_dict(capability.warmup, "production warmup")
+        if capability.warmup is not None
+        else {"state": "absent"}
+    )
+    return {
+        "raw_model": _required_state_dict(capability.model, "production model"),
+        "ema": _required_state_dict(capability.ema, "production EMA"),
+        "optimizer": _required_state_dict(capability.optimizer, "production optimizer"),
+        "scheduler": scheduler_state,
+        "warmup": warmup_state,
+        "rng_states": {
+            "python": random_module.getstate(),
+            "torch_cpu": torch_module.get_rng_state(),
+            "torch_cuda": cuda_states,
+        },
+    }
+
+
+def _save_production_checkpoint(
+    capability: _ProductionCapability,
+    role: str,
+    epoch: int,
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    writer = capability.checkpoint_writer
+    save_atomic = getattr(writer, "save_atomic", None)
+    is_loadable = getattr(writer, "is_loadable", None)
+    if not callable(save_atomic) or not callable(is_loadable):
+        _fail("production checkpoint writer is unavailable")
+    state_value = {**_copy(metadata), "runtime_states": _production_runtime_states(capability)}
+    reference = save_atomic(role, epoch, state_value)
+    if not is_loadable(reference):
+        _fail("production checkpoint is not loadable after publication")
+    return {
+        "role": role,
+        "epoch": epoch,
+        "path": reference["path"],
+        "size_bytes": reference["file_size_bytes"],
+        "sha256": reference["file_sha256"],
+        "mode": 0o600,
+        "format": "torch_save_v1",
+        "state_sha256": reference["state_sha256"],
+        "runtime_state_keys": reference["runtime_state_keys"],
+        "inventory_path": reference["inventory_path"],
+        "inventory_sha256": reference["inventory_sha256"],
+    }
+
+
+def _write_checkpoint(
+    capability: _ProductionCapability,
+    policy: Mapping[str, Any],
+    role: str,
+    epoch: int,
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    if capability.mode == PRODUCTION_MODE:
+        return _save_production_checkpoint(capability, role, epoch, metadata)
+    path = pathlib.Path(policy["target"]["path"]) / f"{policy['target']['names']['checkpoint_prefix']}{role}_epoch_{epoch}.json"
+    reference = _write_exclusive_json(path, metadata, f"T7D {role} checkpoint")
+    return {"role": role, "epoch": epoch, **reference}
 
 
 def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: str, claim: Mapping[str, Any]) -> dict[str, Any]:
@@ -1099,7 +1229,19 @@ def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: s
     optimizer_updates = 0
     last_checkpoint: dict[str, Any] | None = None
     for epoch in range(1, epochs + 1):
+        train_mode = getattr(capability.model, "train", None)
+        if capability.mode == PRODUCTION_MODE and not callable(train_mode):
+            _fail("production model does not expose train mode")
+        if callable(train_mode):
+            train_mode()
         source = capability.batches() if callable(capability.batches) else capability.batches
+        set_epoch = getattr(source, "set_epoch", None)
+        if callable(set_epoch):
+            set_epoch(epoch - 1)
+        else:
+            dataset_set_epoch = getattr(getattr(source, "dataset", None), "set_epoch", None)
+            if callable(dataset_set_epoch):
+                dataset_set_epoch(epoch - 1)
         try:
             batches = iter(source)
         except TypeError as exc:
@@ -1128,6 +1270,14 @@ def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: s
                     if not callable(backward_method):
                         _fail("loss has no direct backward operation")
                     backward_method()
+            if capability.mode == PRODUCTION_MODE:
+                parameters = getattr(capability.model, "parameters", None)
+                if not callable(parameters):
+                    _fail("production model does not expose parameters")
+                capability.torch_module.nn.utils.clip_grad_norm_(
+                    parameters(),
+                    policy["optimizer"]["gradient_clip_max_norm"],
+                )
             step = getattr(capability.optimizer, "step", None)
             if not callable(step):
                 _fail("optimizer has no direct step")
@@ -1142,39 +1292,51 @@ def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: s
             else:
                 _fail("EMA update port is missing")
             optimizer_updates += 1
+            warmup_step = getattr(capability.warmup, "step", None)
+            if callable(warmup_step):
+                warmup_step()
             batch_count += 1
             if type(loss_value) in {int, float} and type(loss_value) is not bool:
                 mean_loss += float(loss_value)
         if batch_count == 0:
             _fail("epoch has no training batches")
-        if callable(capability.scheduler):
-            capability.scheduler()
+        warmup_finished = getattr(capability.warmup, "finished", None)
+        if capability.scheduler is not None and (
+            not callable(warmup_finished) or bool(warmup_finished())
+        ):
+            scheduler_step = getattr(capability.scheduler, "step", None)
+            if not callable(scheduler_step):
+                _fail("production scheduler has no step operation")
+            scheduler_step()
         metrics = _normalize_metrics(_call_evaluator(capability.evaluator, capability.ema, epoch), policy)
         candidates.append({"epoch": epoch, **metrics})
         selected = _runtime.select_v2a_development_candidate(candidates, policy["runtime_policy"]["contract_binding"])
+        production_binary = capability.mode == PRODUCTION_MODE
         last_checkpoint = _checkpoint(
             policy,
             run_id=run_id,
             epoch=epoch,
             optimizer_updates=optimizer_updates,
-            raw_model=_model_state(capability.raw_model_state if capability.raw_model_state is not None else capability.model, "raw_model", epoch),
-            ema=_model_state(capability.ema_state if capability.ema_state is not None else capability.ema, "ema", epoch),
-            optimizer=capability.optimizer,
-            scheduler=capability.scheduler if capability.scheduler is not None else {"state": "absent"},
-            rng_state=capability.rng_state,
+            raw_model={"binary_state": "raw_model"} if production_binary else _model_state(capability.raw_model_state if capability.raw_model_state is not None else capability.model, "raw_model", epoch),
+            ema={"binary_state": "ema"} if production_binary else _model_state(capability.ema_state if capability.ema_state is not None else capability.ema, "ema", epoch),
+            optimizer={"binary_state": "optimizer"} if production_binary else capability.optimizer,
+            scheduler={"binary_state": "scheduler_and_warmup"} if production_binary else (capability.scheduler if capability.scheduler is not None else {"state": "absent"}),
+            rng_state={"binary_state": "rng_states"} if production_binary else capability.rng_state,
             source_identity=capability.source_identity,
         )
         last_checkpoint = _validate_checkpoint(last_checkpoint, policy, run_id)
-        checkpoint_path = target / f"{names['checkpoint_prefix']}last_epoch_{epoch}.json"
-        checkpoint_ref = _write_exclusive_json(checkpoint_path, last_checkpoint, "T7D last checkpoint")
-        checkpoint_inventory.append({"role": "last", "epoch": epoch, **checkpoint_ref})
+        checkpoint_inventory.append(
+            _write_checkpoint(capability, policy, "last", epoch, last_checkpoint)
+        )
         if selected["epoch"] == epoch:
-            best_ref = _write_exclusive_json(target / f"{names['checkpoint_prefix']}best_epoch_{epoch}.json", last_checkpoint, "T7D best checkpoint")
-            checkpoint_inventory.append({"role": "best", "epoch": epoch, **best_ref})
+            checkpoint_inventory.append(
+                _write_checkpoint(capability, policy, "best", epoch, last_checkpoint)
+            )
         periodic_frequency = policy["checkpoint"]["periodic_checkpoint_frequency_epochs"]
         if epoch % periodic_frequency == 0:
-            periodic_ref = _write_exclusive_json(target / f"{names['checkpoint_prefix']}periodic_epoch_{epoch}.json", last_checkpoint, "T7D periodic checkpoint")
-            checkpoint_inventory.append({"role": "periodic", "epoch": epoch, **periodic_ref})
+            checkpoint_inventory.append(
+                _write_checkpoint(capability, policy, "periodic", epoch, last_checkpoint)
+            )
         _append_progress(
             progress_path,
             {
@@ -1195,8 +1357,9 @@ def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: s
     if last_checkpoint is None or selected is None:
         _fail("epoch loop did not produce a terminal checkpoint")
     final_epoch = epochs
-    final_ref = _write_exclusive_json(target / f"{names['checkpoint_prefix']}final_epoch_{final_epoch}.json", last_checkpoint, "T7D final checkpoint")
-    checkpoint_inventory.append({"role": "final", "epoch": final_epoch, **final_ref})
+    checkpoint_inventory.append(
+        _write_checkpoint(capability, policy, "final", final_epoch, last_checkpoint)
+    )
     progress = _progress_inventory(progress_path, epochs)
     evidence = {
         "schema_version": PRODUCTION_SCHEMA_VERSION,
@@ -1298,16 +1461,327 @@ def _build_production_model(repo_root: pathlib.Path, policy: Mapping[str, Any], 
     if not callable(mover):
         _fail("vendor model has no device transfer")
     model = mover(device="cuda:0")
-    return {"torch": torch, "config": runtime_config, "model": model, "vendor_root": vendor_root}
+    return {"torch": torch, "config": runtime_config, "model": model, "vendor_root": vendor_root, "repo_root": repo_root}
 
 
-def _resolve_production_capability(policy: Mapping[str, Any], loaded: Mapping[str, Any], model_info: Mapping[str, Any], call_order: list[str]) -> _ProductionCapability:
+class _ProductionCheckpointWriter:
+    def __init__(self, root: pathlib.Path, torch_module: Any) -> None:
+        self._torch = torch_module
+        self._root = root / "checkpoints"
+        try:
+            self._root.mkdir(mode=0o700)
+        except OSError as exc:
+            raise V2AProductionError("production checkpoint root creation failed") from exc
+        self._records: list[dict[str, Any]] = []
+        _fsync_directory(root, "production checkpoint parent")
+
+    def save_atomic(self, role: str, epoch: int, state_value: dict[str, Any]) -> dict[str, Any]:
+        tempfile_module = importlib.import_module("tempfile")
+        target = self._root / f"checkpoint-{role}-{epoch:04d}.pth"
+        if target.exists() or target.is_symlink():
+            _fail("production checkpoint target already exists")
+        fd, temporary = tempfile_module.mkstemp(prefix=f".{target.name}.", dir=str(self._root))
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                self._torch.save(state_value, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if target.exists() or target.is_symlink():
+                _fail("production checkpoint target appeared during publication")
+            os.link(temporary, target)
+            os.unlink(temporary)
+            _fsync_directory(self._root, "production checkpoint root")
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+        raw = target.read_bytes()
+        observed = target.lstat()
+        if target.is_symlink() or not target.is_file() or observed.st_nlink != 1 or (observed.st_mode & 0o777) != 0o600:
+            _fail("production checkpoint metadata drift")
+        runtime_states = state_value.get("runtime_states")
+        if type(runtime_states) is not dict or not runtime_states:
+            _fail("production checkpoint lacks runtime states")
+        json_state = {key: value for key, value in state_value.items() if key != "runtime_states"}
+        reference = {
+            "role": role,
+            "epoch": epoch,
+            "path": str(target),
+            "state_sha256": _digest(json_state),
+            "runtime_state_keys": sorted(runtime_states),
+            "file_size_bytes": len(raw),
+            "file_sha256": _sha_bytes(raw),
+        }
+        self._records.append(_copy(reference))
+        inventory = {
+            "schema_version": PRODUCTION_SCHEMA_VERSION,
+            "records": _copy(self._records),
+        }
+        inventory["inventory_sha256"] = _digest(inventory["records"])
+        inventory_path = self._root / f"checkpoint-inventory-{len(self._records):04d}.json"
+        inventory_ref = _write_exclusive_json(inventory_path, inventory, "production checkpoint inventory")
+        reference["inventory_path"] = inventory_ref["path"]
+        reference["inventory_sha256"] = inventory_ref["sha256"]
+        return reference
+
+    def is_loadable(self, reference: Mapping[str, Any]) -> bool:
+        try:
+            path = pathlib.Path(reference["path"])
+            raw = path.read_bytes()
+            if path.parent != self._root or path.is_symlink() or not path.is_file():
+                return False
+            if reference["file_size_bytes"] != len(raw) or reference["file_sha256"] != _sha_bytes(raw):
+                return False
+            loaded = self._torch.load(path, map_location="cpu", weights_only=False)
+            if type(loaded) is not dict or type(loaded.get("runtime_states")) is not dict:
+                return False
+            json_state = {key: value for key, value in loaded.items() if key != "runtime_states"}
+            return reference["state_sha256"] == _digest(json_state)
+        except Exception:
+            return False
+
+
+def _build_runtime_ports(model_info: Mapping[str, Any], policy: Mapping[str, Any]) -> dict[str, Any]:
+    repo_root = model_info["repo_root"]
+    vendor_root = model_info["vendor_root"]
+    runtime_config = model_info["config"]
+    torch = model_info["torch"]
+    multiprocessing = getattr(torch, "multiprocessing", None)
+    set_sharing_strategy = getattr(multiprocessing, "set_sharing_strategy", None)
+    if not callable(set_sharing_strategy):
+        _fail("production torch sharing-strategy API is unavailable")
+    set_sharing_strategy("file_system")
+    baseline_config = importlib.import_module("sparse_rtdetr.baseline.config")
+    baseline_dataset = importlib.import_module("sparse_rtdetr.baseline.dataset")
+    baseline_postprocessor = importlib.import_module("sparse_rtdetr.baseline.postprocessor")
+    primary_evaluator = importlib.import_module("sparse_rtdetr.baseline.primary_evaluator")
+    with baseline_config._vendor_path(vendor_root):
+        workspace = importlib.import_module("src.core.workspace")
+        dataloader_module = importlib.import_module("src.data.dataloader")
+        warmup_module = importlib.import_module("src.optim.warmup")
+        importlib.import_module("src.data")
+        importlib.import_module("src.nn")
+        importlib.import_module("src.zoo.rtdetr")
+    dataset_type = getattr(baseline_dataset, "VisDroneCocoDetection", None)
+    postprocessor_type = getattr(baseline_postprocessor, "VisDronePostProcessor", None)
+    loader_type = getattr(dataloader_module, "DataLoader", None)
+    warmup_type = getattr(warmup_module, "LinearWarmup", None)
+    if not all(callable(value) for value in (dataset_type, postprocessor_type, loader_type, warmup_type)):
+        _fail("production data/evaluator runtime API is incomplete")
+    state: dict[str, Any] = {}
+
+    def configured_component(value: Any, field: str) -> Any:
+        if type(value) is not dict:
+            _fail(f"production {field} configuration is invalid")
+        payload = _copy(value)
+        component_type = payload.pop("type", None)
+        if type(component_type) is not str or not component_type:
+            _fail(f"production {field} type is missing")
+        descriptor = runtime_config.global_cfg.get(component_type)
+        if type(descriptor) is not dict or "_kwargs" not in descriptor:
+            _fail(f"production {field} type is not registered")
+        for key in [key for key in descriptor if not key.startswith("_")]:
+            del descriptor[key]
+        descriptor.update(_copy(descriptor["_kwargs"]))
+        descriptor.update(payload)
+        return workspace.create(component_type, runtime_config.global_cfg)
+
+    def dataset(role: str) -> Any:
+        cached = state.setdefault("datasets", {}).get(role)
+        if cached is not None:
+            return cached
+        loader_name = "train_dataloader" if role == "train_core" else "val_dataloader"
+        loader_config = runtime_config.yaml_cfg.get(loader_name)
+        if type(loader_config) is not dict or type(loader_config.get("dataset")) is not dict:
+            _fail(f"production {role} loader configuration is invalid")
+        transform = configured_component(loader_config["dataset"].get("transforms"), f"{role} transforms")
+        role_binding = policy["data_roots"]["roles"][role]
+        result = dataset_type(
+            img_folder=role_binding["root"],
+            ann_file=role_binding["annotation_path"],
+            transforms=transform,
+            return_masks=False,
+            remap_mscoco_category=False,
+            vendor_root=vendor_root,
+            role=role,
+        )
+        state.setdefault("datasets", {})[role] = result
+        return result
+
+    def loader(role: str) -> Any:
+        cached = state.setdefault("loaders", {}).get(role)
+        if cached is not None:
+            return cached
+        loader_name = "train_dataloader" if role == "train_core" else "val_dataloader"
+        loader_config = runtime_config.yaml_cfg.get(loader_name)
+        if type(loader_config) is not dict:
+            _fail(f"production {role} loader configuration is invalid")
+        collate = configured_component(loader_config.get("collate_fn"), f"{role} collate")
+        topology = policy["topology"]
+        result = loader_type(
+            dataset=dataset(role),
+            batch_size=topology["train_micro_batch"] if role == "train_core" else topology["development_batch"],
+            num_workers=topology["train_workers"] if role == "train_core" else topology["development_workers"],
+            drop_last=topology["drop_last_train"] if role == "train_core" else topology["drop_last_development"],
+            collate_fn=collate,
+            shuffle=role == "train_core",
+        )
+        result.shuffle = role == "train_core"
+        state.setdefault("loaders", {})[role] = result
+        return result
+
+    def postprocessor_factory() -> Any:
+        value = state.get("postprocessor")
+        if value is None:
+            value = postprocessor_type(vendor_root=vendor_root)
+            state["postprocessor"] = value
+        return value
+
+    return {
+        "torch": model_info["torch"],
+        "repo_root": str(repo_root),
+        "primary_evaluator": primary_evaluator,
+        "train_loader": loader("train_core"),
+        "development_loader": loader("development"),
+        "postprocessor_factory": postprocessor_factory,
+        "checkpoint_writer": _ProductionCheckpointWriter(pathlib.Path(policy["target"]["path"]), model_info["torch"]),
+        "warmup_type": warmup_type,
+    }
+
+
+def _evaluate_primary_metrics(
+    runtime_ports: Mapping[str, Any],
+    weights: Any,
+    batches: Any,
+) -> dict[str, float]:
+    """Convert development batches to the certified primary evaluator schema."""
+
+    torch_module = runtime_ports["torch"]
+    primary = runtime_ports["primary_evaluator"]
+    postprocessor = runtime_ports["postprocessor_factory"]()
+    evaluator = getattr(primary, "evaluate_primary_v1", None)
+    validate_result = getattr(primary, "validate_primary_evaluator_result", None)
+    if not callable(evaluator) or not callable(validate_result):
+        _fail("certified primary evaluator API is unavailable")
+    contract = primary.primary_evaluator_contract_binding(runtime_ports["repo_root"])
+    protocol = importlib.import_module("sparse_rtdetr.data_protocol.evaluation")
+    model = getattr(weights, "module", weights)
+    if not callable(model):
+        _fail("EMA evaluation weights are not callable")
+    evaluate_mode = getattr(model, "eval", None)
+    if callable(evaluate_mode):
+        evaluate_mode()
+    dataset = getattr(batches, "dataset", None)
+    images = []
+    detections = []
+    ground_truth = []
+    seen_images: set[str] = set()
+
+    def scalar(value: Any, field: str) -> int:
+        item = getattr(value, "item", None)
+        if callable(item):
+            value = item()
+        if type(value) is not int:
+            _fail(f"{field} is not an integer")
+        return value
+
+    with torch_module.no_grad():
+        for batch in batches:
+            if type(batch) not in {tuple, list} or len(batch) != 2:
+                _fail("development loader yielded an invalid batch")
+            samples, targets = batch
+            if type(targets) is not list:
+                _fail("development targets must be a list")
+            parameters = getattr(model, "parameters", None)
+            first_parameter = next(iter(parameters()), None) if callable(parameters) else None
+            device = getattr(first_parameter, "device", "cuda:0")
+            outputs = model(_move_to_device(samples, device))
+            sizes = torch_module.stack([target["orig_size"] for target in targets], dim=0)
+            output_values = outputs.values() if type(outputs) is dict else ()
+            first_output = next(iter(output_values), None)
+            if first_output is not None:
+                sizes = sizes.to(getattr(first_output, "device", sizes.device))
+            processed = postprocessor(outputs, sizes)
+            stable_ids = []
+            for target in targets:
+                numeric_id = scalar(target.get("image_id"), "development image identity")
+                vendor = getattr(dataset, "_vendor", None)
+                coco = getattr(vendor, "coco", None)
+                image_record = None
+                if coco is not None and hasattr(coco, "loadImgs"):
+                    loaded_images = coco.loadImgs(numeric_id)
+                    if type(loaded_images) is list and len(loaded_images) == 1 and type(loaded_images[0]) is dict:
+                        image_record = loaded_images[0]
+                stable = target.get("stable_image_id")
+                if type(stable) is not str or not stable:
+                    stable = image_record.get("stable_image_id") if image_record is not None else None
+                if type(stable) is not str or not stable:
+                    stable = str(numeric_id)
+                if stable in seen_images:
+                    _fail("development image IDs are duplicated")
+                seen_images.add(stable)
+                orig_size = target.get("orig_size")
+                if orig_size is None or len(orig_size) != 2:
+                    _fail("development target orig_size is invalid")
+                height = scalar(orig_size[0], "development image height")
+                width = scalar(orig_size[1], "development image width")
+                if width <= 0 or height <= 0:
+                    _fail("development target dimensions are invalid")
+                images.append(protocol.PrimaryImageV2(stable, width, height))
+                stable_ids.append(stable)
+                raw_annotations = getattr(coco, "imgToAnns", {}).get(numeric_id, []) if coco is not None else []
+                if type(raw_annotations) is not list:
+                    _fail("development annotation rows are invalid")
+                for index, annotation in enumerate(raw_annotations):
+                    if type(annotation) is not dict:
+                        _fail("development annotation row is invalid")
+                    bbox = annotation.get("bbox")
+                    if type(bbox) is not list or len(bbox) != 4:
+                        _fail("development annotation box is invalid")
+                    x, y, box_width, box_height = (float(item) for item in bbox)
+                    if box_width <= 0 or box_height <= 0:
+                        continue
+                    category = annotation.get("category_id")
+                    if type(category) is not int or category < 0 or category > 11:
+                        _fail("development annotation category is invalid")
+                    ground_truth.append(
+                        protocol.PrimaryGroundTruth(
+                            annotation_id=str(annotation.get("stable_annotation_id", f"{stable}:{index}")),
+                            image_id=stable,
+                            category_id=category,
+                            bbox_xyxy=(x, y, x + box_width, y + box_height),
+                            area=float(annotation.get("area", box_width * box_height)),
+                            ignore_region=category == 0,
+                            ignored=bool(annotation.get("ignore", False) or annotation.get("iscrowd", 0)),
+                        )
+                    )
+            detections.extend(postprocessor.to_detections(processed, stable_ids))
+    if not images:
+        _fail("development loader yielded no images")
+    input_value = protocol.PrimaryEvaluatorInputV2(tuple(images), tuple(detections), tuple(ground_truth))
+    result = evaluator(input_value, contract)
+    validate_result(result, input_value, contract)
+    return {"AP": float(result.AP), "AP50": float(result.AP50), "AR500": float(result.AR500)}
+
+
+def _resolve_production_capability(
+    policy: Mapping[str, Any],
+    loaded: Mapping[str, Any],
+    model_info: Mapping[str, Any],
+    optimizer: Any,
+    call_order: list[str],
+) -> _ProductionCapability:
+    del loaded
     call_order.append("create_data_ports")
     config = model_info["config"]
     try:
-        train_loader = config.train_dataloader
-        development_loader = config.val_dataloader
         criterion = config.criterion
+        runtime_ports = _build_runtime_ports(model_info, policy)
+        train_loader = runtime_ports["train_loader"]
+        development_loader = runtime_ports["development_loader"]
+        checkpoint_writer = runtime_ports["checkpoint_writer"]
     except Exception as exc:
         raise V2AProductionError("authorized train/development ports could not be created") from exc
     ema = config.ema
@@ -1322,28 +1796,43 @@ def _resolve_production_capability(policy: Mapping[str, Any], loaded: Mapping[st
         if type(batch) not in {tuple, list} or len(batch) != 2:
             _fail("production train batch shape drift")
         samples, targets = batch
+        parameters = getattr(model, "parameters", None)
+        first_parameter = next(iter(parameters()), None) if callable(parameters) else None
+        device = getattr(first_parameter, "device", "cuda:0")
+        samples = _move_to_device(samples, device)
+        targets = _move_to_device(targets, device)
         outputs = model(samples, targets=targets)
-        return criterion(outputs, targets)
+        return _weighted_loss(criterion, criterion(outputs, targets))
 
     def primary_evaluate(ema_model: Any, epoch: int) -> dict[str, Any]:
-        del ema_model, epoch, development_loader
-        _fail("primary development evaluator adapter was not supplied by the certified launcher")
+        del epoch
+        return _evaluate_primary_metrics(runtime_ports, ema_model, development_loader)
 
     primary_evaluate.evaluator_id = policy["selection"]["primary_evaluator"]
     call_order.append("create_primary_evaluator")
-    scheduler = None
+    scheduler = model_info["torch"].optim.lr_scheduler.MultiStepLR(
+        optimizer,
+        milestones=[1000],
+        gamma=0.1,
+    )
+    warmup_type = runtime_ports.get("warmup_type")
+    if not callable(warmup_type):
+        _fail("production linear warmup is unavailable")
+    warmup = warmup_type(scheduler, warmup_duration=2000)
     return _ProductionCapability(
         _CAPABILITY_TOKEN,
         policy=_copy(policy),
         mode=PRODUCTION_MODE,
         model=model_info["model"],
-        optimizer=None,
+        optimizer=optimizer,
         ema=ema,
         evaluator=primary_evaluate,
         batches=batches,
         compute_loss=compute_loss,
         backward=None,
         scheduler=scheduler,
+        warmup=warmup,
+        checkpoint_writer=checkpoint_writer,
         rng_state={"mode": PRODUCTION_MODE, "seed": policy["runtime_policy"]["contract_binding"]["contract"]["initialization"]["seed"]},
         source_identity=_copy(policy["source_identity"]),
         torch_module=model_info["torch"],
@@ -1401,8 +1890,13 @@ def run_v2a_production_entry(
         model_info["model"],
         policy["runtime_policy"]["contract_binding"],
     )
-    capability = _resolve_production_capability(policy, loaded, model_info, call_order)
-    capability.optimizer = optimizer["optimizer"]
+    capability = _resolve_production_capability(
+        policy,
+        loaded,
+        model_info,
+        optimizer["optimizer"],
+        call_order,
+    )
     epochs = policy["runtime_policy"]["contract_binding"]["contract"]["schedule"]["epochs"]
     return _run_epoch_loop(capability, epochs=epochs, run_id=checked_descriptor["run_id"], claim=claim)
 
@@ -1551,18 +2045,45 @@ def validate_v2a_production_result(result: Mapping[str, Any], policy: Mapping[st
     if type(checkpoint_rows) is not list or not checkpoint_rows:
         _fail("T7D checkpoint inventory is empty")
     for row in checkpoint_rows:
-        _exact(row, {"role", "epoch", "path", "size_bytes", "sha256", "mode"}, "T7D checkpoint inventory row")
+        common_keys = {"role", "epoch", "path", "size_bytes", "sha256", "mode"}
+        binary_keys = common_keys | {"format", "state_sha256", "runtime_state_keys", "inventory_path", "inventory_sha256"}
+        if row.get("format") == "torch_save_v1":
+            _exact(row, binary_keys, "T7D checkpoint inventory row")
+        else:
+            _exact(row, common_keys, "T7D checkpoint inventory row")
         path = pathlib.Path(row["path"])
-        if path.parent != target or path.is_symlink() or not path.is_file():
+        allowed_parent = target / "checkpoints" if row.get("format") == "torch_save_v1" else target
+        if path.parent != allowed_parent or path.is_symlink() or not path.is_file():
             _fail("T7D checkpoint path drift")
         raw = path.read_bytes()
         if row["size_bytes"] != len(raw) or row["sha256"] != _sha_bytes(raw) or row["mode"] != 0o600:
             _fail("T7D checkpoint inventory identity drift")
-        try:
-            checkpoint_value = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise V2AProductionError("T7D checkpoint JSON is invalid") from exc
-        _validate_checkpoint(checkpoint_value, checked_policy, value["run_id"])
+        if row.get("format") == "torch_save_v1":
+            try:
+                loaded = importlib.import_module("torch").load(path, map_location="cpu", weights_only=False)
+            except Exception as exc:
+                raise V2AProductionError("T7D production checkpoint is not loadable") from exc
+            if type(loaded) is not dict or type(loaded.get("runtime_states")) is not dict:
+                _fail("T7D production checkpoint state schema drift")
+            runtime_states = loaded.pop("runtime_states")
+            required_runtime = {"raw_model", "ema", "optimizer", "scheduler", "warmup", "rng_states"}
+            if set(runtime_states) != required_runtime or sorted(required_runtime) != row["runtime_state_keys"]:
+                _fail("T7D production checkpoint runtime state drift")
+            if row["state_sha256"] != _digest(loaded):
+                _fail("T7D production checkpoint metadata digest drift")
+            _validate_checkpoint(loaded, checked_policy, value["run_id"])
+            inventory_path = pathlib.Path(row["inventory_path"])
+            if inventory_path.parent != allowed_parent or inventory_path.is_symlink() or not inventory_path.is_file():
+                _fail("T7D production checkpoint inventory path drift")
+            inventory_raw = inventory_path.read_bytes()
+            if row["inventory_sha256"] != _sha_bytes(inventory_raw):
+                _fail("T7D production checkpoint inventory digest drift")
+        else:
+            try:
+                checkpoint_value = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise V2AProductionError("T7D checkpoint JSON is invalid") from exc
+            _validate_checkpoint(checkpoint_value, checked_policy, value["run_id"])
     progress = value["progress_inventory"]
     _exact(progress, {"path", "relative_name", "size_bytes", "sha256", "mode", "line_count", "rows_sha256", "first_epoch", "last_epoch"}, "T7D progress inventory")
     progress_path = pathlib.Path(progress["path"])
