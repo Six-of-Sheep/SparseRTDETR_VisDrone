@@ -198,6 +198,46 @@ T7C_ALLOWED_IMPORTS = {
     "sparse_rtdetr.baseline",
 }
 
+T7D_FILES = {
+    "src/sparse_rtdetr/baseline/training_v2a_production.py",
+    "tests/test_rtdetr_baseline_training_v2a_production.py",
+    "docs/contracts/RTDETR_BASELINE_V2A_PRODUCTION_BOUNDARY_T7D.md",
+}
+T7D_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_v2a_production.py"
+T7D_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_v2a_production.py"
+T7D_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_V2A_PRODUCTION_BOUNDARY_T7D.md"
+T7D_MODULE_SHA256 = "aebe413108a09607cde3ac0808a52718f987af0910088b14e9440fb454e9df2e"
+T7D_TEST_SHA256 = "ae97e372f36be15c2f32c98d211a90563c52fd4c9d2949aa973eff271eaf0444"
+T7D_DOCUMENT_SHA256 = "0bf8eb94a41149e913a78030fe128e1bf908f2af56e9acd7d0e6f0fe3e99d908"
+T7D_PUBLIC_NAMES = {
+    "V2AProductionError",
+    "build_v2a_production_policy",
+    "build_v2a_detached_launch_descriptor",
+    "validate_v2a_detached_launch_descriptor",
+    "validate_v2a_authorization_context",
+    "current_v2a_source_identity",
+    "parse_v2a_production_stdout",
+    "classify_v2a_terminal",
+    "validate_v2a_production_result",
+    "run_v2a_production_entry",
+    "run_v2a_cpu_fake",
+}
+T7D_ALLOWED_IMPORTS = {
+    "contextlib",
+    "copy",
+    "hashlib",
+    "importlib",
+    "inspect",
+    "json",
+    "math",
+    "os",
+    "pathlib",
+    "signal",
+    "sys",
+    "typing",
+    "sparse_rtdetr.baseline",
+}
+
 TRAINING_EVIDENCE_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
     "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_EVIDENCE_V1.md",
@@ -1806,6 +1846,96 @@ def _check_t7c_runtime(root: Path, failures: list[str]) -> None:
         failures.append(f"t7c source audit failure: {type(exc).__name__}")
 
 
+def _check_t7d_production_boundary(root: Path, failures: list[str]) -> None:
+    """Check the detached T7D boundary without importing production code."""
+
+    expected_hashes = {
+        T7D_MODULE_RELATIVE_PATH: T7D_MODULE_SHA256,
+        T7D_TEST_RELATIVE_PATH: T7D_TEST_SHA256,
+        T7D_DOCUMENT_RELATIVE_PATH: T7D_DOCUMENT_SHA256,
+    }
+    for relative in sorted(T7D_FILES):
+        path = root / relative
+        try:
+            observed = path.lstat()
+            if path.is_symlink() or not path.is_file() or not stat.S_ISREG(observed.st_mode):
+                failures.append(f"t7d file is not a regular non-symlink file: {relative}")
+                continue
+            if observed.st_nlink != 1:
+                failures.append(f"t7d file nlink drift: {relative}")
+            expected = expected_hashes[relative]
+            if not expected.startswith("PENDING_") and _sha256(path) != expected:
+                failures.append(f"t7d file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing t7d file: {relative}")
+
+    module_path = root / T7D_MODULE_RELATIVE_PATH
+    try:
+        source_text = module_path.read_text(encoding="utf-8")
+        tree = ast.parse(source_text, filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != T7D_ALLOWED_IMPORTS:
+            failures.append(
+                "t7d import set mismatch: "
+                f"extra={sorted(imported - T7D_ALLOWED_IMPORTS)} "
+                f"missing={sorted(T7D_ALLOWED_IMPORTS - imported)}"
+            )
+        public = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public != T7D_PUBLIC_NAMES:
+            failures.append(
+                "t7d public API mismatch: "
+                f"extra={sorted(public - T7D_PUBLIC_NAMES)} missing={sorted(T7D_PUBLIC_NAMES - public)}"
+            )
+        all_values: object = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                all_values = ast.literal_eval(node.value)
+        if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != T7D_PUBLIC_NAMES:
+            failures.append("t7d __all__ mismatch")
+
+        forbidden_roots = {"torch", "numpy", "pandas", "tensorflow", "cupy", "subprocess", "requests"}
+        if "GradScaler" in source_text or "training_t6_engine" in source_text or "training_t6_entry" in source_text:
+            failures.append("t7d source retains forbidden scaler or legacy production surface")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(alias.name.split(".", 1)[0].casefold() in forbidden_roots for alias in node.names):
+                failures.append("t7d forbidden import")
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".", 1)[0].casefold() in forbidden_roots:
+                failures.append("t7d forbidden import")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec"}:
+                failures.append("t7d dynamic execution")
+        production_entries = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run_v2a_production_entry"]
+        if len(production_entries) != 1:
+            failures.append("t7d production entry definition count mismatch")
+        else:
+            arguments = production_entries[0].args.args + production_entries[0].args.kwonlyargs
+            if [argument.arg for argument in arguments] != ["descriptor", "authorization_context"]:
+                failures.append("t7d production entry exposes injected ports")
+        for statement in tree.body:
+            if isinstance(statement, ast.If) and isinstance(statement.test, ast.Compare) and isinstance(statement.test.left, ast.Name) and statement.test.left.id == "__name__":
+                continue
+            if not isinstance(statement, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and any(isinstance(node, ast.Call) for node in ast.walk(statement)):
+                failures.append("t7d import-time call")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError) as exc:
+        failures.append(f"t7d source audit failure: {type(exc).__name__}")
+
+    for relative in (T7D_TEST_RELATIVE_PATH, T7D_DOCUMENT_RELATIVE_PATH):
+        path = root / relative
+        try:
+            if path.stat().st_size <= 0:
+                failures.append(f"empty T7D support file: {relative}")
+        except OSError:
+            failures.append(f"missing T7D support file: {relative}")
+
+
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     return (
         ("package", "src/sparse_rtdetr/__init__.py"),
@@ -1839,6 +1969,9 @@ def check_repository(root: Path) -> bool:
     allowed_files |= T6B_FILES
     allowed_files |= V2A_FILES
     allowed_files |= T7C_FILES
+    t7d_files_present = files & T7D_FILES
+    if t7d_files_present:
+        allowed_files |= T7D_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -1917,6 +2050,8 @@ def check_repository(root: Path) -> bool:
     _check_t6b_production_boundary(root, failures)
     _check_training_v2a_contract(root, failures)
     _check_t7c_runtime(root, failures)
+    if t7d_files_present:
+        _check_t7d_production_boundary(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
