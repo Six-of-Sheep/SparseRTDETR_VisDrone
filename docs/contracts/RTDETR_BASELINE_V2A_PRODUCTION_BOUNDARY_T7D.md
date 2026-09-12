@@ -59,8 +59,10 @@ The isolated production process selects PyTorch's `file_system` tensor-sharing
 strategy before constructing four-worker loaders, avoiding file-descriptor
 exhaustion under the host's fixed descriptor limit.
 Samples and targets are transferred to the
-model device; vendor criterion outputs are aggregated with its `weight_dict`;
-and gradients are clipped at the frozen maximum norm. The vendor 2,000-update
+model device; the vendor criterion applies its `weight_dict` before returning
+the base, auxiliary, DN, and encoder loss values, and the production layer
+sums those returned values exactly once without reapplying the dictionary;
+gradients are clipped at the frozen maximum norm. The vendor 2,000-update
 linear warmup precedes the inert 1,000-epoch milestone scheduler. AMP is CUDA
 bfloat16 autocast with no GradScaler object, state, calls, or checkpoint
 fields. Every valid micro-batch produces one direct optimizer step, followed

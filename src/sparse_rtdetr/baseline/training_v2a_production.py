@@ -821,24 +821,16 @@ def _move_to_device(value: Any, device: Any) -> Any:
 
 
 def _weighted_loss(criterion: Any, losses: Any) -> Any:
-    """Apply the vendor criterion's frozen weight dictionary exactly once."""
+    """Sum the vendor criterion's already-preweighted losses exactly once."""
 
     if type(losses) is not dict:
         return losses
-    weights = getattr(criterion, "weight_dict", None)
-    if type(weights) is not dict or not weights:
-        _fail("production criterion weight dictionary is unavailable")
-    selected = []
-    for name, value in losses.items():
-        if name in weights:
-            weight = weights[name]
-            if type(weight) not in {int, float} or type(weight) is bool or not math.isfinite(float(weight)):
-                _fail("production criterion weight is not finite")
-            selected.append(value * weight)
-    if not selected:
-        _fail("production criterion returned no weighted losses")
-    total = selected[0]
-    for value in selected[1:]:
+    del criterion
+    if not losses:
+        _fail("production criterion returned an empty loss dictionary")
+    values = iter(losses.values())
+    total = next(values)
+    for value in values:
         total = total + value
     return total
 

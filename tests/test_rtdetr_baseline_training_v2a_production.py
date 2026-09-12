@@ -348,16 +348,106 @@ def test_bf16_context_has_no_scaler_construction_or_source_surface(policy: dict)
     assert not hasattr(FakeTorch, "GradScaler")
 
 
-def test_production_loss_uses_vendor_weight_dict_exactly_once() -> None:
-    class Criterion:
-        weight_dict = {"classification": 2.0, "boxes": 5.0}
+def _preweighted_loss_fixture() -> dict[str, float]:
+    losses = {
+        "loss_vfl": 1.0,
+        "loss_bbox": 2.0,
+        "loss_giou": 3.0,
+    }
+    for family in ("aux", "dn", "enc"):
+        for index in range(2):
+            for name in ("loss_vfl", "loss_bbox", "loss_giou"):
+                losses[f"{name}_{family}_{index}"] = float(len(losses) + 1)
+    assert len(losses) == 21
+    return losses
 
-    assert production._weighted_loss(
-        Criterion(),
-        {"classification": 3.0, "boxes": 4.0, "diagnostic": 1000.0},
-    ) == 26.0
-    with pytest.raises(production.V2AProductionError, match="weight dictionary"):
-        production._weighted_loss(object(), {"classification": 3.0})
+
+class _NoWeightRead:
+    @property
+    def weight_dict(self) -> object:
+        raise AssertionError("production aggregation must not read weight_dict")
+
+
+def test_production_loss_sums_all_21_vendor_preweighted_losses_once() -> None:
+    losses = _preweighted_loss_fixture()
+    total = production._weighted_loss(
+        _NoWeightRead(),
+        losses,
+    )
+    assert total == sum(losses.values())
+
+    class NonUnitCriterion:
+        weight_dict = {"loss_vfl": 101.0, "loss_bbox": 103.0, "loss_giou": 107.0}
+
+    assert production._weighted_loss(NonUnitCriterion(), losses) == total
+    for key, value in losses.items():
+        reduced = dict(losses)
+        del reduced[key]
+        assert production._weighted_loss(_NoWeightRead(), reduced) == total - value
+
+
+@pytest.mark.parametrize("family", ("base", "aux", "dn", "enc"))
+def test_production_loss_family_deletion_and_mutation_are_observable(family: str) -> None:
+    losses = _preweighted_loss_fixture()
+    family_keys = [
+        key
+        for key in losses
+        if (family == "base" and key in {"loss_vfl", "loss_bbox", "loss_giou"})
+        or (family != "base" and f"_{family}_" in key)
+    ]
+    baseline = production._weighted_loss(_NoWeightRead(), losses)
+
+    reduced = {key: value for key, value in losses.items() if key not in family_keys}
+    assert production._weighted_loss(_NoWeightRead(), reduced) != baseline
+
+    mutated = dict(losses)
+    mutated[family_keys[0]] += 100.0
+    assert production._weighted_loss(_NoWeightRead(), mutated) == baseline + 100.0
+
+
+def test_production_loss_rejects_empty_dict_and_preserves_scalar_compatibility() -> None:
+    with pytest.raises(production.V2AProductionError, match="empty loss dictionary"):
+        production._weighted_loss(_NoWeightRead(), {})
+    assert production._weighted_loss(_NoWeightRead(), 3.5) == 3.5
+
+
+def test_encoder_auxiliary_loss_aggregation_keeps_all_12_parameter_gradients() -> None:
+    torch = pytest.importorskip("torch")
+    parameter_names = (
+        "decoder.enc_output.norm.weight",
+        "decoder.enc_output.norm.bias",
+        "decoder.enc_output.proj.weight",
+        "decoder.enc_output.proj.bias",
+        "decoder.enc_score_head.weight",
+        "decoder.enc_score_head.bias",
+        "decoder.enc_bbox_head.layers.0.weight",
+        "decoder.enc_bbox_head.layers.0.bias",
+        "decoder.enc_bbox_head.layers.1.weight",
+        "decoder.enc_bbox_head.layers.1.bias",
+        "decoder.enc_bbox_head.layers.2.weight",
+        "decoder.enc_bbox_head.layers.2.bias",
+    )
+    parameters = {
+        name: torch.nn.Parameter(torch.tensor(1.0, device="cpu"))
+        for name in parameter_names
+    }
+    losses = {
+        "loss_vfl": torch.tensor(0.25),
+        "loss_bbox": torch.tensor(0.5),
+        "loss_giou": torch.tensor(0.75),
+    }
+    for index, parameter in enumerate(parameters.values()):
+        losses[f"loss_bbox_enc_{index}"] = parameter.square()
+
+    assert len(losses) == 15
+    total = production._weighted_loss(_NoWeightRead(), losses)
+    total.backward()
+
+    for parameter in parameters.values():
+        assert parameter.device.type == "cpu"
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+        assert parameter.grad.abs().sum().item() > 0
 
 
 def test_production_device_transfer_is_recursive() -> None:
