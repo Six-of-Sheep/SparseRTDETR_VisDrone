@@ -276,6 +276,51 @@ T7E_ALLOWED_IMPORTS = {
     "sparse_rtdetr.baseline",
 }
 
+T7H_FILES = {
+    "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a_t7h_pilot.json",
+    "src/sparse_rtdetr/baseline/training_v2a_pilot.py",
+    "tests/test_rtdetr_baseline_training_v2a_pilot.py",
+    "docs/contracts/RTDETR_BASELINE_V2A_LOSS_REPAIR_PILOT_T7H.md",
+}
+T7H_CONFIG_RELATIVE_PATH = "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a_t7h_pilot.json"
+T7H_MODULE_RELATIVE_PATH = "src/sparse_rtdetr/baseline/training_v2a_pilot.py"
+T7H_TEST_RELATIVE_PATH = "tests/test_rtdetr_baseline_training_v2a_pilot.py"
+T7H_DOCUMENT_RELATIVE_PATH = "docs/contracts/RTDETR_BASELINE_V2A_LOSS_REPAIR_PILOT_T7H.md"
+T7H_CONFIG_RAW_SIZE_BYTES = 4890
+T7H_CONFIG_RAW_SHA256 = "5135e7f90f971fd6bf700996a12a165fcc40a8d3f157a259fae783a19e758206"
+T7H_CONFIG_CANONICAL_SIZE_BYTES = 4889
+T7H_CONFIG_CANONICAL_SHA256 = "2c6f10db3248d523df65102dea21fa0595fe059db03a7289efdc3af68fb506ab"
+T7H_MODULE_SHA256 = "3e35806b9b4d6baddae446ae89da512aa217eea0b638d063fbafdefbf791d9a7"
+T7H_TEST_SHA256 = "23a40b2f7f2960460750f9fa3cd44db81e7020cc0013a843e01cfeb1335050ca"
+T7H_DOCUMENT_SHA256 = "1ec2b599a78a731138605da56f5970127281d0427a96b0632cce8d96707765c9"
+T7H_PUBLIC_NAMES = {
+    "T7HPilotError",
+    "canonical_t7h_pilot_bytes",
+    "load_t7h_pilot_contract",
+    "validate_t7h_pilot_contract",
+    "build_t7h_pilot_policy",
+    "validate_t7h_pilot_policy",
+    "build_t7h_pilot_descriptor",
+    "validate_t7h_pilot_descriptor",
+    "validate_t7h_pilot_result",
+    "run_t7h_cpu_fake",
+}
+T7H_ALLOWED_IMPORTS = {
+    "copy",
+    "hashlib",
+    "importlib",
+    "inspect",
+    "json",
+    "math",
+    "os",
+    "pathlib",
+    "shutil",
+    "stat",
+    "tempfile",
+    "typing",
+    "sparse_rtdetr.baseline",
+}
+
 TRAINING_EVIDENCE_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
     "docs/contracts/RTDETR_BASELINE_FORMAL_TRAINING_EVIDENCE_V1.md",
@@ -2060,6 +2105,109 @@ def _check_t7e_exactly_once_launcher(root: Path, failures: list[str]) -> None:
             failures.append(f"missing T7E file: {relative}")
 
 
+def _check_t7h_loss_repair_pilot(root: Path, failures: list[str]) -> None:
+    """Check the detached T7H contract and inert CPU/fake adapter surface."""
+
+    expected_hashes = {
+        T7H_MODULE_RELATIVE_PATH: T7H_MODULE_SHA256,
+        T7H_TEST_RELATIVE_PATH: T7H_TEST_SHA256,
+        T7H_DOCUMENT_RELATIVE_PATH: T7H_DOCUMENT_SHA256,
+    }
+    for relative, expected in expected_hashes.items():
+        path = root / relative
+        try:
+            observed = path.lstat()
+            if path.is_symlink() or not path.is_file() or not stat.S_ISREG(observed.st_mode):
+                failures.append(f"t7h file is not a regular non-symlink file: {relative}")
+                continue
+            if observed.st_nlink != 1:
+                failures.append(f"t7h file nlink drift: {relative}")
+            if expected.startswith("PENDING_") or _sha256(path) != expected:
+                failures.append(f"t7h file identity mismatch: {relative}")
+        except OSError:
+            failures.append(f"missing t7h file: {relative}")
+
+    config_path = root / T7H_CONFIG_RELATIVE_PATH
+    try:
+        raw = config_path.read_bytes()
+        if len(raw) != T7H_CONFIG_RAW_SIZE_BYTES or _sha256(config_path) != T7H_CONFIG_RAW_SHA256:
+            failures.append("T7H config raw identity mismatch")
+        if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            failures.append("T7H config portable bytes mismatch")
+        value = json.loads(raw[:-1].decode("utf-8"))
+        canonical = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(canonical) != T7H_CONFIG_CANONICAL_SIZE_BYTES or hashlib.sha256(canonical).hexdigest() != T7H_CONFIG_CANONICAL_SHA256:
+            failures.append("T7H config canonical identity mismatch")
+        if value.get("schema_version") != 1 or value.get("contract_id") != "rtdetrv2_r18_visdrone_baseline_v2a_t7h_loss_repair_pilot_r1" or value.get("stage") != "T7H_LOSS_REPAIR_DIAGNOSTIC_PILOT":
+            failures.append("T7H config semantic identity mismatch")
+        overlay = value.get("overlay")
+        if not isinstance(overlay, dict) or overlay.get("executed_epochs") != 10 or overlay.get("required_complete_epochs") != 10 or overlay.get("checkpoint_epochs") != list(range(1, 11)) or overlay.get("development_evaluation_epochs") != list(range(1, 11)) or overlay.get("augmentation_stop_epoch") != 117 or overlay.get("terminal_classification") != "DIAGNOSTIC_ONLY":
+            failures.append("T7H ten-epoch overlay mismatch")
+        t7g = value.get("t7g_binding")
+        if not isinstance(t7g, dict) or t7g.get("head_sha") != "476e224cadebf8787a10c38dd9a0823808b56d48" or t7g.get("tree_sha") != "cf85724186e9c7180f2f6f00cdc400d31c145ee9" or t7g.get("weighted_loss_source_sha256") != "c50be6f2ed177c8c0a97a1d1bde8cb2675ac5a60d293abf3607b37fb4d8d0bf2" or t7g.get("independent_audit_pass") is not True:
+            failures.append("T7H T7G binding mismatch")
+        readiness = value.get("readiness")
+        if not isinstance(readiness, dict) or readiness.get("contract_layer_implemented") is not True or any(readiness.get(field) is not False for field in ("cpu_fake_verified", "archive_verified", "published", "independent_audit_pass", "owner_authorization_created", "production_launch_executed", "diagnostic_complete", "training_ready", "model_selection_certified", "test_access_ready", "confirmatory_metrics_accessed", "dataset_test_split_accessed_by_this_stage")):
+            failures.append("T7H readiness is not fail-closed")
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError):
+        failures.append("T7H config parse failure")
+
+    module_path = root / T7H_MODULE_RELATIVE_PATH
+    try:
+        source_text = module_path.read_text(encoding="utf-8")
+        tree = ast.parse(source_text, filename=str(module_path))
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                imported.add(node.module or "")
+        if imported != T7H_ALLOWED_IMPORTS:
+            failures.append(f"t7h import set mismatch: extra={sorted(imported - T7H_ALLOWED_IMPORTS)} missing={sorted(T7H_ALLOWED_IMPORTS - imported)}")
+        public = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_")
+        }
+        if public != T7H_PUBLIC_NAMES:
+            failures.append(f"t7h public API mismatch: extra={sorted(public - T7H_PUBLIC_NAMES)} missing={sorted(T7H_PUBLIC_NAMES - public)}")
+        all_values: object = []
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+                all_values = ast.literal_eval(node.value)
+        if type(all_values) not in {list, tuple} or len(all_values) != len(set(all_values)) or set(all_values) != T7H_PUBLIC_NAMES:
+            failures.append("t7h __all__ mismatch")
+        forbidden_roots = {"cupy", "numpy", "pandas", "requests", "socket", "subprocess", "tensorflow", "torch", "urllib"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(alias.name.split(".", 1)[0].casefold() in forbidden_roots for alias in node.names):
+                failures.append("t7h forbidden import")
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".", 1)[0].casefold() in forbidden_roots:
+                failures.append("t7h forbidden import")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec"}:
+                failures.append("t7h dynamic execution")
+            if isinstance(node, ast.FunctionDef) and node.name == "_weighted_loss":
+                failures.append("t7h duplicates weighted-loss implementation")
+        if "GradScaler" in source_text:
+            failures.append("t7h source retains forbidden scaler surface")
+        for statement in tree.body:
+            if isinstance(statement, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            if isinstance(statement, ast.If) and isinstance(statement.test, ast.Compare) and isinstance(statement.test.left, ast.Name) and statement.test.left.id == "__name__":
+                continue
+            if any(isinstance(node, ast.Call) for node in ast.walk(statement)):
+                failures.append("t7h import-time call")
+    except (OSError, UnicodeError, SyntaxError, ValueError, TypeError):
+        failures.append("t7h source audit failure")
+
+    for relative in (T7H_TEST_RELATIVE_PATH, T7H_DOCUMENT_RELATIVE_PATH):
+        path = root / relative
+        try:
+            if path.stat().st_size <= 0:
+                failures.append(f"empty T7H support file: {relative}")
+        except OSError:
+            failures.append(f"missing T7H file: {relative}")
+
+
 def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     return (
         ("package", "src/sparse_rtdetr/__init__.py"),
@@ -2099,6 +2247,9 @@ def check_repository(root: Path) -> bool:
     t7e_files_present = files & T7E_FILES
     if t7e_files_present:
         allowed_files |= T7E_FILES
+    t7h_files_present = files & T7H_FILES
+    if t7h_files_present:
+        allowed_files |= T7H_FILES
     if files != allowed_files:
         failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
 
@@ -2181,6 +2332,8 @@ def check_repository(root: Path) -> bool:
         _check_t7d_production_boundary(root, failures)
     if t7e_files_present:
         _check_t7e_exactly_once_launcher(root, failures)
+    if t7h_files_present:
+        _check_t7h_loss_repair_pilot(root, failures)
 
     required_text = {
         "README.md": ["P2 YOLO", "RT-DETRv2", "test split", "vendor"],
