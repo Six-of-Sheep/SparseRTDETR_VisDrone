@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -97,6 +98,17 @@ class _PrimaryEvaluator:
         self.events.append("evaluate")
         self.calls.append(epoch)
         return {"AP": 50.0 + epoch, "AP50": 60.0, "AR500": 70.0}
+
+
+class _TensorLikeLoss:
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def detach(self) -> "_TensorLikeLoss":
+        return self
+
+    def item(self) -> float:
+        return self.value
 
 
 def _fake_ports(policy: dict, events: list[str]) -> dict:
@@ -227,6 +239,16 @@ def test_cpu_fake_call_order_step_ema_primary_and_terminal(policy: dict) -> None
     assert result["terminal_stdout"]["terminal_count"] == 1
     assert all("t7d_" in row["path"] or "t7d_" in Path(row["path"]).name for row in result["checkpoint_inventory"])
     assert result["production"]["formal_training_executed"] is False
+
+
+def test_tensor_loss_is_recorded_as_epoch_mean(policy: dict) -> None:
+    events: list[str] = []
+    ports = _fake_ports(policy, events)
+    ports["compute_loss"] = lambda batch: _TensorLikeLoss(2.5)
+    result = production.run_v2a_cpu_fake(policy, ports, epochs=1)
+    progress_path = Path(result["progress_inventory"]["path"])
+    row = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert row["mean_loss"] == 2.5
 
 
 def test_cpu_fake_duplicate_and_production_port_injection_are_rejected(policy: dict) -> None:

@@ -69,6 +69,8 @@ VisDrone primary evaluator over EMA state and returns unrounded `AP`, `AP50`,
 and `AR500` for deterministic selection.
 
 Epoch progress is canonical JSONL flushed and fsynced per record. Production
+loss tensors are detached and converted to a finite scalar for every batch;
+the recorded `mean_loss` is the arithmetic mean of those observed values.
 last, best, periodic, and final checkpoints are durable `torch.save` artifacts
 that bind raw and EMA model state, optimizer, scheduler, warmup, RNG,
 no-scaler semantics, source, contract, environment, data, and run identities.

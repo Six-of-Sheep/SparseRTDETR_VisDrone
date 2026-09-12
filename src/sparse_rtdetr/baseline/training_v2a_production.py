@@ -774,13 +774,27 @@ def _call_port(function: Any, candidates: tuple[tuple[Any, ...], ...], field: st
 
 
 def _finite_loss(value: Any) -> bool:
-    if type(value) in {int, float} and type(value) is not bool:
-        return math.isfinite(float(value))
-    item = getattr(value, "item", None)
-    if callable(item):
+    try:
+        return math.isfinite(_loss_scalar(value))
+    except V2AProductionError:
+        return False
+
+
+def _loss_scalar(value: Any) -> float:
+    """Return the detached scalar used for durable epoch-loss evidence."""
+
+    scalar = value
+    if type(value) not in {int, float} or type(value) is bool:
+        detach = getattr(value, "detach", None)
+        if callable(detach):
+            scalar = detach()
+        item = getattr(scalar, "item", None)
+        if not callable(item):
+            _fail("loss does not expose a scalar observation")
         scalar = item()
-        return type(scalar) in {int, float} and type(scalar) is not bool and math.isfinite(float(scalar))
-    return True
+    if type(scalar) not in {int, float} or type(scalar) is bool:
+        _fail("loss scalar observation has invalid type")
+    return float(scalar)
 
 
 def _loss_total(value: Any) -> Any:
@@ -1260,7 +1274,8 @@ def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: s
             with context:
                 loss_value = _call_port(capability.compute_loss, ((capability.model, batch, epoch), (batch, epoch), (capability.model, batch), (batch,)), "compute_loss")
                 loss_value = _loss_total(loss_value)
-                if not _finite_loss(loss_value):
+                loss_scalar = _loss_scalar(loss_value)
+                if not math.isfinite(loss_scalar):
                     _fail("loss is non-finite")
                 backward = capability.backward
                 if callable(backward):
@@ -1296,8 +1311,7 @@ def _run_epoch_loop(capability: _ProductionCapability, *, epochs: int, run_id: s
             if callable(warmup_step):
                 warmup_step()
             batch_count += 1
-            if type(loss_value) in {int, float} and type(loss_value) is not bool:
-                mean_loss += float(loss_value)
+            mean_loss += loss_scalar
         if batch_count == 0:
             _fail("epoch has no training batches")
         warmup_finished = getattr(capability.warmup, "finished", None)
