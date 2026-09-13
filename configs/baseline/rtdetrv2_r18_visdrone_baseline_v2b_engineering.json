@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "baseline_id": "rtdetrv2_r18_visdrone_baseline_v2b_engineering",
+  "scope": "cpu_synthetic_engineering",
+  "config": {
+    "seed": 0,
+    "input_size": 640,
+    "physical_batch_size": 16,
+    "accumulation_steps": 1,
+    "amp_dtype": "bfloat16",
+    "bn_statistics": "train",
+    "pretrained_required": true,
+    "num_denoising": 100,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "clip_max_norm": 0.1,
+    "warmup_steps": 2000,
+    "ema_decay": 0.9999,
+    "ema_warmups": 2000
+  },
+  "pretrained_authority": {
+    "weight_relative_path": "artifacts/pretrained_rtdetrv2_presnet18_imagenet_v1/ResNet18_vd_pretrained_from_paddle.pth",
+    "weight_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720",
+    "weight_size_bytes": 44878642
+  },
+  "semantics": {
+    "loss": "sum_i max(GT_i,1)/max(sum_i GT_i,1) * sum(preweighted_vendor_loss_i)",
+    "tail": "drop_incomplete_common_logical_batch",
+    "bn": "statistics_train_or_all_statistics_frozen_affine_trainable",
+    "dn": "native_per_physical_microbatch",
+    "amp": "BF16_model_and_criterion_no_GradScaler",
+    "optimizer_ema_warmup_clock": "one_per_complete_logical_window",
+    "scheduler_clock": "one_per_completed_epoch_after_warmup",
+    "resume": "complete_logical_window_only_CPU_RNG_exact; real_multiworker_augmentation_not_certified"
+  },
+  "readiness": {
+    "cpu_verification_evidence_required": true,
+    "gpu_training_authorized": false,
+    "real_dataset_access_authorized": false,
+    "confirmatory_test_access_authorized": false,
+    "high_resolution_experiment_authorized": false,
+    "scientific_certified": false
+  },
+  "notes": [
+    "The CPU verification tool records explicit small-batch/size overrides from this engineering target.",
+    "This file does not alter frozen v1/v2a contracts or authorize a production launcher.",
+    "Native GPU collection remains unexecuted and cannot certify a graphics-clock cap."
+  ]
+}

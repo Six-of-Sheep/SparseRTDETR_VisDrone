@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import argparse
 import ast
 import json
 import re
@@ -112,6 +113,20 @@ BASELINE_FILES = {
     "tests/test_rtdetr_baseline_smoke_outer_launcher.py",
     "tests/test_rtdetr_baseline_training_contract.py",
     "tests/test_rtdetr_baseline_training_runtime.py",
+}
+
+V2B_ENGINEERING_FILES = {
+    'src/sparse_rtdetr/baseline/training_v2b.py',
+    'src/sparse_rtdetr/baseline/training_v2b_engine.py',
+    'src/sparse_rtdetr/baseline/training_v2b_checkpoint.py',
+    'src/sparse_rtdetr/baseline/training_v2b_evidence.py',
+    'tests/test_rtdetr_baseline_training_v2b.py',
+    'tests/test_rtdetr_baseline_training_v2b_engine.py',
+    'tests/test_rtdetr_baseline_training_v2b_checkpoint.py',
+    'tests/test_rtdetr_baseline_training_v2b_evidence.py',
+    'tools/verify_training_v2b_cpu.py',
+    'configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_engineering.json',
+    'docs/contracts/RTDETR_BASELINE_V2B_ENGINEERING.md',
 }
 
 V2A_FILES = {
@@ -646,6 +661,11 @@ BASELINE_MODEL_IMPORT_FILES = {
     "src/sparse_rtdetr/baseline/smoke.py",
     "src/sparse_rtdetr/baseline/smoke_evidence.py",
     "tests/test_rtdetr_baseline_smoke.py",
+}
+
+# Explicitly allow only the new CPU engineering implementation and tests.
+BASELINE_MODEL_IMPORT_FILES |= {
+    path for path in V2B_ENGINEERING_FILES if path.endswith(".py")
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2225,7 +2245,11 @@ def _training_process_module_rows() -> tuple[tuple[str, str], ...]:
     )
 
 
-def check_repository(root: Path) -> bool:
+def check_repository(root: Path, *, source_only: bool = False) -> bool:
+    """Validate frozen source; default also requires the historical runtime artifacts.
+
+    source_only is an explicit engineering scope, never a production admission.
+    """
     failures: list[str] = []
     files, file_policy_failures = _file_policy(root)
     failures.extend(file_policy_failures)
@@ -2240,6 +2264,8 @@ def check_repository(root: Path) -> bool:
     allowed_files |= T6A_FILES
     allowed_files |= T6B_FILES
     allowed_files |= V2A_FILES
+    if files & V2B_ENGINEERING_FILES:
+        allowed_files |= V2B_ENGINEERING_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
@@ -2314,8 +2340,12 @@ def check_repository(root: Path) -> bool:
             raise RuntimeError("training contract module spec unavailable")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        binding = module.training_contract_binding(root)
-        if binding["canonical_sha256"] != module.TRAINING_CONTRACT_CANONICAL_SHA256:
+        if source_only:
+            config = module.load_training_contract(root)
+            digest = hashlib.sha256(module.canonical_training_contract_bytes(config)).hexdigest()
+        else:
+            digest = module.training_contract_binding(root)["canonical_sha256"]
+        if digest != module.TRAINING_CONTRACT_CANONICAL_SHA256:
             failures.append("formal training contract canonical identity mismatch")
     except Exception as exc:
         failures.append(f"formal training contract validation failure: {type(exc).__name__}: {exc}")
@@ -2352,12 +2382,20 @@ def check_repository(root: Path) -> bool:
         for failure in failures:
             print(f"FAIL: {failure}")
         return False
-    print("repository_contract_check: PASS")
+    if source_only:
+        print("repository_contract_check: SOURCE_ONLY_PASS; runtime_artifacts_checked=false")
+    else:
+        print("repository_contract_check: PASS")
     return True
 
 
 def main() -> int:
-    return 0 if check_repository(Path(__file__).resolve().parents[1]) else 1
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-only", action="store_true",
+                        help="check source without historical runtime/data artifacts")
+    args = parser.parse_args()
+    return 0 if check_repository(Path(__file__).resolve().parents[1],
+                                source_only=args.source_only) else 1
 
 
 if __name__ == "__main__":
