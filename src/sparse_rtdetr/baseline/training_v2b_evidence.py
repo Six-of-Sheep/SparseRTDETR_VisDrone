@@ -132,16 +132,22 @@ def file_reference(path: str | os.PathLike[str]) -> dict[str, Any]:
             "sha256_scope": "complete_file_bytes"}
 
 
-def _verify_reference(reference: Mapping[str, Any]) -> bytes:
+def _validate_reference_shape(reference: Mapping[str, Any]) -> None:
     if type(reference) is not dict:
         raise EvidenceError("file reference must be a dict")
     for key in ("path", "size_bytes", "sha256"):
         if key not in reference:
             raise EvidenceError("file reference missing " + key)
+    if type(reference["path"]) is not str or not reference["path"]:
+        raise EvidenceError("file path must be a nonempty string")
     _sha(reference["sha256"], "file sha256")
     _count(reference["size_bytes"], "file size")
     if reference.get("sha256_scope", "complete_file_bytes") != "complete_file_bytes":
         raise EvidenceError("file hash scope is not complete_file_bytes")
+
+
+def _verify_reference(reference: Mapping[str, Any]) -> bytes:
+    _validate_reference_shape(reference)
     _, raw = _read_regular(reference["path"])
     if len(raw) != reference["size_bytes"] or sha256_bytes(raw) != reference["sha256"]:
         raise EvidenceError("file reference size/hash mismatch")
@@ -193,8 +199,15 @@ def _verify_bound_engine_configuration(config: Mapping[str, Any], actual: Mappin
         raise EvidenceError("bound engine configuration mismatch: input_size")
     if "expected_input_size" in config and config["expected_input_size"] != expected_size:
         raise EvidenceError("bound engine expected_input_size contradicts input_size")
-    if config.get("device") != "cpu" or config.get("scope") != "cpu_synthetic_engineering":
-        raise EvidenceError("bound engine device/scope must be CPU synthetic engineering")
+    scope = config.get("scope")
+    if scope == "cpu_synthetic_engineering":
+        if config.get("device") != "cpu":
+            raise EvidenceError("synthetic engineering device must be CPU")
+    elif scope == "train_core_runtime_engineering":
+        if config.get("device") not in ("cpu", "cuda:0"):
+            raise EvidenceError("train_core runtime device must be CPU or explicit cuda:0")
+    else:
+        raise EvidenceError("unknown bound engine device/scope")
 
 
 def write_exclusive_json(path: str | os.PathLike[str], document: Any) -> dict[str, Any]:
@@ -285,7 +298,8 @@ def build_run_binding(*, run_id: str, code_paths: Mapping[str, str | os.PathLike
                       config: Mapping[str, Any], initial_parameters: Mapping[str, Any],
                       initial_state: Mapping[str, Any] | None = None,
                       input_manifests: Mapping[str, str | os.PathLike[str]] | None = None,
-                      synthetic_input: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                      synthetic_input: Mapping[str, Any] | None = None,
+                      train_core_input: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Bind real source bytes, resolved config, CPU state identity, and input identity."""
     if type(run_id) is not str or not run_id:
         raise EvidenceError("run_id must be a nonempty string")
@@ -301,9 +315,13 @@ def build_run_binding(*, run_id: str, code_paths: Mapping[str, str | os.PathLike
         initial["identity_scope"] = "model_state_dict"
         initial["parameter_reference"] = parameters
         _validate_initial(initial)
-    if bool(input_manifests) == bool(synthetic_input):
-        raise EvidenceError("choose exactly one of real manifests and explicit synthetic input")
-    if input_manifests:
+    if sum(bool(x) for x in (input_manifests, synthetic_input, train_core_input)) != 1:
+        raise EvidenceError("choose exactly one input identity")
+    if train_core_input:
+        loader = _copy(train_core_input)
+        data = {"kind": "train_core_runtime", "loader": loader,
+                "loader_binding_sha256": loader.get("loader_binding_sha256")}
+    elif input_manifests:
         if not set(input_manifests) <= _DATA_ROLES:
             raise EvidenceError("only train_core/development manifest roles are allowed")
         data = {"kind": "manifest_binding_only",
@@ -318,7 +336,76 @@ def build_run_binding(*, run_id: str, code_paths: Mapping[str, str | os.PathLike
                "code": {name: file_reference(path) for name, path in code_paths.items()},
                "config": _copy(config), "initial_weights": initial, "data": data}
     binding["binding_sha256"] = canonical_sha256(binding)
-    return binding
+    return validate_run_binding(binding)
+
+
+def _validate_train_core_input(data: dict, code: dict, config: dict, *, verify_files: bool) -> None:
+    """Validate identity only; a separate batch receipt proves actual loading.
+
+    This is standard-library-only so a passive native hardware collector can
+    validate a run binding without importing a model framework or loading data.
+    """
+    if set(data) != {"kind", "loader", "loader_binding_sha256"}:
+        raise EvidenceError("train_core input schema mismatch")
+    loader = data.get("loader")
+    keys = {"schema_version", "role", "annotation", "manifest", "image_root",
+            "sample_count", "annotation_count", "config", "transforms", "source",
+            "loader_binding_sha256"}
+    if type(loader) is not dict or set(loader) != keys:
+        raise EvidenceError("train_core loader binding schema mismatch")
+    if loader["schema_version"] != 1 or type(loader["schema_version"]) is not int or loader["role"] != "train_core":
+        raise EvidenceError("only train_core runtime input is supported")
+    digest = _sha(data["loader_binding_sha256"], "loader binding SHA")
+    body = {key: value for key, value in loader.items() if key != "loader_binding_sha256"}
+    # The loader's independent identity uses the default ASCII JSON encoder.
+    actual = sha256_bytes(json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                    allow_nan=False).encode())
+    if loader["loader_binding_sha256"] != digest or actual != digest:
+        raise EvidenceError("train_core loader binding digest mismatch")
+    semantic = loader["config"]
+    if type(semantic) is not dict or semantic.get("role") != "train_core":
+        raise EvidenceError("invalid train_core semantic configuration")
+    for name in ("seed", "input_size", "logical_batch_size", "augmentation_stop_internal_epoch"):
+        if semantic.get(name) != config.get(name) or type(semantic.get(name)) is not int:
+            raise EvidenceError("train_core/model configuration mismatch: " + name)
+    _count(semantic["seed"], "train_core seed")
+    _count(semantic["logical_batch_size"], "logical batch size", 1)
+    _count(semantic["augmentation_stop_internal_epoch"], "augmentation stop")
+    if (semantic["seed"] >= 2**32 or not 128 <= semantic["input_size"] <= 640
+            or semantic["input_size"] % 32):
+        raise EvidenceError("train_core seed or input geometry is out of scope")
+    if config.get("scope") != "train_core_runtime_engineering":
+        raise EvidenceError("train_core data requires an explicit runtime scope")
+    _count(loader["sample_count"], "train_core samples", semantic["logical_batch_size"])
+    _count(loader["annotation_count"], "train_core annotations")
+    forbidden = {"confirmatory", "test", "development", "val", "visdrone2019-det-test-dev",
+                 "visdrone2019-det-test-challenge", "visdrone2019-det-val"}
+    for name in ("annotation", "manifest", "image_root"):
+        if name != "image_root" and type(loader[name]) is not dict:
+            raise EvidenceError("train_core metadata reference must be a mapping")
+        raw_path = loader[name] if name == "image_root" else loader[name].get("path")
+        if type(raw_path) is not str or not Path(raw_path).is_absolute():
+            raise EvidenceError("train_core paths must be explicit absolute paths")
+        path = Path(raw_path)
+        candidates = (path, path.resolve()) if verify_files else (path,)
+        if any(part.casefold() in forbidden or part.casefold().startswith("confirmatory_")
+               for candidate in candidates for part in candidate.parts):
+            raise EvidenceError("train_core binding crosses a forbidden data role")
+        if name != "image_root":
+            _validate_reference_shape(loader[name])
+            expected = {"annotation": "train_core_coco.json", "manifest": "train_core_manifest.json"}[name]
+            if any(candidate.name != expected for candidate in candidates):
+                raise EvidenceError("train_core metadata filename mismatch")
+            if verify_files:
+                _verify_reference(loader[name])
+    source = loader["source"]
+    if type(source) is not dict or type(source.get("sources")) is not list or not source["sources"]:
+        raise EvidenceError("train_core source identity missing")
+    for row in source["sources"]:
+        if type(row) is not dict or set(row) != {"path", "sha256"}:
+            raise EvidenceError("invalid train_core source row")
+        if code.get(row["path"], {}).get("sha256") != row["sha256"]:
+            raise EvidenceError("train_core source differs from run source binding")
 
 
 def validate_run_binding(binding: Mapping[str, Any], *, verify_files: bool = True) -> dict[str, Any]:
@@ -336,8 +423,9 @@ def validate_run_binding(binding: Mapping[str, Any], *, verify_files: bool = Tru
     if _sha(binding["binding_sha256"], "binding hash") != canonical_sha256(body):
         raise EvidenceError("run binding digest mismatch")
     _validate_initial(binding["initial_weights"])
-    if verify_files:
-        for reference in binding["code"].values():
+    for reference in binding["code"].values():
+        _validate_reference_shape(reference)
+        if verify_files:
             _verify_reference(reference)
     data = binding["data"]
     if data.get("kind") == "synthetic":
@@ -351,9 +439,12 @@ def validate_run_binding(binding: Mapping[str, Any], *, verify_files: bool = Tru
             raise EvidenceError("invalid manifest role")
         if data.get("dataset_executed") is not False:
             raise EvidenceError("manifest identity does not prove dataset execution")
-        if verify_files:
-            for reference in manifests.values():
+        for reference in manifests.values():
+            _validate_reference_shape(reference)
+            if verify_files:
                 _verify_reference(reference)
+    elif data.get("kind") == "train_core_runtime":
+        _validate_train_core_input(data, binding["code"], binding["config"], verify_files=verify_files)
     else:
         raise EvidenceError("unknown input identity kind")
     return _copy(binding)
@@ -458,9 +549,10 @@ def collect_native_cpu_observation(binding: Mapping[str, Any]) -> NativeObservat
         "torch": {"distribution_version": installed_torch,
                   "module_loaded": loaded_torch is not None,
                   "build_cuda": getattr(getattr(loaded_torch, "version", None), "cuda", None),
-                  "cuda_runtime_or_device_queried": False},
+                  "cuda_runtime_or_device_queried": False,
+                  "query_claim_scope": "this_collector_only_not_process_history"},
         "environment": {name: os.environ.get(name) for name in
-                        ("CUDA_VISIBLE_DEVICES", "OMP_NUM_THREADS", "MKL_NUM_THREADS")},
+                        ("CUDA_VISIBLE_DEVICES", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "MKL_THREADING_LAYER")},
         "rapl": _rapl_observation(),
     })
     return _finish_observation(payload)

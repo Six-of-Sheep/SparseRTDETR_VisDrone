@@ -8,7 +8,7 @@ import subprocess
 import pytest
 import torch
 
-from sparse_rtdetr.baseline.training_v2b_checkpoint import save_checkpoint
+from sparse_rtdetr.baseline.training_v2b_checkpoint import CheckpointError, save_checkpoint
 from sparse_rtdetr.baseline.training_v2b_engine import AccumulationEngine
 
 from sparse_rtdetr.baseline import training_v2b_evidence as evidence
@@ -544,6 +544,15 @@ def test_report_rejects_self_consistent_binding_that_mislabels_actual_engine(
         false_binding["config"][field] = value
     false_binding["binding_sha256"] = evidence.canonical_sha256(
         {key: item for key, item in false_binding.items() if key != "binding_sha256"})
+    if field == "device":
+        # Schema2 now rejects device mislabeling before writing any checkpoint,
+        # earlier than the completed-report comparison tested below.
+        with pytest.raises(CheckpointError, match="runtime device"):
+            save_checkpoint(tmp_path / "mislabelled_engine.pt", model=cpu_state["model"],
+                            optimizer=cpu_state["optimizer"], engine=cpu_state["engine"],
+                            ema=None, binding=false_binding)
+        assert not (tmp_path / "mislabelled_engine.pt").exists()
+        return
     # This is still an actual CPU checkpoint with a valid matching binding hash.
     # Only the semantic comparison can detect that the declaration is false.
     checkpoint = save_checkpoint(

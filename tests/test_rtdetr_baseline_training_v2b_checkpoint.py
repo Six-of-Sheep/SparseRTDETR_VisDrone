@@ -110,7 +110,7 @@ BINDING = {
 def make_state(seed=17, *, optimizer_kind="adamw", amsgrad=False, unused=False, multistep=False):
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
+    torch.random.default_generator.manual_seed(seed)
     model = TinyDetector(unused=unused)
     params = list(model.parameters())
     optimizer_class = torch.optim.AdamW if optimizer_kind == "adamw" else torch.optim.Adam
@@ -688,3 +688,476 @@ def test_legacy_bn_backward_policy_is_rejected_before_live_load(tmp_path, monkey
     assert target["engine"].failed is False
     with pytest.raises(CheckpointError, match="engine state is invalid"):
         inspect_checkpoint(bad, expected_sha256=bad_sha, expected_binding=BINDING)
+
+
+# Schema 2 adds runtime/topology and acknowledged-loader identity. These tests
+# use only CPU tensors; CUDA behavior below is explicitly simulated.
+from test_rtdetr_baseline_training_v2b_device import (
+    GPU_UUID, fake_cuda, forbid_cuda,
+)
+
+
+def write_payload(tmp_path, payload, name="edited.pt"):
+    path = tmp_path / name
+    torch.save(payload, path)
+    return path, {"sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+def test_new_schema_records_cpu_runtime_and_legacy_cpu_artifact_remains_readable(tmp_path, monkeypatch):
+    source, path, reference = trained_checkpoint(tmp_path)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    assert payload["schema_version"] == 2
+    assert payload["runtime"]["device"] == "cpu"
+    assert payload["sampler"] is None
+    legacy = deepcopy(payload)
+    legacy["schema_version"] = 1
+    del legacy["runtime"], legacy["sampler"]
+    old_path, old_ref = write_payload(tmp_path, legacy, "legacy-cpu.pt")
+    target = make_state(87)
+    forbid_cuda(monkeypatch)
+    inspected = inspect_checkpoint(old_path, expected_sha256=old_ref["sha256"], expected_binding=BINDING)
+    restored = restore(old_path, old_ref, target)
+    assert inspected["schema_version"] == restored["schema_version"] == 1
+    for key in ("model", "optimizer", "ema", "engine", "scheduler", "warmup"):
+        assert_tree_equal(source[key].state_dict(), target[key].state_dict())
+
+
+def test_legacy_cuda_without_uuid_binding_is_explicitly_rejected(tmp_path):
+    _, path, _ = trained_checkpoint(tmp_path)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    payload["schema_version"] = 1
+    del payload["runtime"], payload["sampler"]
+    payload["rng"]["cuda"] = {"0": torch.zeros(16, dtype=torch.uint8)}
+    old_path, old_ref = write_payload(tmp_path, payload, "legacy-cuda.pt")
+    with pytest.raises(CheckpointError, match="legacy CUDA.*UUID"):
+        inspect_checkpoint(old_path, expected_sha256=old_ref["sha256"], expected_binding=BINDING)
+    with pytest.raises(CheckpointError, match="legacy CUDA.*UUID"):
+        restore(old_path, old_ref, make_state())
+
+
+def test_entire_cpu_checkpoint_cycle_has_no_cuda_api_calls(tmp_path, monkeypatch):
+    source = make_state()
+    advance(source, 1)
+    target = make_state(99)
+    from sparse_rtdetr.baseline.training_v2b_device import prepare_runtime
+    forbid_cuda(monkeypatch)
+    runtime = prepare_runtime(seed=17)
+    path = tmp_path / "cuda-forbidden.pt"
+    reference = save_checkpoint(path, **source, binding=BINDING, runtime=runtime)
+    inspect_checkpoint(path, expected_sha256=reference["sha256"], expected_binding=BINDING)
+    restore_checkpoint(
+        path, **target, expected_sha256=reference["sha256"],
+        expected_binding=BINDING, runtime=runtime,
+    )
+    assert_tree_equal(source["model"].state_dict(), target["model"].state_dict())
+
+
+class AcknowledgedSyntheticSampler:
+    """State-contract double; no datasets, image access, or workers are involved."""
+    binding_sha256 = "e" * 64
+
+    def __init__(self, engine_state):
+        self.record(engine_state)
+
+    def record(self, engine_state):
+        epoch = engine_state["epoch"]
+        start = engine_state["epoch_start_optimizer_updates"]
+        self.state = {
+            "schema_version": 1, "binding_sha256": self.binding_sha256,
+            "epoch": epoch, "epoch_active": engine_state["epoch_active"],
+            "epoch_start_optimizer_updates": start,
+            "optimizer_updates": engine_state["optimizer_updates"],
+            "completed_batches": engine_state["optimizer_updates"] - start,
+            "logical_batch_size": 8, "dataset_size": 17,
+            "batches_per_epoch": 2, "dropped_samples": 1,
+            "order_sha256": hashlib.sha256(b"[]").hexdigest() if epoch == 0 else "f" * 64,
+        }
+
+    def state_dict(self):
+        return deepcopy(self.state)
+
+    def validate_state_dict(self, state):
+        from sparse_rtdetr.baseline.training_v2b_data import validate_loader_state
+        validate_loader_state(state)
+        if state["binding_sha256"] != self.binding_sha256:
+            raise ValueError("synthetic sampler binding mismatch")
+
+    def validate_engine_state(self, state, engine_state):
+        from sparse_rtdetr.baseline.training_v2b_data import validate_loader_state
+        self.validate_state_dict(state)
+        validate_loader_state(state, engine_state)
+
+    def load_state_dict(self, state):
+        self.validate_state_dict(state)
+        self.state = deepcopy(state)
+
+
+def sampler_binding():
+    bound = deepcopy(BINDING)
+    bound["data"]["loader_binding_sha256"] = AcknowledgedSyntheticSampler.binding_sha256
+    return bound
+
+
+def test_checkpoint_inspects_and_restores_acknowledged_sampler_cursor(tmp_path, monkeypatch):
+    source = make_state()
+    advance(source, 3)
+    source["sampler"] = AcknowledgedSyntheticSampler(source["engine"].state_dict())
+    bound = sampler_binding()
+    path = tmp_path / "acknowledged-cursor.pt"
+    reference = save_checkpoint(path, **source, binding=bound)
+    expected_log = advance(source, 1)
+    target = make_state(19)
+    target["sampler"] = AcknowledgedSyntheticSampler(target["engine"].state_dict())
+    with monkeypatch.context() as safety:
+        forbid_cuda(safety)
+        info = inspect_checkpoint(path, expected_sha256=reference["sha256"], expected_binding=bound)
+        assert info["sampler"]["state"]["completed_batches"] == 1
+        assert info["sampler"]["state"]["optimizer_updates"] == info["optimizer_updates"] == 3
+        result = restore(path, reference, target, binding=bound)
+        assert result["sampler_restored"] is True
+        assert target["sampler"].state_dict() == source["sampler"].state_dict()
+    assert expected_log == advance(target, 1)
+
+
+@pytest.mark.parametrize("kind", ["missing", "unbound", "wrong_binding", "unacknowledged_update"])
+def test_bound_sampler_must_match_acknowledged_engine_state_at_save(tmp_path, kind):
+    state = make_state()
+    state["sampler"] = AcknowledgedSyntheticSampler(state["engine"].state_dict())
+    bound = sampler_binding()
+    if kind == "missing":
+        del state["sampler"]
+    elif kind == "unbound":
+        del bound["data"]["loader_binding_sha256"]
+    elif kind == "wrong_binding":
+        bound["data"]["loader_binding_sha256"] = "a" * 64
+    else:
+        advance(state, 1)  # Model update happened, loader cursor was not committed.
+    path = tmp_path / "invalid-cursor.pt"
+    with pytest.raises(CheckpointError, match="loader|sampler"):
+        save_checkpoint(path, **state, binding=bound)
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("kind", ["missing_target", "tampered_cursor", "tampered_identity"])
+def test_sampler_restore_preflight_rejects_before_live_model_mutation(tmp_path, monkeypatch, kind):
+    source = make_state()
+    advance(source, 1)
+    source["sampler"] = AcknowledgedSyntheticSampler(source["engine"].state_dict())
+    bound = sampler_binding()
+    path = tmp_path / "sampler-good.pt"
+    reference = save_checkpoint(path, **source, binding=bound)
+    if kind != "missing_target":
+        payload = torch.load(path, map_location="cpu", weights_only=True)
+        key = "completed_batches" if kind == "tampered_cursor" else "binding_sha256"
+        payload["sampler"]["state"][key] = 0 if kind == "tampered_cursor" else "a" * 64
+        path, reference = write_payload(tmp_path, payload, "sampler-bad.pt")
+    target = make_state()
+    if kind != "missing_target":
+        target["sampler"] = AcknowledgedSyntheticSampler(target["engine"].state_dict())
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("invalid cursor must precede every live load")
+    for key in ("model", "optimizer", "ema", "engine", "scheduler", "warmup"):
+        monkeypatch.setattr(type(target[key]), "load_state_dict", forbidden)
+    with pytest.raises(CheckpointError):
+        restore(path, reference, target, binding=bound)
+    assert calls == []
+
+
+def test_optimizer_post_restore_placement_failure_poisoned_before_resume(tmp_path, monkeypatch):
+    _, path, reference = trained_checkpoint(tmp_path)
+    target = make_state()
+    loader = target["optimizer"].load_state_dict
+    def misplaced(state):
+        loader(state)
+        first = next(iter(target["optimizer"].state.values()))
+        first["exp_avg"] = torch.empty_like(first["exp_avg"], device="meta")
+    monkeypatch.setattr(target["optimizer"], "load_state_dict", misplaced)
+    with pytest.raises(CheckpointError, match="reconstruction invalidated"):
+        restore(path, reference, target)
+    assert target["engine"].failed is True
+
+
+def prepare_checkpoint_fake_cuda(fake_cuda, monkeypatch, binding):
+    from sparse_rtdetr.baseline import training_v2b_hardware as hardware
+    from sparse_rtdetr.baseline.training_v2b_device import prepare_runtime
+    def admission(*args, **kwargs):
+        assert kwargs["binding"] == binding
+        assert kwargs["expected_gpu_uuid"] == GPU_UUID
+        fake_cuda.calls.append(("admission",))
+        return {"gpu": {"uuid": GPU_UUID}}
+    monkeypatch.setattr(hardware, "require_native_hardware_admission", admission)
+    return prepare_runtime(
+        device="cuda:0", seed=17, binding=binding,
+        gpu_probe="explicit-test-double", expected_gpu_uuid=GPU_UUID,
+    )
+
+
+def gpu_mock_binding():
+    bound = deepcopy(BINDING)
+    bound["config"].update(device="cuda:0", cuda_gpu_uuid=GPU_UUID)
+    return bound
+
+
+def test_mock_cuda_checkpoint_serializes_cpu_rng_bytes_and_restores_before_resumed_work(tmp_path, fake_cuda, monkeypatch):
+    # Model/optimizer execution remains CPU. Device placement is isolated from
+    # this test of checkpoint serialization, RNG control flow, and restoration.
+    source = make_state()
+    advance(source, 3)
+    bound = gpu_mock_binding()
+    runtime = prepare_checkpoint_fake_cuda(fake_cuda, monkeypatch, bound)
+    monkeypatch.setattr(checkpoint, "_check_placement", lambda *args: None)
+    path = tmp_path / "mock-cuda-rng.pt"
+    reference = save_checkpoint(path, **source, binding=bound, runtime=runtime)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    assert payload["runtime"]["cuda_devices"][0]["uuid"] == GPU_UUID
+    assert payload["rng"]["cuda"]["0"].device.type == "cpu"
+    assert payload["rng"]["cuda"]["0"].dtype == torch.uint8
+    expected_cuda_draw = torch.rand(9, generator=fake_cuda.default_generators[0].generator)
+    target = make_state(82)
+    result = restore_checkpoint(
+        path, **target, expected_binding=bound,
+        expected_sha256=reference["sha256"], runtime=runtime,
+    )
+    assert result["runtime"] == runtime.identity
+    replay_cuda_draw = torch.rand(9, generator=fake_cuda.default_generators[0].generator)
+    assert torch.equal(expected_cuda_draw, replay_cuda_draw)
+    assert_tree_equal(source["optimizer"].state_dict(), target["optimizer"].state_dict())
+
+
+def test_mock_cuda_artifact_inspection_uses_no_cuda_api(tmp_path, fake_cuda, monkeypatch):
+    source = make_state()
+    bound = gpu_mock_binding()
+    runtime = prepare_checkpoint_fake_cuda(fake_cuda, monkeypatch, bound)
+    monkeypatch.setattr(checkpoint, "_check_placement", lambda *args: None)
+    path = tmp_path / "mock-cuda-inspect.pt"
+    reference = save_checkpoint(path, **source, binding=bound, runtime=runtime)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("CPU inspection of a CUDA artifact must never initialize/query CUDA")
+    for name in ("is_initialized", "get_rng_state", "set_rng_state", "current_device", "device_count", "init"):
+        monkeypatch.setattr(fake_cuda, name, forbidden)
+    inspected = inspect_checkpoint(path, expected_sha256=reference["sha256"], expected_binding=bound)
+    assert inspected["runtime"]["device"] == "cuda:0"
+
+
+@pytest.mark.parametrize("kind", ["uuid", "ordinal", "build", "backend", "rng_shape"])
+def test_mock_cuda_checkpoint_remapping_or_runtime_mismatch_rejected_before_live_load(tmp_path, fake_cuda, monkeypatch, kind):
+    source = make_state()
+    bound = gpu_mock_binding()
+    runtime = prepare_checkpoint_fake_cuda(fake_cuda, monkeypatch, bound)
+    monkeypatch.setattr(checkpoint, "_check_placement", lambda *args: None)
+    path = tmp_path / "mock-cuda-good.pt"
+    save_checkpoint(path, **source, binding=bound, runtime=runtime)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    identity = payload["runtime"]
+    if kind == "uuid":
+        identity["cuda_devices"][0]["uuid"] = "GPU-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        identity["cuda_visible_devices"] = identity["cuda_devices"][0]["uuid"]
+    elif kind == "ordinal":
+        identity["device"] = "cuda:1"
+        identity["cuda_devices"][0]["index"] = 1
+    elif kind == "build":
+        identity["cuda_build_version"] = "another-build"
+    elif kind == "backend":
+        identity["backend_policy"]["deterministic_algorithms"] = not identity["backend_policy"]["deterministic_algorithms"]
+    else:
+        payload["rng"]["cuda"]["0"] = torch.zeros(8, dtype=torch.uint8)
+    path, reference = write_payload(tmp_path, payload, "mock-cuda-bad.pt")
+    target = make_state(81)
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("runtime mismatch must precede live model mutation")
+    for key in ("model", "optimizer", "ema", "engine", "scheduler", "warmup"):
+        monkeypatch.setattr(type(target[key]), "load_state_dict", forbidden)
+    with pytest.raises(CheckpointError):
+        restore_checkpoint(
+            path, **target, expected_binding=bound,
+            expected_sha256=reference["sha256"], runtime=runtime,
+        )
+    assert calls == []
+
+
+def test_mock_cuda_restore_api_failure_poisoned_before_a_forward_can_continue(tmp_path, fake_cuda, monkeypatch):
+    source = make_state()
+    bound = gpu_mock_binding()
+    runtime = prepare_checkpoint_fake_cuda(fake_cuda, monkeypatch, bound)
+    monkeypatch.setattr(checkpoint, "_check_placement", lambda *args: None)
+    path = tmp_path / "mock-cuda-late-failure.pt"
+    reference = save_checkpoint(path, **source, binding=bound, runtime=runtime)
+    target = make_state(80)
+    def failed(*args, **kwargs):
+        raise RuntimeError("simulated native CUDA set_rng_state failure")
+    monkeypatch.setattr(fake_cuda, "set_rng_state", failed)
+    with pytest.raises(CheckpointError, match="reconstruction invalidated"):
+        restore_checkpoint(
+            path, **target, expected_binding=bound,
+            expected_sha256=reference["sha256"], runtime=runtime,
+        )
+    assert target["engine"].failed is True
+
+
+
+def persistent_geometry(state):
+    for model in (state["model"], state["ema"].module):
+        anchors = model.anchors
+        del model.anchors
+        model.register_buffer("anchors", anchors)
+        model.register_buffer("valid_mask", torch.tensor([True, False]))
+        model.register_buffer("num_points_scale", torch.tensor([0.25, 0.25]))
+    return state
+
+
+def test_persistent_geometry_identity_is_checked_and_legacy_cpu_migration_is_exact(tmp_path):
+    source = persistent_geometry(make_state())
+    advance(source, 1)
+    path = tmp_path / "geometry.pt"
+    reference = save_checkpoint(path, **source, binding=BINDING)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    assert ":persistent_cache:anchors" in payload["model_layout"]["caches"]
+    legacy = deepcopy(payload)
+    legacy["schema_version"] = 1
+    del legacy["runtime"], legacy["sampler"]
+    for layout in (legacy["model_layout"], legacy["ema_layout"]["model"]):
+        layout["caches"] = {key: value for key, value in layout["caches"].items()
+                            if ":persistent_cache:" not in key}
+    old, old_ref = write_payload(tmp_path, legacy, "legacy-geometry.pt")
+    target = persistent_geometry(make_state(79))
+    restore(old, old_ref, target)
+    assert_tree_equal(source["model"].state_dict(), target["model"].state_dict())
+    incompatible = persistent_geometry(make_state(78))
+    incompatible["model"].anchors[0] = 0.75
+    with pytest.raises(CheckpointError, match="cache identity"):
+        restore(old, old_ref, incompatible)
+
+
+@pytest.mark.parametrize("family", ["model", "ema"])
+@pytest.mark.parametrize("cache", ["anchors", "valid_mask", "num_points_scale"])
+def test_persistent_cache_payload_cannot_silently_replace_configured_geometry(tmp_path, family, cache):
+    source = persistent_geometry(make_state())
+    path = tmp_path / "geometry-good.pt"
+    save_checkpoint(path, **source, binding=BINDING)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    state = payload["model"] if family == "model" else payload["ema"]["module"]
+    state[cache][0] = False if cache == "valid_mask" else 0.75
+    bad, reference = write_payload(tmp_path, payload, "geometry-bad.pt")
+    with pytest.raises(CheckpointError, match="persistent geometry"):
+        inspect_checkpoint(bad, expected_sha256=reference["sha256"], expected_binding=BINDING)
+    with pytest.raises(CheckpointError, match="persistent geometry"):
+        restore(bad, reference, persistent_geometry(make_state(77)))
+
+
+@pytest.mark.parametrize("family,name,damage", [
+    ("model", "conv.weight", float("nan")),
+    ("model", "bn.running_mean", float("inf")),
+    ("ema", "head.weight", float("-inf")),
+    ("ema", "bn.running_var", float("nan")),
+    ("model", "bn.num_batches_tracked", -1),
+    ("model", "bn.running_var", -0.1),
+])
+def test_nonfinite_parameters_mutable_buffers_and_negative_bn_counters_are_rejected(tmp_path, family, name, damage):
+    _, path, _ = trained_checkpoint(tmp_path)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    state = payload["model"] if family == "model" else payload["ema"]["module"]
+    state[name].reshape(-1)[0] = damage
+    bad, reference = write_payload(tmp_path, payload, "nonfinite.pt")
+    with pytest.raises(CheckpointError, match="non-finite|negative BatchNorm"):
+        inspect_checkpoint(bad, expected_sha256=reference["sha256"], expected_binding=BINDING)
+    target = make_state(76)
+    before = deepcopy(target["model"].state_dict())
+    with pytest.raises(CheckpointError, match="non-finite|negative BatchNorm"):
+        restore(bad, reference, target)
+    assert_tree_equal(before, target["model"].state_dict())
+
+
+def test_loader_restore_specific_preflight_runs_before_any_live_component_mutation(tmp_path, monkeypatch):
+    source = make_state()
+    advance(source, 1)
+    source["sampler"] = AcknowledgedSyntheticSampler(source["engine"].state_dict())
+    bound = sampler_binding()
+    path = tmp_path / "active-cursor.pt"
+    reference = save_checkpoint(path, **source, binding=bound)
+    target = make_state(75)
+    target["sampler"] = AcknowledgedSyntheticSampler(target["engine"].state_dict())
+    def active_iterator(state):
+        raise ValueError("close active loader iterator before restoring")
+    target["sampler"].validate_restore_state_dict = active_iterator
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("active target loader must be rejected before model mutation")
+    for key in ("model", "optimizer", "ema", "engine", "scheduler", "warmup"):
+        monkeypatch.setattr(type(target[key]), "load_state_dict", forbidden)
+    with pytest.raises(CheckpointError, match="active loader iterator"):
+        restore(path, reference, target, binding=bound)
+    assert calls == []
+
+
+def test_cpu_checkpoint_rejects_outside_generator_device_before_get_state(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    source = make_state()
+    calls = []
+    def forbidden_state():
+        calls.append(True)
+        raise AssertionError("CPU checkpoint must not inspect an outside CUDA generator")
+    synthetic_generator = SimpleNamespace(device=torch.device("cuda:0"), get_state=forbidden_state)
+    monkeypatch.setattr(checkpoint, "_generators", lambda value: {"outside": synthetic_generator})
+    with pytest.raises(CheckpointError, match="outside the bound runtime"):
+        save_checkpoint(tmp_path / "outside.pt", **source, binding=BINDING)
+    assert calls == []
+
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_multistep_counter_codec_preserves_repeated_milestones_and_closed_form_api(tmp_path, version):
+    from collections import Counter
+    source = make_state(multistep=True)
+    source["scheduler"].milestones = Counter([2, 2, 5])
+    advance(source, 3)
+    path = tmp_path / "counter.pt"
+    reference = save_checkpoint(path, **source, binding=BINDING)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    assert type(payload["scheduler"]["state"]["milestones"]) is dict
+    if version == 1:
+        payload["schema_version"] = 1
+        del payload["runtime"], payload["sampler"]
+        path, reference = write_payload(tmp_path, payload, "legacy-counter.pt")
+    target = make_state(74, multistep=True)
+    target["scheduler"].milestones = Counter([2, 2, 5])
+    restore(path, reference, target)
+    assert type(target["scheduler"].milestones) is Counter
+    assert target["scheduler"].milestones == Counter({2: 2, 5: 1})
+    for epoch in (1, 2, 5):
+        source["scheduler"].last_epoch = target["scheduler"].last_epoch = epoch
+        assert source["scheduler"]._get_closed_form_lr() == target["scheduler"]._get_closed_form_lr()
+
+
+@pytest.mark.parametrize("milestones", [{-1: 1}, {2: -1}, {2: 0}, {2: True}, {"2": 1}])
+def test_inspection_rejects_invalid_multistep_counter_encoding(tmp_path, milestones):
+    state = make_state(multistep=True)
+    path = tmp_path / "milestone-good.pt"
+    save_checkpoint(path, **state, binding=BINDING)
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    component = payload["scheduler"]
+    component["state"]["milestones"] = milestones
+    component["config"]["milestones"] = milestones
+    component["structure"] = checkpoint._structure(component["state"])
+    bad, reference = write_payload(tmp_path, payload, "milestone-bad.pt")
+    with pytest.raises(CheckpointError, match="MultiStepLR milestones"):
+        inspect_checkpoint(bad, expected_sha256=reference["sha256"], expected_binding=BINDING)
+
+
+def test_saved_ema_geometry_rounding_is_preserved_without_relaxing_raw_geometry(tmp_path):
+    state = persistent_geometry(make_state())
+    # Mimic a legitimate single-ULP consequence of averaging constant floating
+    # EMA buffers. Raw model geometry stays exactly the configured constant.
+    ema_anchor = state["ema"].module.anchors
+    ema_anchor[0] = torch.nextafter(ema_anchor[0], torch.tensor(float("inf")))
+    path = tmp_path / "ema-cache-rounding.pt"
+    reference = save_checkpoint(path, **state, binding=BINDING)
+    target = persistent_geometry(make_state(73))
+    restore(path, reference, target)
+    assert torch.equal(target["model"].anchors, state["model"].anchors)
+    assert torch.equal(target["ema"].module.anchors, state["ema"].module.anchors)
+    assert not torch.equal(target["model"].anchors, target["ema"].module.anchors)

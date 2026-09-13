@@ -5,6 +5,13 @@ checkpoint implementation and evidence writer. It does not modify the frozen
 v1/v2a implementation, authorize production training, or certify scientific AP.
 Only generated RGB tensors and normalized boxes are used by its verification tool.
 
+The recorded foundation results below belong to commit74201c1. The subsequent
+[runtime extension](RTDETR_BASELINE_V2B_RUNTIME.md) adds train_core loading,
+multiworker recovery, schema2 CPU/CUDA RNG checkpoints and a native hardware
+gate. Historical artifact hashes below must not be relabeled as tests of the
+new source. tools/verify_training_v2b_cpu.py remains synthetic CPU-only; the
+separate pre-run tool reads bounded train_core batches without model updates.
+
 ## Model and initialization
 
 The factory builds the actual vendored RT-DETRv2 R18: 20,094,584 parameters,
@@ -112,9 +119,10 @@ slice. No evaluator or real annotation file is executed by this stage. It reject
 a maxDets=100 value relabeled as 500. A production primary-VisDrone metric adapter
 is still required.
 
-The future native GPU collector has only mocked parser tests in this stage.
-Neither a GPU query nor a CUDA context is run by the CPU verifier. Current graphics
-clock is not evidence of a locked upper clock; hardware admission remains false.
+At the recorded foundation commit, the GPU collector had only mocked parser
+tests. The runtime extension adds a passive native collector. Neither a GPU query
+nor a CUDA context is run by the synthetic CPU verifier. Current graphics clock
+is not evidence of a locked upper clock; hardware admission remains false.
 
 ## Verification artifacts and remaining gates
 
@@ -133,12 +141,13 @@ malformed checkpoints and conflicting evidence. Numerical observations from
 default-initialized model batch comparisons must be reported separately from the
 logical-denominator proof.
 
-Before any scientific run: integrate the shared logical sampler with real
-train_core augmentation and an epoch-boundary resume policy; seed and verify CUDA
-under a separate authorization; bind an actual production hardware probe; and
-connect a trustworthy development metric adapter. A paired 640 16x1 versus 8x2
-control comes before any 896/960 experiment. Neither that control nor any GPU
-training is authorized by these files. Confirmatory/test access remains excluded.
+The runtime extension closes the train_core sampler/augmentation and complete-
+window recovery wiring. Actual CUDA execution still requires separate
+authorization and native hardware admission; a trustworthy development metric
+adapter remains necessary for scientific AP. Paired640 16x1 versus8x2 short
+smoke precedes the scientific control: epoch10 is an early checkpoint and epoch30
+the main comparison endpoint. Neither it nor896/960 training is authorized by
+these files. Confirmatory/test access remains excluded.
 
 Repository source validation has an explicit source-only mode for this isolated
 worktree. It retains frozen file, source, configuration and vendor identities but

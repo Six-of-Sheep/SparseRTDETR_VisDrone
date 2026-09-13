@@ -1,8 +1,8 @@
-"""CPU-verifiable RT-DETRv2 R18 foundation; no dataset, evaluator, or launcher.
+"""Seeded RT-DETRv2 R18 foundation; no evaluator or automatic launcher.
 
 The vendor implementation and historical v2a contracts remain immutable.
 A full logical batch is prepared before the engine splits physical microbatches.
-CUDA training and scientific certification require a separate integration gate.
+CUDA placement requires an explicitly prepared, natively admitted runtime.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import importlib
 import io
 import math
 import random
+import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -29,6 +30,10 @@ from .config import (
     _vendor_root,
 )
 from .training_v2b_engine import AccumulationEngine
+from .training_v2b_device import (
+    PreparedRuntime, place_module, prepare_runtime,
+    validate_component_placement, validate_prepared_runtime,
+)
 
 
 class V2BConfigurationError(ValueError):
@@ -83,11 +88,24 @@ class V2BConfig:
     def logical_batch_size(self) -> int:
         return self.physical_batch_size * self.accumulation_steps
 
-    def binding_config(self) -> dict[str, Any]:
-        return {
+    def binding_config(self, *, device: str = "cpu",
+                       scope: str = "cpu_synthetic_engineering",
+                       cuda_gpu_uuid: str | None = None) -> dict[str, Any]:
+        if device not in ("cpu", "cuda:0"):
+            raise V2BConfigurationError("only CPU or explicit cuda:0 is supported")
+        if scope not in ("cpu_synthetic_engineering", "train_core_runtime_engineering"):
+            raise V2BConfigurationError("unknown v2b engineering scope")
+        if device == "cpu" and cuda_gpu_uuid is not None:
+            raise V2BConfigurationError("CPU configuration cannot bind a CUDA UUID")
+        if device == "cuda:0" and (scope != "train_core_runtime_engineering"
+                                   or not isinstance(cuda_gpu_uuid, str)
+                                   or re.fullmatch(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",
+                                                   cuda_gpu_uuid) is None):
+            raise V2BConfigurationError("CUDA configuration requires train_core scope and a GPU UUID")
+        result = {
             **asdict(self),
-            "device": "cpu",
-            "scope": "cpu_synthetic_engineering",
+            "device": device,
+            "scope": scope,
             "num_classes": 10,
             "num_queries": 300,
             "decoder_layers": 3,
@@ -109,6 +127,9 @@ class V2BConfig:
             "tail_policy": "drop_incomplete_logical_batch",
             "production_training_authorized": False,
         }
+        if cuda_gpu_uuid is not None:
+            result["cuda_gpu_uuid"] = cuda_gpu_uuid
+        return result
 
 
 def seed_cpu_sources(seed: int) -> None:
@@ -134,9 +155,9 @@ def logical_batch_indices(dataset_size: int, *, seed: int, epoch: int,
                           completed_batches: int = 0) -> Iterator[tuple[int, ...]]:
     """Deterministic logical order; independent of physical batch and DN RNG.
 
-    Resuming this index plan does not restore prefetched worker augmentations.
-    Actual multiworker dataset restoration must occur at epoch boundaries unless
-    per-image augmentation state is separately captured.
+    This is the pure order plan. The train_core loader separately keys each
+    sample's augmentation RNG and acknowledges only completed logical windows,
+    so prefetched items never advance a saved resume position.
     """
     for name, value, minimum in (
         ("dataset_size", dataset_size, 0), ("seed", seed, 0),
@@ -344,7 +365,9 @@ def validate_model_geometry(model, config: V2BConfig) -> dict[str, Any]:
     return {"input_size": [size, size], "anchors": list(model.decoder.anchors.shape),
             "valid_mask": list(model.decoder.valid_mask.shape),
             "position_caches": positions,
-            "cache_identity": initial_parameter_reference(cache_tensors)}
+            "cache_identity": initial_parameter_reference({
+                name: tensor.detach().cpu() for name, tensor in cache_tensors.items()
+            })}
 
 
 @dataclass
@@ -362,18 +385,28 @@ class V2BComponents:
     initialization: dict[str, Any]
     geometry: dict[str, Any]
     batchnorm_inventory: list[dict[str, Any]]
+    runtime: PreparedRuntime
 
 
 def build_v2b_components(config: V2BConfig, *, repo_root: str | Path | None = None,
                          pretrained_path: str | Path | None = None,
-                         pretrained_sha256: str | None = None) -> V2BComponents:
-    """Construct the real model on CPU, without datasets, evaluation or CUDA."""
+                         pretrained_sha256: str | None = None,
+                         runtime: PreparedRuntime | None = None) -> V2BComponents:
+    """Initialize on CPU, then place all state before constructing the optimizer.
+
+    The default is CPU-only. A CUDA runtime must already have passed native
+    admission; this factory does not authorize, probe, or launch GPU work.
+    """
     if not isinstance(config, V2BConfig):
         raise V2BConfigurationError("config must be V2BConfig")
     if config.pretrained_required and pretrained_path is None:
         raise V2BConfigurationError("the configured pretrained authority is required")
     if (pretrained_path is None) != (pretrained_sha256 is None):
         raise V2BConfigurationError("pretrained path and SHA-256 must be paired")
+    runtime = prepare_runtime(seed=config.seed) if runtime is None else runtime
+    validate_prepared_runtime(runtime)
+    if runtime.seed != config.seed:
+        raise V2BConfigurationError("prepared runtime seed differs from model seed")
     root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parents[3]
     model, criterion, postprocessor, resolved, ema_type, warmup_type = _build_vendor_objects(root, config)
     pretrained = None
@@ -383,6 +416,7 @@ def build_v2b_components(config: V2BConfig, *, repo_root: str | Path | None = No
     initialization = {
         "seed": config.seed,
         "seed_initialized_before_model": True,
+        "model_initialization_device": "cpu",
         "pretrained": pretrained,
         "parameters": initial_parameter_reference(dict(model.named_parameters())),
         "model_state": initial_parameter_reference(model.state_dict()),
@@ -397,17 +431,23 @@ def build_v2b_components(config: V2BConfig, *, repo_root: str | Path | None = No
         for name, module in model.named_modules()
         if isinstance(module, torch.nn.modules.batchnorm._BatchNorm)
     ]
+    for component in (model, criterion, postprocessor):
+        place_module(component, runtime)
+    resolved["device"] = str(runtime.device)
     optimizer = _optimizer(model, config)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000], gamma=0.1)
     warmup = warmup_type(scheduler, warmup_duration=config.warmup_steps)
     ema = ema_type(model, decay=config.ema_decay, warmups=config.ema_warmups)
     engine = AccumulationEngine(
         model, criterion, optimizer, physical_batch_size=config.physical_batch_size,
-        accumulation_steps=config.accumulation_steps, device="cpu",
+        accumulation_steps=config.accumulation_steps, device=runtime.device,
         amp_dtype=config.amp_dtype, clip_max_norm=config.clip_max_norm,
         ema=ema, warmup=warmup, scheduler=scheduler,
         bn_statistics=config.bn_statistics, expected_input_size=config.input_size,
     )
+    validate_component_placement(model=model, optimizer=optimizer, ema=ema,
+                                 criterion=criterion, postprocessor=postprocessor,
+                                 runtime=runtime)
     return V2BComponents(config, model, criterion, postprocessor, optimizer, ema,
                           scheduler, warmup, engine, resolved, initialization,
-                          geometry, bn_inventory)
+                          geometry, bn_inventory, runtime)

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "baseline_id": "rtdetrv2_r18_visdrone_baseline_v2b_runtime_engineering",
+  "model_config": "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_engineering.json",
+  "current_scope": "CPU_tests_and_bounded_train_core_loader_only",
+  "data": {
+    "role": "train_core",
+    "logical_batch_size": 16,
+    "workers_to_verify": [0, 2, 4],
+    "multiprocessing_context": "spawn",
+    "persistent_workers": false,
+    "pin_memory": false,
+    "MKL_THREADING_LAYER": "GNU",
+    "resume": "acknowledged_complete_logical_window",
+    "augmentation_rng": "per_sample_seed_epoch_order_position_stable_image_id",
+    "historical_v2a_augmentation_stream_reproduced": false
+  },
+  "next_gpu_stage": {
+    "authorized": false,
+    "stage": "paired_short_smoke_before_scientific_control",
+    "arms": [
+      {"id": "640x16x1", "input_size": 640, "physical_batch_size": 16, "accumulation_steps": 1},
+      {"id": "640x8x2", "input_size": 640, "physical_batch_size": 8, "accumulation_steps": 2}
+    ],
+    "logical_windows_per_arm": 4,
+    "checkpoint_after_logical_window": 2,
+    "replay_remaining_windows_in_fresh_runtime": true,
+    "common": ["source_tree", "logical_batches", "seed", "pretrained_sha256", "initial_model_state", "sample_order", "augmented_input_bytes", "worker_settings", "BF16_policy", "BN_policy", "DN_policy", "optimizer_schedule"],
+    "exact_checks": ["sample_and_augmentation_receipts", "loss_denominators", "optimizer_EMA_warmup_clocks", "scheduler_clock", "checkpoint_hash", "CPU_and_CUDA_RNG_restore", "sampler_cursor"],
+    "measure": ["peak_allocated_and_reserved_GPU_memory", "native_device_used_memory", "per_microbatch_loss_families", "logical_loss", "gradient_norm", "BN_running_statistics_and_forward_counts", "DN_groups_and_query_counts", "raw_and_EMA_state", "elapsed_time", "hardware_interval_findings"],
+    "same_arm_replay_tolerances": {
+      "logical_loss_relative": 0.0001,
+      "raw_parameter_relative_L2": 0.00001,
+      "raw_parameter_max_absolute": 0.00001,
+      "failure_action": "stop_and_diagnose_without_loosening_thresholds"
+    },
+    "between_arm_bitwise_or_loss_equality_required": false,
+    "between_arm_BN_DN_differences": "measure_and_explain_native_microbatch_semantics",
+    "auto_batch_fallback_or_retry": false
+  },
+  "scientific_control_after_smoke": {
+    "authorized": false,
+    "early_checkpoint_epoch": 10,
+    "primary_comparison_endpoint_epoch": 30,
+    "same_nominal_120_epoch_schedule_and_stop117_recipe": true,
+    "epoch_10_alone_certifies_batch_equivalence": false,
+    "development_metric_adapter_and_protocol_must_be_bound_before_launch": true
+  },
+  "readiness": {
+    "formal_training_authorized": false,
+    "GPU_smoke_authorized": false,
+    "high_resolution_896_960_authorized": false,
+    "confirmatory_test_access_authorized": false,
+    "scientific_certified": false
+  }
+}

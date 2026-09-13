@@ -129,6 +129,24 @@ V2B_ENGINEERING_FILES = {
     'docs/contracts/RTDETR_BASELINE_V2B_ENGINEERING.md',
 }
 
+# Keep the earlier foundation archive valid under the current checker. The
+# runtime extension is one additional explicit file group, never a glob permit.
+V2B_RUNTIME_FILES = {
+    'tests/conftest.py',
+    'src/sparse_rtdetr/baseline/training_v2b_data.py',
+    'src/sparse_rtdetr/baseline/training_v2b_device.py',
+    'src/sparse_rtdetr/baseline/training_v2b_hardware.py',
+    'src/sparse_rtdetr/baseline/training_v2b_runtime.py',
+    'tests/test_rtdetr_baseline_training_v2b_data.py',
+    'tests/test_rtdetr_baseline_training_v2b_device.py',
+    'tests/test_rtdetr_baseline_training_v2b_hardware.py',
+    'tests/test_rtdetr_baseline_training_v2b_runtime.py',
+    'tests/test_rtdetr_baseline_training_v2b_prerun.py',
+    'tools/verify_training_v2b_prerun.py',
+    'configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_runtime.json',
+    'docs/contracts/RTDETR_BASELINE_V2B_RUNTIME.md',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -665,7 +683,7 @@ BASELINE_MODEL_IMPORT_FILES = {
 
 # Explicitly allow only the new CPU engineering implementation and tests.
 BASELINE_MODEL_IMPORT_FILES |= {
-    path for path in V2B_ENGINEERING_FILES if path.endswith(".py")
+    path for path in V2B_ENGINEERING_FILES | V2B_RUNTIME_FILES if path.endswith(".py")
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2266,6 +2284,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
     allowed_files |= V2A_FILES
     if files & V2B_ENGINEERING_FILES:
         allowed_files |= V2B_ENGINEERING_FILES
+    if files & V2B_RUNTIME_FILES:
+        allowed_files |= V2B_RUNTIME_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
@@ -2277,7 +2297,7 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
     if t7h_files_present:
         allowed_files |= T7H_FILES
     if files != allowed_files:
-        failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(ALLOWED_FILES - files)}")
+        failures.append(f"file set mismatch: extra={sorted(files - allowed_files)} missing={sorted(allowed_files - files)}")
 
     _check_vendor(root, failures)
 

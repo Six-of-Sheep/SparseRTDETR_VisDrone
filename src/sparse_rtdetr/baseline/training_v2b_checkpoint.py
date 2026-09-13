@@ -11,12 +11,16 @@ For a mid-epoch resume, bind and supply explicit sampler/augmentation generators
 or a deterministic cursor policy; saving RNG does not capture DataLoader workers.
 The engine's public validator binds all execution policies, including the
 mandatory BN backward-layout policy; legacy engine configurations are rejected.
-CUDA state is touched only when supplied tensors/generators actually use CUDA.
-That path requires its own validation; the engineering tests exercise CPU only.
+Schema 2 binds an explicit prepared runtime and an acknowledged loader cursor.
+Schema 1 remains readable only for CPU artifacts without a loader. CUDA requires
+a previously admitted, seeded runtime; this module never implicitly initializes
+CUDA. CPU inspection, save, and restore never call CUDA APIs.
 """
 
 from __future__ import annotations
 
+from collections import Counter
+from copy import deepcopy
 import hashlib
 import io
 import json
@@ -32,14 +36,17 @@ import numpy as np
 import torch
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+LEGACY_CPU_SCHEMA_VERSION = 1
 FORMAT = "sparse_rtdetr.training_v2b_checkpoint"
 _REQUIRED_BINDINGS = {"initial_weights", "data", "code", "config"}
 _PAYLOAD_KEYS = {
     "format", "schema_version", "torch_version", "binding", "binding_sha256",
     "model", "model_layout", "model_training", "optimizer", "optimizer_layout",
     "ema", "ema_layout", "engine", "engine_type", "scheduler", "warmup", "rng",
+    "runtime", "sampler",
 }
+_LEGACY_PAYLOAD_KEYS = _PAYLOAD_KEYS - {"runtime", "sampler"}
 
 
 class CheckpointError(RuntimeError):
@@ -146,6 +153,12 @@ def _model_layout(model: torch.nn.Module) -> dict:
             caches[f"{module_name}:buffer:{name}"] = (
                 None if value is None else _tensor_spec(value, digest=True)
             )
+        # These inspected vendor buffers are deterministic geometry constants,
+        # unlike BatchNorm statistics. bind them despite persistent registration.
+        for name in {"anchors", "valid_mask", "num_points_scale"} & module._buffers.keys():
+            value = module._buffers[name]
+            if value is not None:
+                caches[f"{module_name}:persistent_cache:{name}"] = _tensor_spec(value, digest=True)
     return {
         "modules": modules,
         "state": {key: _tensor_spec(value) for key, value in state.items()},
@@ -160,11 +173,40 @@ def _model_layout(model: torch.nn.Module) -> dict:
 def _check_model_state(state: Any, layout: dict, label: str) -> None:
     if type(state) is not dict or set(state) != set(layout["state"]):
         _fail(f"{label}: model state keys differ")
+    parameter_names = {entry["name"] for entry in layout["parameters"]}
     for name, value in state.items():
         if not isinstance(value, torch.Tensor):
             _fail(f"{label}/{name}: expected tensor")
         if _tensor_spec(value) != layout["state"][name]:
             _fail(f"{label}/{name}: tensor shape/dtype differs")
+        leaf = name.rsplit(".", 1)[-1]
+        if value.is_floating_point() or value.is_complex():
+            if leaf == "anchors" and name not in parameter_names:
+                # +inf is the inspected vendor's invalid-anchor sentinel.
+                if bool(torch.isnan(value).any()) or bool(torch.isneginf(value).any()):
+                    _fail(f"{label}/{name}: invalid anchor sentinel")
+            elif not bool(torch.isfinite(value).all()):
+                _fail(f"{label}/{name}: non-finite parameter or mutable buffer")
+        if leaf == "num_batches_tracked" and bool((value < 0).any()):
+            _fail(f"{label}/{name}: negative BatchNorm counter")
+        if leaf == "running_var" and bool((value < 0).any()):
+            _fail(f"{label}/{name}: negative BatchNorm running variance")
+        if leaf in {"anchors", "valid_mask", "num_points_scale"}:
+            parent = name.rsplit(".", 1)[0] if "." in name else ""
+            key = f"{parent}:persistent_cache:{leaf}"
+            if key in layout["caches"] and _tensor_spec(value, digest=True) != layout["caches"][key]:
+                _fail(f"{label}/{name}: persistent geometry cache identity differs")
+
+
+def _upgrade_legacy_geometry_layout(layout: dict | None, state: dict | None) -> None:
+    if layout is None or state is None:
+        return
+    parameters = {entry["name"] for entry in layout["parameters"]}
+    for name, value in state.items():
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf in {"anchors", "valid_mask", "num_points_scale"} and name not in parameters:
+            parent = name.rsplit(".", 1)[0] if "." in name else ""
+            layout["caches"][f"{parent}:persistent_cache:{leaf}"] = _tensor_spec(value, digest=True)
 
 
 def _check_engine_owners(engine: Any, model: Any, optimizer: Any, ema: Any, scheduler: Any, warmup: Any) -> None:
@@ -370,6 +412,16 @@ def _check_component(saved: Any, current: dict | None, label: str) -> None:
         _fail(f"{label}: type, state structure, or declared configuration differs")
 
 
+def _restore_component(value: Any, saved: dict) -> None:
+    state = _safe(saved["state"], "component restore")
+    if saved["type"] == "torch.optim.lr_scheduler.MultiStepLR":
+        # The safe wire format stores integer-key mappings, never arbitrary
+        # pickled classes. Native MultiStepLR also exposes a closed-form path
+        # that requires Counter.elements(), so reconstruct its known type.
+        state["milestones"] = Counter(state["milestones"])
+    value.load_state_dict(state)
+
+
 def _check_warmup_clock(component: dict | None, updates: int) -> None:
     # This is the inspected vendor contract: constructor step() leaves
     # last_step=0, and the engine calls step() after every optimizer update,
@@ -385,6 +437,11 @@ def _check_scheduler_clock(component: dict | None, engine: dict, warmup: dict | 
     if component is None or component["type"] != "torch.optim.lr_scheduler.MultiStepLR":
         return
     state = component["state"]
+    milestones = state.get("milestones")
+    if (type(milestones) is not dict or any(
+            type(epoch) is not int or epoch < 0 or type(count) is not int or count <= 0
+            for epoch, count in milestones.items())):
+        _fail("MultiStepLR milestones must encode nonnegative integer epochs and positive counts")
     last_epoch, steps = state.get("last_epoch"), state.get("_step_count")
     completed_epochs = engine["epoch"] - int(engine["epoch_active"])
     if (
@@ -420,6 +477,26 @@ def _ema(ema: Any, updates: int) -> tuple[dict | None, dict | None]:
     return state, layout
 
 
+def _ema_layout_compatible(saved: Any, current: Any) -> bool:
+    """Vendor EMA averages floating persistent caches as well as learned state.
+
+    Such bytes can round even while raw geometry stays constant. Their saved
+    hashes still authenticate the saved tensor values; compatibility with the
+    freshly constructed EMA requires the same keys/shapes/dtypes, rather than
+    incorrectly demanding the pre-update hash. Other cache identities stay exact.
+    """
+    if saved is None or current is None:
+        return saved is current
+    left, right = deepcopy(saved), deepcopy(current)
+    for layout in (left, right):
+        for name, spec in layout["model"]["caches"].items():
+            if (":persistent_cache:" in name
+                    and name.rsplit(":", 1)[-1] in {"anchors", "num_points_scale"}
+                    and spec["dtype"].startswith(("torch.float", "torch.bfloat"))):
+                spec["sha256"] = "vendor_ema_floating_cache_state_is_saved_and_restored"
+    return left == right
+
+
 def _check_ema(state: Any, layout: Any, updates: int) -> None:
     if state is None or layout is None:
         if state is not None or layout is not None:
@@ -443,31 +520,106 @@ def _generators(value: Any) -> dict:
     return value
 
 
-def _cuda_devices(model: torch.nn.Module, ema: Any, generators: dict) -> list[int]:
-    devices = set()
-    tensors = list(model.parameters()) + list(model.buffers())
-    if ema is not None:
-        tensors += list(ema.module.parameters()) + list(ema.module.buffers())
-    for value in tensors:
-        if value.device.type == "cuda":
-            if value.device.index is None:
-                _fail("CUDA tensors must have an explicit device index")
-            devices.add(value.device.index)
-        elif value.device.type != "cpu":
-            _fail("checkpoint supports CPU or explicit CUDA devices only")
-    for generator in generators.values():
-        if generator.device.type == "cuda":
-            if generator.device.index is None:
-                _fail("CUDA generators must have an explicit device index")
-            devices.add(generator.device.index)
-        elif generator.device.type != "cpu":
-            _fail("unsupported generator device")
-    return sorted(devices)
+def _check_bound_runtime_identity(identity: dict, bound: dict) -> None:
+    declared = bound["config"].get("device", "cpu")
+    if declared != identity["device"]:
+        _fail("runtime device differs from binding.config.device")
+    if (identity["device"] != "cpu"
+            and bound["config"].get("cuda_gpu_uuid") != identity["cuda_devices"][0]["uuid"]):
+        _fail("CUDA GPU UUID differs from binding.config.cuda_gpu_uuid")
 
 
-def _capture_rng(model: torch.nn.Module, ema: Any, generators: dict) -> dict:
+def _check_generator_placement(generators: dict, identity: dict) -> None:
+    allowed = {"cpu"} | {"cuda:" + str(item["index"]) for item in identity["cuda_devices"]}
+    for name, generator in generators.items():
+        if str(generator.device) not in allowed:
+            _fail(f"generator {name}: device is outside the bound runtime")
+
+
+def _runtime_identity(runtime: Any, bound: dict, bound_sha: str) -> dict:
+    from .training_v2b_device import cpu_runtime_identity, validate_prepared_runtime
+    identity = cpu_runtime_identity() if runtime is None else validate_prepared_runtime(runtime)
+    _check_bound_runtime_identity(identity, bound)
+    if runtime is not None and "seed" in bound["config"] and runtime.seed != bound["config"]["seed"]:
+        _fail("prepared runtime seed differs from binding.config.seed")
+    if identity["device"] != "cpu":
+        if runtime.admitted_binding_sha256 != bound_sha:
+            _fail("CUDA runtime admission belongs to a different run binding")
+        if (bound["config"].get("device") != identity["device"]
+                or bound["config"].get("cuda_gpu_uuid") != identity["cuda_devices"][0]["uuid"]):
+            _fail("CUDA requested device / GPU UUID must be declared in binding.config")
+    return identity
+
+
+def _check_placement(model: Any, optimizer: Any, ema: Any, engine: Any, runtime: Any) -> None:
+    from .training_v2b_device import validate_component_placement
+    validate_component_placement(
+        model=model, optimizer=optimizer, ema=ema,
+        criterion=engine.criterion, runtime=runtime,
+    )
+    expected = "cpu" if runtime is None else str(runtime.device)
+    if str(engine.device) != expected:
+        _fail("engine device differs from the prepared runtime")
+
+
+def _sampler_binding(bound: dict) -> str | None:
+    data = bound["data"]
+    return data.get("loader_binding_sha256") if type(data) is dict else None
+
+
+def _check_sampler_saved(saved: Any, bound: dict, engine_state: dict) -> None:
+    expected_sha = _sampler_binding(bound)
+    if saved is None:
+        if expected_sha is not None:
+            _fail("bound loader cursor is missing from checkpoint")
+        return
+    if type(saved) is not dict or set(saved) != {"type", "state"} or type(saved["type"]) is not str or not saved["type"]:
+        _fail("sampler checkpoint schema differs")
+    from .training_v2b_data import validate_loader_state
+    validate_loader_state(saved["state"], engine_state)
+    if (type(expected_sha) is not str or re.fullmatch(r"[0-9a-f]{64}", expected_sha) is None
+            or saved["state"]["binding_sha256"] != expected_sha):
+        _fail("sampler identity differs from binding.data.loader_binding_sha256")
+
+
+def _sampler_state(sampler: Any, bound: dict, engine_state: dict) -> dict | None:
+    if sampler is None:
+        _check_sampler_saved(None, bound, engine_state)
+        return None
+    for name in ("state_dict", "validate_state_dict", "validate_engine_state", "load_state_dict"):
+        if not callable(getattr(sampler, name, None)):
+            _fail(f"sampler lacks {name}")
+    state = _safe(sampler.state_dict(), "sampler")
+    sampler.validate_state_dict(state)
+    sampler.validate_engine_state(state, engine_state)
+    saved = {"type": _type_name(sampler), "state": state}
+    _check_sampler_saved(saved, bound, engine_state)
+    return saved
+
+
+def _check_sampler_live(saved: Any, sampler: Any, bound: dict, engine_state: dict) -> None:
+    _check_sampler_saved(saved, bound, engine_state)
+    if saved is None:
+        if sampler is not None:
+            _fail("checkpoint has no sampler; loader resume is unsupported")
+        return
+    if sampler is None or saved["type"] != _type_name(sampler):
+        _fail("sampler type or presence differs")
+    for name in ("state_dict", "validate_state_dict", "validate_engine_state", "load_state_dict"):
+        if not callable(getattr(sampler, name, None)):
+            _fail(f"sampler lacks {name}")
+    sampler.validate_state_dict(saved["state"])
+    sampler.validate_engine_state(saved["state"], engine_state)
+    restore_validator = getattr(sampler, "validate_restore_state_dict", None)
+    if restore_validator is not None:
+        if not callable(restore_validator):
+            _fail("sampler restore validator is not callable")
+        restore_validator(saved["state"])
+
+
+def _capture_rng(model: torch.nn.Module, ema: Any, generators: dict, runtime: Any = None) -> dict:
+    from .training_v2b_device import capture_cuda_rng
     numpy = np.random.get_state()
-    devices = _cuda_devices(model, ema, generators)
     return {
         "python": random.getstate(),
         "numpy": {
@@ -477,9 +629,9 @@ def _capture_rng(model: torch.nn.Module, ema: Any, generators: dict) -> dict:
             "cached_gaussian": float(numpy[4]),
         },
         "torch_cpu": torch.get_rng_state().clone(),
-        "cuda": {str(index): torch.cuda.get_rng_state(index).cpu() for index in devices},
+        "cuda": capture_cuda_rng(runtime),
         "generators": {
-            name: {"device": str(generator.device), "state": generator.get_state().cpu()}
+            name: {"device": str(generator.device), "state": generator.get_state().cpu().clone()}
             for name, generator in generators.items()
         },
     }
@@ -509,40 +661,57 @@ def _rng_tensor(value: Any, label: str) -> None:
         _fail(f"{label}: invalid RNG byte state")
 
 
-def _check_rng(value: Any, model: torch.nn.Module, ema: Any, generators: dict) -> None:
+def _check_rng_structure(value: Any, runtime_identity: dict) -> None:
+    from .training_v2b_device import validate_cuda_rng_states
     if type(value) is not dict or set(value) != {"python", "numpy", "torch_cpu", "cuda", "generators"}:
         _fail("RNG state schema differs")
     random.Random().setstate(value["python"])
     np.random.RandomState().set_state(_numpy_state(value["numpy"]))
     _rng_tensor(value["torch_cpu"], "torch CPU")
     torch.Generator(device="cpu").set_state(value["torch_cpu"])
-    devices = _cuda_devices(model, ema, generators)
-    if type(value["cuda"]) is not dict or set(value["cuda"]) != {str(index) for index in devices}:
-        _fail("CUDA RNG device identity differs")
-    for index in devices:
-        state = value["cuda"][str(index)]
-        _rng_tensor(state, f"CUDA {index}")
-        if state.shape != torch.cuda.get_rng_state(index).shape:
-            _fail("CUDA RNG state shape differs")
-    if type(value["generators"]) is not dict or set(value["generators"]) != set(generators):
+    validate_cuda_rng_states(value["cuda"], runtime_identity)
+    if type(value["generators"]) is not dict:
+        _fail("explicit RNG generator state container differs")
+    allowed = {"cpu"} | {"cuda:" + str(item["index"]) for item in runtime_identity["cuda_devices"]}
+    cuda_sizes = {str(item["index"]): item["rng_state_bytes"] for item in runtime_identity["cuda_devices"]}
+    for name, saved in value["generators"].items():
+        if type(name) is not str or not name:
+            _fail("explicit RNG generator name is invalid")
+        if type(saved) is not dict or set(saved) != {"device", "state"} or saved["device"] not in allowed:
+            _fail(f"generator {name}: device is outside the bound runtime")
+        _rng_tensor(saved["state"], f"generator {name}")
+        if saved["device"] == "cpu":
+            torch.Generator(device="cpu").set_state(saved["state"])
+        elif saved["state"].numel() != cuda_sizes[saved["device"].split(":")[1]]:
+            _fail(f"generator {name}: CUDA RNG byte count differs")
+
+
+def _check_rng(value: Any, model: torch.nn.Module, ema: Any, generators: dict,
+               runtime: Any = None, runtime_identity: dict | None = None) -> None:
+    from .training_v2b_device import (
+        cpu_runtime_identity, preflight_cuda_rng_restore, _scratch_cuda_generator,
+    )
+    identity = cpu_runtime_identity() if runtime_identity is None else runtime_identity
+    _check_rng_structure(value, identity)
+    if set(value["generators"]) != set(generators):
         _fail("explicit RNG generator names differ")
     for name, generator in generators.items():
         saved = value["generators"][name]
-        if type(saved) is not dict or set(saved) != {"device", "state"} or saved["device"] != str(generator.device):
+        if saved["device"] != str(generator.device):
             _fail(f"generator {name}: device differs")
-        _rng_tensor(saved["state"], f"generator {name}")
         if generator.device.type == "cpu":
             torch.Generator(device="cpu").set_state(saved["state"])
-        elif saved["state"].shape != generator.get_state().shape:
-            _fail(f"generator {name}: RNG state shape differs")
+        else:
+            _scratch_cuda_generator(generator.device.index).set_state(saved["state"])
+    preflight_cuda_rng_restore(value["cuda"], runtime)
 
 
-def _restore_rng(value: dict, generators: dict) -> None:
+def _restore_rng(value: dict, generators: dict, runtime: Any = None) -> None:
+    from .training_v2b_device import restore_cuda_rng
     random.setstate(value["python"])
     np.random.set_state(_numpy_state(value["numpy"]))
     torch.set_rng_state(value["torch_cpu"])
-    for index, state in value["cuda"].items():
-        torch.cuda.set_rng_state(state, int(index))
+    restore_cuda_rng(value["cuda"], runtime)
     for name, saved in value["generators"].items():
         generators[name].set_state(saved["state"])
 
@@ -558,16 +727,37 @@ def _verified_payload(path: str | os.PathLike, expected_sha256: str, expected_bi
     if actual_sha != expected_sha256:
         _fail("checkpoint SHA256 mismatch before deserialization")
     payload = torch.load(io.BytesIO(raw), map_location="cpu", weights_only=True)
-    if type(payload) is not dict or set(payload) != _PAYLOAD_KEYS:
+    if type(payload) is not dict:
         _fail("checkpoint schema keys differ")
-    if payload["format"] != FORMAT or type(payload["schema_version"]) is not int or payload["schema_version"] != SCHEMA_VERSION:
+    version = payload.get("schema_version")
+    if payload.get("format") != FORMAT or type(version) is not int or version not in (LEGACY_CPU_SCHEMA_VERSION, SCHEMA_VERSION):
         _fail("checkpoint format/schema version differs")
+    expected_keys = _PAYLOAD_KEYS if version == SCHEMA_VERSION else _LEGACY_PAYLOAD_KEYS
+    if set(payload) != expected_keys:
+        _fail("checkpoint schema keys differ")
+    from .training_v2b_device import cpu_runtime_identity, validate_runtime_identity
+    if version == LEGACY_CPU_SCHEMA_VERSION:
+        rng = payload["rng"]
+        if (type(rng) is not dict or rng.get("cuda") != {}
+                or type(rng.get("generators")) is not dict
+                or any(type(value) is not dict or value.get("device") != "cpu"
+                       for value in rng["generators"].values())):
+            _fail("legacy CUDA checkpoint lacks UUID/topology binding and cannot be migrated")
+        payload = {**payload, "runtime": cpu_runtime_identity(), "sampler": None}
+        # Reviewable schema migration: derive static persistent-cache identities
+        # from authenticated legacy bytes. Restore still compares these values
+        # with the fresh model's geometry before loading any saved state.
+        _upgrade_legacy_geometry_layout(payload["model_layout"], payload["model"])
+        if payload["ema"] is not None:
+            _upgrade_legacy_geometry_layout(payload["ema_layout"]["model"], payload["ema"]["module"])
+    validate_runtime_identity(payload["runtime"])
     if payload["torch_version"] != str(torch.__version__):
         _fail("checkpoint PyTorch version differs")
     bound, bound_sha = _binding(expected_binding)
     saved_bound, saved_sha = _binding(payload["binding"])
     if saved_bound != bound or saved_sha != bound_sha or payload["binding_sha256"] != bound_sha:
         _fail("checkpoint binding differs")
+    _check_bound_runtime_identity(payload["runtime"], bound)
     return source, raw, payload, bound_sha
 
 
@@ -581,6 +771,8 @@ def inspect_checkpoint(path: str | os.PathLike, *, expected_sha256: str, expecte
     try:
         source, raw, payload, bound_sha = _verified_payload(path, expected_sha256, expected_binding)
         _check_engine(payload["engine"])
+        _check_rng_structure(payload["rng"], payload["runtime"])
+        _check_sampler_saved(payload["sampler"], payload["binding"], payload["engine"])
         model_layout = payload["model_layout"]
         _check_model_state(payload["model"], model_layout, "model")
         parameters = {}
@@ -603,7 +795,8 @@ def inspect_checkpoint(path: str | os.PathLike, *, expected_sha256: str, expecte
         engine_state = _safe(payload["engine"], "engine")
         return {
             "path": str(source), "sha256": expected_sha256, "size_bytes": len(raw),
-            "format": FORMAT, "schema_version": SCHEMA_VERSION,
+            "format": FORMAT, "schema_version": payload["schema_version"],
+            "runtime": payload["runtime"], "sampler": payload["sampler"],
             "binding_sha256": bound_sha, "binding": payload["binding"],
             "engine": engine_state,
             "epoch": engine_state["epoch"], "epoch_active": engine_state["epoch_active"],
@@ -623,6 +816,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer, ema: Any, engine: Any,
     scheduler: Any = None, warmup: Any = None, binding: dict,
     extra_rng_generators: dict | None = None,
+    runtime: Any = None, sampler: Any = None,
 ) -> dict:
     """Atomically publish a new checkpoint; never replace an existing path."""
     temporary = None
@@ -635,7 +829,11 @@ def save_checkpoint(
         bound, bound_sha = _binding(binding)
         _check_engine_owners(engine, model, optimizer, ema, scheduler, warmup)
         engine_state = _engine_state(engine)
+        runtime_identity = _runtime_identity(runtime, bound, bound_sha)
+        _check_placement(model, optimizer, ema, engine, runtime)
+        sampler_state = _sampler_state(sampler, bound, engine_state)
         generators = _generators(extra_rng_generators)
+        _check_generator_placement(generators, runtime_identity)
         layout = _model_layout(model)
         model_state = _safe(model.state_dict(), "model")
         _check_model_state(model_state, layout, "model")
@@ -658,9 +856,10 @@ def save_checkpoint(
             "engine": engine_state, "engine_type": _type_name(engine),
             "scheduler": scheduler_state,
             "warmup": warmup_state,
-            "rng": _capture_rng(model, ema, generators),
+            "rng": _capture_rng(model, ema, generators, runtime),
+            "runtime": runtime_identity, "sampler": sampler_state,
         }
-        _check_rng(payload["rng"], model, ema, generators)
+        _check_rng(payload["rng"], model, ema, generators, runtime, runtime_identity)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
         with os.fdopen(fd, "wb") as stream:
             torch.save(payload, stream)
@@ -701,6 +900,7 @@ def restore_checkpoint(
     optimizer: torch.optim.Optimizer, ema: Any, engine: Any,
     scheduler: Any = None, warmup: Any = None, expected_binding: dict,
     expected_sha256: str, extra_rng_generators: dict | None = None,
+    runtime: Any = None, sampler: Any = None,
 ) -> dict:
     """Verify all identities/state layouts before strict load; restore RNG last.
 
@@ -711,6 +911,10 @@ def restore_checkpoint(
     try:
         source, raw, payload, bound_sha = _verified_payload(path, expected_sha256, expected_binding)
         actual_sha = expected_sha256
+        runtime_identity = _runtime_identity(runtime, payload["binding"], bound_sha)
+        if payload["runtime"] != runtime_identity:
+            _fail("runtime device, UUID/topology, backend policy, or CUDA build differs; remapping is unsupported")
+        _check_placement(model, optimizer, ema, engine, runtime)
         _check_engine_owners(engine, model, optimizer, ema, scheduler, warmup)
         current_engine = _engine_state(engine)
         _check_engine(payload["engine"])
@@ -729,15 +933,16 @@ def restore_checkpoint(
             _fail("optimizer parameter group identity/order or declared options differ")
         _check_optimizer(payload["optimizer"], optimizer_layout, model, payload["engine"]["optimizer_updates"])
         _, ema_layout = _ema(ema, current_engine["optimizer_updates"])
-        if payload["ema_layout"] != ema_layout:
+        if not _ema_layout_compatible(payload["ema_layout"], ema_layout):
             _fail("EMA type, model/cache identity, or configuration differs")
-        _check_ema(payload["ema"], ema_layout, payload["engine"]["optimizer_updates"])
+        _check_ema(payload["ema"], payload["ema_layout"], payload["engine"]["optimizer_updates"])
         _check_component(payload["scheduler"], _component(scheduler, "scheduler"), "scheduler")
         _check_component(payload["warmup"], _component(warmup, "warmup"), "warmup")
         _check_warmup_clock(payload["warmup"], payload["engine"]["optimizer_updates"])
         _check_scheduler_clock(payload["scheduler"], payload["engine"], payload["warmup"])
         generators = _generators(extra_rng_generators)
-        _check_rng(payload["rng"], model, ema, generators)
+        _check_rng(payload["rng"], model, ema, generators, runtime, runtime_identity)
+        _check_sampler_live(payload["sampler"], sampler, payload["binding"], payload["engine"])
         # All externally controlled identities, tensor layouts, counters, and RNG
         # containers have been checked before mutating any supplied state object.
         try:
@@ -745,14 +950,17 @@ def restore_checkpoint(
             if ema is not None:
                 ema.load_state_dict(payload["ema"], strict=True)
             optimizer.load_state_dict(payload["optimizer"])
+            _check_placement(model, optimizer, ema, engine, runtime)
             if scheduler is not None:
-                scheduler.load_state_dict(payload["scheduler"]["state"])
+                _restore_component(scheduler, payload["scheduler"])
             if warmup is not None:
-                warmup.load_state_dict(payload["warmup"]["state"])
+                _restore_component(warmup, payload["warmup"])
             engine.load_state_dict(payload["engine"])
             for name, module in model.named_modules():
                 module.training = modes[name]
-            _restore_rng(payload["rng"], generators)
+            if sampler is not None:
+                sampler.load_state_dict(payload["sampler"]["state"])
+            _restore_rng(payload["rng"], generators, runtime)
         except Exception as exc:
             engine.failed = True
             raise CheckpointError(
@@ -760,7 +968,8 @@ def restore_checkpoint(
             ) from exc
         return {
             "path": str(source), "sha256": actual_sha, "size_bytes": len(raw),
-            "schema_version": SCHEMA_VERSION, "binding_sha256": bound_sha,
+            "schema_version": payload["schema_version"], "binding_sha256": bound_sha,
+            "runtime": payload["runtime"], "sampler_restored": sampler is not None,
             "epoch": payload["engine"]["epoch"],
             "epoch_active": payload["engine"]["epoch_active"],
             "optimizer_updates": payload["engine"]["optimizer_updates"],

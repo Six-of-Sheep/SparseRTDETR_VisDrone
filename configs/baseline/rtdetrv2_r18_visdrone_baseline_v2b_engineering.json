@@ -31,7 +31,7 @@
     "amp": "BF16_model_and_criterion_no_GradScaler",
     "optimizer_ema_warmup_clock": "one_per_complete_logical_window",
     "scheduler_clock": "one_per_completed_epoch_after_warmup",
-    "resume": "complete_logical_window_only_CPU_RNG_exact; real_multiworker_augmentation_not_certified"
+    "resume": "complete_logical_window_only; CPU_synthetic_default; schema2_and_train_core_runtime_in_separate_binding"
   },
   "readiness": {
     "cpu_verification_evidence_required": true,
@@ -44,6 +44,6 @@
   "notes": [
     "The CPU verification tool records explicit small-batch/size overrides from this engineering target.",
     "This file does not alter frozen v1/v2a contracts or authorize a production launcher.",
-    "Native GPU collection remains unexecuted and cannot certify a graphics-clock cap."
+    "The separate runtime extension has passive native GPU evidence; this synthetic CPU tool does not query GPU or certify a graphics-clock cap."
   ]
 }
