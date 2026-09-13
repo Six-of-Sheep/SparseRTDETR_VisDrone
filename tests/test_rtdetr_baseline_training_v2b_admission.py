@@ -1,0 +1,620 @@
+"""CPU-only native gate contracts, including a genuinely separate watchdog.
+
+GPU commands/setters are forbidden unless replaced with in-memory fixtures.
+The watchdog tests may signal only their explicitly spawned CPU dummy worker.
+"""
+from __future__ import annotations
+
+import copy
+import gzip
+import hashlib
+import json
+import multiprocessing as mp
+import os
+from pathlib import Path
+import pickle
+import select
+import socket
+import sys
+import time
+
+import pytest
+
+from sparse_rtdetr.baseline import training_v2b_admission as ad
+from sparse_rtdetr.baseline import training_v2b_evidence as ev
+from sparse_rtdetr.baseline import training_v2b_hardware as hw
+from test_rtdetr_baseline_training_v2b_hardware import bound, native_fixture, capture, journal, UUID, BOOT
+
+
+@pytest.fixture(autouse=True)
+def no_native_gpu_or_setter(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("CPU test attempted an unmocked native GPU command")
+    monkeypatch.setattr(ad, "_command", forbidden)
+    monkeypatch.setattr(hw, "_run_native_command", forbidden)
+
+
+def proc(pid=4661, ppid=4659):
+    return {"pid": pid, "ppid": ppid, "start_ticks": 5989,
+            "uid_fields": [1000] * 4, "gid_fields": [1000] * 4,
+            "cmdline_sha256": "a" * 64, "cgroup": "0::/user.slice/user-1000.slice/session-3.scope\n",
+            "executable": {"path": "/usr/lib/xorg/Xorg", "sha256": "b" * 64,
+                           "size_bytes": 10, "owner_uid": 0, "owner_gid": 0,
+                           "mode_octal": "0o755", "group_or_other_writable": False}}
+
+
+def gpu_identity(p):
+    return {"pid": p["pid"], "start_ticks": p["start_ticks"], "readable": True,
+            "executable": {k: p["executable"][k] for k in ("path", "sha256", "size_bytes")}}
+
+
+@pytest.fixture
+def observation(native_fixture):
+    native = hw.collect_native_hardware_probe(native_fixture["bound"], policy=native_fixture["policy"]).as_dict()
+    xorg = proc()
+    native["gpu"]["processes"] = [{"pid": xorg["pid"], "type": "G", "memory_mib": 4.,
+                                    "identity": gpu_identity(xorg)}]
+    native["commands"]["gpu_xml"]["executable"] = ev.file_reference(native_fixture["library"])
+    policy = {"host": native["host"], "boot_id": BOOT, "gpu_uuid": UUID,
+              "pci_bus_id": native["gpu"]["pci_bus_id"], "xorg": xorg,
+              "xorg_parent": proc(4659, 4389), "hardware_policy": native_fixture["policy"].as_dict(),
+              "xorg_memory_max_mib": 16,
+              "expected_driver_userspace_version": native["gpu"]["driver_userspace_version"],
+              "expected_kernel_driver_version": hw._file_text(native["native_files"]["kernel_driver_version"]),
+              "expected_nvml_library": copy.deepcopy(native["capability_inventory"]["nvml_library"]),
+              "expected_nvidia_smi_executable": copy.deepcopy(native["commands"]["gpu_xml"]["executable"]),
+              "known_bert_records": [], "logind": {"Id": "3", "User": "1000", "Active": "yes"}}
+    return native, policy
+
+
+def test_monitored_policy_does_not_relabel_strict_evidence(observation):
+    native, policy = observation
+    before = copy.deepcopy(native)
+    ad._assess_monitored(native, policy, owner=None, initial=True)
+    assert native == before
+    assert native["gate"]["status"] == "BLOCKED"
+    assert "GRAPHICS_CLOCK_CAP_UNVERIFIED" in {r["code"] for r in hw._assess(native)}
+
+
+@pytest.mark.parametrize("change", ["extra_g", "compute", "mixed", "pid", "start", "hash", "boot", "pci", "unreadable"])
+def test_exact_occupant_and_host_identity_is_required(observation, change):
+    native, policy = observation
+    gpu = native["gpu"]
+    if change in {"extra_g", "compute", "mixed"}:
+        row = copy.deepcopy(gpu["processes"][0])
+        row["type"] = {"extra_g": "G", "compute": "C", "mixed": "C+G"}[change]
+        gpu["processes"].append(row)
+    elif change == "pid": gpu["processes"][0]["pid"] += 1
+    elif change == "start": gpu["processes"][0]["identity"]["start_ticks"] += 1
+    elif change == "hash": gpu["processes"][0]["identity"]["executable"]["sha256"] = "c" * 64
+    elif change == "boot": native["boot_id"] = "a-different-boot"
+    elif change == "pci": gpu["pci_bus_id"] = "00000000:02:00.0"
+    elif change == "unreadable": gpu["processes"][0]["identity"]["readable"] = False
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+
+
+@pytest.mark.parametrize("change", ["clock", "temperature", "busy", "used", "free", "driver"])
+def test_xorg_exception_does_not_waive_other_gates(observation, change):
+    native, policy = observation
+    field, value = {"clock": ("current_graphics_clock_mhz", 1501), "temperature": ("temperature_c", 80),
+                    "busy": ("utilization_percent", 6), "used": ("memory_used_mib", 2048),
+                    "free": ("memory_free_mib", 19000), "driver": ("driver_userspace_version", "different")}[change]
+    native["gpu"][field] = value
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+
+
+def test_bert_exception_is_full_record_and_never_allows_delta(observation):
+    native, policy = observation
+    raw = journal(["Linux version fixture", "BERT: [Hardware Error]: Skipped 1 error records",
+                   "BERT: Total records found: 1"])
+    native["kernel_health"] = hw.parse_kernel_journal(raw, boot_id=BOOT)
+    policy["known_bert_records"] = copy.deepcopy(native["kernel_health"]["findings"])
+    ad._assess_monitored(native, policy, owner=None, initial=True)
+    native["kernel_health"]["findings"][0]["cursor"] += "new"
+    with pytest.raises(ad.MonitoredHardwareError, match="exact BERT"):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+    native["kernel_health"]["findings"] = policy["known_bert_records"]
+    with pytest.raises(ad.MonitoredHardwareError, match="new kernel"):
+        ad._assess_monitored(native, policy, owner=native["process"], initial=False)
+
+
+def test_bert_multiplicity_and_generic_machine_check_are_not_waived(observation):
+    native, policy = observation
+    raw = journal(["Linux version fixture", "BERT: Total records found: 1"])
+    native["kernel_health"] = hw.parse_kernel_journal(raw, boot_id=BOOT)
+    policy["known_bert_records"] = copy.deepcopy(native["kernel_health"]["findings"])
+    native["kernel_health"]["findings"].append(copy.deepcopy(policy["known_bert_records"][0]))
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+    native["kernel_health"] = hw.parse_kernel_journal(journal(["Linux version fixture", "mce: [Hardware Error]"]), boot_id=BOOT)
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+
+
+def test_only_exact_owned_compute_is_allowed_during_interval(observation):
+    native, policy = observation
+    native["gpu"]["processes"].append({"pid": native["process"]["pid"], "type": "C", "identity": native["process"]})
+    ad._assess_monitored(native, policy, owner=native["process"], initial=False)
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+
+
+@pytest.mark.parametrize("readable", [True, False])
+def test_post_exit_context_remains_pending_even_with_same_identity(readable):
+    owner = gpu_identity(proc(51234))
+    identity = copy.deepcopy(owner) if readable else {"pid": owner["pid"], "readable": False, "error": "process exited"}
+    rows = [{"pid": owner["pid"], "type": "C", "identity": identity}]
+    retained, pending = ad._post_exit_processes(rows, owner)
+    assert retained == [] and pending is True
+    assert len(rows) == 1
+
+
+@pytest.mark.parametrize("change", ["start_ticks", "executable", "malformed"])
+def test_post_exit_context_rejects_pid_reuse_or_malformed_identity(change):
+    owner = gpu_identity(proc(51234))
+    identity = copy.deepcopy(owner)
+    if change == "start_ticks": identity["start_ticks"] += 1
+    elif change == "executable": identity["executable"]["sha256"] = "c" * 64
+    else: identity.pop("readable")
+    with pytest.raises(ad.MonitoredHardwareError, match="reused|malformed"):
+        ad._post_exit_processes([{"pid": owner["pid"], "type": "C", "identity": identity}], owner)
+
+
+def test_post_exit_filter_retains_foreign_compute_and_mixed_graphics():
+    owner = gpu_identity(proc(51234))
+    rows = [{"pid": owner["pid"], "type": "C+G", "identity": owner},
+            {"pid": owner["pid"] + 1, "type": "C", "identity": {"readable": False}},
+            {"pid": 4661, "type": "G", "identity": gpu_identity(proc())}]
+    retained, pending = ad._post_exit_processes(rows, owner)
+    assert retained == rows and pending is False
+
+
+@pytest.mark.parametrize("owner_exited", [True, False])
+def test_health_rechecks_pidfd_when_worker_exits_during_identity_query(observation, monkeypatch, owner_exited):
+    native, policy = observation
+    owner = native["process"]
+    gpu = copy.deepcopy(native["gpu"])
+    gpu["processes"].append({"pid": owner["pid"], "type": "C", "memory_mib": 32})
+    binary = policy["expected_nvidia_smi_executable"]["path"]
+    def command(argv, **kwargs):
+        assert argv[0] in {binary, "journalctl"}
+        text = journal(["normal kernel event"], start=1) if argv[0] == "journalctl" else "CPU XML fixture"
+        return {**capture(argv, text), "executable": policy["expected_nvidia_smi_executable"]}
+    def identity(pid):
+        if pid == owner["pid"]:
+            return {"pid": pid, "readable": False, "error": "process exited during query"}
+        assert pid == policy["xorg"]["pid"]
+        return gpu_identity(policy["xorg"])
+    def dead(pidfd):
+        assert pidfd == 424242
+        return owner_exited
+    edac = {"controller_counters_available": False, "controllers": [],
+            "counter_delta_available": False, "unavailable_means": "unknown_not_zero"}
+    monkeypatch.setattr(ad, "_command", command)
+    monkeypatch.setattr(hw, "parse_gpu_xml", lambda *args, **kwargs: copy.deepcopy(gpu))
+    monkeypatch.setattr(hw, "_process_identity", identity)
+    monkeypatch.setattr(ad, "_pidfd_dead", dead)
+    monkeypatch.setattr(ad, "_xorg_identity", lambda p: {"cpu_fixture": True})
+    monkeypatch.setattr(ad, "_edac_observation", lambda: copy.deepcopy(edac))
+    spec = {"policy": policy, "baseline": native, "owner": owner, "nvidia_smi_path": binary,
+            "integrity_references": [], "_owner_pidfd": 424242}
+    if owner_exited:
+        row = ad._health_sample(spec, "fixture:1", edac, owner_alive=True)
+        assert row["owner_pidfd_exited"] is True
+        assert row["owner_gpu_release_pending"] is True
+    else:
+        with pytest.raises(ad.MonitoredHardwareError, match="worker process/executable identity changed"):
+            ad._health_sample(spec, "fixture:1", edac, owner_alive=True)
+
+
+@pytest.mark.parametrize("memory", [None, float("nan"), 16.01, -1])
+def test_graphics_allowance_has_its_own_readable_memory_budget(observation, memory):
+    native, policy = observation
+    native["gpu"]["processes"][0]["memory_mib"] = memory
+    with pytest.raises(ad.MonitoredHardwareError, match="16 MiB"):
+        ad._assess_monitored(native, policy, owner=None, initial=True)
+
+
+def test_same_boot_does_not_allow_driver_library_or_binary_drift(observation):
+    native, policy = observation
+    for container, key in ((native["capability_inventory"]["nvml_library"], "sha256"),
+                           (native["commands"]["gpu_xml"]["executable"], "sha256")):
+        old = container[key]
+        container[key] = "d" * 64
+        with pytest.raises(ad.MonitoredHardwareError, match="identity changed"):
+            ad._assess_monitored(native, policy, owner=None, initial=True)
+        container[key] = old
+
+
+@pytest.mark.parametrize("message", [
+    "NVRM: loading NVIDIA UNIX x86_64 Kernel Module 580.178.04",
+    "nvidia: module unloaded", "nvidia-modeset: Loading NVIDIA Kernel Mode Setting Driver",
+    "GPU reset completed", "NVRM: resetting GPU", "Reloading nvidia kernel module",
+    "nvidia 0000:01:00.0: Removing from iommu group",
+])
+def test_new_driver_reset_or_reload_is_a_stop_even_without_xid(message):
+    with pytest.raises(ad.MonitoredHardwareError, match="reset/load"):
+        ad._reject_driver_events([{"MESSAGE": message}])
+
+
+def test_full_anchor_and_bert_records_are_compared_not_just_cursor(observation):
+    native, policy = observation
+    raw = journal(["Linux version fixture", "BERT: Total records found: 1", "normal anchor"])
+    rows = ad._journal_records(raw)
+    policy.update(kernel_anchor_cursor=rows[-1]["__CURSOR"],
+                  kernel_anchor_record_sha256=ev.canonical_sha256(rows[-1]),
+                  known_bert_raw_record_sha256={rows[1]["__CURSOR"]: ev.canonical_sha256(rows[1])})
+    native["commands"]["kernel_journal"] = capture(["journalctl"], raw)
+    ad._check_anchor(native, policy)
+    for index, match in ((2, "anchor record changed"), (1, "BERT record changed")):
+        modified = copy.deepcopy(rows)
+        modified[index]["PRIORITY"] = "changed-but-not-in-parser-summary"
+        changed = "\n".join(json.dumps(r) for r in modified) + "\n-- cursor: " + rows[-1]["__CURSOR"] + "\n"
+        native["commands"]["kernel_journal"] = capture(["journalctl"], changed)
+        with pytest.raises(ad.MonitoredHardwareError, match=match):
+            ad._check_anchor(native, policy)
+
+
+@pytest.fixture
+def policy_bundle(tmp_path, monkeypatch, observation):
+    native, policy = observation
+    root = tmp_path / "reviewed-evidence"
+    root.mkdir()
+    def metadata(p):
+        return {**copy.deepcopy(p), "cgroup": {"utf8": p["cgroup"]}, "stable_during_observation": True}
+    logind = {"expected_identity_fields": {"Id": "3", "User": "1000"},
+              "properties": {"Id": "3", "User": "1000", "Active": "yes", "State": "active"}}
+    docs = {"current-hardware.json": native,
+            "process-identities.json": {"processes": [{"native": {"type": "G"},
+                "metadata": metadata(policy["xorg"]), "parent": metadata(policy["xorg_parent"])}]},
+            "xorg-logind-session.json": logind}
+    for name in ("independent-review-addendum.json", "hardware-log-policy-review.json", "clock-evidence-protocol.json",
+                 "known-boot-bert-records.json", "xorg-identity-policy.json"):
+        docs[name] = {"CPU_fixture": True}
+    refs = {name: ev.write_exclusive_json(root / name, doc) for name, doc in docs.items()}
+    manifest = ev.write_exclusive_json(root / "manifest.json", {"files": refs})
+    monkeypatch.setattr(ad, "_ANCHOR_MANIFEST_SHA", manifest["sha256"])
+    auth = tmp_path / "user-authorization.txt"
+    auth.write_text("CPU fixture: no hardware authorization\n")
+    auth_ref = ev.file_reference(auth)
+    monkeypatch.setattr(ad, "_AUTHORIZATION_SHA", auth_ref["sha256"])
+    return ad.build_policy_bundle(root, authorization_reference=auth_ref)
+
+
+def test_policy_bundle_is_common_but_scoped_admission_hash_is_distinct(policy_bundle):
+    first = ad._validate_policy(policy_bundle, "paired_smoke", 600)
+    second = ad._validate_policy(policy_bundle, "train_core_30epoch", 43200)
+    assert first["bundle_sha256"] == second["bundle_sha256"]
+    assert first["policy_sha256"] != second["policy_sha256"]
+    assert first["minimum_preload_clock_samples"] == 3
+    assert first["minimum_loaded_clock_samples"] == second["minimum_loaded_clock_samples"] == 3
+    assert first["expected_nvml_library"]["sha256"]
+
+
+@pytest.mark.parametrize("field", ["clock_max_mhz", "xorg_memory_max_mib", "known_bert_records", "expected_nvml_library"])
+def test_caller_cannot_edit_reviewed_policy(policy_bundle, field):
+    policy_bundle[field] = "caller-supplied replacement"
+    with pytest.raises(ad.MonitoredHardwareError, match="differs"):
+        ad._validate_policy(policy_bundle, "paired_smoke", 600)
+
+
+@pytest.mark.parametrize("scope,deadline", [("paired_smoke", 601), ("train_core_30epoch", 43201),
+                                           ("production", 1), ("paired_smoke", True)])
+def test_policy_scope_and_deadline_are_bounded(policy_bundle, scope, deadline):
+    with pytest.raises(ad.MonitoredHardwareError, match="not authorized"):
+        ad._validate_policy(policy_bundle, scope, deadline)
+
+
+def test_policy_authority_file_mutation_is_rejected(policy_bundle):
+    Path(policy_bundle["authority_files"]["xorg-identity-policy.json"]["path"]).write_text("{}\n")
+    with pytest.raises(ev.EvidenceError, match="hash mismatch"):
+        ad._validate_policy(policy_bundle, "paired_smoke", 600)
+
+
+def test_start_failure_closes_pidfd_and_preserves_setter_attempt(policy_bundle, bound, observation, tmp_path, monkeypatch):
+    bound = copy.deepcopy(bound)
+    bound["config"]["cuda_gpu_uuid"] = UUID
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    session = ad.MonitoredHardwareSession(bound, policy_bundle, tmp_path / "run", "paired_smoke")
+    native, _ = observation
+    class FakeProbe:
+        def as_dict(self): return copy.deepcopy(native)
+    monkeypatch.setattr(hw, "collect_native_hardware_probe", lambda *a, **kw: FakeProbe())
+    monkeypatch.setattr(ad, "_xorg_identity", lambda p: {"fixture": True})
+    monkeypatch.setattr(ad, "_edac_observation", lambda: {"controllers": []})
+    attempts = []
+    def setter(*args):
+        attempts.append(1)
+        return {"validation_errors": ["permission denied"], "native_return_success": False,
+                "command": {"returncode": 4}, "no_retry_or_fallback": True}
+    monkeypatch.setattr(ad, "_setter", setter)
+    opened = []
+    def open_fd(pid):
+        fd = os.open(tmp_path / "user-authorization.txt", os.O_RDONLY)
+        opened.append(fd)
+        return fd
+    monkeypatch.setattr(ad, "_open_pidfd", open_fd)
+    with pytest.raises(ad.MonitoredHardwareError, match="permission denied"):
+        session.start()
+    assert len(attempts) == 1
+    with pytest.raises(OSError): os.fstat(opened[0])
+    assert json.loads((session.root / "setter-receipt.json").read_bytes())["command"]["returncode"] == 4
+    with pytest.raises(ad.MonitoredHardwareError, match="cannot be retried"): session.start()
+
+
+def test_edac_unavailable_is_not_zero_and_coverage_changes_fail(tmp_path, monkeypatch):
+    monkeypatch.setattr(ad, "_EDAC", tmp_path)
+    missing = ad._edac_observation()
+    assert missing["controller_counters_available"] is False
+    assert missing["unavailable_means"] == "unknown_not_zero"
+    ad._check_edac(missing, missing)
+    controller = tmp_path / "mc0"
+    controller.mkdir()
+    (controller / "ce_count").write_text("0\n")
+    (controller / "ue_count").write_text("0\n")
+    zeros = ad._edac_observation()
+    ad._check_edac(zeros, None)
+    with pytest.raises(ad.MonitoredHardwareError, match="coverage"):
+        ad._check_edac(zeros, missing)
+    (controller / "ce_count").write_text("1\n")
+    with pytest.raises(ad.MonitoredHardwareError, match="nonzero"):
+        ad._check_edac(ad._edac_observation(), None)
+
+
+@pytest.mark.parametrize("clock,util,free", [(1501, 50, 1000), ("N/A", 50, 1000), (1500, 101, 1000), (1500, 50, 63)])
+def test_clock_sample_fails_closed(monkeypatch, clock, util, free):
+    monkeypatch.setattr(ad, "_command", lambda argv, **kw: capture(argv, f"{UUID}, {clock}, {util}, 2000, {free}\n"))
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._clock_sample({"nvidia_smi_path": "/fixture/nvidia-smi", "policy": {
+            "gpu_uuid": UUID, "expected_nvidia_smi_executable": None,
+            "hardware_policy": {"interval_min_free_memory_mib": 64}}})
+
+
+def test_clock_sample_keeps_capture_and_is_not_locked_readback(monkeypatch):
+    calls = []
+    def fake(argv, **kw):
+        calls.append((argv, kw))
+        return capture(argv, f"{UUID}, 1500, 80, 2000, 22000\n")
+    monkeypatch.setattr(ad, "_command", fake)
+    row = ad._clock_sample({"nvidia_smi_path": "/fixture/nvidia-smi", "policy": {
+        "gpu_uuid": UUID, "expected_nvidia_smi_executable": None,
+        "hardware_policy": {"interval_min_free_memory_mib": 64}}})
+    assert row["clock_mhz"] == 1500
+    assert row["command"]["stdout"]["sha256"]
+    assert calls[0][1]["timeout"] < 1
+
+
+def test_admission_cannot_be_constructed_from_json_or_pickled():
+    with pytest.raises(ad.MonitoredHardwareError): ad.MonitoredHardwareAdmission(object(), {})
+    token = ad.MonitoredHardwareAdmission(ad._TOKEN, object())
+    with pytest.raises(ad.MonitoredHardwareError): pickle.dumps(token)
+    with pytest.raises(ad.MonitoredHardwareError): token._session = object()
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad.require_monitored_hardware_admission({}, binding={}, expected_gpu_uuid=UUID)
+
+
+def test_dispatch_does_not_change_legacy_json_rejection():
+    with pytest.raises(hw.HardwareGateError, match="supplied observation JSON"):
+        hw.require_native_hardware_admission({}, binding={}, expected_gpu_uuid=UUID)
+
+
+def test_dispatch_routes_only_exact_new_type(monkeypatch):
+    token = ad.MonitoredHardwareAdmission(ad._TOKEN, object())
+    sentinel = {"fixture": True}
+    monkeypatch.setattr(ad, "require_monitored_hardware_admission", lambda probe, **kw: sentinel)
+    assert hw.require_native_hardware_admission(token, binding={}, expected_gpu_uuid=UUID) is sentinel
+
+
+@pytest.mark.parametrize("mode", ["direct", "sudo_n"])
+def test_setter_is_one_frozen_attempt_and_failure_receipt_is_preserved(tmp_path, monkeypatch, mode):
+    binary, library = tmp_path / "nvidia-smi", tmp_path / "libnvidia-ml.so.580.178.04"
+    binary.write_bytes(b"fake setter")
+    library.write_bytes(b"fake library")
+    monkeypatch.setattr(ad.shutil, "which", lambda name: str(binary))
+    monkeypatch.setattr(hw, "_boot_id", lambda: BOOT)
+    calls = []
+    def fake(argv, **kwargs):
+        calls.append((argv, kwargs))
+        row = capture(argv, "permission denied\n", stderr="")
+        row["returncode"] = 4
+        return row
+    monkeypatch.setattr(ad, "_command", fake)
+    result = ad._setter({"setter_mode": mode, "gpu_uuid": UUID, "boot_id": BOOT}, {
+        "commands": {"gpu_xml": {"executable": ev.file_reference(binary)}},
+        "capability_inventory": {"nvml_library": ev.file_reference(library)}})
+    assert len(calls) == 1
+    assert calls[0][0][-2:] == ["--id=" + UUID, "--lock-gpu-clocks=1500,1500"]
+    assert (calls[0][0][:3] == ["sudo", "-n", "--"]) == (mode == "sudo_n")
+    assert result["native_return_success"] is False
+    assert result["command"]["returncode"] == 4
+    assert result["validation_errors"]
+    assert result["locked_upper_readback_verified"] is False
+
+
+@pytest.mark.parametrize("text", [
+    'GPU clocks set to "(1500, 1500)" for GPU 00000000:01:00.0\nAll done.\n',
+    'GPU clocks set to "(1500, 1500)" for GPU ' + UUID + '\nAll done.\n',
+])
+def test_exact_setter_acknowledgement_is_not_readback(text):
+    result = ad._setter_acknowledgement(text, {"gpu_uuid": UUID, "pci_bus_id": "00000000:01:00.0"})
+    assert result["min_mhz"] == result["max_mhz"] == 1500
+    assert "not_locked_clock_readback" in result["meaning"]
+
+
+@pytest.mark.parametrize("text", [
+    'GPU clocks set to "(1500, 1501)" for GPU 00000000:01:00.0\nAll done.\n',
+    'GPU clocks set to "(1500, 1500)" for GPU 00000000:02:00.0\nAll done.\n',
+    "All done.\n", "permission denied\n", "", "Warning: unsafe clock request\n",
+])
+def test_setter_acknowledgement_rejects_wrong_target_range_or_diagnostics(text):
+    with pytest.raises(ad.MonitoredHardwareError):
+        ad._setter_acknowledgement(text, {"gpu_uuid": UUID, "pci_bus_id": "00000000:01:00.0"})
+
+
+def test_atomic_publication_never_exposes_partial_json_or_overwrites(tmp_path, monkeypatch):
+    target = tmp_path / "complete.json"
+    original = os.link
+    observed = []
+    def link(source, destination, **kwargs):
+        assert not target.exists()
+        assert json.loads(Path(source).read_bytes()) == {"complete": True}
+        observed.append(True)
+        return original(source, destination, **kwargs)
+    monkeypatch.setattr(ad.os, "link", link)
+    reference = ad._publish_exclusive(target, {"complete": True})
+    assert observed and ev.file_reference(target) == reference
+    monkeypatch.setattr(ad.os, "link", original)
+    with pytest.raises(FileExistsError): ad._publish_exclusive(target, {"complete": False})
+    assert json.loads(target.read_bytes()) == {"complete": True}
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_deadlines_use_query_start_and_bound_scope():
+    p = {"clock_max_gap_seconds": 1., "health_max_gap_seconds": 2., "workload_deadline_seconds": 10}
+    assert ad._deadline_error(1_000_000_000, {"clock": 0, "health": 0}, p, 0) is None
+    assert "clock" in ad._deadline_error(1_000_000_001, {"clock": 0, "health": 0}, p, 0)
+    assert "health" in ad._deadline_error(2_000_000_001, {"clock": 2_000_000_000, "health": 0}, p, 0)
+    assert "workload" in ad._deadline_error(11_000_000_000, {"clock": 11_000_000_000, "health": 11_000_000_000}, p, 0)
+
+
+def _cpu_worker(fd):
+    os.read(fd, 1)
+
+
+@pytest.mark.parametrize("stall", ["clock", "health", "footer", "release_gap", "unloaded_formal", None])
+def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_path, monkeypatch, stall):
+    if sys.platform != "linux":
+        pytest.skip("Linux pidfd is required for this process-level CPU test")
+    ctx = mp.get_context("fork")
+    worker_read, worker_write = os.pipe()
+    bystander_read, bystander_write = os.pipe()
+    worker = ctx.Process(target=_cpu_worker, args=(worker_read,))
+    bystander = ctx.Process(target=_cpu_worker, args=(bystander_read,))
+    worker.start(); bystander.start()
+    owner = {"pid": worker.pid, "start_ticks": 1}
+    assert worker.pid != os.getpid() and worker.pid != bystander.pid
+    release_observations = []
+    def clock(spec):
+        if stall == "clock": time.sleep(5.)
+        now = time.monotonic_ns()
+        return {"kind": "clock", "started_ns": now, "finished_ns": now,
+                "utilization_percent": 0 if stall == "unloaded_formal" else 50,
+                "clock_mhz": 1500, "memory_used_mib": 100, "memory_free_mib": 24000}
+    def health(spec, cursor, edac, *, owner_alive):
+        if stall == "health": time.sleep(5.)
+        pending = False
+        if not owner_alive:
+            release_observations.append(True)
+            pending = stall == "release_gap" and len(release_observations) == 2
+        now = time.monotonic_ns()
+        return {"kind": "health", "started_ns": now, "finished_ns": now,
+                "gpu": {"processes": [{"pid": worker.pid, "type": "C"}] if owner_alive or pending else []},
+                "kernel_health": {"last_cursor": "cpu-fixture", "findings": []},
+                "owner_gpu_release_pending": pending, "owner_pidfd_exited": not owner_alive}
+    monkeypatch.setattr(ad, "_clock_sample", clock)
+    monkeypatch.setattr(ad, "_health_sample", health)
+    if stall == "footer":
+        original_gzip = ad.gzip.GzipFile
+        class BadFooter(original_gzip):
+            def __exit__(self, *args):
+                super().__exit__(*args)
+                raise OSError("CPU fixture footer/fsync failure")
+        monkeypatch.setattr(ad.gzip, "GzipFile", BadFooter)
+    policy = {"clock_period_seconds": .2, "health_period_seconds": 1., "clock_max_gap_seconds": 1.,
+              "health_max_gap_seconds": 2., "workload_deadline_seconds": 10,
+              "owner_exit_timeout_seconds": 5., "post_exit_observation_seconds": 2.,
+              "minimum_loaded_clock_samples": 3, "loaded_utilization_min_percent": 10,
+              "minimum_preload_clock_samples": 3,
+              "guardian_heartbeat_period_seconds": .1, "guardian_heartbeat_max_gap_seconds": 1.,
+              "policy_sha256": "1" * 64, "gpu_uuid": UUID,
+              "authorized_scope": "train_core_30epoch" if stall == "unloaded_formal" else "paired_smoke"}
+    marker = tmp_path / "marker.json"
+    marker.write_text("{}\n")
+    spec = {"policy": policy, "evidence_dir": str(tmp_path), "owner": owner,
+            "baseline": {"kernel_health": {"last_cursor": "cpu-fixture"}}, "edac": {},
+            "run_id": "cpu-independent-watchdog", "binding_sha256": "2" * 64, "nonce": "private-fixture",
+            "setter_reference": ev.file_reference(marker), "startup_reference": ev.file_reference(marker)}
+    left, right = socket.socketpair()
+    pidfd = ad._open_pidfd(worker.pid)
+    guardian = ctx.Process(target=ad._watchdog_main, args=(spec, right, pidfd))
+    guardian.start()
+    right.close(); os.close(pidfd)
+    try:
+        if stall not in {"clock", "health"}:
+            assert select.select([left], [], [], 3.)[0]
+            rows, rest = ad._receive(left, b"")
+            assert rows[0]["op"] == "ready"
+            heartbeats = [json.loads(line) for line in (tmp_path / "guardian-heartbeat.jsonl").read_bytes().splitlines()]
+            assert heartbeats[-1]["clock_samples"] >= 3
+            assert heartbeats[-1]["phase"] == "running"
+            assert heartbeats[-1]["guardian_identity"]["pid"] == guardian.pid
+            time.sleep(.8)
+            ad._send(left, {"op": "finish", "nonce": "private-fixture"})
+            assert select.select([left], [], [], 2.)[0]
+            rows, rest = ad._receive(left, rest)
+            assert rows[0]["op"] == "finish"
+            assert not (tmp_path / "monitor-final.json").exists()
+            os.write(worker_write, b"x")
+        guardian.join(7.)
+        assert not guardian.is_alive()
+        worker.join(2.)
+        assert not worker.is_alive()
+        assert bystander.is_alive()
+        result = json.loads((tmp_path / "monitor-final.json").read_bytes())
+        assert result["status"] == ("FAIL" if stall in {"clock", "health", "footer", "unloaded_formal"} else "PASS")
+        heartbeat_rows = [json.loads(line) for line in (tmp_path / "guardian-heartbeat.jsonl").read_bytes().splitlines()]
+        for row in heartbeat_rows:
+            assert row["monotonic_ns"] >= max(row["last_clock_started_ns"], row["last_health_started_ns"])
+        if stall in {"clock", "health"}:
+            assert stall + " observation gap exceeded" in result["failure"]
+            assert worker.exitcode < 0
+        elif stall == "footer":
+            assert "writer failed at close" in result["failure"]
+            assert result["sampled_clock_compliance"] is False
+            assert worker.exitcode == 0
+        elif stall == "unloaded_formal":
+            assert "insufficient loaded clock observations for train_core_30epoch" in result["failure"]
+            assert result["loaded_clock_samples"] == 0
+            assert result["sampled_clock_compliance"] is False
+            assert worker.exitcode == 0
+        else:
+            assert result["worker_exited"] is True
+            assert result["post_exit_health_observations"] >= 2
+            assert result["locked_upper_readback_verified"] is False
+            assert result["loaded_clock_samples"] >= 3
+            records = [json.loads(line) for line in gzip.decompress(Path(result["samples"]["path"]).read_bytes()).splitlines()]
+            if stall == "release_gap":
+                release_rows = [r["record"] for r in records
+                                if r["record"]["kind"] == "health" and r["record"]["owner_pidfd_exited"]]
+                assert [r["owner_gpu_release_pending"] for r in release_rows] == [False, True, False, False]
+                assert result["post_exit_health_observations"] == 2
+            previous = None
+            for i, record in enumerate(records):
+                assert record["sequence"] == i
+                assert record["previous_sha256"] == previous
+                body = {k: v for k, v in record.items() if k != "sha256"}
+                assert ev.canonical_sha256(body) == record["sha256"]
+                previous = record["sha256"]
+            assert result["sample_hash_chain"] == {"records": len(records), "last_sha256": previous}
+            assert ev.file_reference(tmp_path / "guardian-heartbeat.jsonl") == result["guardian_heartbeat"]
+    finally:
+        for fd in (worker_write, bystander_write):
+            try: os.write(fd, b"x")
+            except OSError: pass
+        for process in (worker, bystander, guardian):
+            process.join(.5)
+            if process.is_alive(): process.terminate(); process.join(2.)
+        left.close()
+        for fd in (worker_read, worker_write, bystander_read, bystander_write):
+            os.close(fd)
+
+
+def test_finish_report_failure_is_not_admission(tmp_path):
+    path = tmp_path / "monitor-final.json"
+    ref = {"monitor_final_report": str(path), "run_id": "fixture", "run_binding_sha256": "2" * 64,
+           "policy_sha256": "1" * 64, "monitor_pid": 123, "owner": {"pid": 12}}
+    path.write_text(json.dumps({**ref, "status": "FAIL", "worker_exited": True, "failure": "clock gap"}))
+    with pytest.raises(ad.MonitoredHardwareError, match="clock gap"):
+        ad.wait_for_monitored_finish(ref)

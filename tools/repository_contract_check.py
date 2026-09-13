@@ -147,6 +147,20 @@ V2B_RUNTIME_FILES = {
     'docs/contracts/RTDETR_BASELINE_V2B_RUNTIME.md',
 }
 
+V2B_PAIRED_CONTROL_FILES = {
+    'docs/contracts/RTDETR_BASELINE_V2B_PAIRED_CONTROL.md',
+    'src/sparse_rtdetr/baseline/training_v2b_admission.py',
+    'src/sparse_rtdetr/baseline/training_v2b_campaign.py',
+    'src/sparse_rtdetr/baseline/training_v2b_control.py',
+    'src/sparse_rtdetr/baseline/training_v2b_development.py',
+    'tests/test_rtdetr_baseline_training_v2b_admission.py',
+    'tests/test_rtdetr_baseline_training_v2b_campaign.py',
+    'tests/test_rtdetr_baseline_training_v2b_control.py',
+    'tests/test_rtdetr_baseline_training_v2b_development.py',
+    'tools/run_training_v2b_campaign.py',
+    'tools/run_training_v2b_control.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -684,6 +698,14 @@ BASELINE_MODEL_IMPORT_FILES = {
 # Explicitly allow only the new CPU engineering implementation and tests.
 BASELINE_MODEL_IMPORT_FILES |= {
     path for path in V2B_ENGINEERING_FILES | V2B_RUNTIME_FILES if path.endswith(".py")
+}
+
+BASELINE_MODEL_IMPORT_FILES |= {
+    "src/sparse_rtdetr/baseline/training_v2b_campaign.py",
+    "src/sparse_rtdetr/baseline/training_v2b_control.py",
+    "src/sparse_rtdetr/baseline/training_v2b_development.py",
+    "tests/test_rtdetr_baseline_training_v2b_control.py",
+    "tests/test_rtdetr_baseline_training_v2b_development.py",
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2286,6 +2308,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_ENGINEERING_FILES
     if files & V2B_RUNTIME_FILES:
         allowed_files |= V2B_RUNTIME_FILES
+    if files & V2B_PAIRED_CONTROL_FILES:
+        allowed_files |= V2B_PAIRED_CONTROL_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:

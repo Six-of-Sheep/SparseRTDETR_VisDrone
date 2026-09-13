@@ -675,6 +675,14 @@ def collect_native_hardware_probe(binding: Mapping[str, Any], *, policy: Hardwar
 def require_native_hardware_admission(probe: NativeHardwareProbe, *, binding: Mapping[str, Any],
                                       expected_gpu_uuid: str, max_age_seconds: float = 30.0) -> dict[str, Any]:
     """Require fresh native admission before CUDA initialization, never a dict."""
+    from .training_v2b_admission import (
+        MonitoredHardwareAdmission, require_monitored_hardware_admission,
+    )
+    if type(probe) is MonitoredHardwareAdmission:
+        return require_monitored_hardware_admission(
+            probe, binding=binding, expected_gpu_uuid=expected_gpu_uuid,
+            max_age_seconds=max_age_seconds,
+        )
     payload = _check_capability(probe, binding, max_age_seconds=max_age_seconds)
     if payload["policy"]["expected_gpu_uuid"] != expected_gpu_uuid or not payload.get("gpu") or payload["gpu"]["uuid"] != expected_gpu_uuid:
         raise HardwareGateError("native hardware admission GPU UUID differs")

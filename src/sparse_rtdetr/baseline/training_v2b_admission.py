@@ -1,0 +1,1100 @@
+"""Scoped native admission with a separate, fail-closed GPU watchdog.
+
+Nothing observes hardware or changes its settings at import time. ``start`` is
+an explicitly authorized operation: it checks native idle evidence, executes
+exactly one frozen 1500/1500 setter, and starts an independent process. This is
+monitored admission, never a claim that a locked-clock getter was available.
+The watchdog outlives the CUDA worker and publishes success only after its
+pidfd signals exit and native observations confirm GPU context release.
+"""
+from __future__ import annotations
+
+import ctypes
+import datetime as dt
+import gzip
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import platform
+import queue
+import re
+import select
+import shutil
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import threading
+import time
+from typing import Any, Mapping
+
+from . import training_v2b_evidence as ev
+from . import training_v2b_hardware as hw
+
+_TOKEN = object()
+_ANCHOR_MANIFEST_SHA = "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56e7bd98b0"
+_AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889059b85"
+_SCOPES = {"paired_smoke": 600, "train_core_30epoch": 43_200}
+_PROC = Path("/proc")
+_EDAC = Path("/sys/devices/system/edac/mc")
+_FRAME_LIMIT = 2 * 1024 * 1024
+_DRIVER_EVENT = re.compile(
+    r"\b(?:NVRM|nvidia(?:[-_][a-z0-9]+)?|GPU)\b.*(?:\breset(?:ting|ted)?\b|"
+    r"\bunload(?:ing|ed)?\b|\breload(?:ing|ed)?\b|\bunbind(?:ing)?\b|"
+    r"\bremov(?:ing|ed)\b|\bload(?:ing|ed)\b.*(?:driver|kernel module))|"
+    r"\b(?:loading|loaded|unloading|unloaded|reloading|reloaded)\b.*\b(?:nvidia|NVRM)\b",
+    re.IGNORECASE,
+)
+
+
+class MonitoredHardwareError(hw.HardwareGateError):
+    """A native observation, authorized scope or monitoring deadline failed."""
+
+
+def _utc() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _json_copy(value: Any) -> Any:
+    return ev.strict_json_loads(ev.canonical_json_bytes(value))
+
+
+def _publish_exclusive(path: Path, value: Mapping[str, Any]) -> dict[str, Any]:
+    """Publish complete fsynced bytes atomically, without replacing any path."""
+    temporary = path.parent / ("." + path.name + "." + os.urandom(12).hex() + ".tmp")
+    try:
+        ev.write_exclusive_json(temporary, value)
+        os.link(temporary, path, follow_symlinks=False)
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        return ev.file_reference(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _read_reference(ref: Mapping[str, Any]) -> Any:
+    return ev.strict_json_loads(ev._verify_reference(ref))
+
+
+def _proc_projection(row: Mapping[str, Any]) -> dict[str, Any]:
+    keys = ("pid", "ppid", "start_ticks", "uid_fields", "gid_fields", "cmdline_sha256")
+    exe_keys = ("path", "sha256", "size_bytes", "owner_uid", "owner_gid", "mode_octal", "group_or_other_writable")
+    return {**{k: row[k] for k in keys}, "cgroup": row["cgroup"]["utf8"],
+            "executable": {k: row["executable"][k] for k in exe_keys}}
+
+
+def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: str = "direct",
+                        authorization_reference: Mapping[str, Any]) -> dict[str, Any]:
+    """Read the reviewed evidence anchor; this performs no hardware observation.
+
+    A policy is an explicit declaration, not a caller-supplied observation. Its
+    exception authority is the reviewed manifest, not arbitrary replacement JSON.
+    """
+    if setter_mode not in {"direct", "sudo_n"}:
+        raise MonitoredHardwareError("setter mode must be explicitly direct or sudo_n")
+    if (type(authorization_reference) is not dict or authorization_reference.get("sha256") != _AUTHORIZATION_SHA
+            or ev.file_reference(authorization_reference["path"]) != authorization_reference):
+        raise MonitoredHardwareError("explicit execution authorization reference differs")
+    root = Path(reference_dir).absolute()
+    manifest_ref = ev.file_reference(root / "manifest.json")
+    if manifest_ref["sha256"] != _ANCHOR_MANIFEST_SHA:
+        raise MonitoredHardwareError("unreviewed exception authority manifest")
+    manifest = _read_reference(manifest_ref)
+    names = ("current-hardware.json", "process-identities.json", "xorg-logind-session.json",
+             "independent-review-addendum.json", "hardware-log-policy-review.json",
+             "clock-evidence-protocol.json", "known-boot-bert-records.json", "xorg-identity-policy.json")
+    refs = {name: manifest["files"][name] for name in names}
+    for name, ref in refs.items():
+        if Path(ref["path"]).absolute() != root / name:
+            raise MonitoredHardwareError("exception reference escaped reviewed directory")
+    native, identities, logind = (_read_reference(refs[name]) for name in names[:3])
+    for name in names[3:]:
+        ev._verify_reference(refs[name])
+    occupants = identities["processes"]
+    if len(occupants) != 1 or occupants[0]["native"]["type"] != "G":
+        raise MonitoredHardwareError("reviewed anchor must contain exactly one Xorg")
+    row = occupants[0]
+    xorg, parent = _proc_projection(row["metadata"]), _proc_projection(row["parent"])
+    if (not row["metadata"].get("stable_during_observation")
+            or not row["parent"].get("stable_during_observation")
+            or xorg["ppid"] != parent["pid"]):
+        raise MonitoredHardwareError("reviewed Xorg ancestry is incomplete")
+    expected_logind = {**logind["expected_identity_fields"], "Active": "yes", "State": "active"}
+    if any(logind["properties"].get(k) != v for k, v in expected_logind.items()):
+        raise MonitoredHardwareError("reviewed logind identity differs")
+    journal_rows = _journal_records(hw._command_text(native["commands"]["kernel_journal"]))
+    by_cursor = {row["__CURSOR"]: row for row in journal_rows}
+    bert_raw = {row["cursor"]: ev.canonical_sha256(by_cursor[row["cursor"]])
+                for row in native["kernel_health"]["findings"]}
+    anchor = by_cursor[native["kernel_health"]["last_cursor"]]
+    result = {
+        "schema_version": 1, "mode": "native_monitored_scope_v1", "authority": manifest_ref,
+        "authority_files": refs, "authorization_reference": dict(authorization_reference),
+        "authorized_scope_limits_seconds": dict(_SCOPES), "setter_mode": setter_mode,
+        "host": native["host"], "boot_id": native["boot_id"], "gpu_uuid": native["gpu"]["uuid"],
+        "pci_bus_id": native["gpu"]["pci_bus_id"], "hardware_policy": native["policy"],
+        "expected_driver_userspace_version": native["gpu"]["driver_userspace_version"],
+        "expected_kernel_driver_version": hw._file_text(native["native_files"]["kernel_driver_version"]),
+        "expected_nvml_library": native["capability_inventory"]["nvml_library"],
+        "expected_nvidia_smi_executable": native["commands"]["gpu_xml"]["executable"],
+        "clock_min_mhz": 1500, "clock_max_mhz": 1500,
+        "minimum_preload_clock_samples": 3, "xorg_memory_max_mib": 16,
+        "clock_period_seconds": .2, "clock_max_gap_seconds": 1.,
+        "health_period_seconds": 1., "health_max_gap_seconds": 2.,
+        "guardian_heartbeat_period_seconds": .1, "guardian_heartbeat_max_gap_seconds": 1.,
+        "startup_deadline_seconds": 30.,
+        "owner_exit_timeout_seconds": 10., "post_exit_observation_seconds": 2.,
+        "minimum_loaded_clock_samples_smoke": 3,
+        "loaded_utilization_min_percent": 10,
+        "xorg": xorg, "xorg_parent": parent, "logind": expected_logind,
+        "known_bert_records": native["kernel_health"]["findings"],
+        "known_bert_raw_record_sha256": bert_raw,
+        "kernel_anchor_cursor": native["kernel_health"]["last_cursor"],
+        "kernel_anchor_record_sha256": ev.canonical_sha256(anchor),
+        "edac_unavailable_accepted": True,
+        "clock_readback_verified": False, "settings_after_exit": "keep_1500_1500",
+    }
+    result["bundle_sha256"] = ev.canonical_sha256(result)
+    return result
+
+
+def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int) -> dict[str, Any]:
+    if type(bundle) is not dict:
+        raise MonitoredHardwareError("policy bundle must be an exact reviewed declaration")
+    if scope not in _SCOPES or type(deadline) is not int or not 1 <= deadline <= _SCOPES[scope]:
+        raise MonitoredHardwareError("workload deadline or scope is not authorized")
+    expected = build_policy_bundle(Path(bundle["authority"]["path"]).parent,
+                                   setter_mode=bundle["setter_mode"],
+                                   authorization_reference=bundle["authorization_reference"])
+    if bundle != expected:
+        raise MonitoredHardwareError("policy bundle differs from its reviewed authority or scope")
+    expected.update(authorized_scope=scope, workload_deadline_seconds=deadline,
+                    minimum_loaded_clock_samples=3)
+    expected["policy_sha256"] = ev.canonical_sha256(expected)
+    return expected
+
+
+def _strict_process(pid: int) -> dict[str, Any]:
+    root = _PROC / str(pid)
+    before = (root / "stat").read_text()
+    exe = (root / "exe").resolve(strict=True)
+    reference = ev.file_reference(exe)
+    info = exe.stat()
+    fields = {}
+    for line in (root / "status").read_text().splitlines():
+        if ":" in line:
+            key, value = line.split(":", 1)
+            fields[key] = value.strip()
+    cmdline = (root / "cmdline").read_bytes()
+    cgroup = (root / "cgroup").read_text()
+    after = (root / "stat").read_text()
+    first, last = before.rsplit(")", 1)[1].split(), after.rsplit(")", 1)[1].split()
+    if (first[19] != last[19] or first[1] != last[1]
+            or (root / "exe").resolve(strict=True) != exe or ev.file_reference(exe) != reference):
+        raise MonitoredHardwareError("process identity changed during observation")
+    result = {"pid": pid, "ppid": int(first[1]), "start_ticks": int(first[19]),
+              "uid_fields": [int(v) for v in fields["Uid"].split()],
+              "gid_fields": [int(v) for v in fields["Gid"].split()],
+              "cmdline_sha256": hashlib.sha256(cmdline).hexdigest(), "cgroup": cgroup,
+              "executable": {**{k: reference[k] for k in ("path", "sha256", "size_bytes")},
+                             "owner_uid": info.st_uid, "owner_gid": info.st_gid,
+                             "mode_octal": oct(stat.S_IMODE(info.st_mode)),
+                             "group_or_other_writable": bool(info.st_mode & 0o022)}}
+    return result
+
+
+def _command(argv: list[str], *, timeout: float, trace_loader: bool = False,
+             allow_failed_receipt: bool = False) -> dict[str, Any]:
+    """Only internal fixed argv call sites; no shell, injection, retry or fallback."""
+    start = time.monotonic_ns()
+    utc_started = _utc()
+    executable = Path(shutil.which(argv[0]) or argv[0]).resolve(strict=True)
+    ref = ev.file_reference(executable)
+    env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
+    if trace_loader:
+        env["LD_DEBUG"] = "libs"
+    proc = subprocess.Popen([str(executable), *argv[1:]], stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    error = None
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()  # This exact query/setter subprocess only; never a GPU occupant.
+        out, err = proc.communicate()
+        error = "native command deadline exceeded"
+    if len(out) > 8 * 1024 * 1024 or len(err) > 8 * 1024 * 1024:
+        raise MonitoredHardwareError("native capture exceeds evidence limit")
+    record = {"argv": [str(executable), *argv[1:]], "executable": ref,
+              "returncode": proc.returncode, "error": error, "truncated": False,
+              "loader_trace": trace_loader, "stdout": hw._text_capture(out), "stderr": hw._text_capture(err),
+              "started_ns": start, "finished_ns": time.monotonic_ns(),
+              "utc_started": utc_started, "utc_finished": _utc()}
+    if ev.file_reference(executable) != ref:
+        raise MonitoredHardwareError("native executable changed during query")
+    if (error or proc.returncode != 0) and not allow_failed_receipt:
+        raise MonitoredHardwareError("native command failed: " + json.dumps(record, sort_keys=True))
+    return record
+
+
+def _xorg_identity(policy: Mapping[str, Any]) -> dict[str, Any]:
+    xorg = _strict_process(policy["xorg"]["pid"])
+    parent = _strict_process(policy["xorg_parent"]["pid"])
+    if xorg != policy["xorg"] or parent != policy["xorg_parent"]:
+        raise MonitoredHardwareError("Xorg or direct-parent identity changed")
+    keys = list(policy["logind"])
+    argv = ["loginctl", "show-session", policy["logind"]["Id"], "--no-pager"]
+    for key in keys:
+        argv += ["-p", key]
+    capture = _command(argv, timeout=.5)
+    properties = {}
+    for line in hw._command_text(capture).splitlines():
+        if "=" not in line:
+            raise MonitoredHardwareError("malformed logind response")
+        key, value = line.split("=", 1)
+        if key in properties:
+            raise MonitoredHardwareError("duplicate logind field")
+        properties[key] = value
+    if properties != policy["logind"]:
+        raise MonitoredHardwareError("Xorg logind session changed")
+    return {"xorg": xorg, "parent": parent, "logind": properties, "logind_command": capture,
+            "grandparent_executable": "unavailable_not_required_by_explicit_policy"}
+
+
+def _edac_observation() -> dict[str, Any]:
+    rows = []
+    for path in sorted(_EDAC.glob("mc[0-9]*")):
+        if not re.fullmatch(r"mc[0-9]+", path.name):
+            continue
+        item = {"controller": path.name}
+        for name in ("ce_count", "ue_count"):
+            text = (path / name).read_text().strip()
+            if not text.isdecimal():
+                raise MonitoredHardwareError("EDAC counter is unreadable")
+            item[name] = int(text)
+        rows.append(item)
+    return {"controller_counters_available": bool(rows), "controllers": rows,
+            "counter_delta_available": False,  # This function returns a single observation.
+            "unavailable_means": "unknown_not_zero" if not rows else None}
+
+
+def _check_edac(current: Mapping[str, Any], previous: Mapping[str, Any] | None) -> None:
+    if previous is not None and current != previous:
+        raise MonitoredHardwareError("EDAC counters or observation coverage changed")
+    if any(row[name] != 0 for row in current["controllers"] for name in ("ce_count", "ue_count")):
+        raise MonitoredHardwareError("nonzero EDAC error counter")
+
+
+def _assess_monitored(payload: Mapping[str, Any], policy: Mapping[str, Any], *,
+                      owner: Mapping[str, Any] | None, initial: bool) -> None:
+    if payload["host"] != policy["host"] or payload["boot_id"] != policy["boot_id"]:
+        raise MonitoredHardwareError("reviewed host/boot exception expired")
+    if not payload.get("gpu") or payload["gpu"]["pci_bus_id"] != policy["pci_bus_id"]:
+        raise MonitoredHardwareError("GPU physical identity changed")
+    if (payload["gpu"]["driver_userspace_version"] != policy["expected_driver_userspace_version"]
+            or hw._file_text(payload["native_files"]["kernel_driver_version"]) != policy["expected_kernel_driver_version"]
+            or payload["capability_inventory"]["nvml_library"] != policy["expected_nvml_library"]):
+        raise MonitoredHardwareError("reviewed driver or NVML identity changed")
+    if initial and payload["commands"]["gpu_xml"]["executable"] != policy["expected_nvidia_smi_executable"]:
+        raise MonitoredHardwareError("reviewed nvidia-smi executable identity changed")
+    health = payload["kernel_health"]
+    known = policy["known_bert_records"]
+    actual = health.get("findings", [])
+    if initial:
+        if actual != known or health.get("coverage") != "full_current_boot":
+            raise MonitoredHardwareError("full-boot findings differ from exact BERT exception")
+    elif actual or health.get("prior_findings"):
+        raise MonitoredHardwareError("new kernel hardware/health event")
+    processes = payload["gpu"]["processes"]
+    expected_xorg = policy["xorg"]
+    graphics = [p for p in processes if p["type"] == "G"]
+    if len(graphics) != 1:
+        raise MonitoredHardwareError("expected exactly the approved Xorg occupant")
+    xorg = graphics[0]
+    memory = xorg.get("memory_mib")
+    if type(memory) not in (int, float) or not math.isfinite(memory) or not 0 <= memory <= policy["xorg_memory_max_mib"]:
+        raise MonitoredHardwareError("Xorg memory is unreadable or exceeds its 16 MiB allowance")
+    if (xorg["pid"] != expected_xorg["pid"] or not xorg["identity"].get("readable")
+            or xorg["identity"]["start_ticks"] != expected_xorg["start_ticks"]
+            or xorg["identity"]["executable"]["sha256"] != expected_xorg["executable"]["sha256"]):
+        raise MonitoredHardwareError("native GPU Xorg identity differs")
+    for process in processes:
+        if process is xorg:
+            continue
+        if owner is None or process["type"] != "C" or process.get("identity") != owner:
+            raise MonitoredHardwareError("unapproved GPU compute/graphics occupant")
+    assessed = _json_copy(payload)
+    assessed["policy"]["allowed_graphics_executable_sha256"] = [expected_xorg["executable"]["sha256"]]
+    assessed["kernel_health"]["findings"] = []  # Only after exact full-row/empty-delta checks.
+    assessed["kernel_health"]["prior_findings"] = []
+    assessed["prior_gate_blocked"] = False  # Original strict result remains unchanged in persisted evidence.
+    if owner is not None:
+        assessed["process"] = dict(owner)
+        assessed["phase"] = "interval"
+    reasons = [r for r in hw._assess(assessed) if r["code"] != "GRAPHICS_CLOCK_CAP_UNVERIFIED"]
+    if reasons:
+        raise MonitoredHardwareError("native monitored preconditions failed: " + json.dumps(reasons))
+
+
+def _journal_records(text: str) -> list[dict[str, Any]]:
+    return [ev.strict_json_loads(line.encode()) for line in text.splitlines() if line.startswith("{")]
+
+
+def _reject_driver_events(rows: list[dict[str, Any]]) -> None:
+    if any(_DRIVER_EVENT.search(row["MESSAGE"]) for row in rows):
+        raise MonitoredHardwareError("new driver reset/load/unload/reload event")
+
+
+def _check_anchor(native: Mapping[str, Any], policy: Mapping[str, Any]) -> None:
+    rows = _journal_records(hw._command_text(native["commands"]["kernel_journal"]))
+    hits = [i for i, row in enumerate(rows) if row.get("__CURSOR") == policy["kernel_anchor_cursor"]]
+    if len(hits) != 1:
+        raise MonitoredHardwareError("reviewed journal anchor is not retained")
+    if ev.canonical_sha256(rows[hits[0]]) != policy["kernel_anchor_record_sha256"]:
+        raise MonitoredHardwareError("reviewed journal anchor record changed")
+    for cursor, digest in policy["known_bert_raw_record_sha256"].items():
+        records = [row for row in rows if row["__CURSOR"] == cursor]
+        if len(records) != 1 or ev.canonical_sha256(records[0]) != digest:
+            raise MonitoredHardwareError("reviewed complete BERT record changed")
+    _reject_driver_events(rows[hits[0] + 1:])
+
+
+def _setter(policy: Mapping[str, Any], baseline: Mapping[str, Any]) -> dict[str, Any]:
+    binary = Path(shutil.which("nvidia-smi") or "/usr/bin/nvidia-smi").resolve(strict=True)
+    reference = ev.file_reference(binary)
+    if reference != baseline["commands"]["gpu_xml"]["executable"]:
+        raise MonitoredHardwareError("setter differs from observed native GPU executable")
+    argv = [str(binary), "--id=" + policy["gpu_uuid"], "--lock-gpu-clocks=1500,1500"]
+    direct = policy["setter_mode"] == "direct"
+    if not direct:
+        argv = ["sudo", "-n", "--", *argv]
+    capture = _command(argv, timeout=3., trace_loader=direct, allow_failed_receipt=True)
+    receipt = {"schema_version": 1, "setter_mode": policy["setter_mode"], "command": capture,
+               "utc_started": capture.get("utc_started"), "utc_finished": capture.get("utc_finished"),
+               "nvidia_smi_executable": reference, "gpu_uuid": policy["gpu_uuid"],
+               "boot_id": hw._boot_id(), "clock_min_mhz": 1500, "clock_max_mhz": 1500,
+               "native_return_success": capture["returncode"] == 0 and capture["error"] is None,
+               "validation_errors": [], "locked_upper_readback_verified": False,
+               "nvml_query_library": baseline["capability_inventory"]["nvml_library"],
+               "setter_loaded_nvml_library": None, "no_retry_or_fallback": True}
+    try:
+        stdout = hw._command_text(capture)
+        receipt["acknowledgement"] = _setter_acknowledgement(stdout, policy)
+    except hw.HardwareGateError as exc:
+        receipt["validation_errors"].append("setter acknowledgement/diagnostic rejected: " + str(exc))
+    if direct:
+        stderr = capture["stderr"].get("utf8") or ""
+        candidates = set(re.findall(r"calling init:\s*(/[^\s]*libnvidia-ml\.so[^\s]*)", stderr))
+        if len(candidates) != 1:
+            receipt["validation_errors"].append("setter loaded-NVML identity unavailable")
+        else:
+            receipt["setter_loaded_nvml_library"] = ev.file_reference(Path(candidates.pop()).resolve(strict=True))
+            if receipt["setter_loaded_nvml_library"] != receipt["nvml_query_library"]:
+                receipt["validation_errors"].append("setter NVML differs from native query library")
+    else:
+        receipt["setter_library_scope"] = "sudo_secure_loader_not_traced; executable_and_pre_post_query_library_bound"
+    if receipt["boot_id"] != policy["boot_id"]:
+        receipt["validation_errors"].append("boot changed across setter")
+    if not receipt["native_return_success"]:
+        receipt["validation_errors"].append("native setter did not return success")
+    return receipt
+
+
+def _setter_acknowledgement(text: str, policy: Mapping[str, Any]) -> dict[str, Any]:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    matches = []
+    for line in lines:
+        if line == "All done.":
+            continue
+        match = re.fullmatch(r'GPU clocks set to "\(\s*([0-9]+),\s*([0-9]+)\)" for GPU ([a-zA-Z0-9:.\-]+)', line)
+        if match is None:
+            raise MonitoredHardwareError("unrecognized setter stdout or diagnostic")
+        low, high = int(match[1]), int(match[2])
+        target = match[3].rstrip(".")
+        if ((low, high) != (1500, 1500)
+                or target.lower() not in {policy["gpu_uuid"].lower(), policy["pci_bus_id"].lower()}):
+            raise MonitoredHardwareError("setter acknowledgement target/range differs")
+        matches.append({"target": target, "min_mhz": low, "max_mhz": high})
+    if len(matches) != 1:
+        raise MonitoredHardwareError("setter acknowledgement is missing or ambiguous")
+    return {**matches[0], "meaning": "native_setter_acknowledgement_not_locked_clock_readback"}
+
+
+def _clock_sample(spec: Mapping[str, Any]) -> dict[str, Any]:
+    policy = spec["policy"]
+    capture = _command([spec["nvidia_smi_path"], "--id=" + policy["gpu_uuid"],
+                        "--query-gpu=uuid,clocks.current.graphics,utilization.gpu,memory.used,memory.free",
+                        "--format=csv,noheader,nounits"], timeout=.7)
+    if capture.get("executable") != policy["expected_nvidia_smi_executable"]:
+        raise MonitoredHardwareError("clock sampler executable differs from policy")
+    fields = [x.strip() for x in hw._command_text(capture).strip().split(",")]
+    if len(fields) != 5 or fields[0] != policy["gpu_uuid"]:
+        raise MonitoredHardwareError("clock sample identity/schema differs")
+    values = [hw._value(v) for v in fields[1:]]
+    if any(v is None or not math.isfinite(v) for v in values):
+        raise MonitoredHardwareError("clock sample contains unavailable telemetry")
+    clock, utilization, used, free = values
+    if clock > 1500 or utilization > 100:
+        raise MonitoredHardwareError("clock exceeds 1500 MHz or utilization is invalid")
+    if free < policy["hardware_policy"]["interval_min_free_memory_mib"]:
+        raise MonitoredHardwareError("GPU interval memory reserve exhausted")
+    return {"kind": "clock", "started_ns": capture["started_ns"], "finished_ns": capture["finished_ns"],
+            "clock_mhz": clock, "utilization_percent": utilization,
+            "memory_used_mib": used, "memory_free_mib": free, "command": capture}
+
+
+def _post_exit_processes(processes: list[dict[str, Any]], owner: Mapping[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+    """Retain all strangers; only the original exiting compute PID may linger."""
+    retained, pending = [], False
+    for row in processes:
+        if row["pid"] == owner["pid"] and row["type"] == "C":
+            identity = row.get("identity")
+            if type(identity) is not dict or type(identity.get("readable")) is not bool:
+                raise MonitoredHardwareError("exiting GPU process identity is malformed")
+            if identity["readable"] and identity != owner:
+                raise MonitoredHardwareError("exited worker PID was reused or its executable identity changed")
+            pending = True
+        else:
+            retained.append(row)
+    return retained, pending
+
+
+def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any], *, owner_alive: bool) -> dict[str, Any]:
+    started = time.monotonic_ns()
+    policy = spec["policy"]
+    payload = _json_copy(spec["baseline"])
+    payload["monotonic_started_ns"] = started
+    payload["host"] = platform.node()
+    payload["boot_id"] = hw._boot_id()
+    query = _command([spec["nvidia_smi_path"], "-q", "-x"], timeout=.7)
+    if query.get("executable") != policy["expected_nvidia_smi_executable"]:
+        raise MonitoredHardwareError("health sampler executable differs from policy")
+    payload["gpu"] = hw.parse_gpu_xml(hw._command_text(query), expected_gpu_uuid=policy["gpu_uuid"])
+    for row in payload["gpu"]["processes"]:
+        row["identity"] = hw._process_identity(row["pid"])
+    payload["process"] = spec["owner"]
+    if owner_alive:
+        observed_owner = hw._process_identity(spec["owner"]["pid"])
+        # Query start is only a snapshot: normal worker exit may make /proc
+        # unreadable during collection. Only the original pidfd proves exit.
+        owner_alive = not _pidfd_dead(spec["_owner_pidfd"])
+        if owner_alive and observed_owner != spec["owner"]:
+            raise MonitoredHardwareError("worker process/executable identity changed")
+    payload["phase"] = "interval"
+    payload["native_files"]["kernel_driver_version"] = hw._native_file(Path("/sys/module/nvidia/version"))
+    for ref in spec["integrity_references"]:
+        if ev.file_reference(ref["path"]) != ref:
+            raise MonitoredHardwareError("bound collector/driver/library identity changed")
+    graphics_identity = _xorg_identity(policy)
+    payload.update(rapl=hw._collect_rapl(), cpu_temperatures=hw._collect_cpu_temperatures())
+    journal = _command(["journalctl", "--no-pager", "-k", "--boot=" + policy["boot_id"].replace("-", ""),
+                        "--output=json", "--show-cursor", "--cursor=" + cursor], timeout=.7)
+    payload["kernel_health"] = hw.parse_kernel_journal(hw._command_text(journal), boot_id=policy["boot_id"],
+                                                       expected_start_cursor=cursor)
+    _reject_driver_events(_journal_records(hw._command_text(journal))[1:])
+    current_edac = _edac_observation()
+    _check_edac(current_edac, edac)
+    payload.update(boot_id_after=hw._boot_id(), monotonic_finished_ns=time.monotonic_ns())
+    owner_alive = owner_alive and not _pidfd_dead(spec["_owner_pidfd"])
+    # After the pidfd signals exit, GPU release may briefly lag process exit.
+    # That is never successful final evidence; a reused readable PID is foreign.
+    pending = False
+    if not owner_alive:
+        retained, pending = _post_exit_processes(payload["gpu"]["processes"], spec["owner"])
+        assessed = _json_copy(payload)
+        assessed["gpu"]["processes"] = retained
+    else:
+        assessed = payload
+    _assess_monitored(assessed, policy, owner=spec["owner"] if owner_alive else None, initial=False)
+    return {"kind": "health", "started_ns": started, "finished_ns": time.monotonic_ns(),
+            "gpu": payload["gpu"], "kernel_health": payload["kernel_health"],
+            "rapl": payload["rapl"], "cpu_temperatures": payload["cpu_temperatures"],
+            "graphics_identity": graphics_identity, "edac": current_edac,
+            "gpu_query": query, "journal_query": journal, "owner_gpu_release_pending": pending,
+            "owner_pidfd_exited": not owner_alive}
+
+
+def _send(sock: socket.socket, message: Mapping[str, Any]) -> None:
+    raw = ev.canonical_json_bytes(message) + b"\n"
+    if len(raw) > _FRAME_LIMIT:
+        raise MonitoredHardwareError("monitor frame exceeds limit")
+    sock.sendall(raw)
+
+
+def _receive(sock: socket.socket, buffer: bytes) -> tuple[list[dict[str, Any]], bytes]:
+    chunk = sock.recv(65536)
+    if not chunk:
+        raise EOFError("worker monitor control channel closed")
+    buffer += chunk
+    if len(buffer) > _FRAME_LIMIT:
+        raise MonitoredHardwareError("monitor input exceeds frame limit")
+    rows = []
+    while b"\n" in buffer:
+        raw, buffer = buffer.split(b"\n", 1)
+        row = ev.strict_json_loads(raw)
+        if type(row) is not dict:
+            raise MonitoredHardwareError("monitor request must be an object")
+        rows.append(row)
+    return rows, buffer
+
+
+def _deadline_error(now_ns: int, last: Mapping[str, int], policy: Mapping[str, Any], started_ns: int) -> str | None:
+    if now_ns - started_ns > policy["workload_deadline_seconds"] * 1e9:
+        return "authorized workload deadline exceeded"
+    for kind in ("clock", "health"):
+        if now_ns - last[kind] > policy[kind + "_max_gap_seconds"] * 1e9:
+            return kind + " observation gap exceeded"
+    return None
+
+
+def _pidfd_dead(pidfd: int) -> bool:
+    return bool(select.select([pidfd], [], [], 0)[0])
+
+
+def _pidfd_backend() -> str:
+    if hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"):
+        return "python_pidfd"
+    if sys.platform == "linux" and platform.machine() in {"x86_64", "aarch64"}:
+        return "linux_syscalls_434_424"
+    raise MonitoredHardwareError("this platform has no reviewed pidfd backend")
+
+
+def _pidfd_syscall(number: int, *arguments: Any) -> int:
+    # Some conda CPython builds used older headers and omit os.pidfd_open even
+    # on a new Linux kernel. Select this ABI before execution; never fall back
+    # from a failed operation to signalling a numeric PID.
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.syscall.restype = ctypes.c_long
+    result = libc.syscall(ctypes.c_long(number), *arguments)
+    if result < 0:
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code))
+    return int(result)
+
+
+def _open_pidfd(pid: int) -> int:
+    if _pidfd_backend() == "python_pidfd":
+        return os.pidfd_open(pid)
+    return _pidfd_syscall(434, ctypes.c_int(pid), ctypes.c_uint(0))
+
+
+def _signal_pidfd(pidfd: int, sig: int) -> None:
+    if _pidfd_backend() == "python_pidfd":
+        signal.pidfd_send_signal(pidfd, sig)
+    else:
+        _pidfd_syscall(424, ctypes.c_int(pidfd), ctypes.c_int(sig), ctypes.c_void_p(), ctypes.c_uint(0))
+
+
+def _stop_owner(pidfd: int) -> None:
+    """The fd refers to the exact owned worker, preventing PID reuse kills."""
+    if not _pidfd_dead(pidfd):
+        try:
+            _signal_pidfd(pidfd, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        if not select.select([pidfd], [], [], .5)[0]:
+            try:
+                _signal_pidfd(pidfd, signal.SIGKILL)
+            except ProcessLookupError:
+                return
+
+
+def _telemetry(state: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[str, Any]:
+    clock, health = state.get("clock"), state.get("health")
+    return {"run_id": spec["run_id"], "run_binding_sha256": spec["binding_sha256"],
+            "policy_sha256": spec["policy"]["policy_sha256"], "owner": spec["owner"],
+            "gpu_uuid": spec["policy"]["gpu_uuid"], "authorized_scope": spec["policy"]["authorized_scope"],
+            "clock": {k: v for k, v in (clock or {}).items() if k != "command"},
+            "gpu": health["gpu"] if health else None,
+            "kernel_health": health["kernel_health"] if health else None,
+            "health_started_ns": health["started_ns"] if health else None,
+            "health_finished_ns": health["finished_ns"] if health else None,
+            "loaded_clock_samples": state["loaded"], "locked_upper_readback_verified": False,
+            "admission_mode": "native_monitored_scope_v1", "status": "MONITORED_SCOPE_READY"}
+
+
+def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> None:
+    """Independent process. Query and evidence threads never own its deadline loop."""
+    spec = {**spec, "_owner_pidfd": pidfd}  # Process-local capability, never persisted.
+    policy, root = spec["policy"], Path(spec["evidence_dir"])
+    control.settimeout(.1)
+    guardian_identity = hw._process_identity(os.getpid())
+    if not guardian_identity.get("readable"):
+        raise MonitoredHardwareError("guardian native identity is unavailable")
+    heartbeat_path = root / "guardian-heartbeat.jsonl"
+    heartbeat_fd = os.open(heartbeat_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND
+                           | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    state: dict[str, Any] = {"clock": None, "health": None, "clock_count": 0, "error": None, "loaded": 0,
+                             "owner_alive": True, "own_compute_present": False}
+    lock, stop = threading.Lock(), threading.Event()
+    writes: queue.Queue[Any] = queue.Queue(maxsize=256)
+    log_path = root / "monitor-samples.jsonl.gz"
+    started = time.monotonic_ns()
+    last = {"clock": started, "health": started}
+    ready = False
+    finishing_ns = dead_ns = None
+    post_exit_health = 0
+    last_health_seen = None
+    writer_error: list[str] = []
+    writer_finished = threading.Event()
+    last_written = [started]
+    chain = {"records": 0, "last_sha256": None}
+
+    def writer() -> None:
+        try:
+            with open(log_path, "xb", buffering=0) as raw:
+                with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as stream:
+                    while True:
+                        row = writes.get()
+                        if row is None:
+                            break
+                        entry = {"sequence": chain["records"], "previous_sha256": chain["last_sha256"], "record": row}
+                        entry["sha256"] = ev.canonical_sha256(entry)
+                        stream.write(ev.canonical_json_bytes(entry) + b"\n")
+                        stream.flush()
+                        os.fsync(raw.fileno())
+                        last_written[0] = time.monotonic_ns()
+                        chain.update(records=chain["records"] + 1, last_sha256=entry["sha256"])
+                os.fsync(raw.fileno())
+        except BaseException as exc:
+            writer_error.append(type(exc).__name__ + ": " + str(exc))
+        finally:
+            writer_finished.set()
+
+    def sample(kind: str) -> None:
+        cursor, edac = spec["baseline"]["kernel_health"]["last_cursor"], spec["edac"]
+        period = policy[kind + "_period_seconds"]
+        while not stop.is_set():
+            began = time.monotonic()
+            try:
+                row = (_clock_sample(spec) if kind == "clock" else
+                       _health_sample(spec, cursor, edac, owner_alive=state["owner_alive"]))
+                if stop.is_set():
+                    return
+                if kind == "health":
+                    cursor = row["kernel_health"]["last_cursor"]
+                writes.put_nowait(row)
+                with lock:
+                    state[kind] = row
+                    if kind == "clock":
+                        state["clock_count"] += 1
+                    last[kind] = row["started_ns"]  # Include native query latency in freshness.
+                    if kind == "health":
+                        state["own_compute_present"] = any(p["pid"] == spec["owner"]["pid"] and p["type"] == "C"
+                                                            for p in row["gpu"]["processes"])
+                    if (kind == "clock" and state["owner_alive"] and state["own_compute_present"]
+                            and row["utilization_percent"] >= policy["loaded_utilization_min_percent"]):
+                        state["loaded"] += 1
+            except BaseException as exc:
+                with lock:
+                    state["error"] = type(exc).__name__ + ": " + str(exc)
+                return
+            stop.wait(max(0., period - (time.monotonic() - began)))
+
+    writer_thread = threading.Thread(target=writer, daemon=True)
+    writer_thread.start()
+    for kind in ("clock", "health"):
+        threading.Thread(target=sample, args=(kind,), daemon=True).start()
+    buffer = b""
+    failure = None
+    final_telemetry = None
+    channel_open = True
+    last_heartbeat_ns = 0
+    try:
+        while True:
+            now = time.monotonic_ns()
+            dead = _pidfd_dead(pidfd)
+            if dead and dead_ns is None:
+                dead_ns = now
+                state["owner_alive"] = False
+                if finishing_ns is None:
+                    raise MonitoredHardwareError("worker exited without finish declaration")
+            with lock:
+                frozen_last = dict(last)
+                frozen_clock_count = state["clock_count"]
+                sample_error = state["error"]
+                snapshot = _telemetry(state, spec)
+                clock_ready = frozen_clock_count >= policy["minimum_preload_clock_samples"]
+                health_ready = state["health"] is not None
+                health = state["health"]
+            # Stamp after freezing the sampler state: a concurrent new sample
+            # must not appear newer than this heartbeat's monotonic timestamp.
+            now = time.monotonic_ns()
+            error = sample_error or _deadline_error(now, frozen_last, policy, started)
+            if error:
+                raise MonitoredHardwareError(error)
+            if writer_error or (now - last_written[0] > 2e9):
+                raise MonitoredHardwareError("monitor evidence writer failed or stalled")
+            announce_ready = clock_ready and health_ready and not ready
+            if announce_ready:
+                ready = True
+            if announce_ready or now - last_heartbeat_ns >= policy["guardian_heartbeat_period_seconds"] * 1e9:
+                # Only this deadline loop emits liveness. Sampling/writer threads
+                # cannot keep the guardian apparently alive while it is stopped.
+                heartbeat = {"schema_version": 1, "run_id": spec["run_id"],
+                             "run_binding_sha256": spec["binding_sha256"], "policy_sha256": policy["policy_sha256"],
+                             "gpu_uuid": policy["gpu_uuid"], "owner": spec["owner"],
+                             "guardian_identity": guardian_identity, "monotonic_ns": now,
+                             "last_clock_started_ns": frozen_last["clock"], "last_health_started_ns": frozen_last["health"],
+                             "clock_samples": frozen_clock_count, "health_observed": health_ready,
+                             "phase": "owner_exited" if dead else "finishing" if finishing_ns else "running" if ready else "preload"}
+                raw_heartbeat = ev.canonical_json_bytes(heartbeat) + b"\n"
+                if os.write(heartbeat_fd, raw_heartbeat) != len(raw_heartbeat):
+                    raise MonitoredHardwareError("guardian heartbeat append was incomplete")
+                last_heartbeat_ns = now
+            if announce_ready:
+                _send(control, {"op": "ready", "nonce": spec["nonce"], "telemetry": snapshot,
+                                "guardian_identity": guardian_identity})
+            if finishing_ns and not dead and now - finishing_ns > policy["owner_exit_timeout_seconds"] * 1e9:
+                raise MonitoredHardwareError("finished worker did not exit within the frozen deadline")
+            if dead:
+                if now - dead_ns > policy["owner_exit_timeout_seconds"] * 1e9:
+                    raise MonitoredHardwareError("CUDA context was not released after worker exit")
+                if health and health["started_ns"] >= dead_ns and health["started_ns"] != last_health_seen:
+                    last_health_seen = health["started_ns"]
+                    if health["owner_gpu_release_pending"]:
+                        post_exit_health = 0
+                    else:
+                        post_exit_health += 1
+                if post_exit_health >= 2 and now - dead_ns >= policy["post_exit_observation_seconds"] * 1e9:
+                    final_telemetry = snapshot
+                    if state["loaded"] < policy["minimum_loaded_clock_samples"]:
+                        raise MonitoredHardwareError("insufficient loaded clock observations for " + policy["authorized_scope"])
+                    break
+            if not dead and channel_open and select.select([control], [], [], .025)[0]:
+                try:
+                    messages, buffer = _receive(control, buffer)
+                except EOFError:
+                    if finishing_ns is None and not _pidfd_dead(pidfd):
+                        raise MonitoredHardwareError("live worker lost monitor control channel")
+                    channel_open = False
+                    continue
+                for message in messages:
+                    if message.get("nonce") != spec["nonce"]:
+                        raise MonitoredHardwareError("monitor control identity mismatch")
+                    operation = message.get("op")
+                    if operation == "abort":
+                        raise MonitoredHardwareError("worker abort: " + str(message.get("reason")))
+                    if operation == "finish":
+                        if finishing_ns is not None:
+                            raise MonitoredHardwareError("duplicate finish declaration")
+                        finishing_ns = time.monotonic_ns()
+                    elif operation != "check" or finishing_ns is not None:
+                        raise MonitoredHardwareError("invalid monitored workload state transition")
+                    _send(control, {"op": operation, "nonce": spec["nonce"], "telemetry": snapshot})
+            else:
+                time.sleep(.025)
+    except BaseException as exc:
+        failure = type(exc).__name__ + ": " + str(exc)
+        _stop_owner(pidfd)  # Stop owned computation before attempting any final file I/O.
+    finally:
+        stop.set()
+        try:
+            writes.put_nowait(None)
+        except queue.Full:
+            failure = failure or "monitor evidence queue could not close"
+        if not writer_finished.wait(2.):
+            failure = failure or "monitor evidence writer did not close"
+        if writer_error:
+            failure = failure or "monitor evidence writer failed at close: " + "; ".join(writer_error)
+        result = {"schema_version": 1, "status": "FAIL" if failure else "PASS",
+                  "run_id": spec["run_id"], "run_binding_sha256": spec["binding_sha256"],
+                  "policy_sha256": policy["policy_sha256"], "authorized_scope": policy["authorized_scope"],
+                  "gpu_uuid": policy["gpu_uuid"],
+                  "owner": spec["owner"], "monitor_pid": os.getpid(), "finished_utc": _utc(),
+                  "guardian_identity": guardian_identity, "pidfd_backend": _pidfd_backend(),
+                  "failure": failure, "worker_exited": _pidfd_dead(pidfd),
+                  "post_exit_health_observations": post_exit_health,
+                  "sampled_clock_compliance": failure is None,
+                  "locked_upper_readback_verified": False, "settings_after_exit": "keep_1500_1500",
+                  "loaded_clock_samples": state["loaded"], "final_telemetry": final_telemetry,
+                  "setter_receipt": spec["setter_reference"], "startup_evidence": spec["startup_reference"],
+                  "strict_native_gate": "BLOCKED", "no_retry_or_fallback": True}
+        if writer_finished.is_set() and not writer_error:
+            result["samples"] = ev.file_reference(log_path)
+            result["sample_hash_chain"] = dict(chain)
+        try:
+            os.fsync(heartbeat_fd)
+            os.close(heartbeat_fd)
+            result["guardian_heartbeat"] = ev.file_reference(heartbeat_path)
+            _publish_exclusive(root / "monitor-final.json", result)
+        finally:
+            control.close()
+            os.close(pidfd)
+
+
+class MonitoredHardwareAdmission:
+    """An in-process handle to a live native watchdog, not a JSON observation."""
+    __slots__ = ("_session",)
+
+    def __init__(self, token: object, session: "MonitoredHardwareSession") -> None:
+        if token is not _TOKEN:
+            raise MonitoredHardwareError("admission requires a live native monitored session")
+        object.__setattr__(self, "_session", session)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise MonitoredHardwareError("monitored admissions are immutable")
+
+    def __reduce__(self) -> Any:
+        raise MonitoredHardwareError("monitored admission cannot be serialized")
+
+
+class MonitoredHardwareSession:
+    def __init__(self, binding: Mapping[str, Any], policy_bundle: Mapping[str, Any],
+                 evidence_dir: str | os.PathLike[str], authorized_scope: str,
+                 workload_deadline_seconds: int = 600) -> None:
+        self.binding = ev.validate_run_binding(binding)
+        self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+        if self.binding["config"].get("cuda_gpu_uuid") != self.policy["gpu_uuid"]:
+            raise MonitoredHardwareError("workload GPU identity differs from policy")
+        self.root = Path(evidence_dir).absolute()
+        self._state = "new"
+        self._channel: socket.socket | None = None
+        self._child: subprocess.Popen | None = None
+        self._buffer = b""
+        self._nonce = os.urandom(32).hex()
+        self._owner: dict[str, Any] | None = None
+        self._admission: MonitoredHardwareAdmission | None = None
+        self._last: dict[str, Any] | None = None
+        self._guardian_identity: dict[str, Any] | None = None
+        self._source_refs = [ev.file_reference(p) for p in (__file__, hw.__file__, ev.__file__)]
+
+    def start(self) -> "MonitoredHardwareSession":
+        if self._state != "new":
+            raise MonitoredHardwareError("session start cannot be retried")
+        self._state = "starting"
+        self.root.mkdir(mode=0o700, parents=False, exist_ok=False)
+        pidfd = None
+        child = None
+        try:
+            ev.write_exclusive_json(self.root / "policy.json", self.policy)
+            pidfd = _open_pidfd(os.getpid())
+            self._owner = hw._process_identity(os.getpid())
+            if not self._owner.get("readable"):
+                raise MonitoredHardwareError("worker native identity is unreadable")
+            native = hw.collect_native_hardware_probe(
+                self.binding, policy=hw.HardwarePolicy(**{**self.policy["hardware_policy"],
+                                                         "allowed_graphics_executable_sha256": ()})).as_dict()
+            ev.write_exclusive_json(self.root / "strict-preflight.json", native)
+            _assess_monitored(native, self.policy, owner=None, initial=True)
+            _check_anchor(native, self.policy)
+            identity = _xorg_identity(self.policy)
+            edac = _edac_observation()
+            _check_edac(edac, None)
+            # All preconditions precede the one and only hardware mutation.
+            receipt = _setter(self.policy, native)
+            setter_ref = ev.write_exclusive_json(self.root / "setter-receipt.json", receipt)
+            if receipt["validation_errors"]:
+                raise MonitoredHardwareError("native setter failed: " + json.dumps(receipt["validation_errors"]))
+            post = hw.collect_native_hardware_probe(
+                self.binding, policy=hw.HardwarePolicy(**{**self.policy["hardware_policy"],
+                                                         "allowed_graphics_executable_sha256": ()})).as_dict()
+            _assess_monitored(post, self.policy, owner=None, initial=True)
+            _check_anchor(post, self.policy)
+            if post["capability_inventory"] != native["capability_inventory"]:
+                raise MonitoredHardwareError("driver/NVML identity changed across setter")
+            startup_ref = ev.write_exclusive_json(self.root / "startup.json", {
+                "native_post_setter": post, "xorg_identity": identity, "edac": edac,
+                "setter_receipt": setter_ref, "policy_sha256": self.policy["policy_sha256"],
+                "run_binding_sha256": self.binding["binding_sha256"], "strict_native_gate": "BLOCKED"})
+            base = {k: v for k, v in post.items() if k not in ("commands", "collector_sources")}
+            refs = self._source_refs + [post["capability_inventory"]["nvml_library"],
+                                      post["commands"]["gpu_xml"]["executable"]]
+            spec = {"policy": self.policy, "owner": self._owner, "baseline": base,
+                    "pidfd_backend": _pidfd_backend(),
+                    "nvidia_smi_path": post["commands"]["gpu_xml"]["executable"]["path"],
+                    "edac": edac, "integrity_references": refs, "run_id": self.binding["run_id"],
+                    "binding_sha256": self.binding["binding_sha256"], "nonce": self._nonce,
+                    "evidence_dir": str(self.root), "setter_reference": setter_ref,
+                    "startup_reference": startup_ref}
+            spec_ref = ev.write_exclusive_json(self.root / "monitor-spec.json", spec)
+            parent, child = socket.socketpair()
+            self._channel = parent
+            parent.settimeout(1.)
+            env = os.environ.copy()
+            package_root = str(Path(__file__).resolve().parents[2])
+            env["PYTHONPATH"] = package_root + os.pathsep + env.get("PYTHONPATH", "")
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            self._child = subprocess.Popen(
+                [sys.executable, "-c", "from sparse_rtdetr.baseline.training_v2b_admission import _entry; _entry()",
+                 str(child.fileno()), str(pidfd), spec_ref["path"], spec_ref["sha256"]],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                close_fds=True, pass_fds=(child.fileno(), pidfd), start_new_session=True, env=env)
+            child.close()
+            child = None
+            os.close(pidfd)
+            pidfd = None
+            # Cold interpreter/import time is not an admitted sampling gap.
+            # The child enforces the unchanged 1 s / 2 s deadlines itself.
+            self._wait_response("ready", timeout=self.policy["startup_deadline_seconds"])
+            self._admission = MonitoredHardwareAdmission(_TOKEN, self)
+            self._state = "running"
+            _publish_exclusive(self.root / "admission-start.json", {
+                "status": "MONITORED_SCOPE_READY", "monitor_pid": self._child.pid, "owner": self._owner,
+                "guardian_identity": self._guardian_identity, "gpu_uuid": self.policy["gpu_uuid"],
+                "heartbeat_path": str(self.root / "guardian-heartbeat.jsonl"),
+                "authorized_scope": self.policy["authorized_scope"],
+                "workload_deadline_seconds": self.policy["workload_deadline_seconds"],
+                "heartbeat_period_seconds": self.policy["guardian_heartbeat_period_seconds"],
+                "heartbeat_max_gap_seconds": self.policy["guardian_heartbeat_max_gap_seconds"],
+                "clock_max_gap_seconds": self.policy["clock_max_gap_seconds"],
+                "health_max_gap_seconds": self.policy["health_max_gap_seconds"],
+                "collector_sources": self._source_refs, "monitor_spec_reference": spec_ref,
+                "run_id": self.binding["run_id"], "run_binding_sha256": self.binding["binding_sha256"],
+                "policy_sha256": self.policy["policy_sha256"], "setter_receipt": setter_ref,
+                "clock_readback_verified": False})
+            return self
+        except BaseException as exc:
+            self._state = "failed"
+            if self._channel is not None:
+                self._channel.close()
+            ev.write_exclusive_json(self.root / "startup-failure.json", {"error": type(exc).__name__ + ": " + str(exc),
+                                                                       "no_retry_or_fallback": True})
+            raise
+        finally:
+            if pidfd is not None:
+                os.close(pidfd)
+            if child is not None:
+                child.close()
+
+    def _wait_response(self, operation: str, *, timeout: float = 1.) -> dict[str, Any]:
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if self._child is None or self._child.poll() is not None:
+                raise MonitoredHardwareError("independent hardware watchdog exited")
+            if select.select([self._channel], [], [], min(.1, end - time.monotonic()))[0]:
+                rows, self._buffer = _receive(self._channel, self._buffer)
+                if not rows:
+                    continue
+                if len(rows) != 1 or rows[0].get("op") != operation or rows[0].get("nonce") != self._nonce:
+                    raise MonitoredHardwareError("monitor response identity/order differs")
+                telemetry = rows[0]["telemetry"]
+                if telemetry["run_binding_sha256"] != self.binding["binding_sha256"]:
+                    raise MonitoredHardwareError("monitor binding differs")
+                self._last = telemetry
+                if operation == "ready":
+                    guardian = rows[0].get("guardian_identity")
+                    if guardian != hw._process_identity(self._child.pid):
+                        raise MonitoredHardwareError("guardian native process identity differs")
+                    self._guardian_identity = guardian
+                return telemetry
+        raise MonitoredHardwareError("watchdog response deadline exceeded")
+
+    def admission(self) -> MonitoredHardwareAdmission:
+        if self._state != "running" or self._admission is None:
+            raise MonitoredHardwareError("session has no live admission")
+        return self._admission
+
+    def check(self, stage: str = "window") -> dict[str, Any]:
+        # Full executable hashing runs in the independent health sampler, not
+        # three times per logical window. PID/start identity remains checked here.
+        own_pid = os.getpid()
+        own_start = int((_PROC / str(own_pid) / "stat").read_text().rsplit(")", 1)[1].split()[19])
+        if (self._state != "running" or self._owner is None or own_pid != self._owner["pid"]
+                or own_start != self._owner["start_ticks"]):
+            raise MonitoredHardwareError("monitored worker identity/state changed")
+        try:
+            _send(self._channel, {"op": "check", "nonce": self._nonce, "stage": stage})
+            return self._wait_response("check")
+        except BaseException:
+            self._state = "failed"
+            if self._channel:
+                self._channel.close()  # Guardian independently detects loss and stops this exact worker.
+            raise
+
+    def abort(self, reason: str) -> None:
+        self._state = "failed"
+        if self._channel is not None:
+            try:
+                _send(self._channel, {"op": "abort", "nonce": self._nonce, "reason": str(reason)})
+            finally:
+                self._channel.close()
+
+    def finish(self) -> dict[str, Any]:
+        if self._state != "running":
+            raise MonitoredHardwareError("only an active workload can finish")
+        _send(self._channel, {"op": "finish", "nonce": self._nonce})
+        self._wait_response("finish")
+        self._state = "finishing"
+        return {"monitor_final_report": str(self.root / "monitor-final.json"),
+                "monitor_pid": self._child.pid, "run_id": self.binding["run_id"],
+                "guardian_identity": self._guardian_identity, "gpu_uuid": self.policy["gpu_uuid"],
+                "run_binding_sha256": self.binding["binding_sha256"], "policy_sha256": self.policy["policy_sha256"],
+                "owner": self._owner, "worker_must_exit": True}
+
+    def __enter__(self) -> "MonitoredHardwareSession":
+        return self.start()
+
+    def __exit__(self, kind: Any, error: Any, traceback: Any) -> None:
+        if kind is not None:
+            self.abort(str(error))
+        elif self._state == "running":
+            self.finish()
+
+
+def require_monitored_hardware_admission(probe: MonitoredHardwareAdmission, *, binding: Mapping[str, Any],
+                                         expected_gpu_uuid: str, max_age_seconds: float = 30.) -> dict[str, Any]:
+    if type(probe) is not MonitoredHardwareAdmission:
+        raise MonitoredHardwareError("supplied JSON cannot grant monitored admission")
+    if type(max_age_seconds) not in {int, float} or not math.isfinite(max_age_seconds) or not 0 < max_age_seconds <= 60:
+        raise MonitoredHardwareError("invalid native admission age")
+    checked = ev.validate_run_binding(binding, verify_files=False)
+    session = probe._session
+    if (checked != session.binding or expected_gpu_uuid != session.policy["gpu_uuid"]
+            or session._admission is not probe):
+        raise MonitoredHardwareError("live monitored capability is bound to another run/device")
+    for ref in session._source_refs:
+        if ev.file_reference(ref["path"]) != ref:
+            raise MonitoredHardwareError("admission implementation changed")
+    telemetry = session.check(stage="native_admission")
+    now = time.monotonic_ns()
+    for field, maximum in (("clock", min(1., max_age_seconds)), ("health", min(2., max_age_seconds))):
+        observed = telemetry["clock"]["started_ns"] if field == "clock" else telemetry["health_started_ns"]
+        if observed > now or now - observed > maximum * 1e9:
+            raise MonitoredHardwareError("monitored native admission is stale")
+    return telemetry
+
+
+def wait_for_monitored_finish(reference: Mapping[str, Any], *, timeout_seconds: float = 15.) -> dict[str, Any]:
+    """Controller only, after worker exit. Reading this report grants no capability."""
+    if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 60:
+        raise MonitoredHardwareError("invalid final report wait bound")
+    path = Path(reference["monitor_final_report"])
+    end = time.monotonic() + timeout_seconds
+    while not path.exists():
+        if time.monotonic() >= end:
+            raise MonitoredHardwareError("monitor final report unavailable")
+        time.sleep(.05)
+    path, raw = ev._read_regular(path)
+    report_reference = {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+                        "size_bytes": len(raw), "sha256_scope": "complete_file_bytes"}
+    report = ev.strict_json_loads(raw)
+    for key in ("run_id", "run_binding_sha256", "policy_sha256", "monitor_pid", "owner", "guardian_identity", "gpu_uuid"):
+        if report.get(key) != reference.get(key):
+            raise MonitoredHardwareError("monitor final evidence binding differs")
+    if report.get("status") != "PASS" or report.get("worker_exited") is not True:
+        raise MonitoredHardwareError("monitor workload failed: " + str(report.get("failure")))
+    for name in ("samples", "setter_receipt", "startup_evidence", "guardian_heartbeat"):
+        ref = report[name]
+        if ev.file_reference(ref["path"]) != ref:
+            raise MonitoredHardwareError("monitor final evidence changed")
+    if ev.file_reference(path) != report_reference:
+        raise MonitoredHardwareError("monitor final report changed while verified")
+    return {**report, "final_report_reference": report_reference}
+
+
+def _entry() -> None:
+    fd, pidfd = int(sys.argv[1]), int(sys.argv[2])
+    path, digest = Path(sys.argv[3]), sys.argv[4]
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != digest:
+        _stop_owner(pidfd)
+        raise MonitoredHardwareError("watchdog specification changed")
+    spec = ev.strict_json_loads(raw)
+    _watchdog_main(spec, socket.socket(fileno=fd), pidfd)
