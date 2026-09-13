@@ -313,6 +313,268 @@ def test_policy_authority_file_mutation_is_rejected(policy_bundle):
         ad._validate_policy(policy_bundle, "paired_smoke", 600)
 
 
+@pytest.fixture
+def external_receipt(tmp_path, monkeypatch, policy_bundle):
+    """Synthetic user/journal evidence; never a hardware authorization."""
+    root = tmp_path / "external-clock"
+    root.mkdir()
+    terminal = root / "terminal.txt"
+    terminal.write_text('GPU clocks set to "(gpuClkMin 1500, gpuClkMax 1500)" for GPU '
+                        + policy_bundle["pci_bus_id"] + '\nAll done.\n' + ad._EXTERNAL_TERMINAL_TRAILER + '\n')
+    attestation = root / "attestation.txt"
+    attestation.write_text("CPU fixture only; no GPU or setter permitted\n")
+    monkeypatch.setattr(ad, "_EXTERNAL_ADMIN_ATTESTATION_SHA", ev.file_reference(attestation)["sha256"])
+    binary = root / "journalctl"
+    binary.write_bytes(b"CPU fake journal query binary")
+    argv = [policy_bundle["expected_nvidia_smi_executable"]["path"], "-i", UUID, "--lock-gpu-clocks=1500,1500"]
+    common = {"_HOSTNAME": policy_bundle["host"], "_BOOT_ID": BOOT.replace("-", ""),
+              "_PID": "2911481", "_UID": "1000", "_AUDIT_LOGINUID": "1000", "_EXE": "/usr/bin/sudo",
+              "_COMM": "sudo", "SYSLOG_IDENTIFIER": "sudo", "_CMDLINE": "sudo " + " ".join(argv),
+              "_AUDIT_SESSION": "1366", "_SYSTEMD_SESSION": "1366",
+              "_SYSTEMD_INVOCATION_ID": "fixture-invocation", "_MACHINE_ID": "fixture-machine"}
+    messages = ["     lyy : TTY=pts/1 ; PWD=/ ; USER=root ; COMMAND=" + " ".join(argv),
+                "pam_unix(sudo:session): session opened for user root(uid=0) by lyy(uid=1000)",
+                "pam_unix(sudo:session): session closed for user root"]
+    rows = [{**common, "MESSAGE": message, "_GID": "1000" if i == 0 else "0", "__CURSOR": "sudo:" + str(i),
+             "__MONOTONIC_TIMESTAMP": str(10_000 + i), "__REALTIME_TIMESTAMP": str(1_000_000 + i)}
+            for i, message in enumerate(messages)]
+    receipt = {"schema_version": 1, "kind": "reviewed_external_admin_clock_receipt",
+               "provenance": ad._EXTERNAL_CLOCK_PROVENANCE, "locally_executed_setter": False,
+               "native_exitcode": None, "native_exit_code": None, "native_return_success": None,
+               "native_journal_query_returncode_is_setter_exitcode": False,
+               "reported_acknowledgement_success": True, "acknowledgement_verified": True,
+               "success_ack_observed": True, "locked_upper_readback_verified": False,
+               "stdout_source": "user_supplied_terminal", "time_source": "native_sudo_journal_record",
+               "separate_stderr_capture_available": False, "setter_loaded_nvml_library": None,
+               "transport_line": ad._EXTERNAL_TERMINAL_TRAILER, "clock_min_mhz": 1500, "clock_max_mhz": 1500,
+               **{key: policy_bundle[key] for key in ("host", "boot_id", "gpu_uuid", "pci_bus_id")},
+               "user_attestation": ev.file_reference(attestation), "terminal_transcript": ev.file_reference(terminal),
+               "command_argv": argv, "native_sudo_pid": 2911481,
+               "native_command_realtime_timestamp_us": rows[0]["__REALTIME_TIMESTAMP"]}
+    def save_rows():
+        raw = b"\n".join(ev.canonical_json_bytes(row) for row in rows) + b"\n"
+        (root / "journal.jsonl").write_bytes(raw)
+        receipt["native_command_journal"] = ev.file_reference(root / "journal.jsonl")
+        receipt["command_journal_record_sha256"] = ev.canonical_sha256(rows[0])
+        query_argv = [str(binary), "-b", "_PID=2911481", "--output=json", "--no-pager"]
+        query = {**capture(query_argv, raw.decode()), "argv": query_argv, "executable": ev.file_reference(binary)}
+        (root / "query.json").write_bytes(ev.canonical_json_bytes(query))
+        receipt["native_journal_query"] = ev.file_reference(root / "query.json")
+        prior = {"status": "fulfilled", "value": {"exit_code": 0,
+            "output": raw.decode() + "-- cursor: " + rows[-1]["__CURSOR"] + "\n"}}
+        (root / "prior.json").write_bytes(ev.canonical_json_bytes(prior))
+        receipt["prior_journal_tool_capture"] = ev.file_reference(root / "prior.json")
+    def publish():
+        path = root / "reviewed-receipt.json"
+        path.write_bytes(ev.canonical_json_bytes(receipt))
+        reference = ev.file_reference(path)
+        monkeypatch.setattr(ad, "_EXTERNAL_CLOCK_RECEIPT_SHA", reference["sha256"])
+        return reference
+    def build(reference=None):
+        return ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+            authorization_reference=policy_bundle["authorization_reference"], setter_mode=ad._EXTERNAL_ADMIN_MODE,
+            external_clock_receipt=reference or publish())
+    save_rows()
+    return {"receipt": receipt, "rows": rows, "reference": publish(), "root": root,
+            "publish": publish, "save_rows": save_rows, "build": build, "policy": policy_bundle}
+
+
+def test_external_clock_evidence_is_reported_success_with_unknown_native_exit(external_receipt, observation):
+    fixture = external_receipt
+    bundle = fixture["build"](fixture["reference"])
+    policy = ad._validate_policy(bundle, "paired_smoke", 600)
+    result = ad._external_clock_evidence(policy, observation[0])
+    assert result["command"] is None and result["locally_executed_setter"] is False
+    assert result["native_exitcode"] is None and result["native_exit_code"] is None
+    assert result["native_return_success"] is None
+    assert result["reported_acknowledgement_success"] is True
+    assert result["provenance"] == ad._EXTERNAL_CLOCK_PROVENANCE
+    assert result["locked_upper_readback_verified"] is False
+    assert policy["clock_max_mhz"] == 1500
+    assert policy["minimum_preload_clock_samples"] == policy["minimum_loaded_clock_samples"] == 3
+    assert policy["clock_period_seconds"] == .2
+    assert policy["clock_max_gap_seconds"] == 1 and policy["health_max_gap_seconds"] == 2
+    assert "clock" in ad._deadline_error(1_000_000_001, {"clock": 0, "health": 0}, policy, 0)
+    with pytest.raises(ad.MonitoredHardwareError, match="cannot execute"):
+        ad._setter(policy, observation[0])
+
+
+@pytest.mark.parametrize("field,value", [("gpu_uuid", "wrong"), ("pci_bus_id", "00000000:02:00.0"),
+    ("boot_id", "wrong"), ("clock_max_mhz", 1501), ("clock_min_mhz", 1000),
+    ("native_exitcode", 0), ("native_return_success", True), ("reported_acknowledgement_success", False),
+    ("locally_executed_setter", True), ("locked_upper_readback_verified", True),
+    ("native_journal_query_returncode_is_setter_exitcode", True)])
+def test_external_receipt_rejects_identity_range_or_fabricated_native_success(external_receipt, field, value):
+    external_receipt["receipt"][field] = value
+    with pytest.raises(ad.MonitoredHardwareError):
+        external_receipt["build"]()
+
+
+@pytest.mark.parametrize("change", ["missing_terminal", "incomplete_ack", "diagnostic", "wrong_close", "wrong_gpu"])
+def test_external_original_stdout_is_required_and_only_exact_transport_trailer_is_removed(external_receipt, change):
+    receipt = external_receipt["receipt"]
+    if change == "missing_terminal":
+        del receipt["terminal_transcript"]
+    else:
+        path = Path(receipt["terminal_transcript"]["path"])
+        raw = path.read_text()
+        if change == "incomplete_ack": raw = raw.replace("All done.\n", "")
+        elif change == "diagnostic": raw += "Warning: incomplete setting\n"
+        elif change == "wrong_close": raw = raw.replace("192.168.0.198", "192.168.0.199")
+        else: raw = raw.replace("00000000:01:00.0", "00000000:02:00.0")
+        path.write_text(raw)
+        receipt["terminal_transcript"] = ev.file_reference(path)
+    with pytest.raises(ad.MonitoredHardwareError):
+        external_receipt["build"]()
+
+
+@pytest.mark.parametrize("change", ["uid", "exe", "boot", "pid", "command", "open", "close", "order", "query_exit"])
+def test_external_native_sudo_journal_requires_real_user_and_privileged_session_chain(external_receipt, change):
+    rows = external_receipt["rows"]
+    if change in {"uid", "exe", "boot", "pid"}:
+        field, value = {"uid": ("_UID", "0"), "exe": ("_EXE", "/tmp/sudo"),
+                        "boot": ("_BOOT_ID", "wrong"), "pid": ("_PID", "2911482")}[change]
+        rows[0][field] = value
+    elif change == "command": rows[0]["MESSAGE"] = rows[0]["MESSAGE"].replace("1500,1500", "1500,1501")
+    elif change == "open": rows[1]["MESSAGE"] = "session opened without native root identity"
+    elif change == "close": rows[2]["MESSAGE"] = "session closed without user identity"
+    elif change == "order": rows[2]["__MONOTONIC_TIMESTAMP"] = rows[0]["__MONOTONIC_TIMESTAMP"]
+    external_receipt["save_rows"]()
+    if change == "query_exit":
+        receipt = external_receipt["receipt"]
+        path = Path(receipt["native_journal_query"]["path"])
+        query = json.loads(path.read_bytes())
+        query["returncode"] = 1
+        path.write_bytes(ev.canonical_json_bytes(query))
+        receipt["native_journal_query"] = ev.file_reference(path)
+    with pytest.raises((ad.MonitoredHardwareError, hw.HardwareGateError)):
+        external_receipt["build"]()
+
+
+def test_external_receipt_bytes_cannot_be_replaced_after_policy_freeze(external_receipt):
+    bundle = external_receipt["build"]()
+    path = Path(bundle["external_clock_receipt"]["path"])
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(ad.MonitoredHardwareError, match="reviewed complete bytes"):
+        ad._validate_policy(bundle, "paired_smoke", 600)
+
+
+@pytest.mark.parametrize("field", ["receipt", *ad._EXTERNAL_REFERENCE_FIELDS])
+def test_each_external_evidence_reference_is_rechecked_before_runtime_native_query(external_receipt, field):
+    bundle = external_receipt["build"]()
+    policy = ad._validate_policy(bundle, "paired_smoke", 600)
+    refs = ad._external_clock_integrity_references(policy)
+    selected = bundle["external_clock_receipt"] if field == "receipt" else external_receipt["receipt"][field]
+    path = Path(selected["path"])
+    path.write_bytes(path.read_bytes() + b"changed")
+    # The autouse forbidden _command proves the drift is caught first.
+    with pytest.raises(ad.MonitoredHardwareError, match="external-evidence identity changed"):
+        ad._health_sample({"policy": policy, "integrity_references": refs}, "fixture", {}, owner_alive=True)
+
+
+@pytest.mark.parametrize("mode,has_receipt", [(ad._EXTERNAL_ADMIN_MODE, False), ("direct", True), ("sudo_n", True)])
+def test_external_clock_evidence_cannot_silently_change_native_setter_modes(policy_bundle, external_receipt, mode, has_receipt):
+    with pytest.raises(ad.MonitoredHardwareError, match="required only"):
+        ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent, setter_mode=mode,
+            authorization_reference=policy_bundle["authorization_reference"],
+            external_clock_receipt=external_receipt["reference"] if has_receipt else None)
+
+
+def test_external_session_start_never_calls_native_setter_and_binds_all_runtime_refs(
+        external_receipt, bound, observation, tmp_path, monkeypatch):
+    bundle = external_receipt["build"]()
+    bound = copy.deepcopy(bound)
+    bound["config"]["cuda_gpu_uuid"] = UUID
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    session = ad.MonitoredHardwareSession(bound, bundle, tmp_path / "external-run", "paired_smoke")
+    native, _ = observation
+    class FakeProbe:
+        def as_dict(self): return copy.deepcopy(native)
+    monkeypatch.setattr(hw, "collect_native_hardware_probe", lambda *a, **kw: FakeProbe())
+    monkeypatch.setattr(ad, "_xorg_identity", lambda p: {"fixture": True})
+    monkeypatch.setattr(ad, "_edac_observation", lambda: {"controllers": []})
+    monkeypatch.setattr(ad, "_setter", lambda *a, **kw: pytest.fail("external start attempted a native setter"))
+    rows = external_receipt["rows"]
+    calls = []
+    def query(argv, **kwargs):
+        calls.append(argv)
+        assert argv[0] == bundle["external_journal_executable"]["path"] and kwargs["timeout"] == .7
+        return {**capture(argv, "\n".join(json.dumps(row) for row in rows) + "\n-- cursor: " + rows[-1]["__CURSOR"] + "\n"),
+                "executable": bundle["external_journal_executable"]}
+    monkeypatch.setattr(ad, "_command", query)
+    monkeypatch.setattr(ad, "_open_pidfd", lambda pid: os.open(external_receipt["receipt"]["user_attestation"]["path"], os.O_RDONLY))
+    class FakeGuardian:
+        pid = 77777
+    monkeypatch.setattr(ad.subprocess, "Popen", lambda *a, **kw: FakeGuardian())
+    monkeypatch.setattr(session, "_wait_response", lambda *a, **kw: {})
+    try:
+        session.start()
+        assert len(calls) == 1
+        saved = json.loads((session.root / "setter-receipt.json").read_bytes())
+        assert saved["native_return_success"] is None and saved["locally_executed_setter"] is False
+        startup = json.loads((session.root / "startup.json").read_bytes())
+        assert "native_after_external_clock_review" in startup and "native_post_setter" not in startup
+        spec = json.loads((session.root / "monitor-spec.json").read_bytes())
+        assert spec["external_sudo_anchor"]["cursor"] == rows[-1]["__CURSOR"]
+        for ref in ad._external_clock_integrity_references(session.policy):
+            assert ref in spec["integrity_references"]
+        assert startup["strict_native_gate"] == "BLOCKED"
+    finally:
+        if session._channel is not None: session._channel.close()
+
+
+@pytest.mark.parametrize("option", ["-lgc=1500,1500", "--lock-gpu-clocks=1500,1500", "-rgc", "--reset-gpu-clocks",
+    "-ac=810,1500", "--applications-clocks=810,1500", "-rac", "--reset-applications-clocks", "-r", "--gpu-reset"])
+def test_later_trusted_sudo_clock_or_reset_command_invalidates_external_event(option):
+    row = {"_EXE": "/usr/bin/sudo", "_COMM": "sudo",
+           "MESSAGE": "lyy : USER=root ; COMMAND=/usr/bin/nvidia-smi -i " + UUID + " " + option}
+    assert ad._known_sudo_clock_mutation(row) is True
+
+
+@pytest.mark.parametrize("command", ["/usr/bin/nvidia-smi -q", "/usr/bin/sudo -n -l -- /usr/bin/nvidia-smi -rgc",
+    "/usr/bin/cat /tmp/nvidia-smi--lock-gpu-clocks.txt", "/usr/bin/echo nvidia-smi --reset-gpu-clocks"])
+def test_sudo_readonly_permission_queries_and_arbitrary_text_are_not_clock_mutations(command):
+    row = {"_EXE": "/usr/bin/sudo", "_COMM": "sudo", "MESSAGE": "lyy : USER=root ; COMMAND=" + command}
+    assert ad._known_sudo_clock_mutation(row) is False
+    row.update(_CMDLINE="sudo /usr/bin/nvidia-smi -rgc", MESSAGE="pam_unix(sudo:session): session closed for user root")
+    assert ad._known_sudo_clock_mutation(row) is False
+    row.update(_EXE="/usr/bin/echo", MESSAGE="lyy : USER=root ; COMMAND=/usr/bin/nvidia-smi -rgc")
+    assert ad._known_sudo_clock_mutation(row) is False
+
+
+@pytest.mark.parametrize("change", [None, "anchor", "boot", "cursor", "mutation", "collector"])
+def test_external_sudo_cursor_continuity_and_rejection_preserve_native_capture(external_receipt, tmp_path, monkeypatch, change):
+    policy = external_receipt["build"]()
+    rows = copy.deepcopy(external_receipt["rows"])
+    anchor = {"cursor": rows[0]["__CURSOR"], "record_sha256": ev.canonical_sha256(rows[0])}
+    if change == "anchor": rows[0]["PRIORITY"] = "changed"
+    elif change == "boot": rows[-1]["_BOOT_ID"] = "wrong"
+    elif change == "mutation":
+        rows.append({**rows[-1], "__CURSOR": "sudo:3", "__MONOTONIC_TIMESTAMP": "10003",
+                     "MESSAGE": "lyy : USER=root ; COMMAND=/usr/bin/nvidia-smi --reset-gpu-clocks"})
+    trailer = "wrong" if change == "cursor" else rows[-1]["__CURSOR"]
+    text = "\n".join(json.dumps(row) for row in rows) + "\n-- cursor: " + trailer + "\n"
+    calls = []
+    def query(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return {**capture(argv, text), "executable": {**policy["external_journal_executable"],
+                **({"sha256": "f" * 64} if change == "collector" else {})}}
+    monkeypatch.setattr(ad, "_command", query)
+    if change:
+        with pytest.raises(ad.MonitoredHardwareError):
+            ad._external_sudo_journal_sample(policy, anchor, evidence_dir=tmp_path)
+        saved = json.loads((tmp_path / "external-clock-journal-rejection.json").read_bytes())
+        assert saved["native_query"]["stdout"]["utf8"] == text
+    else:
+        result = ad._external_sudo_journal_sample(policy, anchor, evidence_dir=tmp_path)
+        assert result["records"] == 3 and result["last_cursor"] == rows[-1]["__CURSOR"]
+        assert result["known_later_clock_mutations"] == 0
+        assert result["locked_upper_readback_verified"] is False
+    assert calls[0][1]["timeout"] == .7
+    assert calls[0][0][0] == policy["external_journal_executable"]["path"]
+    assert calls[0][0][-2:] == ["_COMM=sudo", "_EXE=/usr/bin/sudo"]
+
+
 def test_start_failure_closes_pidfd_and_preserves_setter_attempt(policy_bundle, bound, observation, tmp_path, monkeypatch):
     bound = copy.deepcopy(bound)
     bound["config"]["cuda_gpu_uuid"] = UUID
@@ -363,9 +625,10 @@ def test_edac_unavailable_is_not_zero_and_coverage_changes_fail(tmp_path, monkey
         ad._check_edac(ad._edac_observation(), None)
 
 
-@pytest.mark.parametrize("clock,util,free", [(1501, 50, 1000), ("N/A", 50, 1000), (1500, 101, 1000), (1500, 50, 63)])
-def test_clock_sample_fails_closed(monkeypatch, clock, util, free):
-    monkeypatch.setattr(ad, "_command", lambda argv, **kw: capture(argv, f"{UUID}, {clock}, {util}, 2000, {free}\n"))
+@pytest.mark.parametrize("clock,sm,util,free", [(1501, 1500, 50, 1000), (1500, 1501, 50, 1000),
+    ("N/A", 1500, 50, 1000), (1500, "N/A", 50, 1000), (1500, 1500, 101, 1000), (1500, 1500, 50, 63)])
+def test_clock_sample_fails_closed(monkeypatch, clock, sm, util, free):
+    monkeypatch.setattr(ad, "_command", lambda argv, **kw: capture(argv, f"{UUID}, {clock}, {sm}, {util}, 2000, {free}\n"))
     with pytest.raises(ad.MonitoredHardwareError):
         ad._clock_sample({"nvidia_smi_path": "/fixture/nvidia-smi", "policy": {
             "gpu_uuid": UUID, "expected_nvidia_smi_executable": None,
@@ -376,14 +639,16 @@ def test_clock_sample_keeps_capture_and_is_not_locked_readback(monkeypatch):
     calls = []
     def fake(argv, **kw):
         calls.append((argv, kw))
-        return capture(argv, f"{UUID}, 1500, 80, 2000, 22000\n")
+        return capture(argv, f"{UUID}, 1500, 1500, 80, 2000, 22000\n")
     monkeypatch.setattr(ad, "_command", fake)
     row = ad._clock_sample({"nvidia_smi_path": "/fixture/nvidia-smi", "policy": {
         "gpu_uuid": UUID, "expected_nvidia_smi_executable": None,
         "hardware_policy": {"interval_min_free_memory_mib": 64}}})
     assert row["clock_mhz"] == 1500
+    assert row["graphics_clock_mhz"] == row["sm_clock_mhz"] == 1500
     assert row["command"]["stdout"]["sha256"]
     assert calls[0][1]["timeout"] < 1
+    assert "clocks.current.graphics,clocks.current.sm" in calls[0][0][2]
 
 
 def test_admission_cannot_be_constructed_from_json_or_pickled():
@@ -436,6 +701,8 @@ def test_setter_is_one_frozen_attempt_and_failure_receipt_is_preserved(tmp_path,
 @pytest.mark.parametrize("text", [
     'GPU clocks set to "(1500, 1500)" for GPU 00000000:01:00.0\nAll done.\n',
     'GPU clocks set to "(1500, 1500)" for GPU ' + UUID + '\nAll done.\n',
+    'GPU clocks set to "(gpuClkMin 1500, gpuClkMax 1500)" for GPU 00000000:01:00.0\nAll done.\n',
+    'GPU clocks set to "(gpuClkMin 1500, gpuClkMax 1500)" for GPU ' + UUID + '\nAll done.\n',
 ])
 def test_exact_setter_acknowledgement_is_not_readback(text):
     result = ad._setter_acknowledgement(text, {"gpu_uuid": UUID, "pci_bus_id": "00000000:01:00.0"})
@@ -446,6 +713,11 @@ def test_exact_setter_acknowledgement_is_not_readback(text):
 @pytest.mark.parametrize("text", [
     'GPU clocks set to "(1500, 1501)" for GPU 00000000:01:00.0\nAll done.\n',
     'GPU clocks set to "(1500, 1500)" for GPU 00000000:02:00.0\nAll done.\n',
+    'GPU clocks set to "(gpuClkMin 1500, gpuClkMax 1501)" for GPU 00000000:01:00.0\nAll done.\n',
+    'GPU clocks set to "(1500, 1500)" for GPU 00000000:01:00.0\n',
+    'GPU clocks set to "(1500, 1500)" for GPU 00000000:01:00.0\nAll done.\nAll done.\n',
+    'GPU clocks set to "(1500, 1500)" for GPU 00000000:01:00.0\nAll done.\nConnection to 192.168.0.198 closed.\n',
+    'GPU clocks set to "(gpuClkMin 1500, 1500)" for GPU 00000000:01:00.0\nAll done.\n',
     "All done.\n", "permission denied\n", "", "Warning: unsafe clock request\n",
 ])
 def test_setter_acknowledgement_rejects_wrong_target_range_or_diagnostics(text):
@@ -483,7 +755,7 @@ def _cpu_worker(fd):
     os.read(fd, 1)
 
 
-@pytest.mark.parametrize("stall", ["clock", "health", "footer", "release_gap", "unloaded_formal", None])
+@pytest.mark.parametrize("stall", ["clock", "health", "sudo_mutation", "footer", "release_gap", "unloaded_formal", None])
 def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_path, monkeypatch, stall):
     if sys.platform != "linux":
         pytest.skip("Linux pidfd is required for this process-level CPU test")
@@ -504,6 +776,8 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
                 "clock_mhz": 1500, "memory_used_mib": 100, "memory_free_mib": 24000}
     def health(spec, cursor, edac, *, owner_alive):
         if stall == "health": time.sleep(5.)
+        if stall == "sudo_mutation":
+            raise ad._ExternalSudoJournalError("CPU fixture later sudo clock command", {"native_query": "CPU fixture"})
         pending = False
         if not owner_alive:
             release_observations.append(True)
@@ -515,6 +789,18 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
                 "owner_gpu_release_pending": pending, "owner_pidfd_exited": not owner_alive}
     monkeypatch.setattr(ad, "_clock_sample", clock)
     monkeypatch.setattr(ad, "_health_sample", health)
+    if stall == "sudo_mutation":
+        stopped = {"value": False}
+        original_stop, original_write = ad._stop_owner, ad.ev.write_exclusive_json
+        def stop_owned(fd):
+            original_stop(fd)
+            stopped["value"] = True
+        def persist(path, value):
+            if Path(path).name == "external-clock-journal-rejection.json":
+                assert stopped["value"], "runtime rejection I/O preceded owned-worker stop"
+            return original_write(path, value)
+        monkeypatch.setattr(ad, "_stop_owner", stop_owned)
+        monkeypatch.setattr(ad.ev, "write_exclusive_json", persist)
     if stall == "footer":
         original_gzip = ad.gzip.GzipFile
         class BadFooter(original_gzip):
@@ -542,7 +828,7 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
     guardian.start()
     right.close(); os.close(pidfd)
     try:
-        if stall not in {"clock", "health"}:
+        if stall not in {"clock", "health", "sudo_mutation"}:
             assert select.select([left], [], [], 3.)[0]
             rows, rest = ad._receive(left, b"")
             assert rows[0]["op"] == "ready"
@@ -563,13 +849,17 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
         assert not worker.is_alive()
         assert bystander.is_alive()
         result = json.loads((tmp_path / "monitor-final.json").read_bytes())
-        assert result["status"] == ("FAIL" if stall in {"clock", "health", "footer", "unloaded_formal"} else "PASS")
+        assert result["status"] == ("FAIL" if stall in {"clock", "health", "sudo_mutation", "footer", "unloaded_formal"} else "PASS")
         heartbeat_rows = [json.loads(line) for line in (tmp_path / "guardian-heartbeat.jsonl").read_bytes().splitlines()]
         for row in heartbeat_rows:
             assert row["monotonic_ns"] >= max(row["last_clock_started_ns"], row["last_health_started_ns"])
         if stall in {"clock", "health"}:
             assert stall + " observation gap exceeded" in result["failure"]
             assert worker.exitcode < 0
+        elif stall == "sudo_mutation":
+            assert "later sudo clock command" in result["failure"]
+            assert worker.exitcode < 0
+            assert json.loads((tmp_path / "external-clock-journal-rejection.json").read_bytes()) == {"native_query": "CPU fixture"}
         elif stall == "footer":
             assert "writer failed at close" in result["failure"]
             assert result["sampled_clock_compliance"] is False

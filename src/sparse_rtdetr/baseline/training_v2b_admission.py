@@ -1,9 +1,11 @@
 """Scoped native admission with a separate, fail-closed GPU watchdog.
 
 Nothing observes hardware or changes its settings at import time. ``start`` is
-an explicitly authorized operation: it checks native idle evidence, executes
-exactly one frozen 1500/1500 setter, and starts an independent process. This is
-monitored admission, never a claim that a locked-clock getter was available.
+an explicitly authorized operation: it checks native idle evidence, verifies
+the frozen clock-setting evidence, and starts an independent process. Native
+setter modes make exactly one 1500/1500 attempt; the externally acknowledged
+administrator mode never sets or resets clocks. This is monitored admission,
+never a claim that a locked-clock getter was available.
 The watchdog outlives the CUDA worker and publishes success only after its
 pidfd signals exit and native observations confirm GPU context release.
 """
@@ -21,6 +23,7 @@ import platform
 import queue
 import re
 import select
+import shlex
 import shutil
 import signal
 import socket
@@ -37,6 +40,13 @@ from . import training_v2b_hardware as hw
 _TOKEN = object()
 _ANCHOR_MANIFEST_SHA = "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56e7bd98b0"
 _AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889059b85"
+_EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
+_EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
+_EXTERNAL_ADMIN_MODE = "external_admin_acknowledged"
+_EXTERNAL_CLOCK_PROVENANCE = "user_supplied_original_terminal+native_command_journal"
+_EXTERNAL_TERMINAL_TRAILER = "Connection to 192.168.0.198 closed."
+_EXTERNAL_REFERENCE_FIELDS = ("user_attestation", "terminal_transcript", "native_command_journal",
+                              "native_journal_query", "prior_journal_tool_capture")
 _SCOPES = {"paired_smoke": 600, "train_core_30epoch": 43_200}
 _PROC = Path("/proc")
 _EDAC = Path("/sys/devices/system/edac/mc")
@@ -52,6 +62,12 @@ _DRIVER_EVENT = re.compile(
 
 class MonitoredHardwareError(hw.HardwareGateError):
     """A native observation, authorized scope or monitoring deadline failed."""
+
+
+class _ExternalSudoJournalError(MonitoredHardwareError):
+    def __init__(self, reason: str, evidence: Mapping[str, Any]) -> None:
+        super().__init__(reason)
+        self.external_sudo_rejection = evidence
 
 
 def _utc() -> str:
@@ -91,14 +107,17 @@ def _proc_projection(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: str = "direct",
-                        authorization_reference: Mapping[str, Any]) -> dict[str, Any]:
+                        authorization_reference: Mapping[str, Any],
+                        external_clock_receipt: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Read the reviewed evidence anchor; this performs no hardware observation.
 
     A policy is an explicit declaration, not a caller-supplied observation. Its
     exception authority is the reviewed manifest, not arbitrary replacement JSON.
     """
-    if setter_mode not in {"direct", "sudo_n"}:
-        raise MonitoredHardwareError("setter mode must be explicitly direct or sudo_n")
+    if setter_mode not in {"direct", "sudo_n", _EXTERNAL_ADMIN_MODE}:
+        raise MonitoredHardwareError("setter mode must be explicitly direct, sudo_n or external_admin_acknowledged")
+    if (setter_mode == _EXTERNAL_ADMIN_MODE) != (external_clock_receipt is not None):
+        raise MonitoredHardwareError("external clock receipt is required only for external administrator mode")
     if (type(authorization_reference) is not dict or authorization_reference.get("sha256") != _AUTHORIZATION_SHA
             or ev.file_reference(authorization_reference["path"]) != authorization_reference):
         raise MonitoredHardwareError("explicit execution authorization reference differs")
@@ -161,6 +180,10 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
         "edac_unavailable_accepted": True,
         "clock_readback_verified": False, "settings_after_exit": "keep_1500_1500",
     }
+    if setter_mode == _EXTERNAL_ADMIN_MODE:
+        receipt = _validate_external_clock_receipt(external_clock_receipt, result)
+        result["external_clock_receipt"] = dict(external_clock_receipt)
+        result["external_journal_executable"] = dict(_read_reference(receipt["native_journal_query"])["executable"])
     result["bundle_sha256"] = ev.canonical_sha256(result)
     return result
 
@@ -172,7 +195,8 @@ def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int) -> di
         raise MonitoredHardwareError("workload deadline or scope is not authorized")
     expected = build_policy_bundle(Path(bundle["authority"]["path"]).parent,
                                    setter_mode=bundle["setter_mode"],
-                                   authorization_reference=bundle["authorization_reference"])
+                                   authorization_reference=bundle["authorization_reference"],
+                                   external_clock_receipt=bundle.get("external_clock_receipt"))
     if bundle != expected:
         raise MonitoredHardwareError("policy bundle differs from its reviewed authority or scope")
     expected.update(authorized_scope=scope, workload_deadline_seconds=deadline,
@@ -366,6 +390,8 @@ def _check_anchor(native: Mapping[str, Any], policy: Mapping[str, Any]) -> None:
 
 
 def _setter(policy: Mapping[str, Any], baseline: Mapping[str, Any]) -> dict[str, Any]:
+    if policy["setter_mode"] not in {"direct", "sudo_n"}:
+        raise MonitoredHardwareError("external administrator mode cannot execute a native setter")
     binary = Path(shutil.which("nvidia-smi") or "/usr/bin/nvidia-smi").resolve(strict=True)
     reference = ev.file_reference(binary)
     if reference != baseline["commands"]["gpu_xml"]["executable"]:
@@ -408,44 +434,283 @@ def _setter(policy: Mapping[str, Any], baseline: Mapping[str, Any]) -> dict[str,
 
 def _setter_acknowledgement(text: str, policy: Mapping[str, Any]) -> dict[str, Any]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    matches = []
-    for line in lines:
-        if line == "All done.":
-            continue
-        match = re.fullmatch(r'GPU clocks set to "\(\s*([0-9]+),\s*([0-9]+)\)" for GPU ([a-zA-Z0-9:.\-]+)', line)
-        if match is None:
-            raise MonitoredHardwareError("unrecognized setter stdout or diagnostic")
-        low, high = int(match[1]), int(match[2])
-        target = match[3].rstrip(".")
-        if ((low, high) != (1500, 1500)
-                or target.lower() not in {policy["gpu_uuid"].lower(), policy["pci_bus_id"].lower()}):
-            raise MonitoredHardwareError("setter acknowledgement target/range differs")
-        matches.append({"target": target, "min_mhz": low, "max_mhz": high})
-    if len(matches) != 1:
-        raise MonitoredHardwareError("setter acknowledgement is missing or ambiguous")
-    return {**matches[0], "meaning": "native_setter_acknowledgement_not_locked_clock_readback"}
+    if len(lines) != 2 or lines[1] != "All done.":
+        raise MonitoredHardwareError("setter acknowledgement is incomplete, ambiguous or has diagnostics")
+    match = re.fullmatch(
+        r'GPU clocks set to "\((?:gpuClkMin ([0-9]+), gpuClkMax ([0-9]+)|\s*([0-9]+),\s*([0-9]+))\)" '
+        r'for GPU ([a-zA-Z0-9:.\-]+)', lines[0])
+    if match is None:
+        raise MonitoredHardwareError("unrecognized setter stdout or diagnostic")
+    low, high = (int(match[1]), int(match[2])) if match[1] is not None else (int(match[3]), int(match[4]))
+    target = match[5]
+    if ((low, high) != (1500, 1500)
+            or target.lower() not in {policy["gpu_uuid"].lower(), policy["pci_bus_id"].lower()}):
+        raise MonitoredHardwareError("setter acknowledgement target/range differs")
+    return {"target": target, "min_mhz": low, "max_mhz": high,
+            "meaning": "native_setter_acknowledgement_not_locked_clock_readback"}
+
+
+def _strict_journal_jsonl(raw: bytes) -> list[dict[str, Any]]:
+    """The external journal has no cursor trailer or discarded diagnostic lines."""
+    try:
+        rows = [ev.strict_json_loads(line) for line in raw.splitlines()]
+    except ev.EvidenceError as exc:
+        raise MonitoredHardwareError("external command journal is not complete JSONL") from exc
+    if not rows or any(type(row) is not dict for row in rows):
+        raise MonitoredHardwareError("external command journal is empty or malformed")
+    return rows
+
+
+def _validate_external_clock_receipt(reference: Mapping[str, Any], policy: Mapping[str, Any]) -> dict[str, Any]:
+    """Verify reviewed bytes, not a caller-declared success or a locked-cap getter.
+
+    These historical records do not grant admission by themselves. Every start
+    still collects native idle/identity evidence and waits for preload samples;
+    the independent guardian requires actual loaded samples and unchanged gaps.
+    """
+    ev._validate_reference_shape(reference)
+    if (reference.get("sha256") != _EXTERNAL_CLOCK_RECEIPT_SHA
+            or ev.file_reference(reference["path"]) != reference):
+        raise MonitoredHardwareError("external clock receipt differs from reviewed complete bytes")
+    receipt = _read_reference(reference)
+    fixed = {
+        "schema_version": 1, "kind": "reviewed_external_admin_clock_receipt",
+        "provenance": _EXTERNAL_CLOCK_PROVENANCE, "locally_executed_setter": False,
+        "native_exitcode": None, "native_exit_code": None, "native_return_success": None,
+        "native_journal_query_returncode_is_setter_exitcode": False,
+        "reported_acknowledgement_success": True, "acknowledgement_verified": True,
+        "success_ack_observed": True, "locked_upper_readback_verified": False,
+        "stdout_source": "user_supplied_terminal", "time_source": "native_sudo_journal_record",
+        "separate_stderr_capture_available": False, "setter_loaded_nvml_library": None,
+        "transport_line": _EXTERNAL_TERMINAL_TRAILER, "clock_min_mhz": 1500, "clock_max_mhz": 1500,
+    }
+    required = set(fixed) | set(_EXTERNAL_REFERENCE_FIELDS) | {
+        "host", "boot_id", "gpu_uuid", "pci_bus_id", "command_argv", "command_journal_record_sha256",
+        "native_sudo_pid", "native_command_realtime_timestamp_us"}
+    if type(receipt) is not dict or set(receipt) != required:
+        raise MonitoredHardwareError("external clock receipt schema differs from reviewed scope")
+    for name, expected in fixed.items():
+        if type(receipt[name]) is not type(expected) or receipt[name] != expected:
+            raise MonitoredHardwareError("external clock receipt provenance/semantics differs: " + name)
+    for name in ("host", "boot_id", "gpu_uuid", "pci_bus_id"):
+        if receipt[name] != policy[name]:
+            raise MonitoredHardwareError("external clock receipt identity differs: " + name)
+    raw = {}
+    for name in _EXTERNAL_REFERENCE_FIELDS:
+        ref = receipt[name]
+        raw[name] = ev._verify_reference(ref)
+        if ev.file_reference(ref["path"]) != ref:
+            raise MonitoredHardwareError("external evidence reference is not canonical: " + name)
+    if receipt["user_attestation"]["sha256"] != _EXTERNAL_ADMIN_ATTESTATION_SHA:
+        raise MonitoredHardwareError("external administrator authorization is not the reviewed user statement")
+    try:
+        terminal = raw["terminal_transcript"].decode("utf-8")
+    except UnicodeError as exc:
+        raise MonitoredHardwareError("external administrator terminal is not UTF8") from exc
+    terminal_lines = terminal.splitlines()
+    if len(terminal_lines) != 3 or terminal_lines[-1] != _EXTERNAL_TERMINAL_TRAILER:
+        raise MonitoredHardwareError("external terminal must contain exact success lines and reviewed SSH trailer")
+    _setter_acknowledgement("\n".join(terminal_lines[:-1]) + "\n", policy)
+    argv = [policy["expected_nvidia_smi_executable"]["path"], "-i", policy["gpu_uuid"],
+            "--lock-gpu-clocks=1500,1500"]
+    if receipt["command_argv"] != argv:
+        raise MonitoredHardwareError("external administrator native command target/range differs")
+    pid = receipt["native_sudo_pid"]
+    if type(pid) is not int or pid <= 0:
+        raise MonitoredHardwareError("external sudo PID is unavailable")
+    rows = _strict_journal_jsonl(raw["native_command_journal"])
+    if len(rows) != 3:
+        raise MonitoredHardwareError("external sudo command/open/close journal chain is incomplete")
+    command, opened, closed = rows
+    if ev.canonical_sha256(command) != receipt["command_journal_record_sha256"]:
+        raise MonitoredHardwareError("external sudo command record differs from selected complete record")
+    identity = {"_HOSTNAME": policy["host"], "_BOOT_ID": policy["boot_id"].replace("-", ""),
+                "_PID": str(pid), "_UID": "1000", "_AUDIT_LOGINUID": "1000",
+                "_EXE": "/usr/bin/sudo", "_COMM": "sudo", "SYSLOG_IDENTIFIER": "sudo",
+                "_CMDLINE": "sudo " + " ".join(argv)}
+    for row in rows:
+        if any(row.get(k) != v for k, v in identity.items()):
+            raise MonitoredHardwareError("external sudo journal native process/boot/command identity differs")
+    if [row.get("_GID") for row in rows] != ["1000", "0", "0"]:
+        raise MonitoredHardwareError("external sudo journal reviewed setuid/group transition differs")
+    for key in ("_AUDIT_SESSION", "_SYSTEMD_SESSION", "_SYSTEMD_INVOCATION_ID", "_MACHINE_ID"):
+        if type(command.get(key)) is not str or not command[key] or any(row.get(key) != command[key] for row in rows):
+            raise MonitoredHardwareError("external sudo journal native session identity differs")
+    if command["_AUDIT_SESSION"] != command["_SYSTEMD_SESSION"]:
+        raise MonitoredHardwareError("external sudo audit and logind sessions differ")
+    pattern = r"[ \t]*lyy : TTY=[^;\r\n]+ ; PWD=[^;\r\n]+ ; USER=root ; COMMAND=" + re.escape(" ".join(argv))
+    if re.fullmatch(pattern, command.get("MESSAGE", "")) is None:
+        raise MonitoredHardwareError("external sudo journal command did not target root with the exact setter")
+    if (opened.get("MESSAGE") != "pam_unix(sudo:session): session opened for user root(uid=0) by lyy(uid=1000)"
+            or closed.get("MESSAGE") != "pam_unix(sudo:session): session closed for user root"):
+        raise MonitoredHardwareError("external sudo journal privileged session acknowledgement is incomplete")
+    for key in ("__REALTIME_TIMESTAMP", "__MONOTONIC_TIMESTAMP"):
+        values = [row.get(key) for row in rows]
+        if any(type(v) is not str or not v.isdecimal() or int(v) <= 0 for v in values):
+            raise MonitoredHardwareError("external sudo journal timestamps are unavailable")
+        if not int(values[0]) < int(values[1]) < int(values[2]):
+            raise MonitoredHardwareError("external sudo journal command/session ordering differs")
+    if receipt["native_command_realtime_timestamp_us"] != command["__REALTIME_TIMESTAMP"]:
+        raise MonitoredHardwareError("external command timestamp differs from its native source")
+    query = ev.strict_json_loads(raw["native_journal_query"])
+    query_executable = query.get("executable", {})
+    if (query.get("argv") != [query_executable.get("path"), "-b", "_PID=" + str(pid), "--output=json", "--no-pager"]
+            or Path(query_executable.get("path", "")).name != "journalctl"
+            or hw._command_text(query).encode("utf-8") != raw["native_command_journal"]
+            or query.get("stdout") != hw._text_capture(raw["native_command_journal"])
+            or query.get("stderr") != hw._text_capture(b"")):
+        raise MonitoredHardwareError("native journal query capture differs from the complete JSONL")
+    ev._verify_reference(query_executable)
+    prior = ev.strict_json_loads(raw["prior_journal_tool_capture"])
+    if prior.get("status") != "fulfilled" or prior.get("value", {}).get("exit_code") != 0:
+        raise MonitoredHardwareError("prior journal tool capture was incomplete")
+    prior_output = prior["value"].get("output")
+    if type(prior_output) is not str:
+        raise MonitoredHardwareError("prior journal tool output is unavailable")
+    prior_lines = prior_output.splitlines()
+    if (not prior_lines or prior_lines[-1] != "-- cursor: " + closed["__CURSOR"]
+            or _strict_journal_jsonl("\n".join(prior_lines[:-1]).encode("utf-8")) != rows):
+        raise MonitoredHardwareError("prior and current native journal records differ")
+    return receipt
+
+
+def _external_clock_evidence(policy: Mapping[str, Any], baseline: Mapping[str, Any]) -> dict[str, Any]:
+    """A per-start review receipt: deliberately no call to _setter or _command."""
+    reviewed = _validate_external_clock_receipt(policy["external_clock_receipt"], policy)
+    if (baseline["boot_id"] != reviewed["boot_id"] or baseline["host"] != reviewed["host"]
+            or baseline["gpu"]["uuid"] != reviewed["gpu_uuid"]
+            or baseline["gpu"]["pci_bus_id"] != reviewed["pci_bus_id"]
+            or baseline["commands"]["gpu_xml"]["executable"] != policy["expected_nvidia_smi_executable"]):
+        raise MonitoredHardwareError("live hardware differs from reviewed external clock-setting identity")
+    journal = _strict_journal_jsonl(ev._verify_reference(reviewed["native_command_journal"]))
+    return {"schema_version": 1, "setter_mode": _EXTERNAL_ADMIN_MODE,
+            "external_clock_receipt": dict(policy["external_clock_receipt"]),
+            "locally_executed_setter": False, "command": None,
+            "native_exitcode": None, "native_exit_code": None, "native_return_success": None,
+            "reported_acknowledgement_success": True, "acknowledgement_verified": True,
+            "success_ack_observed": True, "provenance": _EXTERNAL_CLOCK_PROVENANCE,
+            "stdout_source": "user_supplied_terminal", "validation_errors": [],
+            "reviewed_at_utc": _utc(), "time_source": "native_sudo_journal_record",
+            "native_command_realtime_timestamp_us": reviewed["native_command_realtime_timestamp_us"],
+            "native_sudo_journal_anchor": {"cursor": journal[0]["__CURSOR"],
+                                            "record_sha256": reviewed["command_journal_record_sha256"]},
+            "gpu_uuid": reviewed["gpu_uuid"], "pci_bus_id": reviewed["pci_bus_id"], "boot_id": reviewed["boot_id"],
+            "clock_min_mhz": 1500, "clock_max_mhz": 1500, "locked_upper_readback_verified": False,
+            "nvidia_smi_executable": baseline["commands"]["gpu_xml"]["executable"],
+            "nvml_query_library": baseline["capability_inventory"]["nvml_library"],
+            "setter_loaded_nvml_library": None, "no_retry_or_fallback": True,
+            "settings_after_exit": "keep_1500_1500"}
+
+
+def _external_clock_integrity_references(policy: Mapping[str, Any]) -> list[dict[str, Any]]:
+    receipt = _validate_external_clock_receipt(policy["external_clock_receipt"], policy)
+    query = _read_reference(receipt["native_journal_query"])
+    return [dict(policy["external_clock_receipt"]),
+            *(dict(receipt[name]) for name in _EXTERNAL_REFERENCE_FIELDS), dict(query["executable"])]
+
+
+def _known_sudo_clock_mutation(row: Mapping[str, Any]) -> bool:
+    """Recognize direct nvidia-smi mutations in trusted native sudo records.
+
+    This does not claim visibility of privileged writes without sudo or opaque
+    shell wrappers, and never treats arbitrary journal text as a command.
+    """
+    if row.get("_EXE") != "/usr/bin/sudo" or row.get("_COMM") != "sudo":
+        return False
+    message = row.get("MESSAGE")
+    if type(message) is not str:
+        raise MonitoredHardwareError("sudo journal message is unavailable")
+    match = re.search(r"(?:^|;[ \t]*)COMMAND=([^\r\n]+)$", message)
+    if match is None:
+        return False  # PAM/session records are retained, but are not commands.
+    try:
+        argv = shlex.split(match[1], posix=True)
+    except ValueError as exc:
+        raise MonitoredHardwareError("native sudo command cannot be parsed") from exc
+    if not argv or Path(argv[0]).name != "nvidia-smi":
+        return False
+    mutations = {"-lgc", "--lock-gpu-clocks", "-rgc", "--reset-gpu-clocks",
+                 "-ac", "--applications-clocks", "-rac", "--reset-applications-clocks",
+                 "-r", "--gpu-reset", "-lmc", "--lock-memory-clocks", "-rmc", "--reset-memory-clocks",
+                 "-lmcd", "--lock-memory-clocks-deferred", "-rmcd", "--reset-memory-clocks-deferred"}
+    return any(arg.split("=", 1)[0] in mutations for arg in argv[1:])
+
+
+def _external_sudo_journal_sample(policy: Mapping[str, Any], anchor: Mapping[str, Any], *,
+                                  evidence_dir: Path | None = None) -> dict[str, Any]:
+    """Retain the anchor and raw incremental sudo log with unchanged deadlines."""
+    capture = None
+    try:
+        executable = policy["external_journal_executable"]
+        capture = _command([executable["path"], "--no-pager", "--boot=" + policy["boot_id"].replace("-", ""),
+                            "--output=json", "--show-cursor", "--cursor=" + anchor["cursor"],
+                            "_COMM=sudo", "_EXE=/usr/bin/sudo"], timeout=.7)
+        if capture.get("executable") != executable:
+            raise MonitoredHardwareError("external sudo journal collector executable identity differs")
+        lines = hw._command_text(capture).splitlines()
+        if len(lines) < 2 or not lines[-1].startswith("-- cursor: "):
+            raise MonitoredHardwareError("external sudo journal cursor/coverage is unavailable")
+        rows = _strict_journal_jsonl("\n".join(lines[:-1]).encode("utf-8"))
+        if (rows[0].get("__CURSOR") != anchor["cursor"]
+                or ev.canonical_sha256(rows[0]) != anchor["record_sha256"]):
+            raise MonitoredHardwareError("external sudo journal retained anchor differs")
+        if lines[-1] != "-- cursor: " + rows[-1].get("__CURSOR", ""):
+            raise MonitoredHardwareError("external sudo journal terminal cursor differs")
+        cursors, monotonic = [], []
+        for row in rows:
+            if (row.get("_BOOT_ID") != policy["boot_id"].replace("-", "")
+                    or row.get("_HOSTNAME") != policy["host"]
+                    or row.get("_EXE") != "/usr/bin/sudo" or row.get("_COMM") != "sudo"):
+                raise MonitoredHardwareError("external sudo journal native source/boot differs")
+            cursor, timestamp = row.get("__CURSOR"), row.get("__MONOTONIC_TIMESTAMP")
+            if (type(cursor) is not str or not cursor or type(timestamp) is not str
+                    or not timestamp.isdecimal() or int(timestamp) <= 0):
+                raise MonitoredHardwareError("external sudo journal event identity/time is unavailable")
+            cursors.append(cursor)
+            monotonic.append(int(timestamp))
+        if len(set(cursors)) != len(cursors) or any(a > b for a, b in zip(monotonic, monotonic[1:])):
+            raise MonitoredHardwareError("external sudo journal event order/multiplicity differs")
+        # Only the exact retained starting event is exempt. A later repeated
+        # 1500/1500 setter also invalidates this fixed external setting event.
+        if any(_known_sudo_clock_mutation(row) for row in rows[1:]):
+            raise MonitoredHardwareError("external clock receipt invalidated by later sudo clock/reset command")
+        return {"query": capture, "anchor": dict(anchor), "last_cursor": rows[-1]["__CURSOR"],
+                "last_record_sha256": ev.canonical_sha256(rows[-1]), "records": len(rows),
+                "known_later_clock_mutations": 0, "coverage": "retained_anchor_through_current_native_sudo",
+                "unobserved_privileged_write_paths": ["without_sudo", "opaque_shell_wrappers"],
+                "locked_upper_readback_verified": False}
+    except (hw.HardwareGateError, ev.EvidenceError) as exc:
+        rejection = {"error": type(exc).__name__ + ": " + str(exc), "native_query": capture,
+                     "anchor": dict(anchor), "recorded_utc": _utc(), "no_retry_or_fallback": True}
+        if evidence_dir is not None:
+            # Startup only: there is no admitted CUDA worker yet.
+            ev.write_exclusive_json(evidence_dir / "external-clock-journal-rejection.json", rejection)
+        # During runtime the guardian first stops its exact worker, then writes
+        # this capture. Failure evidence I/O cannot delay the stop notification.
+        raise _ExternalSudoJournalError(str(exc), rejection) from exc
 
 
 def _clock_sample(spec: Mapping[str, Any]) -> dict[str, Any]:
     policy = spec["policy"]
     capture = _command([spec["nvidia_smi_path"], "--id=" + policy["gpu_uuid"],
-                        "--query-gpu=uuid,clocks.current.graphics,utilization.gpu,memory.used,memory.free",
+                        "--query-gpu=uuid,clocks.current.graphics,clocks.current.sm,utilization.gpu,memory.used,memory.free",
                         "--format=csv,noheader,nounits"], timeout=.7)
     if capture.get("executable") != policy["expected_nvidia_smi_executable"]:
         raise MonitoredHardwareError("clock sampler executable differs from policy")
     fields = [x.strip() for x in hw._command_text(capture).strip().split(",")]
-    if len(fields) != 5 or fields[0] != policy["gpu_uuid"]:
+    if len(fields) != 6 or fields[0] != policy["gpu_uuid"]:
         raise MonitoredHardwareError("clock sample identity/schema differs")
     values = [hw._value(v) for v in fields[1:]]
     if any(v is None or not math.isfinite(v) for v in values):
         raise MonitoredHardwareError("clock sample contains unavailable telemetry")
-    clock, utilization, used, free = values
-    if clock > 1500 or utilization > 100:
-        raise MonitoredHardwareError("clock exceeds 1500 MHz or utilization is invalid")
+    clock, sm_clock, utilization, used, free = values
+    if clock > 1500 or sm_clock > 1500 or utilization > 100:
+        raise MonitoredHardwareError("graphics/SM clock exceeds 1500 MHz or utilization is invalid")
     if free < policy["hardware_policy"]["interval_min_free_memory_mib"]:
         raise MonitoredHardwareError("GPU interval memory reserve exhausted")
     return {"kind": "clock", "started_ns": capture["started_ns"], "finished_ns": capture["finished_ns"],
-            "clock_mhz": clock, "utilization_percent": utilization,
+            "clock_mhz": clock, "graphics_clock_mhz": clock, "sm_clock_mhz": sm_clock,
+            "utilization_percent": utilization,
             "memory_used_mib": used, "memory_free_mib": free, "command": capture}
 
 
@@ -465,9 +730,18 @@ def _post_exit_processes(processes: list[dict[str, Any]], owner: Mapping[str, An
     return retained, pending
 
 
-def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any], *, owner_alive: bool) -> dict[str, Any]:
+def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any], *, owner_alive: bool,
+                   external_sudo_anchor: Mapping[str, Any] | None = None) -> dict[str, Any]:
     started = time.monotonic_ns()
     policy = spec["policy"]
+    for ref in spec["integrity_references"]:
+        if ev.file_reference(ref["path"]) != ref:
+            raise MonitoredHardwareError("bound collector/driver/library/external-evidence identity changed")
+    external_sudo = None
+    if policy.get("setter_mode") == _EXTERNAL_ADMIN_MODE:
+        if external_sudo_anchor is None:
+            raise MonitoredHardwareError("external sudo journal runtime anchor is unavailable")
+        external_sudo = _external_sudo_journal_sample(policy, external_sudo_anchor)
     payload = _json_copy(spec["baseline"])
     payload["monotonic_started_ns"] = started
     payload["host"] = platform.node()
@@ -488,9 +762,6 @@ def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any]
             raise MonitoredHardwareError("worker process/executable identity changed")
     payload["phase"] = "interval"
     payload["native_files"]["kernel_driver_version"] = hw._native_file(Path("/sys/module/nvidia/version"))
-    for ref in spec["integrity_references"]:
-        if ev.file_reference(ref["path"]) != ref:
-            raise MonitoredHardwareError("bound collector/driver/library identity changed")
     graphics_identity = _xorg_identity(policy)
     payload.update(rapl=hw._collect_rapl(), cpu_temperatures=hw._collect_cpu_temperatures())
     journal = _command(["journalctl", "--no-pager", "-k", "--boot=" + policy["boot_id"].replace("-", ""),
@@ -512,12 +783,15 @@ def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any]
     else:
         assessed = payload
     _assess_monitored(assessed, policy, owner=spec["owner"] if owner_alive else None, initial=False)
-    return {"kind": "health", "started_ns": started, "finished_ns": time.monotonic_ns(),
+    result = {"kind": "health", "started_ns": started, "finished_ns": time.monotonic_ns(),
             "gpu": payload["gpu"], "kernel_health": payload["kernel_health"],
             "rapl": payload["rapl"], "cpu_temperatures": payload["cpu_temperatures"],
             "graphics_identity": graphics_identity, "edac": current_edac,
             "gpu_query": query, "journal_query": journal, "owner_gpu_release_pending": pending,
             "owner_pidfd_exited": not owner_alive}
+    if external_sudo is not None:
+        result["external_sudo_journal"] = external_sudo
+    return result
 
 
 def _send(sock: socket.socket, message: Mapping[str, Any]) -> None:
@@ -669,16 +943,25 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
 
     def sample(kind: str) -> None:
         cursor, edac = spec["baseline"]["kernel_health"]["last_cursor"], spec["edac"]
+        sudo_anchor = spec.get("external_sudo_anchor")
         period = policy[kind + "_period_seconds"]
         while not stop.is_set():
             began = time.monotonic()
             try:
-                row = (_clock_sample(spec) if kind == "clock" else
-                       _health_sample(spec, cursor, edac, owner_alive=state["owner_alive"]))
+                if kind == "clock":
+                    row = _clock_sample(spec)
+                else:
+                    kwargs = {"owner_alive": state["owner_alive"]}
+                    if policy.get("setter_mode") == _EXTERNAL_ADMIN_MODE:
+                        kwargs["external_sudo_anchor"] = sudo_anchor
+                    row = _health_sample(spec, cursor, edac, **kwargs)
                 if stop.is_set():
                     return
                 if kind == "health":
                     cursor = row["kernel_health"]["last_cursor"]
+                    if policy.get("setter_mode") == _EXTERNAL_ADMIN_MODE:
+                        sudo = row["external_sudo_journal"]
+                        sudo_anchor = {"cursor": sudo["last_cursor"], "record_sha256": sudo["last_record_sha256"]}
                 writes.put_nowait(row)
                 with lock:
                     state[kind] = row
@@ -694,6 +977,8 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
             except BaseException as exc:
                 with lock:
                     state["error"] = type(exc).__name__ + ": " + str(exc)
+                    if isinstance(exc, _ExternalSudoJournalError):
+                        state["external_sudo_rejection"] = exc.external_sudo_rejection
                 return
             stop.wait(max(0., period - (time.monotonic() - began)))
 
@@ -793,6 +1078,11 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
     except BaseException as exc:
         failure = type(exc).__name__ + ": " + str(exc)
         _stop_owner(pidfd)  # Stop owned computation before attempting any final file I/O.
+        if state.get("external_sudo_rejection") is not None:
+            try:
+                ev.write_exclusive_json(root / "external-clock-journal-rejection.json", state["external_sudo_rejection"])
+            except BaseException as persistence_error:
+                failure += "; rejection evidence persistence failed: " + str(persistence_error)
     finally:
         stop.set()
         try:
@@ -887,25 +1177,33 @@ class MonitoredHardwareSession:
             identity = _xorg_identity(self.policy)
             edac = _edac_observation()
             _check_edac(edac, None)
-            # All preconditions precede the one and only hardware mutation.
-            receipt = _setter(self.policy, native)
+            # External mode only reviews the prior administrator event. The
+            # native modes retain exactly one explicitly selected setter call.
+            external = self.policy["setter_mode"] == _EXTERNAL_ADMIN_MODE
+            receipt = _external_clock_evidence(self.policy, native) if external else _setter(self.policy, native)
             setter_ref = ev.write_exclusive_json(self.root / "setter-receipt.json", receipt)
             if receipt["validation_errors"]:
                 raise MonitoredHardwareError("native setter failed: " + json.dumps(receipt["validation_errors"]))
+            external_sudo = (_external_sudo_journal_sample(self.policy, receipt["native_sudo_journal_anchor"],
+                                                         evidence_dir=self.root) if external else None)
             post = hw.collect_native_hardware_probe(
                 self.binding, policy=hw.HardwarePolicy(**{**self.policy["hardware_policy"],
                                                          "allowed_graphics_executable_sha256": ()})).as_dict()
             _assess_monitored(post, self.policy, owner=None, initial=True)
             _check_anchor(post, self.policy)
             if post["capability_inventory"] != native["capability_inventory"]:
-                raise MonitoredHardwareError("driver/NVML identity changed across setter")
+                raise MonitoredHardwareError("driver/NVML identity changed across clock evidence verification")
+            native_phase = "native_after_external_clock_review" if external else "native_post_setter"
             startup_ref = ev.write_exclusive_json(self.root / "startup.json", {
-                "native_post_setter": post, "xorg_identity": identity, "edac": edac,
+                native_phase: post, "xorg_identity": identity, "edac": edac,
                 "setter_receipt": setter_ref, "policy_sha256": self.policy["policy_sha256"],
+                "external_sudo_journal": external_sudo,
                 "run_binding_sha256": self.binding["binding_sha256"], "strict_native_gate": "BLOCKED"})
             base = {k: v for k, v in post.items() if k not in ("commands", "collector_sources")}
             refs = self._source_refs + [post["capability_inventory"]["nvml_library"],
                                       post["commands"]["gpu_xml"]["executable"]]
+            if external:
+                refs += _external_clock_integrity_references(self.policy) + [setter_ref]
             spec = {"policy": self.policy, "owner": self._owner, "baseline": base,
                     "pidfd_backend": _pidfd_backend(),
                     "nvidia_smi_path": post["commands"]["gpu_xml"]["executable"]["path"],
@@ -913,6 +1211,9 @@ class MonitoredHardwareSession:
                     "binding_sha256": self.binding["binding_sha256"], "nonce": self._nonce,
                     "evidence_dir": str(self.root), "setter_reference": setter_ref,
                     "startup_reference": startup_ref}
+            if external_sudo is not None:
+                spec["external_sudo_anchor"] = {"cursor": external_sudo["last_cursor"],
+                                                "record_sha256": external_sudo["last_record_sha256"]}
             spec_ref = ev.write_exclusive_json(self.root / "monitor-spec.json", spec)
             parent, child = socket.socketpair()
             self._channel = parent

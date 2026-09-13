@@ -79,9 +79,10 @@ equivalence. Hardware clearance is independently required for every worker.
 `training_v2b_admission.py` grants a nonserializable capability only to a live
 worker with an independent native guardian. JSON cannot grant admission. The
 older passive gate remains BLOCKED because this driver does not expose a getter
-for the locked graphics upper bound. The new admission proves the exact setter
-return plus identity and bounded observations; it does not pretend to have that
-unavailable getter or prove an unobservable continuous-time clock bound.
+for the locked graphics upper bound. The admission binds either an agent-captured setter return or an explicitly
+reviewed external administrator acknowledgement, plus current native identity
+and bounded observations. It does not claim an unavailable getter or prove an
+unobservable continuous-time clock bound.
 
 The policy is bound to the complete SHA256 of the user authorization and the
 reviewed evidence manifest, boot, host, GPU UUID/PCI, driver, NVML library and
@@ -91,12 +92,31 @@ local active logind session all match; its graphics memory is at most 16 MiB.
 No other graphics or compute process is allowed. During execution only the
 exact owned worker may have a compute context.
 
-Before the one setter invocation per worker, native checks must show an idle
-GPU, unchanged identity, acceptable temperatures/power limits, and a complete
-kernel journal anchor. The setter is exactly 1500/1500 MHz, without fallback or
-retry, targeting the bound UUID. Its return code, diagnostics, requested and
-returned identity/limits and UTC are retained. Identity is checked again after
-setting. Settings are left at 1500/1500 after the worker exits.
+Every worker first requires an idle GPU, unchanged identity, acceptable
+temperatures/power limits, and a complete kernel journal anchor. In the original
+`direct` or `sudo_n` modes, exactly one 1500/1500 MHz setter targets the bound
+UUID, without fallback or retry; its actual return code and diagnostics are
+retained and identity is checked again afterward.
+
+The current campaign explicitly uses `external_admin_acknowledged`. This mode
+never invokes a setter. It binds the reviewed receipt (complete-file SHA256
+`aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c`),
+original user-supplied terminal bytes and native sudo journal. The native
+command record identifies this boot, host, sudo PID, target UUID and exact
+1500/1500 request; its same-PID PAM records identify the root session. The
+terminal transcript must contain one matching success acknowledgement followed
+by one `All done.`; its SSH connection-close line is separate transport text.
+Both complete driver formats, `(1500, 1500)` and
+`(gpuClkMin 1500, gpuClkMax 1500)`, are accepted; mixed, duplicate, incomplete,
+wrong-target or diagnostic output is rejected.
+
+The externally observed acknowledgement does not supply a native setter exit
+code, separate stderr capture, loaded setter library or command monotonic
+start/end. Those unavailable fields remain null or explicitly unavailable.
+Known later clock/reset commands invalidate the receipt. Native journal checks
+cannot establish the absence of every unlogged direct-root operation; current
+identity, bounded sampling and reset/reboot detection remain mandatory.
+Settings are left at 1500/1500 after every worker exits.
 
 The two exact historical boot BERT records are retained with full raw hashes.
 They are unresolved historical firmware evidence, not proof of healthy RAM.
@@ -104,7 +124,8 @@ New BERT/MCE/Xid/driver reset/load/unload observations stop the worker. Journal
 continuity is required. EDAC unavailability is explicitly reported as
 unavailable, never as zero errors.
 
-Clock observations run every 0.2 seconds with a maximum age/gap of one second;
+Graphics and SM clock observations run together every 0.2 seconds, both with
+zero tolerance above 1500 MHz and a maximum age/gap of one second;
 health observations run every second with a maximum of two seconds. At least
 three preload observations and loaded observations are required. A separate
 controller watches the guardian's main-loop heartbeat every 50 ms (heartbeat

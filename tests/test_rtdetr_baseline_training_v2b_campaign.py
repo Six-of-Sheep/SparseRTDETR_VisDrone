@@ -330,3 +330,77 @@ def test_post_worker_failure_also_cleans_paused_guardian(tmp_path, monkeypatch, 
     stop = json.loads((tmp_path / "smoke-A.supervisor-stop.json").read_bytes())
     assert stop["guardian_cleanup"]["guardian_exited"] is True
     assert stop["guardian_cleanup"]["owner_exit_confirmed_before_guardian_cleanup"] is True
+
+
+@pytest.fixture
+def campaign_cli(tmp_path, monkeypatch):
+    """CLI admission choices are checked before constructing a workload."""
+    import importlib.util
+    from sparse_rtdetr.baseline import training_v2b_admission as admission
+    source = Path(__file__).resolve().parents[1] / "tools" / "run_training_v2b_campaign.py"
+    spec = importlib.util.spec_from_file_location("unit_v2b_campaign_cli", source)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    auth = tmp_path / "auth.txt"
+    auth.write_text("CPU fixture authorization")
+    external = tmp_path / "external.json"
+    external.write_text('{"CPU_fixture": true}\n')
+    captured = {}
+    def policy(*args, **kwargs):
+        captured["policy"] = kwargs
+        return {"CPU_fixture_policy": True}
+    def prepare(**kwargs):
+        captured["prepare"] = kwargs
+        return {"campaign_reference": {"CPU_fixture": True}}
+    monkeypatch.setattr(admission, "build_policy_bundle", policy)
+    monkeypatch.setattr(campaign, "make_campaign", prepare)
+    args = ["prepare", "--campaign-id", "cpu-fixture", "--output-root", str(tmp_path / "new"),
+            "--input-spec", str(tmp_path / "input.json"), "--policy-evidence-dir", str(tmp_path),
+            "--authorization", str(auth), "--authorization-sha256", campaign.file_reference(auth)["sha256"]]
+    (tmp_path / "input.json").write_text("{}")
+    return cli, args, external, captured
+
+
+def test_cli_external_receipt_is_explicit_and_bound(campaign_cli):
+    cli, args, external, captured = campaign_cli
+    reference = campaign.file_reference(external)
+    assert cli.main(args + ["--setter-mode", "external_admin_acknowledged",
+                            "--external-clock-receipt", str(external),
+                            "--external-clock-receipt-sha256", reference["sha256"]]) == 0
+    assert captured["policy"]["setter_mode"] == "external_admin_acknowledged"
+    assert captured["policy"]["external_clock_receipt"] == reference
+    assert captured["prepare"]["policy_bundle"] == {"CPU_fixture_policy": True}
+
+
+@pytest.mark.parametrize("provided", ["neither", "path", "sha"])
+def test_cli_missing_external_reference_stops_before_policy(campaign_cli, provided):
+    cli, args, external, captured = campaign_cli
+    extra = []
+    if provided == "path":
+        extra = ["--external-clock-receipt", str(external)]
+    elif provided == "sha":
+        extra = ["--external-clock-receipt-sha256", campaign.file_reference(external)["sha256"]]
+    with pytest.raises(SystemExit) as failure:
+        cli.main(args + ["--setter-mode", "external_admin_acknowledged"] + extra)
+    assert failure.value.code == 2
+    assert not captured
+
+
+def test_cli_external_hash_mismatch_stops_before_policy(campaign_cli):
+    cli, args, external, captured = campaign_cli
+    with pytest.raises(campaign.CampaignError, match="receipt bytes differ"):
+        cli.main(args + ["--setter-mode", "external_admin_acknowledged",
+                        "--external-clock-receipt", str(external),
+                        "--external-clock-receipt-sha256", "0" * 64])
+    assert not captured
+
+
+@pytest.mark.parametrize("mode", ["direct", "sudo_n"])
+def test_cli_rejects_implicit_external_mode(campaign_cli, mode):
+    cli, args, external, captured = campaign_cli
+    with pytest.raises(SystemExit) as failure:
+        cli.main(args + ["--setter-mode", mode, "--external-clock-receipt", str(external),
+                        "--external-clock-receipt-sha256", campaign.file_reference(external)["sha256"]])
+    assert failure.value.code == 2
+    assert not captured
