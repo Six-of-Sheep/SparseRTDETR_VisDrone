@@ -246,6 +246,83 @@ def _source_correspondence(reader, source):
     return correspondences
 
 
+def _register_evaluator_source_proofs(reader, evidence, producer_source):
+    """Authenticate explicit cross-checkout certification source files.
+
+    Only a source proof with the same relative name, full SHA and size as the
+    authenticated producer inventory can acquire a per-file source role.  A
+    direct tests/test_*.py leaf is engineering source; its ancestors still pass
+    the ordinary role guard.  No directory or arbitrary test-prefixed file is
+    exempted, and the unchanged reader authenticates both physical copies.
+    """
+    _require(evidence.get("status") == "PASS"
+             and evidence.get("certification_record_verified") is True
+             and evidence.get("source_match") is True,
+             "evaluator certification source evidence is not verified")
+    proofs, inputs = evidence.get("source_proofs"), evidence.get("inputs")
+    _require(type(proofs) is list and proofs and type(inputs) is dict,
+             "evaluator certification source proofs are missing")
+    roots = []
+    for value in (evidence.get("repo_root"), producer_source.get("repo_root")):
+        _require(type(value) is str, "evaluator source checkout must be a string")
+        root = Path(value)
+        _path_role(root, set())
+        _require(root.is_absolute() and ".." not in root.parts and str(root) == value
+                 and root.resolve(strict=True) == root and root.is_dir(),
+                 "evaluator source checkout is not canonical")
+        roots.append(root)
+    certificate_root, producer_root = roots
+    code_files = producer_source.get("code_files")
+    _require(type(code_files) is dict and code_files,
+             "evaluator producer source inventory is missing")
+    forbidden = {"artifacts", "data", "train_core", "train", "test", "confirmatory",
+                 "visdrone2019-det-test-dev", "visdrone2019-det-test-challenge"}
+    correspondences = {}
+    # Validate every descriptor before opening any of the declared source leaves.
+    for row in proofs:
+        _require(type(row) is dict and set(row) == {
+            "relative_path", "reference", "matches_formal_full_audit_frozen_input"}
+            and row["matches_formal_full_audit_frozen_input"] is True,
+            "evaluator certification source proof schema differs")
+        name = row["relative_path"]
+        _require(type(name) is str, "evaluator source relative path must be a string")
+        relative = Path(name)
+        _require(not relative.is_absolute() and relative.parts and ".." not in relative.parts
+                 and str(relative) == name and name not in correspondences,
+                 "evaluator source relative path is noncanonical or duplicated")
+        _require(not any(part.casefold() in forbidden
+                         or part.casefold().startswith("confirmatory_")
+                         for part in relative.parts),
+                 "evaluator source proof crosses a protected data role")
+        engineering_test = (len(relative.parts) == 2 and relative.parts[0] == "tests"
+                            and relative.name.startswith("test_") and relative.suffix == ".py")
+        ordinary_source = ((relative.parts[0] == "src" and relative.suffix == ".py")
+                           or (relative.parts[0] == "docs" and relative.suffix == ".md"))
+        _require(engineering_test or ordinary_source,
+                 "evaluator source proof is not an authorized source file")
+        _path_role(certificate_root / (relative.parent if engineering_test else relative), set())
+        _path_role(producer_root / (relative.parent if engineering_test else relative), set())
+        historical = _reference(row["reference"])
+        _same(historical["path"], str(certificate_root / relative),
+              "evaluator source proof path differs from its checkout")
+        _same(_reference(inputs.get(historical["path"])), historical,
+              "evaluator source proof differs from certification inputs")
+        producer = _reference(code_files.get(name))
+        _same(producer["path"], str(producer_root / relative),
+              "evaluator producer source path differs from its checkout")
+        _same((historical["sha256"], historical["size_bytes"]),
+              (producer["sha256"], producer["size_bytes"]),
+              "evaluator source proof differs from authenticated producer bytes")
+        _require(producer["path"] in reader.source_paths,
+                 "evaluator producer source was not classified by its inventory")
+        correspondences[name] = {"producer": producer, "historical": historical}
+    for pair in correspondences.values():
+        reader.read(pair["producer"], retain=False)
+        reader.source_paths.add(pair["historical"]["path"])
+        reader.read(pair["historical"], retain=False)
+    return correspondences
+
+
 def rebind_development_for_consumer(producer_binding, *, reader=None):
     """Derive this checkout's metadata binding without changing producer evidence.
 
@@ -415,6 +492,7 @@ def _load_context(reader, analysis_reference):
              and evaluator_evidence.get("certification_record_verified") is True
              and evaluator_evidence.get("source_match") is True,
              "existing primary evaluator certification evidence is not closed")
+    _register_evaluator_source_proofs(reader, evaluator_evidence, source)
     reader.visit(evaluator_evidence)
     workers, completions = _load_completed_cells(campaign, campaign_ref, result_ref)
     for cell in CELLS:
@@ -971,6 +1049,12 @@ def verify_replication_qualification_binding(reference):
     for pair in document["helper_correspondence"].values():
         reader.source_paths.update((pair["producer"]["path"], pair["consumer"]["path"]))
     leaves = {ref["path"]: ref for ref in document["leaf_references"]}
+    campaign = reader.json(document["campaign_reference"])
+    _same(campaign["source"], source, "qualification producer source differs")
+    evaluator_ref = _reference(campaign["evaluator_evidence_reference"])
+    _same(leaves.get(evaluator_ref["path"]), evaluator_ref,
+          "evaluator certification leaf omitted from sealed inventory")
+    _register_evaluator_source_proofs(reader, reader.json(evaluator_ref), source)
     for ref in document["leaf_references"]:
         reader.read(ref, retain=False)
     for field in ("analysis_reference", "campaign_reference", "campaign_result_reference",
@@ -981,7 +1065,6 @@ def verify_replication_qualification_binding(reference):
     _require(document["verifier_reference"]["path"] == str(actual_verifier),
              "qualification verifier imported from a different checkout")
     analysis = reader.json(document["analysis_reference"])
-    campaign = reader.json(document["campaign_reference"])
     _same(analysis["campaign_reference"], document["campaign_reference"], "qualification analysis campaign swapped")
     _same(analysis["campaign_result_reference"], document["campaign_result_reference"],
           "qualification analysis result swapped")

@@ -307,17 +307,29 @@ def sealed(directory, bootstrap_fixture, monkeypatch):
     monkeypatch.setattr(gate, "AUTHORIZATION_SHA256", authority["sha256"])
     manifest = _write_json(directory / "development_manifest.json", {"records": records})
     foundation = _write_json(directory / "foundation.json", {"predeclared_additional_seeds": [1, 2]})
-    evaluator = _write_json(directory / "evaluator-evidence.json", {"synthetic": True})
     source_root = Path(gate.__file__).resolve().parents[3]
     source_files = {name: file_reference(source_root / name) for name in gate._HELPERS}
+    certified_test = "tests/test_rtdetr_baseline_primary_evaluator.py"
+    source_files[certified_test] = file_reference(source_root / certified_test)
+    historical_root = directory / "certificate_source"
+    (historical_root / "tests").mkdir(parents=True)
+    (historical_root / certified_test).write_bytes((source_root / certified_test).read_bytes())
+    historical_test = file_reference(historical_root / certified_test)
+    evaluator_body = {
+        "status": "PASS", "certification_record_verified": True, "source_match": True,
+        "repo_root": str(historical_root), "inputs": {historical_test["path"]: historical_test},
+        "source_proofs": [{"relative_path": certified_test, "reference": historical_test,
+                          "matches_formal_full_audit_frozen_input": True}],
+    }
+    evaluator = _write_json(directory / "evaluator-evidence.json", evaluator_body)
     consumer_identity = {"repo_root": str(source_root), "commit": "1" * 40, "tree": "2" * 40,
                          "branch": "synthetic-no-Git-mutation", "inventory_sha256": "3" * 64}
     git_values = {("rev-parse", "HEAD"): consumer_identity["commit"],
                   ("rev-parse", "HEAD^{tree}"): consumer_identity["tree"],
                   ("branch", "--show-current"): consumer_identity["branch"]}
     monkeypatch.setattr(gate, "_git", lambda root, *args: git_values[args])
-    helper_correspondence = {name: {"producer": ref, "consumer": ref}
-                             for name, ref in source_files.items()}
+    helper_correspondence = {name: {"producer": source_files[name], "consumer": source_files[name]}
+                             for name in gate._HELPERS}
     backend_ref = _write_json(directory / "synthetic-backend.json", {"synthetic": True})
     campaign = {
         "campaign_id": "synthetic", "output_root": str(directory),
@@ -393,6 +405,8 @@ def sealed(directory, bootstrap_fixture, monkeypatch):
     reader = gate._Reader()
     reader.source_paths.add(verifier_ref["path"])
     reader.source_paths.update(ref["path"] for ref in source_files.values())
+    gate._register_evaluator_source_proofs(reader, evaluator_body, campaign["source"])
+    reader.visit(evaluator_body)
     for value in (campaign, result, analysis, *extra_documents):
         reader.visit(value)
     for reference in (campaign_ref, result_ref, analysis_ref, verifier_ref, backend_ref):
@@ -885,3 +899,178 @@ def test_rebinding_reauthenticates_source_after_metadata_reconstruction(
     monkeypatch.setattr(f["development"], "validate_development_binding", changed)
     with pytest.raises(ERROR, match="SHA or size differs|not the bound regular file"):
         gate.rebind_development_for_consumer(f["binding"])
+
+
+@pytest.fixture
+def evaluator_source_fixture(directory):
+    producer_root, historical_root = directory / "producer_code", directory / "certificate_code"
+    relative = "tests/test_evaluator.py"
+    for root in (producer_root, historical_root):
+        (root / "tests").mkdir(parents=True)
+        (root / relative).write_bytes(b"# synthetic engineering source\n")
+    producer = file_reference(producer_root / relative)
+    historical = file_reference(historical_root / relative)
+    source = {"repo_root": str(producer_root), "code_files": {relative: producer}}
+    evidence = {
+        "status": "PASS", "certification_record_verified": True, "source_match": True,
+        "repo_root": str(historical_root), "inputs": {historical["path"]: historical},
+        "source_proofs": [{"relative_path": relative, "reference": historical,
+                          "matches_formal_full_audit_frozen_input": True}],
+    }
+    reader = gate._Reader()
+    reader.source_paths.add(producer["path"])
+    return {"source": source, "evidence": evidence, "reader": reader, "relative": relative,
+            "producer": producer, "historical": historical,
+            "producer_root": producer_root, "historical_root": historical_root}
+
+
+def test_certified_cross_checkout_test_source_is_authenticated_per_file(evaluator_source_fixture):
+    f = evaluator_source_fixture
+    pairs = gate._register_evaluator_source_proofs(f["reader"], f["evidence"], f["source"])
+    assert pairs == {f["relative"]: {"producer": f["producer"], "historical": f["historical"]}}
+    f["reader"].visit(f["evidence"])
+    assert f["reader"].source_paths == {f["producer"]["path"], f["historical"]["path"]}
+    assert set(f["reader"].references) == f["reader"].source_paths
+    protected = {**f["historical"],
+                 "path": str(f["historical_root"] / "tests/test_payload.json")}
+    with pytest.raises(ERROR, match="protected data role"):
+        f["reader"].read(protected)
+
+
+@pytest.mark.parametrize("mutation", [
+    "unverified", "boolean_flag", "missing_proofs", "duplicate", "missing_counterpart",
+    "proof_sha", "proof_size", "input_sha", "historical_path", "producer_path",
+    "unclassified_producer",
+])
+def test_evaluator_source_metadata_mutations_fail_before_any_leaf_open(
+        evaluator_source_fixture, monkeypatch, mutation):
+    f = evaluator_source_fixture
+    evidence, source = copy.deepcopy(f["evidence"]), copy.deepcopy(f["source"])
+    row = evidence["source_proofs"][0]
+    if mutation == "unverified":
+        evidence["certification_record_verified"] = False
+    elif mutation == "boolean_flag":
+        row["matches_formal_full_audit_frozen_input"] = 1
+    elif mutation == "missing_proofs":
+        evidence["source_proofs"] = []
+    elif mutation == "duplicate":
+        evidence["source_proofs"].append(copy.deepcopy(row))
+    elif mutation == "missing_counterpart":
+        source["code_files"].pop(f["relative"])
+    elif mutation in {"proof_sha", "proof_size"}:
+        field = "sha256" if mutation == "proof_sha" else "size_bytes"
+        row["reference"][field] = "f" * 64 if field == "sha256" else 999
+        evidence["inputs"][row["reference"]["path"]] = copy.deepcopy(row["reference"])
+    elif mutation == "input_sha":
+        evidence["inputs"][row["reference"]["path"]] = {
+            **row["reference"], "sha256": "0" * 64}
+    elif mutation == "historical_path":
+        row["reference"]["path"] = str(f["historical_root"] / "tests/test_other.py")
+        evidence["inputs"][row["reference"]["path"]] = copy.deepcopy(row["reference"])
+    elif mutation == "producer_path":
+        source["code_files"][f["relative"]]["path"] = str(f["producer_root"] / "tests/test_other.py")
+    else:
+        f["reader"].source_paths.clear()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("invalid source metadata must fail before opening leaves")
+
+    with monkeypatch.context() as context:
+        context.setattr(gate.os, "open", forbidden)
+        with pytest.raises(ERROR):
+            gate._register_evaluator_source_proofs(f["reader"], evidence, source)
+
+
+@pytest.mark.parametrize("relative", [
+    "tests/test_labels.json", "tests/test_image.jpg", "tests/test_weights.pt",
+    "tests/nested/test_evaluator.py", "test/labels.py", "confirmatory/labels.py",
+    "artifacts/test_evaluator.py", "data/test_evaluator.py", "train_core/labels.py",
+    "src/confirmatory/labels.py", "src/test_labels.py", "../tests/test_evaluator.py",
+])
+def test_protected_data_cannot_be_laundered_as_a_certification_source(
+        evaluator_source_fixture, monkeypatch, relative):
+    f = evaluator_source_fixture
+    evidence, source = copy.deepcopy(f["evidence"]), copy.deepcopy(f["source"])
+    historical = {**f["historical"], "path": str(f["historical_root"] / relative)}
+    producer = {**f["producer"], "path": str(f["producer_root"] / relative)}
+    evidence["source_proofs"] = [{"relative_path": relative, "reference": historical,
+                                "matches_formal_full_audit_frozen_input": True}]
+    evidence["inputs"] = {historical["path"]: historical}
+    source["code_files"] = {relative: producer}
+    f["reader"].source_paths.add(producer["path"])
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("protected data must be refused before any leaf open")
+
+    with monkeypatch.context() as context:
+        context.setattr(gate.os, "open", forbidden)
+        with pytest.raises(ERROR):
+            gate._register_evaluator_source_proofs(f["reader"], evidence, source)
+
+
+@pytest.mark.parametrize("which", ["certificate", "producer"])
+def test_source_role_does_not_exempt_a_protected_checkout_ancestor(
+        evaluator_source_fixture, monkeypatch, which):
+    f = evaluator_source_fixture
+    evidence, source = copy.deepcopy(f["evidence"]), copy.deepcopy(f["source"])
+    if which == "certificate":
+        evidence["repo_root"] = str(f["historical_root"].parent / "confirmatory/code")
+    else:
+        source["repo_root"] = str(f["producer_root"].parent / "test/code")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("protected checkout must be refused before any leaf open")
+
+    with monkeypatch.context() as context:
+        context.setattr(gate.os, "open", forbidden)
+        with pytest.raises(ERROR, match="protected data role"):
+            gate._register_evaluator_source_proofs(f["reader"], evidence, source)
+
+
+@pytest.mark.parametrize("which", ["historical", "producer"])
+def test_evaluator_source_proof_cannot_hide_actual_byte_drift(evaluator_source_fixture, which):
+    f = evaluator_source_fixture
+    Path(f[which]["path"]).write_bytes(b"# changed engineering bytes\n")
+    with pytest.raises(ERROR, match="SHA or size differs|not the bound regular file"):
+        gate._register_evaluator_source_proofs(f["reader"], f["evidence"], f["source"])
+
+
+def test_evaluator_source_proof_does_not_follow_a_historical_symlink(evaluator_source_fixture):
+    f = evaluator_source_fixture
+    path = Path(f["historical"]["path"])
+    path.unlink()
+    path.symlink_to(f["producer"]["path"])
+    with pytest.raises((OSError, ERROR)):
+        gate._register_evaluator_source_proofs(f["reader"], f["evidence"], f["source"])
+
+
+def test_fast_verifier_registers_historical_engineering_source_before_leaf_inventory(sealed):
+    document, reference, _ = sealed
+    campaign = json.loads(Path(document["campaign_reference"]["path"]).read_bytes())
+    certificate = json.loads(Path(campaign["evaluator_evidence_reference"]["path"]).read_bytes())
+    historical = certificate["source_proofs"][0]["reference"]
+    assert historical in document["leaf_references"]
+    with pytest.raises(ERROR, match="protected data role"):
+        gate._Reader().read(historical, retain=False)
+    assert gate.verify_replication_qualification_binding(reference) == document
+
+
+def test_fast_verifier_requires_certification_document_in_sealed_inventory(sealed):
+    document, _, directory = sealed
+    campaign = json.loads(Path(document["campaign_reference"]["path"]).read_bytes())
+    path = campaign["evaluator_evidence_reference"]["path"]
+    document["leaf_references"] = [ref for ref in document["leaf_references"] if ref["path"] != path]
+    reference = _write_json(directory / "missing-certificate.json", _resign(document))
+    with pytest.raises(ERROR, match="evaluator certification leaf omitted"):
+        gate.verify_replication_qualification_binding(reference)
+
+
+def test_fast_verifier_still_requires_historical_source_in_sealed_inventory(sealed):
+    document, _, directory = sealed
+    campaign = json.loads(Path(document["campaign_reference"]["path"]).read_bytes())
+    certificate = json.loads(Path(campaign["evaluator_evidence_reference"]["path"]).read_bytes())
+    path = certificate["source_proofs"][0]["reference"]["path"]
+    document["leaf_references"] = [ref for ref in document["leaf_references"] if ref["path"] != path]
+    reference = _write_json(directory / "missing-certificate-source.json", _resign(document))
+    with pytest.raises(ERROR, match="required evidence leaf omitted"):
+        gate.verify_replication_qualification_binding(reference)
