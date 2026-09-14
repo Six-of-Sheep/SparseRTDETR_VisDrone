@@ -66,8 +66,8 @@ class V2BConfig:
             value = getattr(self, name)
             if type(value) is not int or value <= 0:
                 raise V2BConfigurationError(f"{name} must be a positive integer")
-        if self.input_size < 128 or self.input_size > 640 or self.input_size % 32:
-            raise V2BConfigurationError("CPU foundation supports sizes 128..640 divisible by 32")
+        if self.input_size % 32 or not (128 <= self.input_size <= 640 or self.input_size == 896):
+            raise V2BConfigurationError("CPU foundation supports sizes 128..640 divisible by 32, plus 896")
         if type(self.seed) is not int or not 0 <= self.seed < 2**32:
             raise V2BConfigurationError("seed must be an integer in [0, 2**32)")
         if type(self.num_denoising) is not int or self.num_denoising < 0:

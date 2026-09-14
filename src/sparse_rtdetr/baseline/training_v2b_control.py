@@ -1,4 +1,4 @@
-"""Frozen 640 control worker and fail-closed smoke comparisons.
+"""Frozen 640 controls and the explicit 896 matched-resolution worker.
 
 Importing this module performs no GPU observation, clock change, data read or
 execution. A worker consumes an externally authenticated contract. The parent
@@ -151,12 +151,18 @@ def frozen_epoch_orders() -> dict[str, str]:
 
 def validate_worker_contract(contract: Any, *, verify_files: bool = True) -> dict[str, Any]:
     """Reject scope/config/reference drift before model construction or admission."""
-    if type(contract) is not dict or set(contract) != _KEYS:
+    resolution = type(contract) is dict and contract.get("kind") == "v2b_896_control_worker"
+    keys = _KEYS | {"matched_control_reference", "capacity_plan"} if resolution else _KEYS
+    if type(contract) is not dict or set(contract) != keys:
         _fail("worker contract schema keys mismatch")
     if type(contract["schema_version"]) is not int or contract["schema_version"] != 1:
         _fail("worker contract schema version differs")
-    if contract["kind"] != "v2b_640_control_worker" or contract["stage"] not in STAGES:
+    stages = (*STAGES, "capacity") if resolution else STAGES
+    if (contract["kind"] not in ("v2b_640_control_worker", "v2b_896_control_worker")
+            or contract["stage"] not in stages):
         _fail("unknown worker kind/stage")
+    if resolution and (contract["arm"] != "B" or contract["num_workers"] != 2):
+        _fail("896 requires the matched physical-eight arm and exactly two workers")
     if contract["arm"] not in ("A", "B"):
         _fail("worker arm must be A or B")
     for name in ("campaign_id", "run_id"):
@@ -177,6 +183,9 @@ def validate_worker_contract(contract: Any, *, verify_files: bool = True) -> dic
     config = V2BConfig(sampling_backend=sampling_backend) if contract["arm"] == "A" else V2BConfig(
         physical_batch_size=8, accumulation_steps=2, sampling_backend=sampling_backend,
     )
+    if resolution:
+        config = V2BConfig(input_size=896, physical_batch_size=8, accumulation_steps=2,
+                           sampling_backend="deterministic_gather")
     _same(contract["config"], asdict(config), "frozen model configuration")
     if type(contract["num_workers"]) is not int or contract["num_workers"] not in (2, 4):
         _fail("exactly the CPU-verified worker count 2 or 4 must be frozen")
@@ -236,7 +245,20 @@ def validate_worker_contract(contract: Any, *, verify_files: bool = True) -> dic
                    else "development_manifest.json")
     _path(development.get("image_root"), "development image_root")
     paired, replay = contract["paired_reference"], contract["replay_source"]
-    if contract["arm"] == "A":
+    if resolution:
+        if contract["policy_bundle"].get("setter_mode") != "external_admin_acknowledged":
+            _fail("896 must preserve the acknowledged administrator clock lock without a setter")
+        if paired is not None:
+            _fail("896 uses its bound historical B control, not a mutable paired A")
+        _reference(contract["matched_control_reference"], "matched B completion",
+                   expected_name="control-B.complete.json")
+        from .training_v2b_resolution import validate_capacity_plan, RESOLUTION_AUTHORIZATION_SHA256
+        if contract["policy_bundle"].get("authorization_reference", {}).get("sha256") != RESOLUTION_AUTHORIZATION_SHA256:
+            _fail("896 requires the explicit current 896 authorization, not a historical 640 grant")
+        validate_capacity_plan(contract["capacity_plan"])
+        if development.get("policy", {}).get("input_size") != [896, 896]:
+            _fail("896 worker requires actual 896 development binding")
+    elif contract["arm"] == "A":
         if paired is not None:
             _fail("A must not consume a paired B reference")
     elif paired is None:
@@ -413,6 +435,12 @@ def capture_control_state(components: Any, loader: Any, *, full: bool = False) -
             model_training={name: module.training for name, module in components.model.named_modules()},
             ema_training={name: module.training for name, module in components.ema.module.named_modules()},
         )
+        if components.config.input_size == 896:
+            from .training_v2b_geometry import snapshot_model_geometry
+            state["geometry"] = {
+                "raw": snapshot_model_geometry(components.model, expected_input_size=896),
+                "ema": snapshot_model_geometry(components.ema.module, expected_input_size=896),
+            }
     return state
 
 
@@ -435,6 +463,8 @@ class _ForwardObservation:
                    "autocast_dtype": str(torch.get_autocast_dtype(kind))}
             if args and isinstance(args[0], torch.Tensor):
                 row["physical_batch_size"] = int(args[0].shape[0])
+                if self.components.config.input_size == 896:
+                    row["input_shape"] = list(args[0].shape)
             destination.append(row)
         return observe
 
@@ -512,6 +542,9 @@ class _ForwardObservation:
         if any(row.get("physical_batch_size") != self.components.config.physical_batch_size
                for row in self.model_calls):
             _fail("actual model physical batch size differs")
+        if self.components.config.input_size == 896 and any(
+                row.get("input_shape") != [8, 3, 896, 896] for row in self.model_calls):
+            _fail("actual 896 physical forward geometry differs")
         if any(value != count for value in self.bn_calls.values()):
             _fail("actual BN forward count differs from physical microbatches")
         return {"model": self.model_calls, "criterion": self.criterion_calls,
@@ -1158,6 +1191,8 @@ def _verify_common_initial_state(expected: dict, actual: dict) -> None:
         "ema_state_sha256", "optimizer_state_sha256", "model_training", "ema_training",
     ):
         _same(expected[name], actual[name], "actual shared CUDA initialization " + name)
+    if "geometry" in expected or "geometry" in actual:
+        _same(expected.get("geometry"), actual.get("geometry"), "same-arm initialized geometry and plain caches")
 
 
 def _common_identity(contract: dict, binding: dict, loader: Any) -> dict:
@@ -1177,7 +1212,8 @@ def _common_identity(contract: dict, binding: dict, loader: Any) -> dict:
 
 def _measure_window(session: Any, batch: Any, monitor: Any, *, expected_indices,
                     paired_record: dict | None = None,
-                    replay_record: dict | None = None, observe_sampling: bool = False) -> dict:
+                    replay_record: dict | None = None, observe_sampling: bool = False,
+                    matched_record: dict | None = None, matched_reference: dict | None = None) -> dict:
     receipt = batch.evidence()
     verify_input_receipt(
         receipt, expected_indices=expected_indices, epoch=batch.epoch,
@@ -1186,6 +1222,9 @@ def _measure_window(session: Any, batch: Any, monitor: Any, *, expected_indices,
     )
     if replay_record is not None:
         _same(receipt, replay_record["input"], "fresh replay input before model update")
+    if matched_record is not None:
+        from .training_v2b_resolution import verify_matched_input
+        verify_matched_input(matched_record["input"], receipt)
     c = session.components
     before_bn = _bn_state(c.model)
     before = monitor.check(stage="before_window")
@@ -1221,6 +1260,16 @@ def _measure_window(session: Any, batch: Any, monitor: Any, *, expected_indices,
         "loss_families_weighted": _loss_families(record["window"]),
         "auxiliary_numerical_health": health, "memory": memory,
         "synchronized_train_window_seconds": elapsed,
+        **({"resolution_match": {
+            "matched_receipt": copy.deepcopy(matched_reference),
+            "source_samples_and_augmentation_seeds_exact": True,
+            "target_counts_per_image": [len(target["labels"]) for target in batch.targets],
+            "control_target_total": matched_record["window"]["target_total"],
+            "control_denominator": matched_record["window"]["denominator"],
+            "control_dn_query_counts": matched_record["window"]["dn_query_counts"],
+            "control_microbatch_target_counts": matched_record["window"]["microbatch_target_counts"],
+            "resized_tensors_and_post_resize_target_counts_may_differ": True,
+        }} if matched_record is not None else {}),
         "hardware_before": before, "hardware_after": after,
     }
 
@@ -1238,7 +1287,7 @@ def _write_checkpoint(session: Any, output: Path, name: str, monitor: Any) -> di
 def _run_active_windows(session: Any, monitor: Any, output: Path, *, limit: int,
                         paired_index: dict, replay_index: dict, save_midpoint: bool,
                         snapshots: bool, checkpoints: dict, receipts: list,
-                        replay_checks: list) -> None:
+                        replay_checks: list, matched_index: dict | None = None) -> None:
     loader, c = session.loader, session.components
     epoch = c.engine.epoch
     plan = list(logical_batch_indices(
@@ -1267,10 +1316,17 @@ def _run_active_windows(session: Any, monitor: Any, output: Path, *, limit: int,
                 if key not in replay_index:
                     _fail("fresh replay lacks the original next logical window")
                 replay = _read_json_reference(replay_index[key], "original replay window")
+            matched, matched_ref = None, None
+            if matched_index is not None:
+                if key not in matched_index:
+                    _fail("896 lacks its authenticated matched 640 B logical window")
+                matched_ref = matched_index[key]
+                matched = _read_json_reference(matched_ref, "matched 640 B window")
             record = _measure_window(
                 session, batch, monitor, expected_indices=plan[batch.logical_batch_index],
                 paired_record=paired, replay_record=replay,
                 observe_sampling=snapshots and c.config.sampling_backend == "native",
+                matched_record=matched, matched_reference=matched_ref,
             )
             record["logical_input_wait_seconds"] = load_seconds
             window_id = c.engine.optimizer_updates
@@ -1315,6 +1371,9 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
     """Run one admitted stage. No retry, subprocess replay or implicit continuation."""
     checked = validate_worker_contract(contract, verify_files=False)
     _same(_read_json_reference(contract_reference, "worker contract"), checked, "contract bytes")
+    if checked["stage"] == "capacity":
+        from .training_v2b_resolution import run_capacity_worker
+        return run_capacity_worker(checked, contract_reference=contract_reference)
     output = Path(checked["output_dir"])
     output.mkdir(parents=False, exist_ok=False)
     monitor = None
@@ -1369,8 +1428,22 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
         report["binding_reference"] = write_exclusive_json(output / "run-binding.json", binding)
         report["initialization"] = cpu.initialization
         report["common_identity"] = _common_identity(checked, binding, loader)
-        paired, original = None, None
-        paired_index, replay_index = {}, {}
+        paired, original, matched = None, None, None
+        paired_index, replay_index, matched_index = {}, {}, None
+        if checked["kind"] == "v2b_896_control_worker":
+            from .training_v2b_resolution import (
+                load_matched_control, validate_matched_definition,
+                compare_matched_initialization, compare_matched_initial_state,
+            )
+            matched = load_matched_control(checked["matched_control_reference"])
+            validate_matched_definition(checked, matched)
+            report["matched_control_reference"] = copy.deepcopy(checked["matched_control_reference"])
+            report["matched_initialization"] = compare_matched_initialization(
+                matched["result"], cpu.initialization,
+            )
+            matched_index = _receipt_index(matched["result"])
+            if set(matched_index) != {(e, i) for e in range(1, 31) for i in range(304)}:
+                _fail("historical B is not a complete thirty-epoch matched control")
         expected_source_stage = "control30" if checked["stage"] == "control30" else "smoke"
         if checked["paired_reference"] is not None:
             paired = _successful_source(
@@ -1417,6 +1490,10 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
         report["runtime"] = runtime.identity
         initial_state = capture_control_state(components, loader, full=True)
         report["initial_state_reference"] = write_exclusive_json(output / "initial-state.json", initial_state)
+        if matched is not None:
+            report["matched_cuda_initialization"] = compare_matched_initial_state(
+                matched["result"], initial_state, runtime.identity,
+            )
         for source in (paired, original):
             if source is not None:
                 _same(source["runtime"], report["runtime"], "actual paired/replay CUDA runtime identity")
@@ -1468,6 +1545,7 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
                 paired_index=paired_index, replay_index=replay_index,
                 save_midpoint=original is None, snapshots=True,
                 checkpoints=checkpoints, receipts=receipts, replay_checks=replay_checks,
+                matched_index=matched_index,
             )
             if components.engine.optimizer_updates != 4:
                 _fail("smoke did not stop after exactly four logical windows")
@@ -1492,7 +1570,7 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
                     session, monitor, output, limit=loader.batches_per_epoch,
                     paired_index=paired_index, replay_index={}, save_midpoint=False,
                     snapshots=False, checkpoints=checkpoints, receipts=receipts,
-                    replay_checks=replay_checks,
+                    replay_checks=replay_checks, matched_index=matched_index,
                 )
                 epoch_record = session.finish_epoch()
                 checkpoints[f"epoch_{epoch}"] = _write_checkpoint(

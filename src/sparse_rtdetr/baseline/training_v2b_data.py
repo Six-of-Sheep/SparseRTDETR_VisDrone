@@ -122,8 +122,8 @@ class TrainCoreDataConfig:
         if self.seed >= 2**32:
             raise TrainCoreDataError("seed exceeds the CPU seed range")
         _integer(self.input_size, "input_size", 128)
-        if self.input_size > 640 or self.input_size % 32:
-            raise TrainCoreDataError("runtime wiring supports sizes 128..640 divisible by 32")
+        if (self.input_size > 640 and self.input_size != 896) or self.input_size % 32:
+            raise TrainCoreDataError("runtime wiring supports sizes 128..640 divisible by 32, plus 896")
         _integer(self.logical_batch_size, "logical_batch_size", 1)
         _integer(self.num_workers, "num_workers")
         _integer(self.prefetch_factor, "prefetch_factor", 1)

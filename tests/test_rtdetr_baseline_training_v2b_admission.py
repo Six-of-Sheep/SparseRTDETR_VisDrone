@@ -339,6 +339,160 @@ def test_repair_authority_adds_only_synthetic_scope_without_hardware_changes(pol
         assert selected["workload_deadline_seconds"] == deadline
         assert selected["minimum_loaded_clock_samples"] == 3
 
+@pytest.fixture
+def resolution_896_policy_bundle(tmp_path, monkeypatch, policy_bundle, external_receipt):
+    auth = tmp_path / "resolution-896-authorization.txt"
+    auth.write_text("CPU fixture: exact 896 capacity pilot and control; no GPU access\n")
+    auth_ref = ev.file_reference(auth)
+    monkeypatch.setattr(ad, "_RESOLUTION_896_AUTHORIZATION_SHA", auth_ref["sha256"])
+    return ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                                  authorization_reference=auth_ref,
+                                  setter_mode=ad._EXTERNAL_ADMIN_MODE,
+                                  external_clock_receipt=external_receipt["reference"])
+
+
+def test_resolution_896_authority_preserves_scopes_and_hardware_rules(
+        external_receipt, resolution_896_policy_bundle):
+    original_external = external_receipt["build"](external_receipt["reference"])
+    assert resolution_896_policy_bundle["authorized_scope_limits_seconds"] == {
+        "paired_smoke": 600, "train_core_30epoch": 43200}
+    assert resolution_896_policy_bundle["setter_mode"] == ad._EXTERNAL_ADMIN_MODE
+    assert resolution_896_policy_bundle["external_clock_receipt"] == external_receipt["reference"]
+    changed = {"authorization_reference", "bundle_sha256"}
+    assert {k: v for k, v in original_external.items() if k not in changed} == {
+        k: v for k, v in resolution_896_policy_bundle.items() if k not in changed}
+    for scope, deadline in (("paired_smoke", 600), ("train_core_30epoch", 43200)):
+        selected = ad._validate_policy(resolution_896_policy_bundle, scope, deadline)
+        assert selected["authorized_scope"] == scope
+        assert selected["workload_deadline_seconds"] == deadline
+
+
+@pytest.mark.parametrize("mode", ["direct", "sudo_n"])
+def test_resolution_896_authority_rejects_native_setter_policy_before_native_access(
+        resolution_896_policy_bundle, monkeypatch, mode):
+    monkeypatch.setattr(hw, "collect_native_hardware_probe",
+                        lambda *a, **kw: pytest.fail("policy construction attempted native hardware access"))
+    monkeypatch.setattr(ad, "_setter",
+                        lambda *a, **kw: pytest.fail("policy construction attempted a clock setter"))
+    with pytest.raises(ad.MonitoredHardwareError, match="896 authorization requires external_admin_acknowledged"):
+        ad.build_policy_bundle(Path(resolution_896_policy_bundle["authority"]["path"]).parent,
+            authorization_reference=resolution_896_policy_bundle["authorization_reference"], setter_mode=mode)
+
+
+@pytest.mark.parametrize("mode", ["direct", "sudo_n"])
+def test_resolution_896_session_rejects_rehashed_native_setter_policy_before_native_access(
+        resolution_896_policy_bundle, bound, tmp_path, monkeypatch, mode):
+    bundle = copy.deepcopy(resolution_896_policy_bundle)
+    bundle["setter_mode"] = mode
+    bundle.pop("external_clock_receipt")
+    bundle.pop("external_journal_executable")
+    bundle["bundle_sha256"] = ev.canonical_sha256({k: v for k, v in bundle.items() if k != "bundle_sha256"})
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=896, physical_batch_size=8, accumulation_steps=2, cuda_gpu_uuid=UUID)
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    monkeypatch.setattr(hw, "collect_native_hardware_probe",
+                        lambda *a, **kw: pytest.fail("session construction attempted native hardware access"))
+    monkeypatch.setattr(ad, "_setter",
+                        lambda *a, **kw: pytest.fail("session construction attempted a clock setter"))
+    output = tmp_path / "rejected-native-setter"
+    with pytest.raises(ad.MonitoredHardwareError, match="896 authorization requires external_admin_acknowledged"):
+        ad.MonitoredHardwareSession(bound, bundle, output, "paired_smoke", 600)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("authority", ["original", "repair"])
+@pytest.mark.parametrize("mode", ["direct", "sudo_n", ad._EXTERNAL_ADMIN_MODE])
+def test_prior_authorities_keep_their_existing_setter_modes(
+        policy_bundle, repair_policy_bundle, external_receipt, authority, mode):
+    original = policy_bundle if authority == "original" else repair_policy_bundle
+    receipt = external_receipt["reference"] if mode == ad._EXTERNAL_ADMIN_MODE else None
+    rebuilt = ad.build_policy_bundle(Path(original["authority"]["path"]).parent,
+        authorization_reference=original["authorization_reference"], setter_mode=mode,
+        external_clock_receipt=receipt)
+    assert rebuilt["setter_mode"] == mode
+    assert rebuilt["authorized_scope_limits_seconds"] == original["authorized_scope_limits_seconds"]
+    assert ad._validate_policy(rebuilt, "paired_smoke", 600)["setter_mode"] == mode
+    if mode == "direct":
+        assert ev.canonical_json_bytes(rebuilt) == ev.canonical_json_bytes(original)
+
+
+@pytest.mark.parametrize("scope,deadline", [
+    ("synthetic_operator_diagnostic", 600), ("paired_smoke", 601),
+    ("train_core_30epoch", 43201), ("paired_smoke", True), ("production", 1),
+])
+def test_resolution_896_authority_cannot_expand_scope_or_deadline(
+        resolution_896_policy_bundle, scope, deadline):
+    with pytest.raises(ad.MonitoredHardwareError, match="not authorized"):
+        ad._validate_policy(resolution_896_policy_bundle, scope, deadline)
+
+
+@pytest.mark.parametrize("rehash", [False, True])
+def test_resolution_896_authorization_requires_exact_complete_bytes(
+        resolution_896_policy_bundle, rehash):
+    ref = copy.deepcopy(resolution_896_policy_bundle["authorization_reference"])
+    Path(ref["path"]).write_bytes(Path(ref["path"]).read_bytes() + b"changed\n")
+    if rehash:
+        ref = ev.file_reference(ref["path"])
+    with pytest.raises(ad.MonitoredHardwareError, match="authorization reference differs"):
+        ad.build_policy_bundle(Path(resolution_896_policy_bundle["authority"]["path"]).parent,
+                               authorization_reference=ref, setter_mode=ad._EXTERNAL_ADMIN_MODE,
+                               external_clock_receipt=resolution_896_policy_bundle["external_clock_receipt"])
+
+
+def test_resolution_896_caller_rehash_cannot_add_synthetic_scope(resolution_896_policy_bundle):
+    bundle = copy.deepcopy(resolution_896_policy_bundle)
+    bundle["authorized_scope_limits_seconds"]["synthetic_operator_diagnostic"] = 600
+    bundle["bundle_sha256"] = ev.canonical_sha256({k: v for k, v in bundle.items() if k != "bundle_sha256"})
+    with pytest.raises(ad.MonitoredHardwareError, match="differs"):
+        ad._validate_policy(bundle, "synthetic_operator_diagnostic", 600)
+
+
+@pytest.mark.parametrize("scope,deadline", [("paired_smoke", 600), ("train_core_30epoch", 43200)])
+def test_resolution_896_authority_accepts_exact_bound_dimensions_without_native_access(
+        resolution_896_policy_bundle, bound, tmp_path, scope, deadline):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=896, physical_batch_size=8, accumulation_steps=2, cuda_gpu_uuid=UUID)
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    output = tmp_path / "never-started"
+    session = ad.MonitoredHardwareSession(bound, resolution_896_policy_bundle, output, scope, deadline)
+    assert session._state == "new"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("key,value", [
+    ("input_size", 640), ("input_size", 960), ("input_size", 896.0), ("input_size", True),
+    ("physical_batch_size", 16), ("physical_batch_size", 8.0), ("physical_batch_size", True),
+    ("accumulation_steps", 1), ("accumulation_steps", 2.0), ("accumulation_steps", True),
+    ("input_size", None), ("physical_batch_size", None), ("accumulation_steps", None),
+])
+def test_resolution_896_authority_rejects_other_bound_dimensions_before_native_access(
+        resolution_896_policy_bundle, bound, tmp_path, key, value):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=896, physical_batch_size=8, accumulation_steps=2, cuda_gpu_uuid=UUID)
+    if value is None:
+        del bound["config"][key]
+    else:
+        bound["config"][key] = value
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    output = tmp_path / "never-started"
+    with pytest.raises(ad.MonitoredHardwareError, match="896 authorization requires exact bound"):
+        ad.MonitoredHardwareSession(bound, resolution_896_policy_bundle, output, "paired_smoke", 600)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("authority", ["original", "repair"])
+def test_prior_authorities_do_not_inherit_resolution_896_binding_restrictions(
+        policy_bundle, repair_policy_bundle, bound, tmp_path, authority):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=640, physical_batch_size=16, accumulation_steps=1, cuda_gpu_uuid=UUID)
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    bundle = policy_bundle if authority == "original" else repair_policy_bundle
+    output = tmp_path / "legacy-never-started"
+    session = ad.MonitoredHardwareSession(bound, bundle, output, "paired_smoke", 600)
+    assert session._state == "new"
+    assert not output.exists()
+
+
 
 @pytest.mark.parametrize("deadline", [0, -1, 601, 43200, True, False, 600.0, "600", None])
 def test_synthetic_diagnostic_has_strict_six_hundred_second_limit(repair_policy_bundle, deadline):

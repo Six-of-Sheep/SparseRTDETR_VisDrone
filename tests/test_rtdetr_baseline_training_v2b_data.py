@@ -427,7 +427,7 @@ def test_epoch_stop_preserves_remaining_flip_and_final_geometry(files):
 
 
 @pytest.mark.parametrize("change", [
-    {"input_size": 896}, {"input_size": 129}, {"num_workers": -1},
+    {"input_size": 960}, {"input_size": 129}, {"num_workers": -1},
     {"prefetch_factor": 0}, {"logical_batch_size": 0},
     {"seed": -1}, {"seed": 2**32}, {"multiprocessing_context": "fork"},
 ])

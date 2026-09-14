@@ -41,6 +41,7 @@ _TOKEN = object()
 _ANCHOR_MANIFEST_SHA = "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56e7bd98b0"
 _AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889059b85"
 _REPAIR_AUTHORIZATION_SHA = "c8b46cc3d91e941c32047806e41e518476b00ce8e1deb62cb58deb42e9869e75"
+_RESOLUTION_896_AUTHORIZATION_SHA = "ece816c4bfc93b62c403a00986a738f853b86e91a05953531ab93c0998538819"
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
 _EXTERNAL_ADMIN_MODE = "external_admin_acknowledged"
@@ -124,12 +125,17 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
     authorizations = {
         _AUTHORIZATION_SHA: _SCOPES,
         _REPAIR_AUTHORIZATION_SHA: {**_SCOPES, "synthetic_operator_diagnostic": 600},
+        # Native admission binds 896 dimensions and external clock evidence; no new hardware scope.
+        _RESOLUTION_896_AUTHORIZATION_SHA: _SCOPES,
     }
     if type(authorization_reference) is not dict or type(authorization_reference.get("sha256")) is not str:
         raise MonitoredHardwareError("explicit execution authorization reference differs")
     scope_limits = authorizations.get(authorization_reference["sha256"])
     if scope_limits is None or ev.file_reference(authorization_reference["path"]) != authorization_reference:
         raise MonitoredHardwareError("explicit execution authorization reference differs")
+    if (authorization_reference["sha256"] == _RESOLUTION_896_AUTHORIZATION_SHA
+            and setter_mode != _EXTERNAL_ADMIN_MODE):
+        raise MonitoredHardwareError("896 authorization requires external_admin_acknowledged; native clock setters are not authorized")
     root = Path(reference_dir).absolute()
     manifest_ref = ev.file_reference(root / "manifest.json")
     if manifest_ref["sha256"] != _ANCHOR_MANIFEST_SHA:
@@ -1152,6 +1158,11 @@ class MonitoredHardwareSession:
                  workload_deadline_seconds: int = 600) -> None:
         self.binding = ev.validate_run_binding(binding)
         self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+        if self.policy["authorization_reference"]["sha256"] == _RESOLUTION_896_AUTHORIZATION_SHA:
+            dimensions = {"input_size": 896, "physical_batch_size": 8, "accumulation_steps": 2}
+            if any(type(self.binding["config"].get(key)) is not int
+                   or self.binding["config"][key] != value for key, value in dimensions.items()):
+                raise MonitoredHardwareError("896 authorization requires exact bound input_size=896, physical_batch_size=8, accumulation_steps=2")
         if authorized_scope == "synthetic_operator_diagnostic" and self.binding["data"]["kind"] != "synthetic":
             raise MonitoredHardwareError("synthetic operator diagnostic requires a synthetic input binding")
         if self.binding["config"].get("cuda_gpu_uuid") != self.policy["gpu_uuid"]:

@@ -85,7 +85,7 @@ def bind(components, images, targets, run_id="real-r18-cpu"):
 
 @pytest.mark.parametrize("kwargs", [
     {"seed": True}, {"seed": -1}, {"seed": 2**32},
-    {"input_size": 96}, {"input_size": 129}, {"input_size": 896},
+    {"input_size": 96}, {"input_size": 129}, {"input_size": 960},
     {"physical_batch_size": 0}, {"accumulation_steps": True},
     {"amp_dtype": "float16"}, {"bn_statistics": "backbone_only"},
     {"learning_rate": float("nan")}, {"weight_decay": -1},

@@ -167,6 +167,18 @@ V2B_PAIRED_CONTROL_FILES = {
     'tools/run_training_v2b_control.py',
 }
 
+V2B_896_MATCHED_FILES = {
+    'docs/contracts/RTDETR_BASELINE_V2B_896_MATCHED_CONTROL.md',
+    'src/sparse_rtdetr/baseline/training_v2b_geometry.py',
+    'src/sparse_rtdetr/baseline/training_v2b_resolution.py',
+    'src/sparse_rtdetr/baseline/training_v2b_resolution_campaign.py',
+    'tests/test_training_v2b_resolution_contract.py',
+    'tests/test_training_v2b_resolution_development.py',
+    'tests/test_training_v2b_resolution_training.py',
+    'tests/test_training_v2b_resolution_campaign.py',
+    'tools/run_training_v2b_resolution_campaign.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -714,6 +726,9 @@ BASELINE_MODEL_IMPORT_FILES |= {
     "tests/test_rtdetr_baseline_training_v2b_control.py",
     "tests/test_rtdetr_baseline_training_v2b_development.py",
 }
+
+# Explicit 896 experiment modules use the same native admitted runtime.
+BASELINE_MODEL_IMPORT_FILES |= {path for path in V2B_896_MATCHED_FILES if path.endswith(".py")}
 
 SCIENTIFIC_ENTRY_ROOTS = (
     "src/sparse_rtdetr/baseline/smoke.py",
@@ -2338,6 +2353,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_RUNTIME_FILES
     if files & V2B_PAIRED_CONTROL_FILES:
         allowed_files |= V2B_PAIRED_CONTROL_FILES
+    if files & V2B_896_MATCHED_FILES:
+        allowed_files |= V2B_896_MATCHED_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:

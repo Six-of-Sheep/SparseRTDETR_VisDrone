@@ -42,6 +42,7 @@ from .training_v2b_device import (
     validate_prepared_runtime,
 )
 from .training_v2b_engine import validate_engine_state_dict
+from .training_v2b_geometry import ModelGeometryError, snapshot_model_geometry
 from .training_v2b_evidence import (
     file_reference, initial_parameter_reference, write_exclusive_json,
 )
@@ -53,6 +54,7 @@ class DevelopmentEvaluationError(ValueError):
 
 EVALUATION_EPOCHS = (10, 20, 30)
 INPUT_SIZE = 640
+SUPPORTED_INPUT_SIZES = (640, 896)
 BATCH_SIZE = 4
 PREVIEW_IMAGES = 4
 _BINDING_KEYS = {
@@ -222,15 +224,32 @@ def _validate_documents(coco: dict, manifest: dict):
     return ordered, grouped, members, inventory
 
 
-def _policy() -> dict:
+def _input_size(value: Any) -> int:
+    if type(value) is not int or value not in SUPPORTED_INPUT_SIZES:
+        raise DevelopmentEvaluationError("development input_size must be 640 or 896")
+    return value
+
+
+def _policy_input_size(policy: Any) -> int:
+    if type(policy) is not dict:
+        raise DevelopmentEvaluationError("development policy must be an object")
+    size = policy.get("input_size")
+    if (type(size) is not list or len(size) != 2
+            or any(type(value) is not int for value in size) or size[0] != size[1]):
+        raise DevelopmentEvaluationError("development policy requires a square integer input_size")
+    return _input_size(size[0])
+
+
+def _policy(input_size: int = INPUT_SIZE) -> dict:
+    size = _input_size(input_size)
     return {
-        "input_size": [INPUT_SIZE, INPUT_SIZE], "batch_size": BATCH_SIZE,
+        "input_size": [size, size], "batch_size": BATCH_SIZE,
         "num_workers": 0, "shuffle": False, "drop_last": False,
         "model_weights": "ema", "forward_dtype": "float32", "autocast": False,
         "evaluation_epochs": list(EVALUATION_EPOCHS),
         "preview_images": PREVIEW_IMAGES, "image_order": "ascending_coco_image_id",
         "transform": [
-            {"type": "Resize", "size": [INPUT_SIZE, INPUT_SIZE]},
+            {"type": "Resize", "size": [size, size]},
             {"type": "ConvertPILImage", "dtype": "float32", "scale": True},
         ],
         "num_top_queries": 300, "focal_sigmoid": True, "nms": False,
@@ -249,7 +268,8 @@ def _policy() -> dict:
     }
 
 
-def _vendor_tools(root: Path):
+def _vendor_tools(root: Path, input_size: int = INPUT_SIZE):
+    size = _input_size(input_size)
     _vendor_source_identities(root)
     with _vendor_path(_vendor_root(root)):
         importlib.import_module("src.data")
@@ -261,9 +281,12 @@ def _vendor_tools(root: Path):
         snapshot = _snapshot_registry(GLOBAL_CONFIG)
         try:
             resolved = load_isolated_vendor_config_dict(root)
-            recipe = resolved["val_dataloader"]["dataset"]["transforms"]
+            recipe = copy.deepcopy(resolved["val_dataloader"]["dataset"]["transforms"])
             if recipe["ops"] != _policy()["transform"]:
                 raise DevelopmentEvaluationError("vendored validation transform recipe changed")
+            for operation in recipe["ops"]:
+                if operation["type"] == "Resize":
+                    operation["size"] = [size, size]
             transforms = Compose(**{k: copy.deepcopy(v) for k, v in recipe.items()
                                     if k != "type"})
         finally:
@@ -285,6 +308,7 @@ def _source_binding(root: Path) -> dict:
     _vendor_tools(root)
     relative = (
         "src/sparse_rtdetr/baseline/training_v2b_development.py",
+        "src/sparse_rtdetr/baseline/training_v2b_geometry.py",
         "src/sparse_rtdetr/baseline/categories.py",
         "src/sparse_rtdetr/baseline/config.py",
         "src/sparse_rtdetr/baseline/postprocessor.py",
@@ -335,8 +359,10 @@ def _source_binding(root: Path) -> dict:
 def build_development_binding(*, repo_root: str | Path,
                               annotation_file: str | Path, annotation_sha256: str,
                               manifest_file: str | Path, manifest_sha256: str,
-                              image_root: str | Path) -> dict:
-    """Bind explicit metadata and expected JPEG identities without reading images."""
+                              image_root: str | Path,
+                              input_size: int = INPUT_SIZE) -> dict:
+    """Bind explicit metadata, evaluation size, and expected JPEG identities."""
+    size = _input_size(input_size)
     root = Path(repo_root).resolve(strict=True)
     images_root = _role_path(image_root, "image root")
     images_root = _role_path(images_root.resolve(strict=True), "resolved image root")
@@ -352,7 +378,7 @@ def build_development_binding(*, repo_root: str | Path,
         "image_count": len(images), "annotation_count": len(coco["annotations"]),
         "image_manifest_sha256": _digest(inventory),
         "image_order_sha256": _digest([image["id"] for image in images]),
-        "policy": _policy(), "source": _source_binding(root),
+        "policy": _policy(size), "source": _source_binding(root),
     }
     return {**result, "binding_sha256": _digest(result)}
 
@@ -366,9 +392,10 @@ def validate_development_binding(binding: Mapping[str, Any], *,
     body = {k: v for k, v in checked.items() if k != "binding_sha256"}
     if _digest(body) != _sha(checked["binding_sha256"], "development binding"):
         raise DevelopmentEvaluationError("development binding digest mismatch")
+    size = _policy_input_size(checked["policy"])
     if (checked["schema_version"] != 1 or checked["role"] != "development"
             or checked["protocol_id"] != "P3-VISDRONE-DATA-PROTOCOL-V2"
-            or checked["policy"] != _policy()):
+            or checked["policy"] != _policy(size)):
         raise DevelopmentEvaluationError("development role or evaluation policy changed")
     _integer(checked["image_count"], "image count", 1)
     _integer(checked["annotation_count"], "annotation count")
@@ -389,7 +416,7 @@ def validate_development_binding(binding: Mapping[str, Any], *,
             annotation_sha256=checked["annotation"]["sha256"],
             manifest_file=checked["manifest"]["path"],
             manifest_sha256=checked["manifest"]["sha256"],
-            image_root=checked["image_root"],
+            image_root=checked["image_root"], input_size=size,
         )
         if rebuilt != checked:
             raise DevelopmentEvaluationError("development source/data binding drift")
@@ -399,6 +426,7 @@ def validate_development_binding(binding: Mapping[str, Any], *,
 class _DevelopmentDataset:
     def __init__(self, binding: dict):
         self.binding = binding
+        self.input_size = _policy_input_size(binding["policy"])
         coco, _ = _read_json(binding["annotation"]["path"],
                              binding["annotation"]["sha256"], "annotation")
         manifest, _ = _read_json(binding["manifest"]["path"],
@@ -407,7 +435,7 @@ class _DevelopmentDataset:
         self.images, self.annotations, self.members, _ = _validate_documents(coco, manifest)
         self.image_root = Path(binding["image_root"])
         self.converter, self.transforms, self.to_tv_tensor, self.evaluator_type = (
-            _vendor_tools(Path(binding["repo_root"]))
+            _vendor_tools(Path(binding["repo_root"]), self.input_size)
         )
         self.epoch = -1
 
@@ -435,7 +463,7 @@ class _DevelopmentDataset:
                                             spatial_size=pixels.size[::-1])
         target = map_target_labels_to_model(target)
         pixels, target, _ = self.transforms(pixels, target, self)
-        if (pixels.dtype != torch.float32 or list(pixels.shape) != [3, INPUT_SIZE, INPUT_SIZE]
+        if (pixels.dtype != torch.float32 or list(pixels.shape) != [3, self.input_size, self.input_size]
                 or not bool(torch.isfinite(pixels).all())
                 or target["orig_size"].tolist() != [image["width"], image["height"]]):
             raise DevelopmentEvaluationError("development resize/width-height convention drift")
@@ -515,6 +543,16 @@ def _component(components, name):
         raise DevelopmentEvaluationError("missing runtime component: " + name) from exc
 
 
+def _geometry_snapshot(model, ema, input_size: int) -> dict:
+    try:
+        return {
+            "raw": snapshot_model_geometry(model, expected_input_size=input_size),
+            "ema": snapshot_model_geometry(ema.module, expected_input_size=input_size),
+        }
+    except ModelGeometryError as exc:
+        raise DevelopmentEvaluationError("evaluation geometry mismatch: " + str(exc)) from exc
+
+
 def _state_reference(module) -> str:
     return initial_parameter_reference({
         name: value.detach().cpu() for name, value in module.state_dict().items()
@@ -540,14 +578,18 @@ def _auxiliary_clocks(engine) -> dict:
 
 
 @contextlib.contextmanager
-def _preserve_training_state(model, ema, postprocessor, engine, runtime):
+def _preserve_training_state(model, ema, postprocessor, engine, runtime, *,
+                             input_size: int, initial_geometry: dict):
     modules = {id(module): module for root in (model, ema.module, postprocessor)
                for module in root.modules()}
     modes = [(module, module.training) for module in modules.values()]
     before = {"engine": copy.deepcopy(engine.state_dict()), "ema_updates": ema.updates,
               "model_sha256": _state_reference(model),
               "ema_sha256": _state_reference(ema.module),
-              "auxiliary_clocks": _auxiliary_clocks(engine)}
+              "auxiliary_clocks": _auxiliary_clocks(engine),
+              "geometry": _geometry_snapshot(model, ema, input_size)}
+    if before["geometry"] != initial_geometry:
+        raise DevelopmentEvaluationError("evaluation geometry changed before snapshot")
     try:
         yield before
     finally:
@@ -556,9 +598,10 @@ def _preserve_training_state(model, ema, postprocessor, engine, runtime):
         after = {"engine": engine.state_dict(), "ema_updates": ema.updates,
                  "model_sha256": _state_reference(model),
                  "ema_sha256": _state_reference(ema.module),
-                 "auxiliary_clocks": _auxiliary_clocks(engine)}
+                 "auxiliary_clocks": _auxiliary_clocks(engine),
+                 "geometry": _geometry_snapshot(model, ema, input_size)}
         if after != before:
-            raise DevelopmentEvaluationError("evaluation changed model/EMA state or update clocks")
+            raise DevelopmentEvaluationError("evaluation changed model/EMA state or update clocks/geometry")
 
 
 def _primary_result(dataset, selected, predictions):
@@ -616,10 +659,16 @@ def _publish_tensors(path: Path, precision: np.ndarray, recall: np.ndarray) -> d
     return reference
 
 
-def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_gate, preview):
+def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_gate,
+              preview, capacity=False):
+    if type(preview) is not bool or type(capacity) is not bool or (preview and capacity):
+        raise DevelopmentEvaluationError("preview and capacity must be distinct evaluation modes")
+    if (preview or capacity) and logged_epoch is not None:
+        raise DevelopmentEvaluationError("preview/capacity cannot represent a completed training epoch")
     if not callable(hardware_gate):
         raise DevelopmentEvaluationError("an explicit per-batch live gate callback is required")
     binding = validate_development_binding(data_binding)
+    input_size = _policy_input_size(binding["policy"])
     model, ema, postprocessor, engine, runtime = (
         _component(components, name)
         for name in ("model", "ema", "postprocessor", "engine", "runtime")
@@ -627,20 +676,20 @@ def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_ga
     identity = validate_prepared_runtime(runtime)
     state = validate_engine_state_dict(engine.state_dict())
     if (engine.model is not model or engine.ema is not ema
-            or state["config"]["expected_input_size"] != [INPUT_SIZE, INPUT_SIZE]
+            or state["config"]["expected_input_size"] != [input_size, input_size]
             or engine.device != runtime.device):
-        raise DevelopmentEvaluationError("evaluation runtime/model/640 geometry mismatch")
+        raise DevelopmentEvaluationError("evaluation runtime/model/bound input geometry mismatch")
     if not isinstance(getattr(ema, "module", None), torch.nn.Module):
         raise DevelopmentEvaluationError("EMA weights are required; raw fallback is forbidden")
-    if (not preview and (type(logged_epoch) is not int or logged_epoch not in EVALUATION_EPOCHS
+    if (not preview and not capacity and
+            (type(logged_epoch) is not int or logged_epoch not in EVALUATION_EPOCHS
                          or state["epoch"] != logged_epoch or state["epoch_active"])):
         raise DevelopmentEvaluationError("full evaluation requires completed epoch 10, 20 or 30")
-    if preview and logged_epoch is not None:
-        raise DevelopmentEvaluationError("preview does not represent a completed training epoch")
     validate_component_placement(model=model, ema=ema, postprocessor=postprocessor,
                                  optimizer=engine.optimizer, runtime=runtime)
     if any(parameter.dtype != torch.float32 for parameter in ema.module.parameters()):
         raise DevelopmentEvaluationError("EMA inference requires FP32 model parameters")
+    geometry = _geometry_snapshot(model, ema, input_size)
     output = Path(output_dir).absolute()
     if not output.is_dir() or output.is_symlink():
         raise DevelopmentEvaluationError("evaluation output directory must already exist")
@@ -670,7 +719,9 @@ def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_ga
 
     started = time.monotonic_ns()
     gate("before_snapshot")
-    with _preserve_training_state(model, ema, postprocessor, engine, runtime) as unchanged:
+    with _preserve_training_state(
+            model, ema, postprocessor, engine, runtime,
+            input_size=input_size, initial_geometry=geometry) as unchanged:
         ema.module.eval()
         wrapper.eval()
         with torch.inference_mode(), torch.autocast(device_type=runtime.device.type, enabled=False):
@@ -717,14 +768,19 @@ def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_ga
     if not preview and _digest(receipts) != binding["image_manifest_sha256"]:
         raise DevelopmentEvaluationError("observed image identities differ from the bound manifest")
     gate("before_publish")
+    if _geometry_snapshot(model, ema, input_size) != geometry:
+        raise DevelopmentEvaluationError("evaluation geometry changed before publication")
     prediction_reference = write_exclusive_json(output / "predictions.json", predictions)
     tensor_reference = _publish_tensors(output / "coco_tensors.npz", precision, recall)
     primary_reference = write_exclusive_json(output / "primary_legacy_result.json", primary)
     result = {
         "schema_version": 1, "role": "development",
-        "scope": "development_preview_only" if preview else "development_full_fixed_checkpoint",
-        "logged_epoch": logged_epoch, "full_development_evaluation": not preview,
-        "scientific_comparison_eligible": not preview,
+        "scope": ("development_capacity_only" if capacity else
+                  "development_preview_only" if preview else "development_full_fixed_checkpoint"),
+        "logged_epoch": logged_epoch,
+        "full_development_evaluation": not preview and not capacity,
+        "full_development_coverage": not preview, "capacity_only": capacity,
+        "scientific_comparison_eligible": not preview and not capacity,
         "checkpoint_selection_performed": False, "protocol_certification_claimed": False,
         "data_binding_sha256": binding["binding_sha256"],
         "data": {"annotation": binding["annotation"], "manifest": binding["manifest"],
@@ -734,7 +790,8 @@ def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_ga
                  "image_receipts": receipts, "observed_images_sha256": _digest(receipts)},
         "policy": binding["policy"], "runtime": identity,
         "weights": {"kind": "ema", "state_sha256": unchanged["ema_sha256"],
-                    "ema_updates": unchanged["ema_updates"]},
+                    "ema_updates": unchanged["ema_updates"],
+                    "eval_spatial_size": unchanged["geometry"]["ema"]["decoder"]["eval_spatial_size"]},
         "training_state_unchanged": unchanged,
         "rng_restored": ["python", "numpy", "torch_cpu"]
                         + (["torch_cuda_bound_device"] if runtime.device.type == "cuda" else []),
@@ -791,3 +848,16 @@ def preview_development(components, *, data_binding: Mapping[str, Any],
     with _preserve_all_rng(_component(components, "runtime")):
         return _evaluate(components, data_binding=data_binding, output_dir=output_dir,
                          logged_epoch=None, hardware_gate=hardware_gate, preview=True)
+
+
+def evaluate_development_capacity(components, *, data_binding: Mapping[str, Any],
+                                  output_dir: str | Path, hardware_gate) -> dict:
+    """Exercise all bound images and metrics without claiming a fixed epoch.
+
+    The production campaign binds 548 images. Synthetic CPU fixtures may bind a
+    smaller complete set; both paths require the full bound identity chain.
+    """
+    with _preserve_all_rng(_component(components, "runtime")):
+        return _evaluate(components, data_binding=data_binding, output_dir=output_dir,
+                         logged_epoch=None, hardware_gate=hardware_gate,
+                         preview=False, capacity=True)

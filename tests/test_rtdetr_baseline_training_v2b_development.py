@@ -73,7 +73,7 @@ def files(tmp_path):
 class Predictor(nn.Module):
     """CPU fixture with real BN modes and deliberately consumed random streams."""
 
-    def __init__(self, *, correct=True):
+    def __init__(self, *, correct=True, input_size=640):
         super().__init__()
         self.bias = nn.Parameter(torch.zeros(()))
         self.bn = nn.BatchNorm2d(3)
@@ -81,6 +81,22 @@ class Predictor(nn.Module):
         self.correct = correct
         self.calls = []
         self.fail = False
+        # Explicit synthetic geometry exercises the production cache guard.
+        # The predictor still supplies fixed boxes independently of these tensors.
+        self.encoder = nn.Module()
+        self.encoder.eval_spatial_size = [input_size, input_size]
+        self.encoder.feat_strides = [8, 16, 32]
+        self.encoder.hidden_dim = 256
+        self.encoder.use_encoder_idx = [2]
+        self.encoder.pos_embed2 = torch.zeros(1, (input_size // 32) ** 2, 256)
+        self.decoder = nn.Module()
+        self.decoder.eval_spatial_size = [input_size, input_size]
+        self.decoder.feat_strides = [8, 16, 32]
+        self.decoder.hidden_dim = 256
+        self.decoder.num_levels = 3
+        count = sum((input_size // stride) ** 2 for stride in (8, 16, 32))
+        self.decoder.register_buffer("anchors", torch.zeros(1, count, 4))
+        self.decoder.register_buffer("valid_mask", torch.ones(1, count, 1, dtype=torch.bool))
 
     def forward(self, samples):
         self.calls.append((list(samples.shape), samples.dtype, self.training,
@@ -465,6 +481,7 @@ def test_actual_r18_640_ema_forward_and_vendor_metrics_on_synthetic_jpeg(files, 
     )
     assert_rng_equal(before_rng, rng_snapshot())
     assert result["data"]["evaluated_image_count"] == 1
+    assert result["weights"]["eval_spatial_size"] == [640, 640]
     assert result["runtime"]["device"] == "cpu"
     assert result["coco_secondary"]["precision_shape"] == [10, 101, 10, 4, 3]
     predictions = json.loads(Path(result["prediction_artifact"]["path"]).read_text())
