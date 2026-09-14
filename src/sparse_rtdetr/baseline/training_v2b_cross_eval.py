@@ -149,8 +149,9 @@ def validate_worker_contract(contract: dict, *, verify_files: bool = True) -> di
 
 
 def _state_identity(model, *, exclude_geometry=False):
+    """Fingerprint detached host copies while preserving the live inference state."""
     return evidence.initial_parameter_reference({
-        key: tensor for key, tensor in model.state_dict().items()
+        key: tensor.detach().cpu() for key, tensor in model.state_dict().items()
         if not exclude_geometry or key not in _GEOMETRY_BUFFERS
     })
 
