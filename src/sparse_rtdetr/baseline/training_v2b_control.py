@@ -19,6 +19,7 @@ import random
 import re
 import stat
 import sys
+import tempfile
 import time
 from typing import Any, Mapping
 
@@ -409,9 +410,11 @@ def capture_control_state(components: Any, loader: Any, *, full: bool = False) -
 
 
 class _ForwardObservation:
-    def __init__(self, components: Any):
+    def __init__(self, components: Any, *, sampling: bool = False):
         self.components = components
         self.handles = []
+        self.observe_sampling = sampling
+        self.sampling_cores, self.sampling_modules, self.sampling_core_calls = [], [], []
         self.model_calls, self.criterion_calls = [], []
         self.bn_calls = {name: 0 for name, module in components.model.named_modules()
                          if isinstance(module, nn.modules.batchnorm._BatchNorm)}
@@ -426,21 +429,69 @@ class _ForwardObservation:
             destination.append(row)
         return observe
 
+    def _sampling_proxy(self, name, module, core):
+        # Observe the actual objects at core entry. Do not reconstruct views,
+        # compute a grid, cast/copy a tensor, consume RNG or replace an operator.
+        target = getattr(core, "func", core)
+        identity = {"module": type(module).__module__, "class": type(module).__qualname__,
+                    "callable_module": getattr(target, "__module__", None),
+                    "callable_name": getattr(target, "__qualname__", None),
+                    "method": module.method}
+        def observe(*args, **kwargs):
+            kind = self.components.runtime.device.type
+            inputs = {}
+            for index, key in ((0, "value"), (2, "sampling_locations"), (3, "attention_weights")):
+                value = args[index] if len(args) > index else kwargs.get(key)
+                inputs[key] = _tensor_layout_observation(value) if isinstance(value, torch.Tensor) else None
+            row = {"module_name": name, "core_identity": identity,
+                   "call_index": len(self.sampling_core_calls) + 1,
+                   "autocast_enabled": bool(torch.is_autocast_enabled(kind)),
+                   "autocast_dtype": str(torch.get_autocast_dtype(kind)),
+                   "inputs": inputs, "call_completed": False}
+            self.sampling_core_calls.append(row)
+            result = core(*args, **kwargs)
+            row["output"] = _tensor_layout_observation(result) if isinstance(result, torch.Tensor) else None
+            row["call_completed"] = True
+            return result
+        return observe
+
     def __enter__(self):
-        self.handles.append(self.components.model.register_forward_pre_hook(self._pre(self.model_calls)))
-        self.handles.append(self.components.criterion.register_forward_pre_hook(self._pre(self.criterion_calls)))
-        for name, module in self.components.model.named_modules():
-            if name in self.bn_calls:
-                def observe(module, args, output, name=name):
-                    if not module.training:
-                        _fail("a frozen-policy live BN was observed in evaluation mode")
-                    self.bn_calls[name] += 1
-                self.handles.append(module.register_forward_hook(observe))
-        return self
+        try:
+            self.handles.append(self.components.model.register_forward_pre_hook(self._pre(self.model_calls)))
+            self.handles.append(self.components.criterion.register_forward_pre_hook(self._pre(self.criterion_calls)))
+            for name, module in self.components.model.named_modules():
+                if name in self.bn_calls:
+                    def observe(module, args, output, name=name):
+                        if not module.training:
+                            _fail("a frozen-policy live BN was observed in evaluation mode")
+                        self.bn_calls[name] += 1
+                    self.handles.append(module.register_forward_hook(observe))
+                if (self.observe_sampling and type(module).__name__ == "MSDeformableAttention"
+                        and type(module).__module__.endswith(".rtdetrv2_decoder")):
+                    core = module.ms_deformable_attn_core
+                    self.sampling_cores.append((module, core))
+                    module.ms_deformable_attn_core = self._sampling_proxy(name, module, core)
+                    self.sampling_modules.append(name)
+            return self
+        except BaseException:
+            self.__exit__()
+            raise
 
     def __exit__(self, *args):
+        for module, core in reversed(self.sampling_cores):
+            module.ms_deformable_attn_core = core
+        self.sampling_cores.clear()
         for handle in self.handles:
             handle.remove()
+        self.handles.clear()
+
+    def sampling_evidence(self) -> dict:
+        return {"status": "OBSERVATION_ONLY", "acceptance_decision": False,
+                "capture_scope": "live_MSDeformableAttention_v2_core_entry_and_return_metadata",
+                "tensor_values_read_or_recomputed": False,
+                "sampling_locations_stage": "before_core_expression_2_times_sampling_locations_minus_1",
+                "derived_grid_tensor_directly_observed": False,
+                "modules": self.sampling_modules, "calls": self.sampling_core_calls}
 
     def evidence(self) -> dict:
         count = self.components.config.accumulation_steps
@@ -536,20 +587,249 @@ def _loss_families(window: dict) -> dict:
     return result
 
 
-def _publish_parameters(path: Path, model: nn.Module) -> dict:
-    values = {name: parameter.detach().cpu().clone() for name, parameter in model.named_parameters()}
-    payload = {"schema_version": 1, "parameters": values}
+def _publish_tensor_evidence(path: Path, payload: dict) -> dict:
+    """Atomically publish complete CPU evidence without replacing any history."""
     stream = io.BytesIO()
     torch.save(payload, stream)
     raw = stream.getvalue()
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(fd, "wb") as destination:
-        destination.write(raw)
-        destination.flush()
-        os.fsync(destination.fileno())
+    fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as destination:
+            destination.write(raw)
+            destination.flush()
+            os.fsync(destination.fileno())
+        os.link(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        os.unlink(temporary)
     reference = file_reference(path)
     if reference["sha256"] != hashlib.sha256(raw).hexdigest():
-        _fail("parameter snapshot publication changed bytes")
+        _fail("tensor evidence publication changed bytes")
+    return reference
+
+
+def _publish_parameters(path: Path, model: nn.Module) -> dict:
+    values = {name: parameter.detach().cpu().clone() for name, parameter in model.named_parameters()}
+    return _publish_tensor_evidence(path, {"schema_version": 1, "parameters": values})
+
+
+def _tensor_layout_observation(value: torch.Tensor) -> dict:
+    """Read live metadata before a CPU copy can change strides or offsets."""
+    dense = value.layout == torch.strided
+    return {"dtype": str(value.dtype), "shape": list(value.shape), "device": str(value.device),
+            "layout": str(value.layout), "stride": list(value.stride()) if dense else None,
+            "storage_offset": value.storage_offset() if dense else None,
+            "contiguous": value.is_contiguous() if dense else None,
+            "channels_last": value.is_contiguous(memory_format=torch.channels_last)
+            if dense and value.ndim == 4 else None,
+            "channels_last_3d": value.is_contiguous(memory_format=torch.channels_last_3d)
+            if dense and value.ndim == 5 else None}
+
+
+def _live_layout_observation(components: Any) -> dict:
+    names = {id(parameter): name for name, parameter in components.model.named_parameters()}
+    result = {
+        "capture_scope": "live_source_tensors_before_CPU_snapshot_copy",
+        "acceptance_rule": "observation_only_no_new_layout_equality_gate",
+        "raw_model_parameters": {name: _tensor_layout_observation(value)
+                                 for name, value in components.model.named_parameters()},
+        "raw_model_buffers": {name: _tensor_layout_observation(value)
+                              for name, value in components.model.named_buffers()},
+        "optimizer_moments": {
+            names[id(parameter)]: {key: _tensor_layout_observation(value)
+                                   for key, value in state.items()
+                                   if key in {"exp_avg", "exp_avg_sq", "max_exp_avg_sq"}}
+            for parameter, state in components.optimizer.state.items() if state
+        },
+    }
+    for family, model in (("raw_bn", components.model), ("ema_bn", components.ema.module)):
+        result[family] = {
+            name: {key: _tensor_layout_observation(getattr(module, key))
+                   for key in ("running_mean", "running_var", "num_batches_tracked")}
+            for name, module in model.named_modules()
+            if isinstance(module, nn.modules.batchnorm._BatchNorm) and module.track_running_stats
+        }
+    return result
+
+
+def _publish_bn_snapshot(path: Path, components: Any, record: dict) -> dict:
+    """Complete raw/EMA BN values for smoke diagnostics, never a new tolerance."""
+    payload = {"schema_version": 1, "kind": "v2b_smoke_bn_snapshot",
+               "run_binding_sha256": record["run_binding_sha256"],
+               "epoch": record["window"]["epoch"],
+               "optimizer_updates": record["window"]["optimizer_updates"],
+               "live_tensor_layout": _live_layout_observation(components)}
+    for family, model in (("raw_bn", components.model), ("ema_bn", components.ema.module)):
+        payload[family] = {
+            name: {"training": module.training, **{
+                key: getattr(module, key).detach().cpu().clone()
+                for key in ("running_mean", "running_var", "num_batches_tracked")
+            }}
+            for name, module in model.named_modules()
+            if isinstance(module, nn.modules.batchnorm._BatchNorm) and module.track_running_stats
+        }
+    _validate_bn_snapshot(payload, record)
+    return _publish_tensor_evidence(path, payload)
+
+
+def _validate_bn_snapshot(payload: dict, record: dict) -> dict:
+    if (type(payload) is not dict or set(payload) != {
+            "schema_version", "kind", "run_binding_sha256", "epoch", "optimizer_updates", "raw_bn", "ema_bn",
+            "live_tensor_layout"
+    } or payload["schema_version"] != 1 or payload["kind"] != "v2b_smoke_bn_snapshot"):
+        _fail("BN snapshot schema differs")
+    if type(payload["live_tensor_layout"]) is not dict:
+        _fail("BN snapshot lacks its live layout observation")
+    for key, expected in (("run_binding_sha256", record["run_binding_sha256"]),
+                          ("epoch", record["window"]["epoch"]),
+                          ("optimizer_updates", record["window"]["optimizer_updates"])):
+        _same(payload[key], expected, "BN snapshot " + key)
+    for family in ("raw_bn", "ema_bn"):
+        rows, summaries = payload[family], record["state"][family]
+        if type(rows) is not dict or not rows or set(rows) != set(summaries):
+            _fail("BN snapshot layer inventory differs: " + family)
+        for name, row in rows.items():
+            if type(row) is not dict or set(row) != {
+                    "training", "running_mean", "running_var", "num_batches_tracked"}:
+                _fail("BN snapshot layer schema differs: " + family + "." + name)
+            counter = row["num_batches_tracked"]
+            if (type(row["training"]) is not bool or not isinstance(counter, torch.Tensor)
+                    or counter.device.type != "cpu" or counter.dtype != torch.int64 or counter.ndim != 0):
+                _fail("BN snapshot mode/counter differs: " + family + "." + name)
+            summary = {"training": row["training"], "num_batches_tracked": int(counter.item())}
+            for key in ("running_mean", "running_var"):
+                value = row[key]
+                if (not isinstance(value, torch.Tensor) or value.device.type != "cpu"
+                        or value.layout != torch.strided or not value.is_floating_point()
+                        or value.ndim != 1 or not value.numel() or not bool(torch.isfinite(value).all())):
+                    _fail("BN snapshot requires finite CPU vectors: " + family + "." + name + "." + key)
+                summary[key] = {**_tensor_identity(value), "min": float(value.min().item()),
+                                "max": float(value.max().item()),
+                                "L2": float(torch.linalg.vector_norm(value.double()).item())}
+            _same(summary, summaries[name], "BN snapshot versus recorded state " + family + "." + name)
+    return payload
+
+
+def _load_bn_snapshot(reference: dict, record: dict) -> dict:
+    raw = _read_bound_bytes(reference, "BN snapshot before deserialization")
+    return _validate_bn_snapshot(torch.load(io.BytesIO(raw), map_location="cpu", weights_only=True), record)
+
+
+def _field_differences(expected: Any, actual: Any, path: tuple = ()) -> list[dict]:
+    """Describe exact field changes without treating a digest as a numeric delta."""
+    if type(expected) is type(actual) and isinstance(expected, dict):
+        rows = []
+        for key in sorted(set(expected) | set(actual)):
+            if key not in expected or key not in actual:
+                rows.append({"path": list(path + (key,)), "expected_present": key in expected,
+                             "actual_present": key in actual, "expected": expected.get(key),
+                             "actual": actual.get(key)})
+            else:
+                rows.extend(_field_differences(expected[key], actual[key], path + (key,)))
+        return rows
+    if type(expected) is type(actual) and isinstance(expected, list) and len(expected) == len(actual):
+        return [row for index, (left, right) in enumerate(zip(expected, actual))
+                for row in _field_differences(left, right, path + (index,))]
+    if canonical_sha256(expected) == canonical_sha256(actual):
+        return []
+    return [{"path": list(path), "expected": expected, "actual": actual,
+             "expected_type": type(expected).__name__, "actual_type": type(actual).__name__}]
+
+
+def _bn_value_differences(expected: dict, actual: dict) -> list[dict]:
+    rows = []
+    for family in ("raw_bn", "ema_bn"):
+        for name in sorted(set(expected[family]) | set(actual[family])):
+            left, right = expected[family].get(name), actual[family].get(name)
+            if left is None or right is None:
+                rows.append({"family": family, "layer": name, "available": False,
+                             "reason": "layer missing from one snapshot", "max_absolute": None})
+                continue
+            row = {"family": family, "layer": name,
+                   "training": {"expected": left["training"], "actual": right["training"]},
+                   "num_batches_tracked": {"expected": int(left["num_batches_tracked"].item()),
+                                           "actual": int(right["num_batches_tracked"].item())}}
+            for key in ("running_mean", "running_var"):
+                a, b = left[key], right[key]
+                value = {"expected_identity": _tensor_identity(a), "actual_identity": _tensor_identity(b),
+                         "available": False, "max_absolute": None, "difference_L2": None,
+                         "relative_L2": None, "numeric_different_elements": None}
+                value["byte_exact"] = value["expected_identity"] == value["actual_identity"]
+                if a.shape != b.shape or a.dtype != b.dtype:
+                    value["reason"] = "shape or dtype differs; numeric delta not computed"
+                else:
+                    delta = b.double() - a.double()
+                    norm = float(torch.linalg.vector_norm(a.double()).item())
+                    error = float(torch.linalg.vector_norm(delta).item())
+                    maximum = float(delta.abs().max().item())
+                    relative = error / max(norm, 1e-12)
+                    if not all(math.isfinite(number) for number in (norm, error, maximum, relative)):
+                        value["reason"] = "numeric delta overflow; no finite magnitude available"
+                    else:
+                        value.update(available=True, max_absolute=maximum, difference_L2=error,
+                                     relative_L2=relative, numeric_different_elements=int((a != b).sum().item()))
+                row[key] = value
+            rows.append(row)
+    return rows
+
+
+def _publish_replay_observation(path: Path, expected: dict, actual: dict, *,
+                                expected_reference: dict, actual_reference: dict) -> dict:
+    """Publish before acceptance, so failure does not add diagnostic I/O before abort."""
+    _same(_read_json_reference(expected_reference, "original replay receipt"), expected,
+          "original replay receipt bytes")
+    _same(_read_json_reference(actual_reference, "actual replay receipt"), actual,
+          "actual replay receipt bytes")
+    discrete_window = ("epoch", "optimizer_updates", "microsteps", "logical_batch_size", "target_total",
+                       "denominator", "microbatch_target_counts", "coefficients", "dn_num_groups",
+                       "dn_query_counts", "phase")
+    def compared_fields(record):
+        return {"run_binding_sha256": record["run_binding_sha256"], "input": record["input"],
+                "state": {name: record["state"][name] for name in ("clocks", "rng", "raw_bn", "ema_bn")},
+                "window": {name: record["window"][name] for name in discrete_window},
+                "forward_observation": record["forward_observation"]}
+    report = {
+        "schema_version": 1, "kind": "v2b_replay_observation_before_acceptance",
+        "acceptance_decision": False, "status": "OBSERVATION_ONLY",
+        "expected_receipt": expected_reference, "actual_receipt": actual_reference,
+        "epoch": actual["window"]["epoch"], "optimizer_updates": actual["window"]["optimizer_updates"],
+        "exact_field_differences": _field_differences(compared_fields(expected), compared_fields(actual)),
+        "logical_loss": {"expected": expected["window"]["loss"], "actual": actual["window"]["loss"]},
+        "predeclared_tolerances_unchanged": copy.deepcopy(REPLAY_TOLERANCES),
+        "BN_values": {"available": False, "layers": None, "error": None},
+        "layout_field_differences": None,
+        "layout_differences_are_observations_not_an_acceptance_gate": True,
+        "sampling_core_observation": {
+            "expected_available": "sampling_core_observation" in expected,
+            "actual_available": "sampling_core_observation" in actual,
+            "field_differences": _field_differences(
+                expected.get("sampling_core_observation"), actual.get("sampling_core_observation"),
+                ("sampling_core_observation",),
+            ) if "sampling_core_observation" in expected or "sampling_core_observation" in actual else None,
+            "acceptance_decision": False,
+        },
+        "diagnostics_do_not_override_replay_comparator": True,
+    }
+    try:
+        left = _load_bn_snapshot(expected["bn_snapshot_reference"], expected)
+        right = _load_bn_snapshot(actual["bn_snapshot_reference"], actual)
+        report["BN_values"] = {"available": True, "layers": _bn_value_differences(left, right),
+                               "expected_snapshot": expected["bn_snapshot_reference"],
+                               "actual_snapshot": actual["bn_snapshot_reference"]}
+        report["layout_field_differences"] = _field_differences(
+            left["live_tensor_layout"], right["live_tensor_layout"], ("live_tensor_layout",),
+        )
+    except Exception as exc:
+        report["BN_values"]["error"] = {"type": type(exc).__name__, "message": str(exc)}
+    reference = write_exclusive_json(path, report)
+    if report["BN_values"]["available"] is not True:
+        error = ControlWorkerError("complete replay BN diagnostic evidence is unavailable")
+        error.replay_observation_reference = reference
+        raise error
     return reference
 
 
@@ -888,7 +1168,7 @@ def _common_identity(contract: dict, binding: dict, loader: Any) -> dict:
 
 def _measure_window(session: Any, batch: Any, monitor: Any, *, expected_indices,
                     paired_record: dict | None = None,
-                    replay_record: dict | None = None) -> dict:
+                    replay_record: dict | None = None, observe_sampling: bool = False) -> dict:
     receipt = batch.evidence()
     verify_input_receipt(
         receipt, expected_indices=expected_indices, epoch=batch.epoch,
@@ -903,7 +1183,7 @@ def _measure_window(session: Any, batch: Any, monitor: Any, *, expected_indices,
     torch.cuda.synchronize(0)
     torch.cuda.reset_peak_memory_stats(0)
     started = time.perf_counter()
-    with _ForwardObservation(c) as observations:
+    with _ForwardObservation(c, sampling=observe_sampling) as observations:
         record = session.train_batch(batch, hardware_probe=monitor.admission())
     torch.cuda.synchronize(0)
     elapsed = time.perf_counter() - started
@@ -928,6 +1208,7 @@ def _measure_window(session: Any, batch: Any, monitor: Any, *, expected_indices,
         "schema_version": 1, "run_binding_sha256": session.binding["binding_sha256"],
         **record, "state": state,
         "bn_before": before_bn, "forward_observation": observations.evidence(),
+        **({"sampling_core_observation": observations.sampling_evidence()} if observe_sampling else {}),
         "loss_families_weighted": _loss_families(record["window"]),
         "auxiliary_numerical_health": health, "memory": memory,
         "synchronized_train_window_seconds": elapsed,
@@ -979,21 +1260,38 @@ def _run_active_windows(session: Any, monitor: Any, output: Path, *, limit: int,
                 replay = _read_json_reference(replay_index[key], "original replay window")
             record = _measure_window(
                 session, batch, monitor, expected_indices=plan[batch.logical_batch_index],
-                paired_record=paired, replay_record=replay,
+                paired_record=paired, replay_record=replay, observe_sampling=snapshots,
             )
             record["logical_input_wait_seconds"] = load_seconds
             window_id = c.engine.optimizer_updates
+            if snapshots:
+                record["bn_snapshot_reference"] = _publish_bn_snapshot(
+                    output / f"bn-state-window-{window_id:02d}.pt", c, record,
+                )
             if snapshots and window_id in (3, 4):
                 record["raw_parameters_reference"] = _publish_parameters(
                     output / f"raw-parameters-window-{window_id:02d}.pt", c.model,
                 )
-            if replay is not None:
-                replay_checks.append(compare_replay_records(replay, record))
+            # This is an actual completed update, not replay acceptance. Persist
+            # its complete observation before any comparator can reject it.
             reference = write_exclusive_json(
                 receipt_dir / f"window-{batch.logical_batch_index + 1:04d}.json", record,
             )
             receipts.append({**reference, "epoch": batch.epoch,
                              "logical_batch_index": batch.logical_batch_index})
+            if replay is not None:
+                observation = _publish_replay_observation(
+                    output / f"replay-observation-window-{window_id:02d}.json", replay, record,
+                    expected_reference=replay_index[key], actual_reference=reference,
+                )
+                try:
+                    comparison = compare_replay_records(replay, record)
+                except Exception as exc:
+                    # All detailed evidence already exists. Do no extra reads
+                    # or writes here before the worker's existing abort path.
+                    exc.replay_observation_reference = observation
+                    raise
+                replay_checks.append({**comparison, "observation_reference": observation})
             produced += 1
             if save_midpoint and window_id == 2:
                 checkpoints["window_2"] = _write_checkpoint(
@@ -1148,6 +1446,12 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
                 report["restore_boundary_reference"] = write_exclusive_json(
                     output / "restored-boundary-state.json", restored_state,
                 )
+                report["restore_boundary_bn_snapshot_reference"] = _publish_bn_snapshot(
+                    output / "bn-state-restored-boundary-02.pt", components,
+                    {"run_binding_sha256": binding["binding_sha256"], "state": restored_state,
+                     "window": {"epoch": components.engine.epoch,
+                                "optimizer_updates": components.engine.optimizer_updates}},
+                )
                 report["restored_from"] = copy.deepcopy(midpoint)
             _run_active_windows(
                 session, monitor, output, limit=4 if original is None else 2,
@@ -1214,7 +1518,11 @@ def run_worker(contract: dict, *, contract_reference: dict) -> dict:
         report["status"] = "STOP_NO_RETRY"
         chain, cause = [], exc
         while cause is not None:
-            chain.append({"type": type(cause).__name__, "message": str(cause)})
+            row = {"type": type(cause).__name__, "message": str(cause)}
+            observation = getattr(cause, "replay_observation_reference", None)
+            if observation is not None:
+                row["observation_reference"] = copy.deepcopy(observation)
+            chain.append(row)
             cause = cause.__cause__
         report["failure"] = chain
         # Persist failure before the guardian is asked to terminate this owner.

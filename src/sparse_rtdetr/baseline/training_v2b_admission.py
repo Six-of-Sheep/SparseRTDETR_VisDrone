@@ -40,6 +40,7 @@ from . import training_v2b_hardware as hw
 _TOKEN = object()
 _ANCHOR_MANIFEST_SHA = "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56e7bd98b0"
 _AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889059b85"
+_REPAIR_AUTHORIZATION_SHA = "c8b46cc3d91e941c32047806e41e518476b00ce8e1deb62cb58deb42e9869e75"
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
 _EXTERNAL_ADMIN_MODE = "external_admin_acknowledged"
@@ -118,8 +119,16 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
         raise MonitoredHardwareError("setter mode must be explicitly direct, sudo_n or external_admin_acknowledged")
     if (setter_mode == _EXTERNAL_ADMIN_MODE) != (external_clock_receipt is not None):
         raise MonitoredHardwareError("external clock receipt is required only for external administrator mode")
-    if (type(authorization_reference) is not dict or authorization_reference.get("sha256") != _AUTHORIZATION_SHA
-            or ev.file_reference(authorization_reference["path"]) != authorization_reference):
+    # Keep old declarations byte-for-byte reproducible. The repair authority
+    # adds only a bounded synthetic diagnostic, never a hardware exception.
+    authorizations = {
+        _AUTHORIZATION_SHA: _SCOPES,
+        _REPAIR_AUTHORIZATION_SHA: {**_SCOPES, "synthetic_operator_diagnostic": 600},
+    }
+    if type(authorization_reference) is not dict or type(authorization_reference.get("sha256")) is not str:
+        raise MonitoredHardwareError("explicit execution authorization reference differs")
+    scope_limits = authorizations.get(authorization_reference["sha256"])
+    if scope_limits is None or ev.file_reference(authorization_reference["path"]) != authorization_reference:
         raise MonitoredHardwareError("explicit execution authorization reference differs")
     root = Path(reference_dir).absolute()
     manifest_ref = ev.file_reference(root / "manifest.json")
@@ -156,7 +165,7 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
     result = {
         "schema_version": 1, "mode": "native_monitored_scope_v1", "authority": manifest_ref,
         "authority_files": refs, "authorization_reference": dict(authorization_reference),
-        "authorized_scope_limits_seconds": dict(_SCOPES), "setter_mode": setter_mode,
+        "authorized_scope_limits_seconds": dict(scope_limits), "setter_mode": setter_mode,
         "host": native["host"], "boot_id": native["boot_id"], "gpu_uuid": native["gpu"]["uuid"],
         "pci_bus_id": native["gpu"]["pci_bus_id"], "hardware_policy": native["policy"],
         "expected_driver_userspace_version": native["gpu"]["driver_userspace_version"],
@@ -191,14 +200,16 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
 def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int) -> dict[str, Any]:
     if type(bundle) is not dict:
         raise MonitoredHardwareError("policy bundle must be an exact reviewed declaration")
-    if scope not in _SCOPES or type(deadline) is not int or not 1 <= deadline <= _SCOPES[scope]:
-        raise MonitoredHardwareError("workload deadline or scope is not authorized")
     expected = build_policy_bundle(Path(bundle["authority"]["path"]).parent,
                                    setter_mode=bundle["setter_mode"],
                                    authorization_reference=bundle["authorization_reference"],
                                    external_clock_receipt=bundle.get("external_clock_receipt"))
     if bundle != expected:
         raise MonitoredHardwareError("policy bundle differs from its reviewed authority or scope")
+    scope_limits = expected["authorized_scope_limits_seconds"]
+    if (type(scope) is not str or scope not in scope_limits
+            or type(deadline) is not int or not 1 <= deadline <= scope_limits[scope]):
+        raise MonitoredHardwareError("workload deadline or scope is not authorized")
     expected.update(authorized_scope=scope, workload_deadline_seconds=deadline,
                     minimum_loaded_clock_samples=3)
     expected["policy_sha256"] = ev.canonical_sha256(expected)
@@ -1141,6 +1152,8 @@ class MonitoredHardwareSession:
                  workload_deadline_seconds: int = 600) -> None:
         self.binding = ev.validate_run_binding(binding)
         self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+        if authorized_scope == "synthetic_operator_diagnostic" and self.binding["data"]["kind"] != "synthetic":
+            raise MonitoredHardwareError("synthetic operator diagnostic requires a synthetic input binding")
         if self.binding["config"].get("cuda_gpu_uuid") != self.policy["gpu_uuid"]:
             raise MonitoredHardwareError("workload GPU identity differs from policy")
         self.root = Path(evidence_dir).absolute()

@@ -307,6 +307,91 @@ def test_policy_scope_and_deadline_are_bounded(policy_bundle, scope, deadline):
         ad._validate_policy(policy_bundle, scope, deadline)
 
 
+@pytest.fixture
+def repair_policy_bundle(tmp_path, monkeypatch, policy_bundle):
+    auth = tmp_path / "repair-authorization.txt"
+    auth.write_text("CPU fixture: synthetic diagnostic repair authority; no GPU access\n")
+    auth_ref = ev.file_reference(auth)
+    monkeypatch.setattr(ad, "_REPAIR_AUTHORIZATION_SHA", auth_ref["sha256"])
+    return ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                                  authorization_reference=auth_ref)
+
+
+def test_original_authority_keeps_its_exact_scope_declaration(policy_bundle, repair_policy_bundle):
+    rebuilt = ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                                     authorization_reference=policy_bundle["authorization_reference"])
+    assert rebuilt == policy_bundle
+    assert ev.canonical_json_bytes(rebuilt) == ev.canonical_json_bytes(policy_bundle)
+    assert rebuilt["authorized_scope_limits_seconds"] == {"paired_smoke": 600, "train_core_30epoch": 43200}
+    with pytest.raises(ad.MonitoredHardwareError, match="not authorized"):
+        ad._validate_policy(rebuilt, "synthetic_operator_diagnostic", 600)
+
+
+def test_repair_authority_adds_only_synthetic_scope_without_hardware_changes(policy_bundle, repair_policy_bundle):
+    assert repair_policy_bundle["authorized_scope_limits_seconds"] == {
+        "paired_smoke": 600, "train_core_30epoch": 43200, "synthetic_operator_diagnostic": 600}
+    changed = {"authorization_reference", "authorized_scope_limits_seconds", "bundle_sha256"}
+    assert {k: v for k, v in policy_bundle.items() if k not in changed} == {
+        k: v for k, v in repair_policy_bundle.items() if k not in changed}
+    for scope, deadline in repair_policy_bundle["authorized_scope_limits_seconds"].items():
+        selected = ad._validate_policy(repair_policy_bundle, scope, deadline)
+        assert selected["authorized_scope"] == scope
+        assert selected["workload_deadline_seconds"] == deadline
+        assert selected["minimum_loaded_clock_samples"] == 3
+
+
+@pytest.mark.parametrize("deadline", [0, -1, 601, 43200, True, False, 600.0, "600", None])
+def test_synthetic_diagnostic_has_strict_six_hundred_second_limit(repair_policy_bundle, deadline):
+    with pytest.raises(ad.MonitoredHardwareError, match="not authorized"):
+        ad._validate_policy(repair_policy_bundle, "synthetic_operator_diagnostic", deadline)
+
+
+@pytest.mark.parametrize("authority", ["original", "repair"])
+def test_caller_rehash_cannot_expand_authorized_scope(policy_bundle, repair_policy_bundle, authority):
+    bundle = copy.deepcopy(policy_bundle if authority == "original" else repair_policy_bundle)
+    bundle["authorized_scope_limits_seconds"]["synthetic_operator_diagnostic"] = 601
+    bundle["bundle_sha256"] = ev.canonical_sha256({k: v for k, v in bundle.items() if k != "bundle_sha256"})
+    with pytest.raises(ad.MonitoredHardwareError, match="differs"):
+        ad._validate_policy(bundle, "synthetic_operator_diagnostic", 601)
+
+
+@pytest.mark.parametrize("change", ["changed_file", "unknown_authority"])
+def test_repair_authorization_requires_reviewed_complete_file(repair_policy_bundle, change):
+    ref = copy.deepcopy(repair_policy_bundle["authorization_reference"])
+    Path(ref["path"]).write_bytes(Path(ref["path"]).read_bytes() + b"changed\n")
+    if change == "unknown_authority":
+        ref = ev.file_reference(ref["path"])
+    with pytest.raises(ad.MonitoredHardwareError, match="authorization reference differs"):
+        ad.build_policy_bundle(Path(repair_policy_bundle["authority"]["path"]).parent,
+                               authorization_reference=ref)
+
+
+@pytest.mark.parametrize("input_kind", ["synthetic", "manifest_binding_only"])
+def test_diagnostic_scope_requires_synthetic_binding_before_native_access(
+        repair_policy_bundle, bound, tmp_path, monkeypatch, input_kind):
+    def forbidden(*args, **kwargs):
+        pytest.fail("diagnostic constructor attempted native hardware access")
+    monkeypatch.setattr(hw, "collect_native_hardware_probe", forbidden)
+    bound = copy.deepcopy(bound)
+    bound["config"]["cuda_gpu_uuid"] = UUID
+    if input_kind == "manifest_binding_only":
+        manifest = tmp_path / "cpu-only-manifest.json"
+        manifest.write_text('{"fixture": "no real data"}\n')
+        bound["data"] = {"kind": input_kind, "manifests": {"train_core": ev.file_reference(manifest)},
+                         "dataset_executed": False}
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    ev.validate_run_binding(bound)
+    root = tmp_path / "diagnostic-never-started"
+    if input_kind == "synthetic":
+        session = ad.MonitoredHardwareSession(bound, repair_policy_bundle, root, "synthetic_operator_diagnostic")
+        assert session._state == "new"
+        assert session.policy["workload_deadline_seconds"] == 600
+    else:
+        with pytest.raises(ad.MonitoredHardwareError, match="requires a synthetic input binding"):
+            ad.MonitoredHardwareSession(bound, repair_policy_bundle, root, "synthetic_operator_diagnostic")
+    assert not root.exists()
+
+
 def test_policy_authority_file_mutation_is_rejected(policy_bundle):
     Path(policy_bundle["authority_files"]["xorg-identity-policy.json"]["path"]).write_text("{}\n")
     with pytest.raises(ev.EvidenceError, match="hash mismatch"):

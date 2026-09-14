@@ -444,6 +444,128 @@ def test_forward_hooks_are_removed_after_exception():
     assert len(c.criterion._forward_pre_hooks) == 0
 
 
+@pytest.fixture
+def real_sampling_components():
+    root = Path(__file__).resolve().parents[1]
+    return control.build_v2b_components(
+        V2BConfig(pretrained_required=False, input_size=128), repo_root=root,
+    )
+
+
+@pytest.mark.parametrize("autocast", [False, True])
+def test_real_sampling_proxy_preserves_objects_outputs_gradients_layout_and_rng(
+        real_sampling_components, autocast):
+    c = real_sampling_components
+    modules = [(name, module) for name, module in c.model.named_modules()
+               if type(module).__name__ == "MSDeformableAttention"]
+    name, module = modules[0]
+    originals = [item.ms_deformable_attn_core for _, item in modules]
+    core = originals[0]
+    shapes, points = [(2, 2), (1, 1), (1, 1)], module.num_points_list
+    generator = torch.Generator(device="cpu").manual_seed(919)
+    dtype = torch.bfloat16 if autocast else torch.float32
+    # Non-dense views with nonzero offsets must be observed before any copy.
+    value = torch.randn(2, 7, 2, 3, generator=generator, dtype=dtype)[:, 1:].requires_grad_(True)
+    locations = torch.rand(2, 4, 2, sum(points), 4, generator=generator)[..., 1:3].requires_grad_(True)
+    weights = torch.rand(2, 4, 2, sum(points), 2, generator=generator, dtype=dtype)[..., 1].requires_grad_(True)
+    inputs = (value, locations, weights)
+    versions = [item._version for item in inputs]
+    with torch.autocast("cpu", dtype=torch.bfloat16, enabled=autocast):
+        expected = core(value, shapes, locations, weights, points)
+    expected_gradients = torch.autograd.grad(expected, inputs, torch.ones_like(expected))
+    seen = []
+    def original_call(*args, **kwargs):
+        assert len(args) == 1 and args[0] is value
+        assert kwargs["value_spatial_shapes"] is shapes
+        assert kwargs["sampling_locations"] is locations
+        assert kwargs["attention_weights"] is weights
+        assert kwargs["num_points_list"] is points
+        result = core(*args, **kwargs)
+        seen.append(result)
+        return result
+    module.ms_deformable_attn_core = original_call
+    before_rng = torch.get_rng_state().clone()
+    with control._ForwardObservation(c, sampling=True) as observation:
+        assert module.ms_deformable_attn_core is not original_call
+        with torch.autocast("cpu", dtype=torch.bfloat16, enabled=autocast):
+            actual = module.ms_deformable_attn_core(
+                value, value_spatial_shapes=shapes, sampling_locations=locations,
+                attention_weights=weights, num_points_list=points,
+            )
+        assert len(seen) == 1 and actual is seen[0]
+        actual_gradients = torch.autograd.grad(actual, inputs, torch.ones_like(actual))
+    assert module.ms_deformable_attn_core is original_call
+    assert [item.ms_deformable_attn_core for _, item in modules[1:]] == originals[1:]
+    assert torch.equal(torch.get_rng_state(), before_rng)
+    assert [item._version for item in inputs] == versions
+    assert torch.equal(actual, expected)
+    assert all(torch.equal(left, right) for left, right in zip(expected_gradients, actual_gradients))
+    evidence = observation.sampling_evidence()
+    assert evidence["acceptance_decision"] is False
+    assert evidence["derived_grid_tensor_directly_observed"] is False
+    assert evidence["modules"] == [key for key, _ in modules]
+    row, = evidence["calls"]
+    assert row["module_name"] == name and row["call_completed"] is True
+    assert row["autocast_enabled"] is autocast and row["autocast_dtype"] == "torch.bfloat16"
+    for key, tensor in zip(("value", "sampling_locations", "attention_weights"), inputs):
+        metadata = row["inputs"][key]
+        assert metadata["dtype"] == str(tensor.dtype) and metadata["shape"] == list(tensor.shape)
+        assert metadata["stride"] == list(tensor.stride())
+        assert metadata["storage_offset"] == tensor.storage_offset() > 0
+    assert row["output"] == control._tensor_layout_observation(actual)
+
+
+def test_real_attention_forward_observes_actual_cpu_amp_core_inputs(real_sampling_components):
+    c = real_sampling_components
+    module = next(item for item in c.model.modules() if type(item).__name__ == "MSDeformableAttention")
+    core = module.ms_deformable_attn_core
+    generator = torch.Generator(device="cpu").manual_seed(920)
+    query = torch.randn(2, 4, module.embed_dim, generator=generator)
+    value = torch.randn(2, 6, module.embed_dim, generator=generator)
+    references = torch.rand(2, 4, 1, 4, generator=generator)
+    with control._ForwardObservation(c, sampling=True) as observation:
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            output = module(query, references, value, [(2, 2), (1, 1), (1, 1)])
+    assert output.shape == (2, 4, module.embed_dim)
+    assert module.ms_deformable_attn_core is core
+    row, = observation.sampling_evidence()["calls"]
+    assert row["core_identity"]["callable_name"] == "deformable_attention_core_func_v2"
+    assert row["inputs"]["value"]["dtype"] == "torch.bfloat16"
+    assert row["inputs"]["sampling_locations"]["dtype"] == "torch.float32"
+    assert row["inputs"]["attention_weights"]["dtype"] == "torch.bfloat16"
+    assert row["output"]["dtype"] == "torch.float32"
+
+
+@pytest.mark.parametrize("failure", ["body", "second_install", "core"])
+def test_sampling_proxies_and_forward_hooks_restore_after_all_exceptions(
+        real_sampling_components, monkeypatch, failure):
+    c = real_sampling_components
+    modules = [item for item in c.model.modules() if type(item).__name__ == "MSDeformableAttention"]
+    hooks = [(len(item._forward_hooks), len(item._forward_pre_hooks)) for item in c.model.modules()]
+    if failure == "core":
+        def broken_core(*args, **kwargs):
+            raise RuntimeError("core failed")
+        modules[0].ms_deformable_attn_core = broken_core
+    originals = [item.ms_deformable_attn_core for item in modules]
+    if failure == "second_install":
+        factory = control._ForwardObservation._sampling_proxy
+        calls = []
+        def broken_install(self, name, module, core):
+            calls.append(name)
+            if len(calls) == 2:
+                raise RuntimeError("installation failed")
+            return factory(self, name, module, core)
+        monkeypatch.setattr(control._ForwardObservation, "_sampling_proxy", broken_install)
+    with pytest.raises(RuntimeError):
+        with control._ForwardObservation(c, sampling=True):
+            if failure == "core":
+                modules[0].ms_deformable_attn_core()
+            raise RuntimeError("body failed")
+    assert [item.ms_deformable_attn_core for item in modules] == originals
+    assert hooks == [(len(item._forward_hooks), len(item._forward_pre_hooks)) for item in c.model.modules()]
+    assert len(c.criterion._forward_pre_hooks) == 0
+
+
 def test_nonfinite_ema_or_adam_state_fails_health_gate():
     c = components()
     c.engine.begin_epoch(1)
@@ -465,15 +587,242 @@ def test_output_parameter_snapshot_is_exclusive_and_cpu_weights_only(tmp_path):
     assert file_reference(destination) == reference
 
 
+def test_complete_bn_snapshot_is_atomic_exclusive_and_preserves_state(tmp_path, monkeypatch):
+    c = components()
+    c.engine.begin_epoch(1)
+    window = c.engine.train_window(torch.ones(2, 1, 4, 4), targets())
+    before = control.capture_control_state(c, SmallLoader(c), full=True)
+    record = {"run_binding_sha256": "c" * 64, "window": window, "state": before}
+    destination = tmp_path / "bn.pt"
+    original_link = control.os.link
+    def atomic_link(source, target):
+        assert not Path(target).exists()
+        value = torch.load(source, map_location="cpu", weights_only=True)
+        assert value["raw_bn"]["bn"]["running_mean"].device.type == "cpu"
+        assert value["ema_bn"]["bn"]["num_batches_tracked"].dtype == torch.int64
+        return original_link(source, target)
+    monkeypatch.setattr(control.os, "link", atomic_link)
+    reference = control._publish_bn_snapshot(destination, c, record)
+    snapshot = control._load_bn_snapshot(reference, record)
+    assert before == control.capture_control_state(c, SmallLoader(c), full=True)
+    for family, model in (("raw_bn", c.model), ("ema_bn", c.ema.module)):
+        assert snapshot[family]["bn"]["training"] == model.bn.training
+        for name in ("running_mean", "running_var", "num_batches_tracked"):
+            assert torch.equal(snapshot[family]["bn"][name], getattr(model.bn, name))
+    with torch.no_grad():
+        c.model.bn.running_mean.add_(0.25)
+    assert not torch.equal(snapshot["raw_bn"]["bn"]["running_mean"], c.model.bn.running_mean)
+    monkeypatch.setattr(control.os, "link", original_link)
+    with pytest.raises(FileExistsError):
+        control._publish_tensor_evidence(destination, snapshot)
+    assert file_reference(destination) == reference
+    assert list(tmp_path.iterdir()) == [destination]
+    bad = {**reference, "sha256": "0" * 64}
+    monkeypatch.setattr(torch, "load", lambda *a, **k: pytest.fail("unverified BN snapshot deserialized"))
+    with pytest.raises(control.ControlWorkerError, match="reference mismatch"):
+        control._load_bn_snapshot(bad, record)
+
+
+def test_live_layout_is_observed_before_copy_and_does_not_relax_or_add_replay_gates(tmp_path):
+    c = components()
+    c.engine.begin_epoch(1)
+    window = c.engine.train_window(torch.ones(2, 1, 4, 4), targets())
+    expected = {
+        "run_binding_sha256": "c" * 64, "input": receipt(), "window": window,
+        "state": control.capture_control_state(c, SmallLoader(c)),
+        "forward_observation": {"synthetic": "fixed"},
+        "sampling_core_observation": {"synthetic_layout": {"stride": [2], "storage_offset": 1}},
+        "raw_parameters_reference": control._publish_parameters(tmp_path / "expected-raw.pt", c.model),
+    }
+    expected["bn_snapshot_reference"] = control._publish_bn_snapshot(tmp_path / "expected-bn.pt", c, expected)
+    with torch.no_grad():
+        # Preserve every BN/parameter/moment value while changing live storage
+        # offset/stride; the CPU clone in the evidence will be contiguous.
+        source = torch.empty(6)
+        source[1:5:2].copy_(c.model.bn.running_mean)
+        c.model.bn.running_mean = source[1:5:2]
+        moment = c.optimizer.state[c.model.bn.weight]["exp_avg"]
+        storage = torch.empty(4)
+        storage[::2].copy_(moment)
+        c.optimizer.state[c.model.bn.weight]["exp_avg"] = storage[::2]
+    actual = {**copy.deepcopy(expected), "state": control.capture_control_state(c, SmallLoader(c))}
+    actual["sampling_core_observation"]["synthetic_layout"]["stride"] = [1]
+    actual["raw_parameters_reference"] = control._publish_parameters(tmp_path / "actual-raw.pt", c.model)
+    actual["bn_snapshot_reference"] = control._publish_bn_snapshot(tmp_path / "actual-bn.pt", c, actual)
+    payload = control._load_bn_snapshot(actual["bn_snapshot_reference"], actual)
+    layout = payload["live_tensor_layout"]
+    observed = layout["raw_bn"]["bn"]["running_mean"]
+    assert observed["stride"] == [2] and observed["storage_offset"] == 1
+    assert observed["contiguous"] is False and observed["channels_last"] is None
+    assert payload["raw_bn"]["bn"]["running_mean"].is_contiguous()
+    assert payload["raw_bn"]["bn"]["running_mean"].storage_offset() == 0
+    assert layout["optimizer_moments"]["bn.weight"]["exp_avg"]["stride"] == [2]
+    assert layout["raw_model_parameters"]["conv.weight"]["channels_last"] is not None
+    assert layout["raw_model_buffers"]["bn.running_mean"]["storage_offset"] == 1
+    left = write_exclusive_json(tmp_path / "expected-receipt.json", expected)
+    right = write_exclusive_json(tmp_path / "actual-receipt.json", actual)
+    report_ref = control._publish_replay_observation(
+        tmp_path / "layout-observation.json", expected, actual, expected_reference=left, actual_reference=right,
+    )
+    report = control._read_json_reference(report_ref, "layout observation")
+    assert report["layout_field_differences"] and report["exact_field_differences"] == []
+    assert report["layout_differences_are_observations_not_an_acceptance_gate"] is True
+    assert report["sampling_core_observation"]["field_differences"]
+    assert report["sampling_core_observation"]["acceptance_decision"] is False
+    assert control.compare_replay_records(expected, actual)["status"] == "PASS"
+
+
+def test_formal_window_mode_has_no_complete_bn_snapshot_cost(tmp_path, fake_timing, monkeypatch):
+    c = components()
+    session = SmallSession(c)
+    c.engine.begin_epoch(1)
+    monkeypatch.setattr(control, "_publish_bn_snapshot", lambda *a, **k: pytest.fail("formal BN snapshot"))
+    observation_type = control._ForwardObservation
+    def formal_observation(components, *, sampling=False):
+        assert sampling is False
+        return observation_type(components, sampling=sampling)
+    monkeypatch.setattr(control, "_ForwardObservation", formal_observation)
+    monkeypatch.setattr(observation_type, "sampling_evidence", lambda *a: pytest.fail("formal sampling snapshot"))
+    receipts = []
+    control._run_active_windows(
+        session, FakeMonitor(), tmp_path, limit=1, paired_index={}, replay_index={},
+        save_midpoint=False, snapshots=False, checkpoints={}, receipts=receipts, replay_checks=[],
+    )
+    record = control._read_json_reference(receipts[0], "formal window observation")
+    assert "bn_snapshot_reference" not in record
+    assert "sampling_core_observation" not in record
+    assert session.calls == 1 and not session.loader.has_active_iterator
+
+
+def _synthetic_replay_pair(tmp_path):
+    original_dir, prelude_dir, replay_dir = (tmp_path / name for name in ("original", "prelude", "replay"))
+    for path in (original_dir, prelude_dir, replay_dir):
+        path.mkdir()
+    original = SmallSession(components())
+    original.components.engine.begin_epoch(1)
+    original_receipts = []
+    control._run_active_windows(
+        original, FakeMonitor(), original_dir, limit=4, paired_index={}, replay_index={},
+        save_midpoint=False, snapshots=True, checkpoints={}, receipts=original_receipts, replay_checks=[],
+    )
+    replay = SmallSession(components())
+    replay.components.engine.begin_epoch(1)
+    # Establish the same deterministic CPU second-window boundary. Checkpoint
+    # serialization/restore itself is covered by the real session tests.
+    control._run_active_windows(
+        replay, FakeMonitor(), prelude_dir, limit=2, paired_index={}, replay_index={},
+        save_midpoint=False, snapshots=True, checkpoints={}, receipts=[], replay_checks=[],
+    )
+    index = {(row["epoch"], row["logical_batch_index"]): row for row in original_receipts}
+    return replay, replay_dir, index
+
+
+@pytest.mark.parametrize("failed_window", [3, 4])
+def test_replay_bn_failure_preserves_actual_receipt_values_and_diff_before_stop(
+        tmp_path, fake_timing, monkeypatch, failed_window):
+    replay, output, index = _synthetic_replay_pair(tmp_path)
+    train = replay.train_batch
+    def changed_bn(batch, hardware_probe=None):
+        record = train(batch, hardware_probe=hardware_probe)
+        if replay.components.engine.optimizer_updates == failed_window:
+            with torch.no_grad():
+                replay.components.model.bn.running_mean[0].add_(0.25)
+                replay.components.ema.module.bn.running_var[1].add_(0.125)
+        return record
+    replay.train_batch = changed_bn
+    comparator, writer = control.compare_replay_records, control.write_exclusive_json
+    rejecting = False
+    def observed_compare(expected, actual):
+        nonlocal rejecting
+        window = actual["window"]["optimizer_updates"]
+        assert (output / "receipts" / "epoch-001" / f"window-{window:04d}.json").exists()
+        assert (output / f"bn-state-window-{window:02d}.pt").exists()
+        assert (output / f"replay-observation-window-{window:02d}.json").exists()
+        rejecting = window == failed_window
+        return comparator(expected, actual)
+    def write_before_rejection(*args, **kwargs):
+        assert not rejecting, "failure handler added diagnostic I/O before abort"
+        return writer(*args, **kwargs)
+    monkeypatch.setattr(control, "compare_replay_records", observed_compare)
+    monkeypatch.setattr(control, "write_exclusive_json", write_before_rejection)
+    receipts, checks = [], []
+    with pytest.raises(control.ControlWorkerError, match="raw_bn mismatch") as caught:
+        control._run_active_windows(
+            replay, FakeMonitor(), output, limit=2, paired_index={}, replay_index=index,
+            save_midpoint=False, snapshots=True, checkpoints={}, receipts=receipts, replay_checks=checks,
+        )
+    assert replay.calls == failed_window
+    assert not replay.loader.has_active_iterator
+    assert len(receipts) == failed_window - 2 and len(checks) == failed_window - 3
+    actual = control._read_json_reference(receipts[-1], "failed actual receipt")
+    full = control._load_bn_snapshot(actual["bn_snapshot_reference"], actual)
+    report = control._read_json_reference(caught.value.replay_observation_reference, "failed comparison evidence")
+    assert report["status"] == "OBSERVATION_ONLY" and report["acceptance_decision"] is False
+    assert report["BN_values"]["available"] is True
+    assert report["actual_receipt"]["sha256"] == receipts[-1]["sha256"]
+    paths = {tuple(row["path"]) for row in report["exact_field_differences"]}
+    assert ("state", "raw_bn", "bn", "running_mean", "sha256") in paths
+    assert ("state", "ema_bn", "bn", "running_var", "sha256") in paths
+    by_family = {row["family"]: row for row in report["BN_values"]["layers"]}
+    assert by_family["raw_bn"]["running_mean"]["max_absolute"] == pytest.approx(0.25, abs=1e-7)
+    assert by_family["ema_bn"]["running_var"]["max_absolute"] == pytest.approx(0.125, abs=1e-7)
+    assert torch.equal(full["raw_bn"]["bn"]["running_mean"], replay.components.model.bn.running_mean)
+    assert not (output / "checkpoint-window-04.pt").exists()
+
+
+@pytest.mark.parametrize("family,key,value", [
+    ("rng", "python", "0" * 64),
+    ("clocks", "ema_updates", 999),
+])
+def test_replay_rng_or_clock_failure_retains_exact_field_evidence(
+        tmp_path, fake_timing, monkeypatch, family, key, value):
+    replay, output, index = _synthetic_replay_pair(tmp_path)
+    measure = control._measure_window
+    def changed_observation(*args, **kwargs):
+        record = measure(*args, **kwargs)
+        record["state"][family][key] = value
+        return record
+    monkeypatch.setattr(control, "_measure_window", changed_observation)
+    receipts = []
+    with pytest.raises(control.ControlWorkerError, match="same-arm replay " + family) as caught:
+        control._run_active_windows(
+            replay, FakeMonitor(), output, limit=2, paired_index={}, replay_index=index,
+            save_midpoint=False, snapshots=True, checkpoints={}, receipts=receipts, replay_checks=[],
+        )
+    report = control._read_json_reference(caught.value.replay_observation_reference, "failure fields")
+    changed = next(row for row in report["exact_field_differences"] if row["path"] == ["state", family, key])
+    assert changed["actual"] == value and changed["actual"] != changed["expected"]
+    assert replay.calls == 3 and len(receipts) == 1 and not replay.loader.has_active_iterator
+    assert not (output / "receipts" / "epoch-001" / "window-0004.json").exists()
+
+
+def test_missing_bn_diagnostic_is_unavailable_and_cannot_be_reported_as_zero(tmp_path):
+    expected, actual = make_replay_record(tmp_path, "expected"), make_replay_record(tmp_path, "actual")
+    left = write_exclusive_json(tmp_path / "expected.json", expected)
+    right = write_exclusive_json(tmp_path / "actual.json", actual)
+    with pytest.raises(control.ControlWorkerError, match="BN diagnostic evidence is unavailable") as caught:
+        control._publish_replay_observation(
+            tmp_path / "observation.json", expected, actual, expected_reference=left, actual_reference=right,
+        )
+    report = control._read_json_reference(caught.value.replay_observation_reference, "unavailable diagnosis")
+    assert report["BN_values"]["available"] is False
+    assert report["BN_values"]["layers"] is None
+    assert report["BN_values"]["error"]["type"] == "KeyError"
+    assert report["acceptance_decision"] is False
+
+
 def test_worker_failure_is_durable_before_hardware_abort(contract, tmp_path, monkeypatch):
     # Fail before input construction/admission; a syntactically valid contract
     # can never turn failed full verification into PASS.
     path = tmp_path / "worker-contract.json"
     reference = write_exclusive_json(path, contract)
+    observation = write_exclusive_json(tmp_path / "observation.json", {"status": "OBSERVATION_ONLY"})
     original = control.validate_worker_contract
     def validate(value, *, verify_files=True):
         if verify_files:
-            raise control.ControlWorkerError("injected frozen source mismatch")
+            error = control.ControlWorkerError("injected frozen source mismatch")
+            error.replay_observation_reference = observation
+            raise error
         return original(value, verify_files=False)
     monkeypatch.setattr(control, "validate_worker_contract", validate)
     monkeypatch.setattr(control, "_environment", lambda value: {"synthetic": "cpu"})
@@ -484,6 +833,7 @@ def test_worker_failure_is_durable_before_hardware_abort(contract, tmp_path, mon
     assert result["status"] == "STOP_NO_RETRY"
     assert result["receipts"] == [] and result["checkpoints"] == {}
     assert result["automatic_retry_or_batch_fallback"] is False
+    assert result["failure"][0]["observation_reference"] == observation
 
 
 def test_smoke_comparison_of_incomplete_artifacts_returns_stop(tmp_path):
