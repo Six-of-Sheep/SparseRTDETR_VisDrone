@@ -199,6 +199,25 @@ V2B_RESOLUTION_EVIDENCE_FILES = {
     'tools/run_training_v2b_evidence_campaign.py',
 }
 
+
+# Explicit paired-seed execution and fixed-epoch evidence extension.
+V2B_PAIRED_SEED_FILES = {
+    'docs/contracts/RTDETR_BASELINE_V2B_PAIRED_SEED_REPLICATION.md',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_campaign.py',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_capacity.py',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_gate.py',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_worker.py',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_summary.py',
+    'tests/test_training_v2b_replication_campaign.py',
+    'tests/test_training_v2b_replication_capacity.py',
+    'tests/test_training_v2b_replication_gate.py',
+    'tests/test_training_v2b_replication_worker.py',
+    'tests/test_training_v2b_replication_summary.py',
+    'tools/run_training_v2b_replication_campaign.py',
+    'tools/run_training_v2b_replication_worker.py',
+    'tools/summarize_training_v2b_replication.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -755,6 +774,17 @@ BASELINE_MODEL_IMPORT_FILES |= {
     'src/sparse_rtdetr/baseline/training_v2b_cross_eval.py',
     'tests/test_rtdetr_baseline_training_v2b_cross_eval.py',
     'tests/test_training_v2b_resolution_diagnostics.py',
+}
+
+# Only the paired-seed runtime and actual CPU model fixtures import torch.
+BASELINE_MODEL_IMPORT_FILES |= {
+    'src/sparse_rtdetr/baseline/training_v2b_replication_campaign.py',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_capacity.py',
+    'src/sparse_rtdetr/baseline/training_v2b_replication_worker.py',
+    'tests/test_training_v2b_replication_capacity.py',
+    'tests/test_training_v2b_replication_gate.py',
+    'tests/test_training_v2b_replication_worker.py',
+    'tests/test_training_v2b_replication_summary.py',
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2384,6 +2414,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_896_MATCHED_FILES
     if files & V2B_RESOLUTION_EVIDENCE_FILES:
         allowed_files |= V2B_RESOLUTION_EVIDENCE_FILES
+    if files & V2B_PAIRED_SEED_FILES:
+        allowed_files |= V2B_PAIRED_SEED_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
