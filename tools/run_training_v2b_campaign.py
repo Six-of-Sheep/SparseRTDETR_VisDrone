@@ -54,6 +54,7 @@ def main(argv=None) -> int:
             repo_root=ROOT, campaign_id=args.campaign_id, output_root=args.output_root,
             input_spec=strict_json_loads(Path(args.input_spec).read_bytes()),
             policy_bundle=policy, authorization_reference=auth,
+            sampling_backend="deterministic_gather",
         )
         print(json.dumps({"status": "PREPARED_NO_GPU_EXECUTED",
                           "campaign_reference": prepared["campaign_reference"]}, sort_keys=True), flush=True)

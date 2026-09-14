@@ -73,6 +73,7 @@ def test_committed_prerun_policy_is_validated_without_model_or_data_execution(to
     monkeypatch.setattr(tool.torch.cuda, "init", forbidden)
     result = tool._validate_policy(model, runtime)
     assert isinstance(result, V2BConfig)
+    assert result.sampling_backend == "deterministic_gather"
     assert (result.seed, result.input_size, result.physical_batch_size,
             result.accumulation_steps, result.logical_batch_size) == (0, 640, 16, 1, 16)
     assert policies == before
@@ -82,6 +83,8 @@ def test_committed_prerun_policy_is_validated_without_model_or_data_execution(to
     (("current_scope",), "formal_training"),
     (("next_gpu_stage", "authorized"), True),
     (("next_gpu_stage", "authorized"), 0),
+    (("next_gpu_stage", "sampling_backend"), "native"),
+    (("next_gpu_stage", "sampling_backend"), None),
     (("scientific_control_after_smoke", "authorized"), True),
     (("data", "role"), "confirmatory"),
     (("data", "logical_batch_size"), 8),
@@ -125,6 +128,7 @@ def test_runtime_readiness_cannot_grant_any_unlaunched_action(tool, policies, ke
     (("config", "input_size"), 128),
     (("config", "physical_batch_size"), 8),
     (("config", "accumulation_steps"), 2),
+    (("config", "sampling_backend"), "native"),
     (("readiness", "gpu_training_authorized"), True),
     (("readiness", "high_resolution_experiment_authorized"), True),
     (("readiness", "confirmatory_test_access_authorized"), True),

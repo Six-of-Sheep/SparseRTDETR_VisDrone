@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 import hashlib
 import importlib.util
 import json
@@ -17,7 +18,7 @@ import torch
 from sparse_rtdetr.baseline.training_v2b import (
     V2BConfig, V2BConfigurationError, build_v2b_components,
     logical_batch_indices, seed_cpu_sources, seed_worker,
-    validate_model_geometry,
+    validate_model_geometry, validate_model_sampling,
 )
 from sparse_rtdetr.baseline.training_v2b_checkpoint import (
     save_checkpoint, restore_checkpoint,
@@ -74,7 +75,7 @@ def bind(components, images, targets, run_id="real-r18-cpu"):
     }
     return build_run_binding(
         run_id=run_id, code_paths=code_paths,
-        config=components.config.binding_config(),
+        config={**components.config.binding_config(), "sampling": components.initialization["sampling"]},
         initial_parameters=components.initialization["parameters"],
         initial_state=components.initialization["model_state"],
         synthetic_input={"fixture": "generated normalized boxes and RGB tensors",
@@ -89,6 +90,7 @@ def bind(components, images, targets, run_id="real-r18-cpu"):
     {"amp_dtype": "float16"}, {"bn_statistics": "backbone_only"},
     {"learning_rate": float("nan")}, {"weight_decay": -1},
     {"pretrained_required": 1}, {"num_denoising": -1},
+    {"sampling_backend": "discrete"}, {"sampling_backend": True},
 ])
 def test_invalid_foundation_config(kwargs):
     with pytest.raises(V2BConfigurationError):
@@ -110,10 +112,11 @@ def test_engineering_checker_never_reads_runtime_artifact_contents(monkeypatch):
     assert checker.check_repository(ROOT, source_only=True)
 
 
-def test_engineering_target_configuration_matches_factory_defaults():
+def test_engineering_target_configuration_explicitly_selects_candidate():
     path = ROOT / "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_engineering.json"
     policy = json.loads(path.read_text())
-    assert policy["config"] == asdict(V2BConfig())
+    assert V2BConfig().sampling_backend == "native"
+    assert policy["config"] == asdict(V2BConfig(sampling_backend="deterministic_gather"))
     assert policy["scope"] == "cpu_synthetic_engineering"
     assert all(value is False for key, value in policy["readiness"].items()
                if key != "cpu_verification_evidence_required")
@@ -138,6 +141,56 @@ def test_actual_seed_initialization_and_registry_isolation():
     assert len(a.batchnorm_inventory) == 69
     assert all(x["affine"] and x["track_running_stats"] for x in a.batchnorm_inventory)
     assert not torch.cuda.is_initialized()
+
+
+def test_sampling_selection_is_per_model_preserves_initial_state_and_binds_ema():
+    native = build(seed=23)
+    native_identity = validate_model_sampling(native.model, sampling_backend="native")
+    native_draws = (random.random(), np.random.rand(), torch.rand(3))
+    candidate = build(seed=23, sampling_backend="deterministic_gather")
+    candidate_draws = (random.random(), np.random.rand(), torch.rand(3))
+    assert native.config.sampling_backend == V2BConfig().sampling_backend == "native"
+    assert candidate.initialization["parameters"] == native.initialization["parameters"]
+    assert candidate.initialization["model_state"] == native.initialization["model_state"]
+    assert native_draws[:2] == candidate_draws[:2]
+    assert torch.equal(native_draws[2], candidate_draws[2])
+    assert validate_model_sampling(native.model, sampling_backend="native") == native_identity
+    identity = validate_model_sampling(candidate.model, sampling_backend="deterministic_gather")
+    assert candidate.initialization["sampling"] == identity
+    assert validate_model_sampling(candidate.ema.module, sampling_backend="deterministic_gather") == identity
+    assert len(identity["modules"]) == 3
+    assert identity["core"]["source"]["relative_path"] == (
+        "src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py"
+    )
+    assert identity["core"]["source"]["sha256"] == hashlib.sha256(
+        (ROOT / identity["core"]["source"]["relative_path"]).read_bytes()
+    ).hexdigest()
+    assert native.config.binding_config()["cuda_backend_policy"]["deterministic_algorithms"] is False
+    policy = candidate.config.binding_config()["cuda_backend_policy"]
+    assert policy["deterministic_algorithms"] is True
+    assert policy["deterministic_warn_only"] is False
+    assert policy["cublas_workspace_config"] == ":4096:8"
+
+
+@pytest.mark.parametrize("change", ["native_callable", "partial_args", "partial_keywords", "method", "missing_module"])
+def test_candidate_sampling_rejects_actual_callable_or_inventory_drift(change):
+    candidate = build(sampling_backend="deterministic_gather")
+    model = candidate.model
+    attention = model.decoder.decoder.layers[0].cross_attn
+    core = attention.ms_deformable_attn_core
+    if change == "native_callable":
+        from src.zoo.rtdetr.rtdetrv2_decoder import deformable_attention_core_func_v2
+        attention.ms_deformable_attn_core = functools.partial(deformable_attention_core_func_v2, method="default")
+    elif change == "partial_args":
+        attention.ms_deformable_attn_core = functools.partial(core.func, None, method="default")
+    elif change == "partial_keywords":
+        attention.ms_deformable_attn_core = functools.partial(core.func, method="discrete")
+    elif change == "method":
+        attention.method = "discrete"
+    else:
+        model.decoder.decoder.layers[0].cross_attn = torch.nn.Identity()
+    with pytest.raises(V2BConfigurationError, match="sampling"):
+        validate_model_sampling(model, sampling_backend="deterministic_gather")
 
 
 def test_rejects_vendor_or_package_cached_from_another_checkout(monkeypatch, tmp_path):
@@ -224,8 +277,9 @@ def test_resolved_geometry_and_configuration_640_then_128():
         validate_model_geometry(small.model, config(input_size=640))
 
 
-def test_real_loss_families_empty_targets_and_variable_dn():
-    c = build(amp_dtype="float32")
+@pytest.mark.parametrize("sampling_backend", ["native", "deterministic_gather"])
+def test_real_loss_families_empty_targets_and_variable_dn(sampling_backend):
+    c = build(amp_dtype="float32", sampling_backend=sampling_backend)
     c.model.train()
     for counts, expected_dn in [((2,), 200), ((0,), 0), ((101,), 202)]:
         images, targets = batch(counts)
@@ -245,8 +299,9 @@ def test_real_loss_families_empty_targets_and_variable_dn():
             assert losses["loss_bbox"] == 0
 
 
-def test_real_bf16_update_covers_encoder_heads_and_bn_ema_clock():
-    c = build()
+@pytest.mark.parametrize("sampling_backend", ["native", "deterministic_gather"])
+def test_real_bf16_update_covers_encoder_heads_and_bn_ema_clock(sampling_backend):
+    c = build(sampling_backend=sampling_backend)
     images, targets = batch()
     norms = dict((n, m) for n, m in c.model.named_modules()
                  if isinstance(m, torch.nn.modules.batchnorm._BatchNorm))
@@ -295,8 +350,9 @@ def test_full_vs_split_real_model_when_bn_statistics_and_dn_are_controlled():
                    if isinstance(m, torch.nn.modules.batchnorm._BatchNorm))
 
 
-def test_actual_r18_checkpoint_replay_and_native_cpu_evidence(tmp_path):
-    c = build(seed=19)
+@pytest.mark.parametrize("sampling_backend", ["native", "deterministic_gather"])
+def test_actual_r18_checkpoint_replay_and_native_cpu_evidence(tmp_path, sampling_backend):
+    c = build(seed=19, sampling_backend=sampling_backend)
     images, targets = batch((1, 3), seed=11)
     binding = bind(c, images, targets)
     c.engine.begin_epoch(1)
@@ -331,7 +387,7 @@ def test_actual_r18_checkpoint_replay_and_native_cpu_evidence(tmp_path):
     expected_scheduler = c.scheduler.state_dict()
     expected_warmup = c.warmup.state_dict()
 
-    restored = build(seed=19)
+    restored = build(seed=19, sampling_backend=sampling_backend)
     new_generator = torch.Generator().manual_seed(999999)
     restore_checkpoint(
         reference["path"], model=restored.model, optimizer=restored.optimizer,

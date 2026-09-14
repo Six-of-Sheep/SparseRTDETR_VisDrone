@@ -18,6 +18,7 @@
   "next_gpu_stage": {
     "authorized": false,
     "stage": "paired_short_smoke_before_scientific_control",
+    "sampling_backend": "deterministic_gather",
     "arms": [
       {"id": "640x16x1", "input_size": 640, "physical_batch_size": 16, "accumulation_steps": 1},
       {"id": "640x8x2", "input_size": 640, "physical_batch_size": 8, "accumulation_steps": 2}

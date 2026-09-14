@@ -35,6 +35,57 @@ _IDENTITY_KEYS = {
 }
 
 
+def cuda_backend_policy_for_sampling(sampling_backend: str) -> dict:
+    """Return the declared CUDA policy without querying or initializing CUDA.
+
+    Native sampling remains an explicit diagnostic/CPU-compatible choice.
+    The gather candidate requires strict deterministic algorithms; the cuBLAS
+    workspace is a separate requirement for this model's matrix operations.
+    """
+    if type(sampling_backend) is not str or sampling_backend not in {"native", "deterministic_gather"}:
+        raise RuntimeDeviceError("unknown sampling backend")
+    return {
+        "cudnn_benchmark": False, "cudnn_deterministic": True,
+        "cudnn_allow_tf32": False, "matmul_allow_tf32": False,
+        "deterministic_algorithms": sampling_backend == "deterministic_gather",
+        "deterministic_warn_only": False,
+        "cublas_workspace_config": ":4096:8",
+    }
+
+
+def _bound_backend_policy(config: dict) -> dict | None:
+    if type(config) is not dict:
+        raise RuntimeDeviceError("bound runtime configuration must be an object")
+    declared = {"sampling_backend", "cuda_backend_policy"} & set(config)
+    # Generic historical checkpoint/device callers did not declare sampling.
+    # New V2BConfig bindings always contain both fields and cannot use this path.
+    if not declared:
+        return None
+    if declared != {"sampling_backend", "cuda_backend_policy"}:
+        raise RuntimeDeviceError("sampling backend and CUDA policy must be declared together")
+    expected = cuda_backend_policy_for_sampling(config["sampling_backend"])
+    actual = config["cuda_backend_policy"]
+    if type(actual) is not dict or set(actual) != set(expected):
+        raise RuntimeDeviceError("declared CUDA backend policy schema differs")
+    if any(type(actual[key]) is not type(value) or actual[key] != value
+           for key, value in expected.items()):
+        raise RuntimeDeviceError("declared CUDA backend policy differs from sampling backend")
+    return expected
+
+
+def validate_bound_runtime_policy(identity: dict, config: dict) -> None:
+    """Validate requested versus recorded policy using CPU-only operations.
+
+    CPU identities do not claim CUDA flags. Their future CUDA declaration must
+    still agree with the selected sampler. CUDA identities must match every
+    declared flag and workspace value, including strict versus warn-only mode.
+    """
+    checked = validate_runtime_identity(identity)
+    expected = _bound_backend_policy(config)
+    if expected is not None and checked["device"] == "cuda:0" and checked["backend_policy"] != expected:
+        raise RuntimeDeviceError("runtime CUDA backend policy differs from bound sampling backend")
+
+
 def _digest(value: dict) -> str:
     return hashlib.sha256(json.dumps(
         value, sort_keys=True, separators=(",", ":"), allow_nan=False, ensure_ascii=False,
@@ -166,7 +217,8 @@ def prepare_runtime(*, device: str | torch.device = "cpu", seed: int,
 
     The production CUDA branch requires a same-process native hardware token.
     CPU tests explicitly replace the native admission and CUDA APIs. The exact
-    CUDA RNG is restored on resume; bitwise CUDA kernels are not promised.
+    CUDA RNG is restored on resume. Explicit sampler bindings select numerical
+    flags before CUDA initialization; flags alone do not prove full-model replay.
     """
     chosen = torch.device(device)
     if type(seed) is not int or not 0 <= seed < 2**32:
@@ -175,6 +227,9 @@ def prepare_runtime(*, device: str | torch.device = "cpu", seed: int,
         declared_seed = binding["config"].get("seed", seed)
         if type(declared_seed) is not int or declared_seed != seed:
             raise RuntimeDeviceError("runtime seed differs from the run binding")
+        requested_policy = _bound_backend_policy(binding["config"])
+    else:
+        requested_policy = None
     if str(chosen) == "cpu":
         if gpu_probe is not None or expected_gpu_uuid is not None:
             raise RuntimeDeviceError("CPU preparation does not accept a GPU admission")
@@ -189,6 +244,9 @@ def prepare_runtime(*, device: str | torch.device = "cpu", seed: int,
         raise RuntimeDeviceError("CUDA_VISIBLE_DEVICES must exactly equal the admitted GPU UUID")
     if type(binding) is not dict:
         raise RuntimeDeviceError("CUDA preparation requires the run binding")
+    if (requested_policy is not None and os.environ.get("CUBLAS_WORKSPACE_CONFIG")
+            != requested_policy["cublas_workspace_config"]):
+        raise RuntimeDeviceError("set the bound cuBLAS workspace in the process startup environment")
     from .training_v2b_hardware import require_native_hardware_admission
     require_native_hardware_admission(
         gpu_probe, binding=binding, expected_gpu_uuid=expected_gpu_uuid,
@@ -197,6 +255,18 @@ def prepare_runtime(*, device: str | torch.device = "cpu", seed: int,
     api = torch.cuda
     if api.is_initialized():
         raise RuntimeDeviceError("prepare CUDA before any previous CUDA initialization")
+    # CUDA admission has passed, but no CUDA initialization or computation has
+    # occurred. Never rely on ambient deterministic/warn-only flags for a new
+    # sampler binding, and never set the workspace after a cuBLAS context exists.
+    if requested_policy is not None:
+        torch.use_deterministic_algorithms(
+            requested_policy["deterministic_algorithms"],
+            warn_only=requested_policy["deterministic_warn_only"],
+        )
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cuda.matmul.allow_tf32 = False
     _seed_cpu(seed)
     api.init()
     if api.device_count() != 1:
@@ -208,10 +278,6 @@ def prepare_runtime(*, device: str | torch.device = "cpu", seed: int,
         raise RuntimeDeviceError("CUDA properties UUID differs from native admission")
     # Older PyTorch versions omit UUID in properties. Exact full-UUID
     # CUDA_VISIBLE_DEVICES plus count=1 fixes the ordinal mapping in that case.
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.allow_tf32 = False
-    torch.backends.cuda.matmul.allow_tf32 = False
     api.default_generators[0].manual_seed(seed)
     rng_state = api.get_rng_state(0)
     if rng_state.device.type != "cpu" or rng_state.dtype != torch.uint8 or rng_state.ndim != 1:
@@ -231,6 +297,7 @@ def prepare_runtime(*, device: str | torch.device = "cpu", seed: int,
         "backend_policy": _backend_policy(),
     }
     validate_runtime_identity(identity)
+    validate_bound_runtime_policy(identity, binding.get("config", {}))
     bound_sha = binding.get("binding_sha256", _digest(binding))
     return PreparedRuntime(chosen, seed, bound_sha, identity, _digest(identity), _SEAL)
 

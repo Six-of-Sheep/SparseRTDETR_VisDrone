@@ -11,10 +11,12 @@ import copy
 from pathlib import Path
 from typing import Any, Mapping
 
-from .training_v2b import V2BComponents, validate_model_geometry
+from .training_v2b import V2BComponents, validate_model_geometry, validate_model_sampling
 from .training_v2b_checkpoint import restore_checkpoint, save_checkpoint
 from .training_v2b_data import TrainCoreLogicalLoader, LogicalBatch
-from .training_v2b_device import validate_component_placement, validate_prepared_runtime
+from .training_v2b_device import (
+    validate_bound_runtime_policy, validate_component_placement, validate_prepared_runtime,
+)
 from .training_v2b_evidence import (
     build_run_binding, initial_parameter_reference, validate_run_binding,
 )
@@ -43,7 +45,8 @@ def _config(components: V2BComponents, loader: TrainCoreLogicalLoader, *,
         resolved.pop(key, None)
     resolved["device"] = device
     return {**config, "resolved_model_optimizer_config": resolved,
-            "geometry": copy.deepcopy(components.geometry),
+             "geometry": copy.deepcopy(components.geometry),
+             "sampling": copy.deepcopy(components.initialization["sampling"]),
             "pretrained": copy.deepcopy(components.initialization["pretrained"]),
             "loader_runtime_settings": "observed_separately_not_resume_semantics"}
 
@@ -118,10 +121,20 @@ class V2BTrainingSession:
         c = self.components
         checked = validate_run_binding(self.binding, verify_files=verify_files)
         identity = validate_prepared_runtime(c.runtime)
+        validate_bound_runtime_policy(identity, checked["config"])
         uuid = identity["cuda_devices"][0]["uuid"] if identity["device"] == "cuda:0" else None
         expected = _config(c, self.loader, device=identity["device"], cuda_gpu_uuid=uuid)
         if checked["config"] != expected:
             raise V2BSessionError("live model/runtime configuration differs from binding")
+        # Native diagnostic observers temporarily wrap the original core only
+        # during train_batch. Candidate workers do not install that observer,
+        # so their actual raw/EMA callables are checked before every forward.
+        # Both backends are checked at construction/save/restore/epoch bounds.
+        if c.config.sampling_backend == "deterministic_gather" or verify_files:
+            for name, model in (("raw", c.model), ("EMA", c.ema.module)):
+                actual_sampling = validate_model_sampling(model, sampling_backend=c.config.sampling_backend)
+                if actual_sampling != c.initialization["sampling"]:
+                    raise V2BSessionError(name + " sampling identity differs from initialization")
         if (checked["data"].get("kind") != "train_core_runtime"
                 or checked["data"].get("loader") != self.loader.binding):
             raise V2BSessionError("live loader differs from bound train_core input")

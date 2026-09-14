@@ -129,12 +129,14 @@ def _data_path(path: str, *, expected_name: str | None = None) -> Path:
 
 def make_campaign(*, repo_root: str | Path, campaign_id: str, output_root: str | Path,
                   input_spec: dict, policy_bundle: dict,
-                  authorization_reference: dict) -> dict:
+                  authorization_reference: dict,
+                  sampling_backend: str = "deterministic_gather") -> dict:
     """Prepare the immutable campaign without loading images or starting a GPU."""
     from .training_v2b import V2BConfig, logical_batch_indices
     from .training_v2b_development import build_development_binding
     import torch
 
+    common_config = asdict(V2BConfig(sampling_backend=sampling_backend))
     root = Path(repo_root).resolve(strict=True)
     campaign_id = _safe_id(campaign_id)
     output = Path(output_root).absolute()
@@ -174,7 +176,7 @@ def make_campaign(*, repo_root: str | Path, campaign_id: str, output_root: str |
         "campaign_id": campaign_id, "output_root": str(output),
         "authorization_reference": authorization_reference,
         "source": source, "torch_version": str(torch.__version__),
-        "common_config": asdict(V2BConfig()),
+        "common_config": common_config,
         "arms": {"A": {"physical_batch_size": 16, "accumulation_steps": 1},
                  "B": {"physical_batch_size": 8, "accumulation_steps": 2}},
         "num_workers": 2, "prefetch_factor": 2,
@@ -452,6 +454,9 @@ def run_campaign(campaign_reference: dict) -> dict:
     campaign = _json_reference(campaign_reference)
     if campaign.get("kind") != "v2b_640_paired_campaign" or campaign.get("schema_version") != 1:
         raise CampaignError("unknown campaign schema")
+    if (type(campaign.get("common_config")) is not dict or
+            campaign["common_config"].get("sampling_backend") != "deterministic_gather"):
+        raise CampaignError("paired formal campaign requires deterministic_gather; native is diagnostic only")
     validate_frozen_source(campaign["source"])
     execution = Path(campaign["output_root"]) / "execution"
     execution.mkdir(mode=0o700, exist_ok=False)

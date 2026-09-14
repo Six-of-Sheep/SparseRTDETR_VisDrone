@@ -18,7 +18,7 @@ from sparse_rtdetr.baseline.training_v2b import V2BConfig
 def _fixture(tmp_path):
     value = {"schema_version": 1, "kind": "v2b_640_paired_campaign", "campaign_id": "unit-campaign",
              "output_root": str(tmp_path), "source": {"repo_root": str(tmp_path), "code_files": {}},
-             "common_config": asdict(V2BConfig()),
+             "common_config": asdict(V2BConfig(sampling_backend="deterministic_gather")),
              "arms": {"A": {"physical_batch_size": 16, "accumulation_steps": 1},
                       "B": {"physical_batch_size": 8, "accumulation_steps": 2}},
              "num_workers": 2, "prefetch_factor": 2, "torch_version": "fixture",
@@ -60,6 +60,17 @@ def test_bound_file_mutation_is_rejected(tmp_path):
     path.write_bytes(b"changed")
     with pytest.raises(campaign.CampaignError, match="bound file changed"):
         campaign.read_reference(ref)
+
+
+def test_native_campaign_cannot_launch_smoke_or_formal_workers(tmp_path, monkeypatch):
+    value, _ = _fixture(tmp_path)
+    value["common_config"]["sampling_backend"] = "native"
+    reference = campaign._write_json(tmp_path / "native-campaign.json", value)
+    monkeypatch.setattr(campaign, "_run_worker", lambda *a: pytest.fail("native campaign launched a worker"))
+    monkeypatch.setattr(campaign, "validate_frozen_source", lambda *a: pytest.fail("native campaign passed entry gate"))
+    with pytest.raises(campaign.CampaignError, match="native is diagnostic only"):
+        campaign.run_campaign(reference)
+    assert not (tmp_path / "execution").exists()
 
 
 @pytest.mark.parametrize("role", ["test", "confirmatory", "confirmatory_coco.json"])
@@ -371,6 +382,7 @@ def test_cli_external_receipt_is_explicit_and_bound(campaign_cli):
     assert captured["policy"]["setter_mode"] == "external_admin_acknowledged"
     assert captured["policy"]["external_clock_receipt"] == reference
     assert captured["prepare"]["policy_bundle"] == {"CPU_fixture_policy": True}
+    assert captured["prepare"]["sampling_backend"] == "deterministic_gather"
 
 
 @pytest.mark.parametrize("provided", ["neither", "path", "sha"])

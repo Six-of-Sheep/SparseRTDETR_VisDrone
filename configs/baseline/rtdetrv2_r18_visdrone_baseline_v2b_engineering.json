@@ -8,6 +8,7 @@
     "physical_batch_size": 16,
     "accumulation_steps": 1,
     "amp_dtype": "bfloat16",
+    "sampling_backend": "deterministic_gather",
     "bn_statistics": "train",
     "pretrained_required": true,
     "num_denoising": 100,
@@ -29,6 +30,7 @@
     "bn": "statistics_train_or_all_statistics_frozen_affine_trainable",
     "dn": "native_per_physical_microbatch",
     "amp": "BF16_model_and_criterion_no_GradScaler",
+    "sampling": "bilinear_zeros_align_corners_false_fixed_order_gather; strict_CUDA_deterministic_algorithms",
     "optimizer_ema_warmup_clock": "one_per_complete_logical_window",
     "scheduler_clock": "one_per_completed_epoch_after_warmup",
     "resume": "complete_logical_window_only; CPU_synthetic_default; schema2_and_train_core_runtime_in_separate_binding"

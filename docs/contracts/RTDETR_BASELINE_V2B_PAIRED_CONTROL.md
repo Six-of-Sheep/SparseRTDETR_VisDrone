@@ -59,6 +59,37 @@ outside this campaign.
 
 ## Checkpoint and replay acceptance
 
+The repaired campaign explicitly uses `sampling_backend=deterministic_gather`.
+The model factory retains `native` for CPU and isolated diagnostics, but the
+paired campaign entry point and every formal worker reject native sampling.
+This selection is present in the engineering configuration, CPU verifier,
+train_core prerun, smoke, checkpoint, runtime and formal A/B contracts.
+
+The repair replaces only each model instance's v2 bilinear sampler core. It
+preserves bilinear interpolation, zero padding, `align_corners=False`, gradients
+for values and locations, and the vendor's layout, weighting and summation
+order. Vendor files, attention geometry, DN/BN policies and the experiment
+design are unchanged. CUDA uses strict deterministic algorithms, not warn-only,
+with `CUBLAS_WORKSPACE_CONFIG=:4096:8` established before CUDA initialization.
+Raw and EMA callable identities and partial arguments are checked against the
+bound implementation; a state dictionary alone cannot identify this wiring.
+
+The native operator diagnostic showed different value gradients for identical
+inputs without any checkpoint restoration. A separate native model diagnostic
+on commit `c5a178b3114b98c9720dc3b757ad20fd5e6efb6c` restored window two exactly,
+then produced parameter differences at window three and BN plus out-of-tolerance
+loss differences at window four. Its tensor layouts, inputs, RNG and clocks
+matched. The candidate operator passed 64 repeated CUDA forwards/backwards in
+each of FP32 and BF16-value/FP32-grid autocast, with exact output and both input
+gradients. These observations motivate the repair; successful full-model
+smoke and fresh-process replay remain required before any formal experiment.
+
+Smoke/replay always save actual receipts and complete BN snapshots before
+comparison, including failures. Native-only core proxies record AMP input
+metadata; candidate workers preserve their strictly verified callable and keep
+the existing model/criterion AMP, BN and DN observations. No replay threshold
+is relaxed by this repair.
+
 The restore boundary must exactly reproduce model/EMA/optimizer state, Python,
 NumPy, CPU and CUDA RNGs, loader cursor, module modes and every update clock.
 Replayed windows must preserve exact input receipts, loss denominators, BN/DN,

@@ -15,6 +15,9 @@ Schema 2 binds an explicit prepared runtime and an acknowledged loader cursor.
 Schema 1 remains readable only for CPU artifacts without a loader. CUDA requires
 a previously admitted, seeded runtime; this module never implicitly initializes
 CUDA. CPU inspection, save, and restore never call CUDA APIs.
+The bound sampling inventory is the initialization snapshot: raw/EMA Python
+callables must match it before capture or restoration, since state_dict does not
+serialize them. Generic non-RT-DETR fixtures without that declaration remain valid.
 """
 
 from __future__ import annotations
@@ -280,6 +283,43 @@ def _equal(left: Any, right: Any) -> bool:
     return left == right
 
 
+def _check_bound_model_sampling(model: Any, ema: Any, bound: dict) -> None:
+    """Validate non-serialized sampling behavior before any state/RNG mutation.
+
+    The real v2b binding copies initialization['sampling'] into config. Compare
+    that immutable inventory with both live modules using strict types, exact
+    callable identity and the factory's inspected partial/method/module policy.
+    No model is constructed, tensor is computed or CUDA API is called here.
+    """
+    config = bound["config"]
+    models = (("raw", model), ("EMA", getattr(ema, "module", None)))
+    if not any(key in config for key in ("sampling", "sampling_backend")):
+        # Missing declarations are compatible with old generic toy artifacts,
+        # but removing every sampling field must not bypass the real-model gate.
+        for _, candidate in models:
+            if isinstance(candidate, torch.nn.Module) and any(
+                    base.__module__.endswith(".rtdetrv2_decoder")
+                    and base.__name__ in {"MSDeformableAttention", "RTDETRTransformerv2"}
+                    for module in candidate.modules() for base in type(module).__mro__):
+                _fail("RT-DETRv2 sampling requires its bound initialization inventory")
+        return
+    backend = config.get("sampling_backend")
+    declared = config.get("sampling")
+    if (type(backend) is not str or type(declared) is not dict
+            or type(declared.get("backend")) is not str or declared["backend"] != backend):
+        _fail("bound sampling backend and initialization inventory are incomplete or inconsistent")
+    from .training_v2b import validate_model_sampling
+    for family, candidate in models:
+        if not isinstance(candidate, torch.nn.Module):
+            _fail(f"bound sampling requires a live {family} model")
+        try:
+            actual = validate_model_sampling(candidate, sampling_backend=backend)
+        except Exception as exc:
+            raise CheckpointError(f"{family} sampling callable/inventory validation failed: {exc}") from exc
+        if not _equal(actual, declared):
+            _fail(f"{family} sampling differs from the bound initialization inventory")
+
+
 def _check_optimizer(state: Any, layout: dict, model: torch.nn.Module, updates: int) -> None:
     if type(layout) is not dict or set(layout) != {"type", "defaults", "groups"} or type(layout["groups"]) is not list:
         _fail("optimizer layout schema differs")
@@ -527,6 +567,11 @@ def _check_bound_runtime_identity(identity: dict, bound: dict) -> None:
     if (identity["device"] != "cpu"
             and bound["config"].get("cuda_gpu_uuid") != identity["cuda_devices"][0]["uuid"]):
         _fail("CUDA GPU UUID differs from binding.config.cuda_gpu_uuid")
+    from .training_v2b_device import validate_bound_runtime_policy
+    try:
+        validate_bound_runtime_policy(identity, bound["config"])
+    except Exception as exc:
+        raise CheckpointError(f"bound sampling/runtime backend policy differs: {exc}") from exc
 
 
 def _check_generator_placement(generators: dict, identity: dict) -> None:
@@ -827,6 +872,7 @@ def save_checkpoint(
         if not destination.parent.is_dir():
             _fail("checkpoint parent directory must already exist")
         bound, bound_sha = _binding(binding)
+        _check_bound_model_sampling(model, ema, bound)
         _check_engine_owners(engine, model, optimizer, ema, scheduler, warmup)
         engine_state = _engine_state(engine)
         runtime_identity = _runtime_identity(runtime, bound, bound_sha)
@@ -911,6 +957,7 @@ def restore_checkpoint(
     try:
         source, raw, payload, bound_sha = _verified_payload(path, expected_sha256, expected_binding)
         actual_sha = expected_sha256
+        _check_bound_model_sampling(model, ema, payload["binding"])
         runtime_identity = _runtime_identity(runtime, payload["binding"], bound_sha)
         if payload["runtime"] != runtime_identity:
             _fail("runtime device, UUID/topology, backend policy, or CUDA build differs; remapping is unsupported")

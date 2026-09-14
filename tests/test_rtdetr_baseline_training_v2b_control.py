@@ -7,7 +7,7 @@ tests. These checks do not certify CUDA numerical replay or hardware stability.
 from __future__ import annotations
 
 import copy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import importlib.util
 import io
@@ -88,11 +88,31 @@ def test_contract_validation_is_cpu_pure_and_preserves_frozen_order(contract, mo
     assert len(control.frozen_epoch_orders()) == 30
 
 
+@pytest.mark.parametrize("backend", ["native", "deterministic_gather"])
+def test_backend_is_explicit_and_native_cannot_be_formal(contract, monkeypatch, backend):
+    contract["config"]["sampling_backend"] = backend
+    monkeypatch.setattr(control, "file_reference", lambda *a: pytest.fail("contract check read files"))
+    assert control.validate_worker_contract(contract, verify_files=False)["config"]["sampling_backend"] == backend
+    contract["stage"] = "control30"
+    if backend == "native":
+        with pytest.raises(control.ControlWorkerError, match="formal control30 requires"):
+            control.validate_worker_contract(contract, verify_files=False)
+    else:
+        assert control.validate_worker_contract(contract, verify_files=False)["stage"] == "control30"
+
+
+def test_missing_backend_is_not_inferred_from_a_legacy_contract(contract):
+    del contract["config"]["sampling_backend"]
+    with pytest.raises(control.ControlWorkerError, match="explicit supported sampling"):
+        control.validate_worker_contract(contract, verify_files=False)
+
+
 @pytest.mark.parametrize("path,value", [
     (("schema_version",), True), (("kind",), "unfrozen"), (("stage",), "train120"),
     (("arm",), "C"), (("run_id",), "../overwrite"),
     (("config", "seed"), 1), (("config", "seed"), False),
     (("config", "input_size"), 896), (("config", "amp_dtype"), "float32"),
+    (("config", "sampling_backend"), "unchecked_grid_sample"),
     (("config", "bn_statistics"), "frozen"), (("config", "num_denoising"), 0),
     (("config", "learning_rate"), 0.01), (("config", "warmup_steps"), 20),
     (("config", "physical_batch_size"), 8), (("num_workers",), 0),
@@ -692,6 +712,36 @@ def test_formal_window_mode_has_no_complete_bn_snapshot_cost(tmp_path, fake_timi
     assert "bn_snapshot_reference" not in record
     assert "sampling_core_observation" not in record
     assert session.calls == 1 and not session.loader.has_active_iterator
+
+
+def test_candidate_smoke_keeps_bn_snapshots_without_wrapping_core(tmp_path, fake_timing, monkeypatch):
+    c = components()
+    c.config = replace(c.config, sampling_backend="deterministic_gather")
+    session = SmallSession(c)
+    c.engine.begin_epoch(1)
+    observation_type = control._ForwardObservation
+    def observation(components, *, sampling=False):
+        assert sampling is False
+        return observation_type(components, sampling=sampling)
+    monkeypatch.setattr(control, "_ForwardObservation", observation)
+    monkeypatch.setattr(observation_type, "sampling_evidence", lambda *a: pytest.fail("candidate core proxy"))
+    receipts = []
+    control._run_active_windows(
+        session, FakeMonitor(), tmp_path, limit=1, paired_index={}, replay_index={},
+        save_midpoint=False, snapshots=True, checkpoints={}, receipts=receipts, replay_checks=[],
+    )
+    record = control._read_json_reference(receipts[0], "candidate window observation")
+    assert "bn_snapshot_reference" in record
+    assert "sampling_core_observation" not in record
+    assert c.model.bn.num_batches_tracked.item() == 2
+    assert session.calls == 1 and not session.loader.has_active_iterator
+
+
+def test_candidate_cannot_request_native_only_sampling_proxy():
+    c = components()
+    c.config = replace(c.config, sampling_backend="deterministic_gather")
+    with pytest.raises(control.ControlWorkerError, match="restricted to native diagnostics"):
+        control._ForwardObservation(c, sampling=True)
 
 
 def _synthetic_replay_pair(tmp_path):

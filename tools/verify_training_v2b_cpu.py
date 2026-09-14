@@ -150,6 +150,8 @@ def verify(args):
         "accumulation_steps": args.accumulation,
         "amp_dtype": args.amp_dtype,
     })
+    if config.sampling_backend != "deterministic_gather":
+        raise ValueError("repaired CPU verification requires deterministic_gather sampling")
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,79}", args.run_id):
         raise ValueError("run_id must be a short lowercase safe directory name")
     if args.threads < 1 or args.threads > 4:
@@ -179,6 +181,7 @@ def verify(args):
         config={**config.binding_config(),
                 "resolved_vendor_config": components.resolved_config,
                 "geometry": components.geometry,
+                "sampling": components.initialization["sampling"],
                 "verification_windows": args.windows},
         initial_parameters=components.initialization["parameters"],
         initial_state=components.initialization["model_state"],
@@ -268,6 +271,8 @@ def verify(args):
         "bn_backward_diagnostic": bn_diagnostic,
         "input_size": config.input_size, "physical_batch": config.physical_batch_size,
         "accumulation": config.accumulation_steps, "amp_dtype": config.amp_dtype,
+        "sampling_backend": config.sampling_backend,
+        "sampling": components.initialization["sampling"],
         "observed_logits_dtypes": observed_dtypes, "counters": counters,
         "geometry": components.geometry, "checkpoint_replay": replay,
         "cuda_initialized": torch.cuda.is_initialized(), "real_data_accessed": False,

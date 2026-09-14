@@ -70,8 +70,8 @@ def _validate_policy(model_policy, runtime_policy):
     if type(configuration) is not dict or set(configuration) != set(V2BConfig.__dataclass_fields__):
         raise ValueError("model construction policy must explicitly declare all configuration fields")
     base = V2BConfig(**configuration)
-    if base != V2BConfig():
-        raise ValueError("pre-run requires the declared common 640/seed0/logical16 model")
+    if base != V2BConfig(sampling_backend="deterministic_gather"):
+        raise ValueError("pre-run requires the common 640/seed0/logical16 deterministic_gather model")
     if runtime_policy.get("current_scope") != "CPU_tests_and_bounded_train_core_loader_only":
         raise ValueError("wrong pre-run scope")
     readiness = runtime_policy.get("readiness")
@@ -97,6 +97,8 @@ def _validate_policy(model_policy, runtime_policy):
     ]
     if type(smoke) is not dict or smoke.get("authorized") is not False:
         raise ValueError("GPU smoke is not authorized in this tool")
+    if smoke.get("sampling_backend") != base.sampling_backend:
+        raise ValueError("model and smoke sampling backend policies differ")
     if canonical_sha256(smoke.get("arms")) != canonical_sha256(expected_arms):
         raise ValueError("pre-run requires exactly the named 640x16x1 and 640x8x2 pair")
     if (type(smoke.get("logical_windows_per_arm")) is not int or smoke["logical_windows_per_arm"] != 4

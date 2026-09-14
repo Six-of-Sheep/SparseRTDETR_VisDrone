@@ -167,8 +167,15 @@ def validate_worker_contract(contract: Any, *, verify_files: bool = True) -> dic
     output = _path(contract["output_dir"], "output_dir")
     if root == output or root.is_relative_to(output):
         _fail("output may not contain the source checkout")
-    config = V2BConfig() if contract["arm"] == "A" else V2BConfig(
-        physical_batch_size=8, accumulation_steps=2,
+    supplied_config = contract["config"]
+    if type(supplied_config) is not dict or supplied_config.get("sampling_backend") not in (
+            "native", "deterministic_gather"):
+        _fail("worker requires an explicit supported sampling backend")
+    sampling_backend = supplied_config["sampling_backend"]
+    if contract["stage"] == "control30" and sampling_backend != "deterministic_gather":
+        _fail("formal control30 requires the deterministic_gather sampling backend")
+    config = V2BConfig(sampling_backend=sampling_backend) if contract["arm"] == "A" else V2BConfig(
+        physical_batch_size=8, accumulation_steps=2, sampling_backend=sampling_backend,
     )
     _same(contract["config"], asdict(config), "frozen model configuration")
     if type(contract["num_workers"]) is not int or contract["num_workers"] not in (2, 4):
@@ -411,6 +418,8 @@ def capture_control_state(components: Any, loader: Any, *, full: bool = False) -
 
 class _ForwardObservation:
     def __init__(self, components: Any, *, sampling: bool = False):
+        if sampling and components.config.sampling_backend != "native":
+            _fail("sampling core observation proxies are restricted to native diagnostics")
         self.components = components
         self.handles = []
         self.observe_sampling = sampling
@@ -1260,7 +1269,8 @@ def _run_active_windows(session: Any, monitor: Any, output: Path, *, limit: int,
                 replay = _read_json_reference(replay_index[key], "original replay window")
             record = _measure_window(
                 session, batch, monitor, expected_indices=plan[batch.logical_batch_index],
-                paired_record=paired, replay_record=replay, observe_sampling=snapshots,
+                paired_record=paired, replay_record=replay,
+                observe_sampling=snapshots and c.config.sampling_backend == "native",
             )
             record["logical_input_wait_seconds"] = load_seconds
             window_id = c.engine.optimizer_updates

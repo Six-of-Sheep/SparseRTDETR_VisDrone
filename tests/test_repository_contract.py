@@ -84,6 +84,49 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertIn("symlink: source-link.txt", failures)
             self.assertIn("large file: large-source.txt", failures)
 
+    def test_source_only_never_enters_runtime_artifacts_or_follows_evidence_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+            evidence = root / "artifacts" / "evidence"
+            evidence.mkdir(parents=True)
+            (evidence / "payload").write_bytes(b"runtime-only")
+            os.symlink(evidence / "payload", evidence / "pytest-current")
+            (root / "source.py").write_text("value = 1\n", encoding="utf-8")
+            scandir = os.scandir
+            def source_scandir(path):
+                candidate = Path(path)
+                if candidate == root / "artifacts" or root / "artifacts" in candidate.parents:
+                    raise AssertionError("source checker entered runtime evidence")
+                return scandir(path)
+            with mock.patch.object(CHECKER.os, "scandir", side_effect=source_scandir), \
+                    mock.patch.object(CHECKER, "_git_tracked_files", return_value=set()):
+                files, failures = CHECKER._file_policy(root, source_only=True)
+            self.assertEqual(files, {".gitignore", "source.py"})
+            self.assertEqual(failures, [])
+
+    def test_source_only_still_rejects_source_links_and_tracked_runtime_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+            (root / "artifacts").mkdir()
+            (root / "source.py").write_text("value = 1\n", encoding="utf-8")
+            os.symlink(root / "source.py", root / "source-link.py")
+            os.symlink(root / "artifacts", root / "source-dir-link")
+            with mock.patch.object(CHECKER, "_git_tracked_files", return_value={"artifacts/unread.pt"}):
+                _, failures = CHECKER._file_policy(root, source_only=True)
+            self.assertIn("symlink: source-link.py", failures)
+            self.assertIn("symlink: source-dir-link", failures)
+            self.assertIn("tracked runtime artifact: artifacts/unread.pt", failures)
+
+    def test_source_only_rejects_dangling_artifact_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+            os.symlink(root / "absent", root / "artifacts")
+            _, failures = CHECKER._file_policy(root, source_only=True)
+            self.assertIn("artifacts must be a real directory", failures)
+
 
 if __name__ == "__main__":
     unittest.main()

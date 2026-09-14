@@ -7,6 +7,7 @@ train_core images, evaluation, GPU, development or held-out data are opened.
 from __future__ import annotations
 
 import copy
+import functools
 import hashlib
 import json
 import random
@@ -17,7 +18,9 @@ import pytest
 import torch
 from PIL import Image
 
-from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
+from sparse_rtdetr.baseline.training_v2b import (
+    V2BConfig, V2BConfigurationError, build_v2b_components, validate_model_sampling,
+)
 from sparse_rtdetr.baseline.training_v2b_data import (
     TrainCoreDataConfig, build_train_core_loader,
 )
@@ -130,11 +133,14 @@ def rng():
     return random.getstate(), np.random.get_state(), torch.get_rng_state().clone()
 
 
-def test_real_r18_resume_through_dataset_workers_checkpoint_and_runtime(files, tmp_path):
-    current, model, loader, binding = session(files)
+@pytest.mark.parametrize("sampling_backend", ["native", "deterministic_gather"])
+def test_real_r18_resume_through_dataset_workers_checkpoint_and_runtime(files, tmp_path, sampling_backend):
+    current, model, loader, binding = session(files, sampling_backend=sampling_backend)
     assert sum(parameter.numel() for parameter in model.model.parameters()) == 20_094_584
     assert binding["data"]["kind"] == "train_core_runtime"
     assert binding["data"]["loader_binding_sha256"] == loader.binding_sha256
+    assert binding["config"]["sampling_backend"] == sampling_backend
+    assert binding["config"]["sampling"] == model.initialization["sampling"]
     current.begin_epoch(1)
     iterator = iter(loader)
     first = next(iterator)
@@ -152,7 +158,7 @@ def test_real_r18_resume_through_dataset_workers_checkpoint_and_runtime(files, t
     iterator.close()
     expected_rng = rng()
 
-    restored, other, other_loader, other_binding = session(files, workers=2)
+    restored, other, other_loader, other_binding = session(files, workers=2, sampling_backend=sampling_backend)
     assert binding == other_binding
     inspection = restored.restore(checkpoint, expected_sha256=reference["sha256"])
     assert isinstance(inspection, dict)
@@ -175,7 +181,44 @@ def test_real_r18_resume_through_dataset_workers_checkpoint_and_runtime(files, t
     assert other_loader.state_dict() == loader.state_dict()
     assert_nested_equal(rng(), expected_rng)
     assert other.runtime.identity["device"] == "cpu"
+    assert validate_model_sampling(other.model, sampling_backend=sampling_backend) == binding["config"]["sampling"]
+    assert validate_model_sampling(other.ema.module, sampling_backend=sampling_backend) == binding["config"]["sampling"]
     assert not torch.cuda.is_initialized()
+
+
+@pytest.mark.parametrize("family", ["raw", "EMA"])
+def test_candidate_session_refuses_callable_drift_before_forward_or_cursor_ack(files, family):
+    current, components_, loader, binding = session(files, sampling_backend="deterministic_gather")
+    current.begin_epoch(1)
+    iterator = iter(loader)
+    batch = next(iterator)
+    model = components_.model if family == "raw" else components_.ema.module
+    module = model.decoder.decoder.layers[0].cross_attn
+    from src.zoo.rtdetr.rtdetrv2_decoder import deformable_attention_core_func_v2
+    module.ms_deformable_attn_core = functools.partial(deformable_attention_core_func_v2, method="default")
+    before_rng = rng()
+    before_engine = copy.deepcopy(components_.engine.state_dict())
+    before_loader = copy.deepcopy(loader.state_dict())
+    try:
+        with pytest.raises(V2BConfigurationError, match="sampling callable"):
+            current.train_batch(batch)
+        assert_nested_equal(before_rng, rng())
+        assert before_engine == components_.engine.state_dict()
+        assert before_loader == loader.state_dict()
+        assert components_.engine.optimizer_updates == 0
+    finally:
+        iterator.close()
+
+
+def test_candidate_binding_cannot_enter_a_native_session_even_with_same_parameters(files):
+    candidate = components(sampling_backend="deterministic_gather")
+    candidate_loader = data_loader(files, candidate)
+    binding = build_train_core_run_binding(candidate, candidate_loader, run_id="candidate-binding", repo_root=ROOT)
+    native = components()
+    native_loader = data_loader(files, native)
+    assert candidate.initialization["model_state"] == native.initialization["model_state"]
+    with pytest.raises((RuntimeError, ValueError), match="config|sampling"):
+        V2BTrainingSession(native, native_loader, binding)
 
 
 def test_mutated_pending_batch_is_refused_before_model_update(files):

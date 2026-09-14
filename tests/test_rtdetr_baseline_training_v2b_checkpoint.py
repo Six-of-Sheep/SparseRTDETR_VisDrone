@@ -1,6 +1,7 @@
 """CPU-only synthetic evidence for checkpoint continuity and rejection gates."""
 
 from copy import deepcopy
+import functools
 import hashlib
 import json
 from pathlib import Path
@@ -1161,3 +1162,222 @@ def test_saved_ema_geometry_rounding_is_preserved_without_relaxing_raw_geometry(
     assert torch.equal(target["model"].anchors, state["model"].anchors)
     assert torch.equal(target["ema"].module.anchors, state["ema"].module.anchors)
     assert not torch.equal(target["model"].anchors, target["ema"].module.anchors)
+
+
+def _sampling_cpu_guard(monkeypatch):
+    torch.set_num_threads(2)
+    forbid_cuda(monkeypatch)
+    # PyTorch 2.4 checks this CUDA-availability predicate while constructing even
+    # a CPU autocast context. Its CPU branch must remain observation-free here.
+    monkeypatch.setattr(torch.cuda.amp.common, "amp_definitely_not_available", lambda: True)
+    # AdamW also queries CUDA availability in this graph-capture health check,
+    # including for CPU-only parameters. Keep its real update arithmetic while
+    # proving that bypassing this CUDA-only check is confined to CPU tensors.
+    def cpu_graph_capture_health_check(optimizer):
+        assert all(parameter.device.type == "cpu"
+                   for group in optimizer.param_groups for parameter in group["params"])
+
+    monkeypatch.setattr(torch.optim.Optimizer, "_cuda_graph_capture_health_check",
+                        cpu_graph_capture_health_check)
+
+
+@pytest.fixture
+def sampling_cpu_only(monkeypatch):
+    _sampling_cpu_guard(monkeypatch)
+
+
+def _real_sampling_state(*, amp_dtype="float32", sampling_backend="deterministic_gather"):
+    from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
+    return build_v2b_components(
+        V2BConfig(input_size=128, physical_batch_size=1, accumulation_steps=2,
+                  pretrained_required=False, warmup_steps=2, ema_warmups=2,
+                  amp_dtype=amp_dtype, sampling_backend=sampling_backend),
+        repo_root=Path(__file__).resolve().parents[1],
+    )
+
+
+def _real_sampling_parts(components):
+    return {key: getattr(components, key) for key in
+            ("model", "optimizer", "ema", "engine", "scheduler", "warmup", "runtime")}
+
+
+def _real_sampling_binding(components):
+    # This is a real model with generated CPU tensors, not a train_core run.
+    # The same initialization snapshot is copied by the production run builder.
+    return {
+        "initial_weights": {"parameters": components.initialization["parameters"],
+                            "model_state": components.initialization["model_state"]},
+        "data": {"kind": "synthetic_cpu_sampling_checkpoint", "fixture_seeds": [930, 931]},
+        "code": {key: components.initialization[key] for key in ("vendor_sources", "package_sources")},
+        "config": {**components.config.binding_config(),
+                   "sampling": deepcopy(components.initialization["sampling"])},
+    }
+
+
+def _real_sampling_batch(seed):
+    generator = torch.Generator(device="cpu").manual_seed(seed)
+    images = torch.rand(2, 3, 128, 128, generator=generator)
+    targets = []
+    for count in (1, 3):
+        centers = .25 + .5 * torch.rand(count, 2, generator=generator)
+        sizes = .05 + .1 * torch.rand(count, 2, generator=generator)
+        targets.append({"labels": torch.arange(count, dtype=torch.int64),
+                        "boxes": torch.cat((centers, sizes), dim=1)})
+    return images, targets
+
+
+def _cpu_rng_snapshot():
+    return (random.getstate(), np.random.get_state(), torch.get_rng_state().clone())
+
+
+@pytest.fixture(scope="module")
+def real_candidate_checkpoint(tmp_path_factory):
+    with pytest.MonkeyPatch.context() as patch:
+        _sampling_cpu_guard(patch)
+        source = _real_sampling_state()
+        bound = _real_sampling_binding(source)
+        path = tmp_path_factory.mktemp("real-candidate-checkpoint") / "untrained.pt"
+        reference = save_checkpoint(path, **_real_sampling_parts(source), binding=bound)
+    return path, reference, bound
+
+
+@pytest.mark.parametrize("amp_dtype", ["float32", "bfloat16"])
+def test_real_candidate_cpu_checkpoint_preserves_callable_and_exact_continuation(
+        tmp_path, sampling_cpu_only, amp_dtype):
+    from sparse_rtdetr.baseline.training_v2b import validate_model_sampling
+    source = _real_sampling_state(amp_dtype=amp_dtype)
+    bound = _real_sampling_binding(source)
+    source.engine.begin_epoch(1)
+    source.engine.train_window(*_real_sampling_batch(930))
+    path = tmp_path / "candidate-boundary.pt"
+    reference = save_checkpoint(path, **_real_sampling_parts(source), binding=bound)
+    metadata = inspect_checkpoint(path, expected_sha256=reference["sha256"], expected_binding=bound)
+    assert metadata["schema_version"] == 2 and metadata["optimizer_updates"] == 1
+    assert metadata["binding"]["config"]["sampling"] == source.initialization["sampling"]
+    expected_window = source.engine.train_window(*_real_sampling_batch(931))
+    expected_rng = _cpu_rng_snapshot()
+    rebuilt = _real_sampling_state(amp_dtype=amp_dtype)
+    restored = restore_checkpoint(
+        path, **_real_sampling_parts(rebuilt), expected_binding=bound,
+        expected_sha256=reference["sha256"],
+    )
+    assert restored["schema_version"] == 2 and restored["optimizer_updates"] == 1
+    actual_window = rebuilt.engine.train_window(*_real_sampling_batch(931))
+    assert_tree_equal(expected_window, actual_window)
+    assert_tree_equal(expected_rng, _cpu_rng_snapshot())
+    for key in ("model", "optimizer", "ema", "engine", "scheduler", "warmup"):
+        assert_tree_equal(getattr(source, key).state_dict(), getattr(rebuilt, key).state_dict())
+    for model in (rebuilt.model, rebuilt.ema.module):
+        assert validate_model_sampling(model, sampling_backend="deterministic_gather") == bound["config"]["sampling"]
+
+
+def _forbid_checkpoint_mutation(monkeypatch, components):
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("sampling rejection must precede live state/RNG mutation")
+    for key in ("model", "optimizer", "ema", "engine", "scheduler", "warmup"):
+        monkeypatch.setattr(getattr(components, key), "load_state_dict", forbidden)
+    monkeypatch.setattr(checkpoint, "_restore_rng", forbidden)
+    monkeypatch.setattr(checkpoint, "_capture_rng", forbidden)
+    return calls
+
+
+@pytest.mark.parametrize("operation", ["save", "restore"])
+@pytest.mark.parametrize("family,damage", [
+    ("raw", "native_callable"), ("EMA", "native_callable"),
+    ("raw", "partial_args"), ("EMA", "partial_keywords"),
+    ("raw", "method"), ("EMA", "missing_module"), ("raw", "points"),
+])
+def test_actual_sampling_drift_rejected_before_checkpoint_state_or_rng_mutation(
+        tmp_path, monkeypatch, sampling_cpu_only, real_candidate_checkpoint, operation, family, damage):
+    import importlib
+    path, reference, bound = real_candidate_checkpoint
+    target = _real_sampling_state()
+    model = target.model if family == "raw" else target.ema.module
+    attention = model.decoder.decoder.layers[0].cross_attn
+    core = attention.ms_deformable_attn_core
+    if damage == "native_callable":
+        native = importlib.import_module("src.zoo.rtdetr.rtdetrv2_decoder").deformable_attention_core_func_v2
+        attention.ms_deformable_attn_core = functools.partial(native, method="default")
+    elif damage == "partial_args":
+        attention.ms_deformable_attn_core = functools.partial(core.func, 0, method="default")
+    elif damage == "partial_keywords":
+        attention.ms_deformable_attn_core = functools.partial(core.func, method="default", extra=None)
+    elif damage == "method":
+        attention.method = "discrete"
+    elif damage == "missing_module":
+        model.decoder.decoder.layers[0].cross_attn = nn.Identity()
+    else:
+        attention.num_points_list[0] += 1
+    before_model = deepcopy(target.model.state_dict())
+    before_ema = deepcopy(target.ema.state_dict())
+    before_rng = _cpu_rng_snapshot()
+    calls = _forbid_checkpoint_mutation(monkeypatch, target)
+    destination = tmp_path / "must-not-exist.pt"
+    with pytest.raises(CheckpointError, match="sampling"):
+        if operation == "save":
+            save_checkpoint(destination, **_real_sampling_parts(target), binding=bound)
+        else:
+            restore_checkpoint(path, **_real_sampling_parts(target), expected_binding=bound,
+                               expected_sha256=reference["sha256"])
+    assert calls == [] and not destination.exists()
+    assert_tree_equal(before_model, target.model.state_dict())
+    assert_tree_equal(before_ema, target.ema.state_dict())
+    assert_tree_equal(before_rng, _cpu_rng_snapshot())
+    assert target.engine.failed is False
+
+
+@pytest.mark.parametrize("damage", [
+    "missing_snapshot", "wrong_backend", "snapshot_numeric_type", "removed_declarations", "wrong_cuda_policy",
+])
+def test_sampling_initialization_snapshot_and_runtime_policy_cannot_be_omitted_or_redeclared(
+        tmp_path, monkeypatch, sampling_cpu_only, damage):
+    target = _real_sampling_state()
+    bound = _real_sampling_binding(target)
+    config = bound["config"]
+    if damage == "missing_snapshot":
+        del config["sampling"]
+    elif damage == "wrong_backend":
+        config["sampling_backend"] = "native"
+    elif damage == "snapshot_numeric_type":
+        config["sampling"]["modules"][0]["num_heads"] = 8.0
+    elif damage == "removed_declarations":
+        for key in ("sampling", "sampling_backend", "cuda_backend_policy"):
+            del config[key]
+    else:
+        config["cuda_backend_policy"]["deterministic_algorithms"] = False
+    before_rng = _cpu_rng_snapshot()
+    calls = _forbid_checkpoint_mutation(monkeypatch, target)
+    path = tmp_path / "invalid-declaration.pt"
+    with pytest.raises(CheckpointError, match="sampling"):
+        save_checkpoint(path, **_real_sampling_parts(target), binding=bound)
+    assert calls == [] and not path.exists()
+    assert_tree_equal(before_rng, _cpu_rng_snapshot())
+
+
+def test_candidate_checkpoint_cannot_restore_into_native_model_with_same_tensor_state(
+        monkeypatch, sampling_cpu_only, real_candidate_checkpoint):
+    path, reference, bound = real_candidate_checkpoint
+    target = _real_sampling_state(sampling_backend="native")
+    assert target.initialization["parameters"] == bound["initial_weights"]["parameters"]
+    assert target.initialization["model_state"] == bound["initial_weights"]["model_state"]
+    before_rng = _cpu_rng_snapshot()
+    calls = _forbid_checkpoint_mutation(monkeypatch, target)
+    with pytest.raises(CheckpointError, match="raw sampling callable"):
+        restore_checkpoint(path, **_real_sampling_parts(target), expected_binding=bound,
+                           expected_sha256=reference["sha256"])
+    assert calls == [] and target.engine.failed is False
+    assert_tree_equal(before_rng, _cpu_rng_snapshot())
+
+
+def test_checkpoint_inspection_checks_sampling_backend_policy_without_a_live_model_or_cuda(
+        tmp_path, sampling_cpu_only, real_candidate_checkpoint):
+    path, _, bound = real_candidate_checkpoint
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    incompatible = deepcopy(bound)
+    incompatible["config"]["cuda_backend_policy"]["deterministic_algorithms"] = False
+    payload["binding"], payload["binding_sha256"] = checkpoint._binding(incompatible)
+    damaged, reference = write_payload(tmp_path, payload, "incorrect-candidate-policy.pt")
+    with pytest.raises(CheckpointError, match="sampling/runtime backend policy"):
+        inspect_checkpoint(damaged, expected_sha256=reference["sha256"], expected_binding=incompatible)

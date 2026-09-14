@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 import hashlib
+import os
 import random
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ from torch import nn
 from sparse_rtdetr.baseline import training_v2b_device as device
 from sparse_rtdetr.baseline.training_v2b_device import (
     RuntimeDeviceError, capture_cuda_rng, cpu_runtime_identity, place_module,
+    cuda_backend_policy_for_sampling, validate_bound_runtime_policy,
     preflight_cuda_rng_restore, prepare_runtime, restore_cuda_rng,
     validate_component_placement, validate_cuda_rng_states,
     validate_module_placement, validate_optimizer_placement,
@@ -232,6 +234,8 @@ class FakeCUDA:
 @pytest.fixture
 def fake_cuda(monkeypatch):
     from sparse_rtdetr.baseline import training_v2b_hardware as hardware
+    deterministic_before = (torch.are_deterministic_algorithms_enabled(),
+                            torch.is_deterministic_algorithms_warn_only_enabled())
     # Restore numerical flags after each fake CUDA control-flow test.
     for component, key in (
         (torch.backends.cudnn, "benchmark"), (torch.backends.cudnn, "deterministic"),
@@ -250,7 +254,10 @@ def fake_cuda(monkeypatch):
         return {"gpu": {"uuid": GPU_UUID}}
     monkeypatch.setattr(hardware, "require_native_hardware_admission", fake_admission)
     monkeypatch.setattr(device, "_scratch_cuda_generator", lambda index: torch.Generator(device="cpu"))
-    return api
+    try:
+        yield api
+    finally:
+        torch.use_deterministic_algorithms(deterministic_before[0], warn_only=deterministic_before[1])
 
 
 def prepared_fake_cuda():
@@ -363,3 +370,103 @@ def test_runtime_identity_property_is_a_copy():
     copied["device"] = "cuda:0"
     assert runtime.identity["device"] == "cpu"
     validate_prepared_runtime(runtime)
+
+
+def _declare_sampling_binding(monkeypatch, backend):
+    policy = cuda_backend_policy_for_sampling(backend)
+    monkeypatch.setitem(FAKE_BINDING["config"], "sampling_backend", backend)
+    monkeypatch.setitem(FAKE_BINDING["config"], "cuda_backend_policy", policy)
+    monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", policy["cublas_workspace_config"])
+    return policy
+
+
+@pytest.mark.parametrize("backend", ["native", "deterministic_gather"])
+def test_declared_cuda_policy_is_set_before_init_and_bound_in_runtime(fake_cuda, monkeypatch, backend):
+    policy = _declare_sampling_binding(monkeypatch, backend)
+    torch.use_deterministic_algorithms(not policy["deterministic_algorithms"], warn_only=True)
+    original_init = fake_cuda.init
+    def checked_init():
+        assert device._backend_policy() == policy
+        assert os.environ["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
+        original_init()
+    monkeypatch.setattr(fake_cuda, "init", checked_init)
+    runtime = prepared_fake_cuda()
+    assert fake_cuda.calls[:3] == [("admission",), ("is_initialized",), ("init",)]
+    assert runtime.identity["backend_policy"] == policy
+    validate_bound_runtime_policy(runtime.identity, FAKE_BINDING["config"])
+
+
+@pytest.mark.parametrize("change", ["unknown_backend", "missing_policy", "missing_backend",
+                                   "disabled", "warn_only", "integer_flag", "workspace"])
+def test_invalid_sampling_policy_fails_before_cuda_or_admission(fake_cuda, monkeypatch, change):
+    _declare_sampling_binding(monkeypatch, "deterministic_gather")
+    config = FAKE_BINDING["config"]
+    if change == "unknown_backend":
+        monkeypatch.setitem(config, "sampling_backend", "discrete")
+    elif change == "missing_policy":
+        monkeypatch.delitem(config, "cuda_backend_policy")
+    elif change == "missing_backend":
+        monkeypatch.delitem(config, "sampling_backend")
+    else:
+        policy = dict(config["cuda_backend_policy"])
+        if change == "disabled": policy["deterministic_algorithms"] = False
+        elif change == "warn_only": policy["deterministic_warn_only"] = True
+        elif change == "integer_flag": policy["deterministic_algorithms"] = 1
+        else: policy["cublas_workspace_config"] = ":16:8"
+        monkeypatch.setitem(config, "cuda_backend_policy", policy)
+    with pytest.raises(RuntimeDeviceError, match="sampling|policy|declared"):
+        prepared_fake_cuda()
+    assert fake_cuda.calls == []
+
+
+@pytest.mark.parametrize("workspace", [None, ":16:8", "invalid"])
+def test_declared_workspace_must_exist_at_process_start(fake_cuda, monkeypatch, workspace):
+    _declare_sampling_binding(monkeypatch, "deterministic_gather")
+    if workspace is None:
+        monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG")
+    else:
+        monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", workspace)
+    with pytest.raises(RuntimeDeviceError, match="startup environment"):
+        prepared_fake_cuda()
+    assert fake_cuda.calls == []
+
+
+@pytest.mark.parametrize("change", ["deterministic", "warn_only", "workspace"])
+def test_prepared_candidate_rejects_live_policy_drift(fake_cuda, monkeypatch, change):
+    _declare_sampling_binding(monkeypatch, "deterministic_gather")
+    runtime = prepared_fake_cuda()
+    if change == "deterministic":
+        torch.use_deterministic_algorithms(False, warn_only=False)
+    elif change == "warn_only":
+        torch.use_deterministic_algorithms(True, warn_only=True)
+    else:
+        monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":16:8")
+    with pytest.raises(RuntimeDeviceError, match="backend policy changed"):
+        validate_prepared_runtime(runtime)
+
+
+def test_bound_candidate_policy_rejects_otherwise_valid_native_runtime(fake_cuda, monkeypatch):
+    _declare_sampling_binding(monkeypatch, "native")
+    runtime = prepared_fake_cuda()
+    candidate = {"sampling_backend": "deterministic_gather",
+                 "cuda_backend_policy": cuda_backend_policy_for_sampling("deterministic_gather")}
+    with pytest.raises(RuntimeDeviceError, match="bound sampling"):
+        validate_bound_runtime_policy(runtime.identity, candidate)
+
+
+def test_cpu_candidate_policy_is_declarative_and_does_not_query_cuda_or_mutate_flags(monkeypatch):
+    forbid_cuda(monkeypatch)
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    before = device._backend_policy()
+    config = {"sampling_backend": "deterministic_gather",
+              "cuda_backend_policy": cuda_backend_policy_for_sampling("deterministic_gather")}
+    runtime = prepare_runtime(seed=91, binding={"config": config})
+    validate_bound_runtime_policy(runtime.identity, config)
+    assert runtime.identity == cpu_runtime_identity()
+    assert device._backend_policy() == before
+
+
+@pytest.mark.parametrize("backend", [None, True, "", "discrete", "unknown"])
+def test_unknown_sampling_backend_has_no_implicit_cuda_policy(backend):
+    with pytest.raises(RuntimeDeviceError, match="sampling backend"):
+        cuda_backend_policy_for_sampling(backend)

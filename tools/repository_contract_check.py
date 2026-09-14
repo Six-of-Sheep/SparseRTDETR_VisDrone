@@ -6,6 +6,7 @@ import hashlib
 import argparse
 import ast
 import json
+import os
 import re
 import stat
 import subprocess
@@ -127,6 +128,11 @@ V2B_ENGINEERING_FILES = {
     'tools/verify_training_v2b_cpu.py',
     'configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_engineering.json',
     'docs/contracts/RTDETR_BASELINE_V2B_ENGINEERING.md',
+}
+
+V2B_SAMPLING_FILES = {
+    'src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py',
+    'tests/test_rtdetr_baseline_training_v2b_deterministic_sampling.py',
 }
 
 # Keep the earlier foundation archive valid under the current checker. The
@@ -697,7 +703,8 @@ BASELINE_MODEL_IMPORT_FILES = {
 
 # Explicitly allow only the new CPU engineering implementation and tests.
 BASELINE_MODEL_IMPORT_FILES |= {
-    path for path in V2B_ENGINEERING_FILES | V2B_RUNTIME_FILES if path.endswith(".py")
+    path for path in V2B_ENGINEERING_FILES | V2B_RUNTIME_FILES | V2B_SAMPLING_FILES
+    if path.endswith(".py")
 }
 
 BASELINE_MODEL_IMPORT_FILES |= {
@@ -747,7 +754,22 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _relative_files(root: Path) -> set[str]:
+def _relative_files(root: Path, *, source_only: bool = False) -> set[str]:
+    if source_only:
+        # A source audit must not enter runtime evidence or resolve its links.
+        # Retain source directory symlinks in the inventory so they still fail.
+        result = set()
+        for directory, subdirectories, filenames in os.walk(root, followlinks=False):
+            parent = Path(directory)
+            subdirectories[:] = [name for name in subdirectories
+                                 if name != ".git" and not (parent == root and name == "artifacts")]
+            for name in subdirectories + filenames:
+                if name == ".git" or (parent == root and name == "artifacts"):
+                    continue
+                path = parent / name
+                if path.is_symlink() or path.is_file():
+                    result.add(path.relative_to(root).as_posix())
+        return result
     return {
         p.relative_to(root).as_posix()
         for p in root.rglob("*")
@@ -811,12 +833,16 @@ def _gitignored(relative: str, patterns: list[tuple[bool, str]]) -> bool:
     return ignored
 
 
-def _file_policy(root: Path) -> tuple[set[str], list[str]]:
-    """Separate ignored runtime files from source while still auditing them."""
+def _file_policy(root: Path, *, source_only: bool = False) -> tuple[set[str], list[str]]:
+    """Audit source; historical mode additionally inventories runtime paths."""
 
     failures: list[str] = []
-    all_files = _relative_files(root)
+    all_files = _relative_files(root, source_only=source_only)
     tracked_files = _git_tracked_files(root)
+    if source_only:
+        # Git's index names suffice to reject tracked data without opening it.
+        failures.extend(f"tracked runtime artifact: {relative}" for relative in sorted(tracked_files)
+                        if relative == "artifacts" or relative.startswith("artifacts/"))
     ignore_patterns = _gitignore_patterns(root)
     files: set[str] = set()
     for relative in all_files:
@@ -833,12 +859,12 @@ def _file_policy(root: Path) -> tuple[set[str], list[str]]:
             continue
         files.add(relative)
     artifacts_root = root / "artifacts"
-    if artifacts_root.exists() and (artifacts_root.is_symlink() or not artifacts_root.is_dir()):
+    if artifacts_root.is_symlink() or (artifacts_root.exists() and not artifacts_root.is_dir()):
         failures.append("artifacts must be a real directory")
-    for path in root.rglob("*"):
-        if ".git" in path.relative_to(root).parts or path.is_symlink() or not path.is_file():
+    for relative in all_files:
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
             continue
-        relative = path.relative_to(root).as_posix()
         if _gitignored(relative, ignore_patterns):
             continue
         if path.stat().st_size == 0:
@@ -2291,7 +2317,7 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
     source_only is an explicit engineering scope, never a production admission.
     """
     failures: list[str] = []
-    files, file_policy_failures = _file_policy(root)
+    files, file_policy_failures = _file_policy(root, source_only=source_only)
     failures.extend(file_policy_failures)
 
     vendor_files = {relative for relative in files if relative.startswith(VENDOR_PREFIX)}
@@ -2306,6 +2332,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
     allowed_files |= V2A_FILES
     if files & V2B_ENGINEERING_FILES:
         allowed_files |= V2B_ENGINEERING_FILES
+    if files & V2B_SAMPLING_FILES:
+        allowed_files |= V2B_SAMPLING_FILES
     if files & V2B_RUNTIME_FILES:
         allowed_files |= V2B_RUNTIME_FILES
     if files & V2B_PAIRED_CONTROL_FILES:
