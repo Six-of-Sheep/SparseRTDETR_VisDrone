@@ -179,6 +179,26 @@ V2B_896_MATCHED_FILES = {
     'tools/run_training_v2b_resolution_campaign.py',
 }
 
+# Exact development-evidence extension; older engineering archives remain valid.
+V2B_RESOLUTION_EVIDENCE_FILES = {
+    'docs/contracts/RTDETR_BASELINE_V2B_RESOLUTION_EVIDENCE.md',
+    'src/sparse_rtdetr/baseline/training_v2b_cross_eval.py',
+    'src/sparse_rtdetr/baseline/training_v2b_evidence_campaign.py',
+    'src/sparse_rtdetr/baseline/training_v2b_official_gt.py',
+    'src/sparse_rtdetr/baseline/training_v2b_primary_cache.py',
+    'src/sparse_rtdetr/baseline/training_v2b_resolution_analysis.py',
+    'src/sparse_rtdetr/baseline/training_v2b_resolution_diagnostics.py',
+    'tests/test_rtdetr_baseline_training_v2b_cross_eval.py',
+    'tests/test_rtdetr_baseline_training_v2b_development_admission.py',
+    'tests/test_training_v2b_evidence_campaign.py',
+    'tests/test_training_v2b_primary_cache.py',
+    'tests/test_training_v2b_resolution_analysis.py',
+    'tests/test_training_v2b_resolution_diagnostics.py',
+    'tools/analyze_training_v2b_resolution.py',
+    'tools/run_training_v2b_cross_eval.py',
+    'tools/run_training_v2b_evidence_campaign.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -729,6 +749,13 @@ BASELINE_MODEL_IMPORT_FILES |= {
 
 # Explicit 896 experiment modules use the same native admitted runtime.
 BASELINE_MODEL_IMPORT_FILES |= {path for path in V2B_896_MATCHED_FILES if path.endswith(".py")}
+
+# Only the inference worker and its CPU test need additional model imports.
+BASELINE_MODEL_IMPORT_FILES |= {
+    'src/sparse_rtdetr/baseline/training_v2b_cross_eval.py',
+    'tests/test_rtdetr_baseline_training_v2b_cross_eval.py',
+    'tests/test_training_v2b_resolution_diagnostics.py',
+}
 
 SCIENTIFIC_ENTRY_ROOTS = (
     "src/sparse_rtdetr/baseline/smoke.py",
@@ -2355,6 +2382,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_PAIRED_CONTROL_FILES
     if files & V2B_896_MATCHED_FILES:
         allowed_files |= V2B_896_MATCHED_FILES
+    if files & V2B_RESOLUTION_EVIDENCE_FILES:
+        allowed_files |= V2B_RESOLUTION_EVIDENCE_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:

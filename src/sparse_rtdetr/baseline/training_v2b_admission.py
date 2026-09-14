@@ -42,6 +42,7 @@ _ANCHOR_MANIFEST_SHA = "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56
 _AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889059b85"
 _REPAIR_AUTHORIZATION_SHA = "c8b46cc3d91e941c32047806e41e518476b00ce8e1deb62cb58deb42e9869e75"
 _RESOLUTION_896_AUTHORIZATION_SHA = "ece816c4bfc93b62c403a00986a738f853b86e91a05953531ab93c0998538819"
+_RESOLUTION_EVIDENCE_AUTHORIZATION_SHA = "0ea553eef36857f9686fa8bad3ad2b708af9f22a83f8f194b4405157a6a3b055"
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
 _EXTERNAL_ADMIN_MODE = "external_admin_acknowledged"
@@ -133,6 +134,8 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
         _REPAIR_AUTHORIZATION_SHA: {**_SCOPES, "synthetic_operator_diagnostic": 600},
         # Native admission binds 896 dimensions and external clock evidence; no new hardware scope.
         _RESOLUTION_896_AUTHORIZATION_SHA: _SCOPES,
+        # Only the new evidence authority adds bounded development evaluation.
+        _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA: {**_SCOPES, "development_cross_eval": 1800},
     }
     if type(authorization_reference) is not dict or type(authorization_reference.get("sha256")) is not str:
         raise MonitoredHardwareError("explicit execution authorization reference differs")
@@ -142,6 +145,9 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
     if (authorization_reference["sha256"] == _RESOLUTION_896_AUTHORIZATION_SHA
             and setter_mode != _EXTERNAL_ADMIN_MODE):
         raise MonitoredHardwareError("896 authorization requires external_admin_acknowledged; native clock setters are not authorized")
+    if (authorization_reference["sha256"] == _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA
+            and setter_mode != _EXTERNAL_ADMIN_MODE):
+        raise MonitoredHardwareError("resolution evidence authorization requires external_admin_acknowledged; native clock setters are not authorized")
     root = Path(reference_dir).absolute()
     manifest_ref = ev.file_reference(root / "manifest.json")
     if manifest_ref["sha256"] != _ANCHOR_MANIFEST_SHA:
@@ -226,6 +232,45 @@ def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int) -> di
                     minimum_loaded_clock_samples=3)
     expected["policy_sha256"] = ev.canonical_sha256(expected)
     return expected
+
+
+def _validate_resolution_evidence_binding(binding: Mapping[str, Any], policy: Mapping[str, Any],
+                                          scope: str) -> None:
+    """Keep the new authority inside its explicit data, geometry and seed scopes.
+
+    This check receives a metadata-validated binding before any bound source or
+    dataset file is opened. Scientific qualification and replication freezes
+    remain the responsibility of the separately bound workload contract.
+    """
+    config, data = binding["config"], binding["data"]
+    size = config.get("input_size")
+    if type(size) is not int or size not in {640, 896}:
+        raise MonitoredHardwareError("resolution evidence authorization requires input_size 640 or 896")
+    if scope == "development_cross_eval":
+        if (config.get("scope") != "development_cross_eval"
+                or config.get("authorization_reference") != policy["authorization_reference"]):
+            raise MonitoredHardwareError("development evaluation scope and exact authorization must be bound")
+        if (data.get("kind") != "manifest_binding_only"
+                or set(data.get("manifests", {})) != {"development"}):
+            raise MonitoredHardwareError("development evaluation requires only its development manifest")
+        path = Path(data["manifests"]["development"]["path"])
+        forbidden = {"train_core", "confirmatory", "test", "visdrone2019-det-test-dev",
+                     "visdrone2019-det-test-challenge"}
+        candidates = (path, path.resolve())
+        if any(candidate.name != "development_manifest.json"
+               or any(part.casefold() in forbidden or part.casefold().startswith("confirmatory_")
+                      for part in candidate.parts) for candidate in candidates):
+            raise MonitoredHardwareError("development manifest path crosses its permitted data role")
+    else:
+        if (scope not in {"paired_smoke", "train_core_30epoch"}
+                or config.get("scope") != "train_core_runtime_engineering"
+                or data.get("kind") != "train_core_runtime"):
+            raise MonitoredHardwareError("seed replication requires the actual train_core runtime binding")
+        dimensions = {"physical_batch_size": 8, "accumulation_steps": 2}
+        if (type(config.get("seed")) is not int or config["seed"] not in {1, 2}
+                or any(type(config.get(key)) is not int or config[key] != value
+                       for key, value in dimensions.items())):
+            raise MonitoredHardwareError("seed replication requires seed 1 or 2 and physical batch 8 accumulation 2")
 
 
 def _strict_process(pid: int) -> dict[str, Any]:
@@ -1341,8 +1386,18 @@ class MonitoredHardwareSession:
     def __init__(self, binding: Mapping[str, Any], policy_bundle: Mapping[str, Any],
                  evidence_dir: str | os.PathLike[str], authorized_scope: str,
                  workload_deadline_seconds: int = 600) -> None:
-        self.binding = ev.validate_run_binding(binding)
-        self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+        evidence_authority = (type(policy_bundle) is dict
+                              and type(policy_bundle.get("authorization_reference")) is dict
+                              and policy_bundle["authorization_reference"].get("sha256")
+                              == _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA)
+        if evidence_authority:
+            self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+            metadata = ev.validate_run_binding(binding, verify_files=False)
+            _validate_resolution_evidence_binding(metadata, self.policy, authorized_scope)
+            self.binding = ev.validate_run_binding(metadata)
+        else:
+            self.binding = ev.validate_run_binding(binding)
+            self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
         if self.policy["authorization_reference"]["sha256"] == _RESOLUTION_896_AUTHORIZATION_SHA:
             dimensions = {"input_size": 896, "physical_batch_size": 8, "accumulation_steps": 2}
             if any(type(self.binding["config"].get(key)) is not int
