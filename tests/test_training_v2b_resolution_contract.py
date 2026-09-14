@@ -275,3 +275,38 @@ def test_896_worker_rejects_old_or_unbound_authorization(tmp_path, capacity_plan
     contract["policy_bundle"]["authorization_reference"]["sha256"] = "0" * 64
     with pytest.raises(control.ControlWorkerError):
         control.validate_worker_contract(contract, verify_files=False)
+
+
+def test_capacity_live_state_publishes_native_scheduler_without_type_loss(tmp_path, monkeypatch):
+    """Publish real model/scheduler state with random weights and no data files."""
+    import torch
+    from sparse_rtdetr.baseline.training_v2b_evidence import write_exclusive_json
+
+    def no_cuda(*args, **kwargs):
+        raise AssertionError("capacity state regression is CPU only")
+
+    monkeypatch.setattr(torch.cuda, "_lazy_init", no_cuda)
+    components = resolution.build_v2b_components(
+        V2BConfig(input_size=896, physical_batch_size=8, accumulation_steps=2,
+                  sampling_backend="deterministic_gather", pretrained_required=False),
+        repo_root=Path(__file__).resolve().parents[1],
+        runtime=resolution.prepare_runtime(device="cpu", seed=0),
+    )
+    before_rng = torch.random.default_generator.get_state().clone()
+    initial = resolution._capacity_state(components)
+    reference = write_exclusive_json(tmp_path / "capacity-state.json", initial)
+    published = json.loads(Path(reference["path"]).read_text())
+    assert published == initial
+    # A native MultiStepLR Counter has integer milestone keys. Its evidence
+    # must retain both the mapping type and key types, not stringify/drop them.
+    scheduler_fields = {key: value for _, key, value in published["scheduler"]["items"]}
+    milestone = scheduler_fields["milestones"]
+    assert milestone["mapping_type"] == "Counter"
+    assert milestone["items"] == [["int", 1000, 1]]
+    components.scheduler.milestones[1000] += 1
+    changed = resolution._capacity_state(components)
+    assert changed["scheduler"] != published["scheduler"]
+    assert changed["warmup"] == published["warmup"]
+    assert components.engine.optimizer_updates == components.ema.updates == 0
+    assert torch.equal(before_rng, torch.random.default_generator.get_state())
+    assert not torch.cuda.is_initialized()

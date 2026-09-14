@@ -384,7 +384,8 @@ def _capacity_state(components) -> dict:
              "capacity AdamW parameter clocks differ")
     return {
         "engine": engine, "optimizer_parameter_steps": steps, "ema_updates": components.ema.updates,
-        "warmup": components.warmup.state_dict(), "scheduler": components.scheduler.state_dict(),
+        "warmup": c._state_identity(components.warmup.state_dict()),
+        "scheduler": c._state_identity(components.scheduler.state_dict()),
         "rng": c._rng_identity(components.runtime),
         "raw_bn": c._bn_state(components.model), "ema_bn": c._bn_state(components.ema.module),
         "geometry": {
