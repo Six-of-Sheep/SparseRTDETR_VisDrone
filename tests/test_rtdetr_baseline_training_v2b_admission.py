@@ -144,7 +144,7 @@ def test_only_exact_owned_compute_is_allowed_during_interval(observation):
 @pytest.mark.parametrize("readable", [True, False])
 def test_post_exit_context_remains_pending_even_with_same_identity(readable):
     owner = gpu_identity(proc(51234))
-    identity = copy.deepcopy(owner) if readable else {"pid": owner["pid"], "readable": False, "error": "process exited"}
+    identity = copy.deepcopy(owner) if readable else _missing_owner_proc(owner)
     rows = [{"pid": owner["pid"], "type": "C", "identity": identity}]
     retained, pending = ad._post_exit_processes(rows, owner)
     assert retained == [] and pending is True
@@ -184,7 +184,7 @@ def test_health_rechecks_pidfd_when_worker_exits_during_identity_query(observati
         return {**capture(argv, text), "executable": policy["expected_nvidia_smi_executable"]}
     def identity(pid):
         if pid == owner["pid"]:
-            return {"pid": pid, "readable": False, "error": "process exited during query"}
+            return _missing_owner_proc(owner)
         assert pid == policy["xorg"]["pid"]
         return gpu_identity(policy["xorg"])
     def dead(pidfd):
@@ -196,6 +196,7 @@ def test_health_rechecks_pidfd_when_worker_exits_during_identity_query(observati
     monkeypatch.setattr(hw, "parse_gpu_xml", lambda *args, **kwargs: copy.deepcopy(gpu))
     monkeypatch.setattr(hw, "_process_identity", identity)
     monkeypatch.setattr(ad, "_pidfd_dead", dead)
+    monkeypatch.setattr(ad, "_wait_owner_pidfd", lambda fd, timeout: ([], [], []))
     monkeypatch.setattr(ad, "_xorg_identity", lambda p: {"cpu_fixture": True})
     monkeypatch.setattr(ad, "_edac_observation", lambda: copy.deepcopy(edac))
     spec = {"policy": policy, "baseline": native, "owner": owner, "nvidia_smi_path": binary,
@@ -205,8 +206,194 @@ def test_health_rechecks_pidfd_when_worker_exits_during_identity_query(observati
         assert row["owner_pidfd_exited"] is True
         assert row["owner_gpu_release_pending"] is True
     else:
-        with pytest.raises(ad.MonitoredHardwareError, match="worker process/executable identity changed"):
+        with pytest.raises(ad.MonitoredHardwareError, match="owner pidfd event wait"):
             ad._health_sample(spec, "fixture:1", edac, owner_alive=True)
+
+
+
+def _missing_owner_proc(owner, error_type="FileNotFoundError"):
+    return {"pid": owner["pid"], "readable": False,
+            "error": error_type + ": [Errno 2] missing entry: " + repr("/proc/" + str(owner["pid"]) + "/exe")}
+
+
+@pytest.fixture
+def owner_identity_case(observation, monkeypatch):
+    native, policy = observation
+    owner = copy.deepcopy(native["process"])
+    spec = {"policy": policy, "owner": owner, "_owner_pidfd": 424242,
+            "run_id": "cpu-owner-identity", "binding_sha256": "2" * 64}
+    query = capture(["CPU-fixture-no-GPU-query"], "CPU native query fixture")
+    processes = [{"pid": owner["pid"], "type": "C", "identity": copy.deepcopy(owner)}]
+    monkeypatch.setattr(hw, "_process_identity", lambda pid: copy.deepcopy(owner))
+    monkeypatch.setattr(ad, "_pidfd_dead", lambda fd: False)
+    return spec, query, processes
+
+
+@pytest.mark.parametrize("dead", [False, True])
+def test_owner_identity_exact_readable_never_waits(owner_identity_case, monkeypatch, dead):
+    spec, query, processes = owner_identity_case
+    monkeypatch.setattr(ad, "_pidfd_dead", lambda fd: dead)
+    monkeypatch.setattr(ad, "_wait_owner_pidfd", lambda *a: pytest.fail("exact identity attempted wait"))
+    result = ad._observe_owner_identity(spec, query, processes, health_started_ns=123, owner_alive=True)
+    assert result["owner_alive_after"] is (not dead)
+    assert result["wait"] is None and result["health_started_ns"] == 123
+    assert result["observed_owner"] == spec["owner"]
+    assert result["gpu_query"] == query and result["gpu_processes"] == processes
+
+
+@pytest.mark.parametrize("dead", [False, True])
+@pytest.mark.parametrize("change", ["pid", "start", "start_type", "executable", "path"])
+def test_owner_identity_readable_mismatch_never_inherits_exit_exception(owner_identity_case, monkeypatch, dead, change):
+    spec, query, processes = owner_identity_case
+    changed = copy.deepcopy(spec["owner"])
+    if change == "pid": changed["pid"] += 1
+    elif change == "start": changed["start_ticks"] += 1
+    elif change == "start_type": changed["start_ticks"] = float(changed["start_ticks"])
+    elif change == "executable": changed["executable"]["sha256"] = "f" * 64
+    else: changed["executable"]["path"] += "-different"
+    monkeypatch.setattr(hw, "_process_identity", lambda pid: changed)
+    monkeypatch.setattr(ad, "_pidfd_dead", lambda fd: dead)
+    monkeypatch.setattr(ad, "_wait_owner_pidfd", lambda *a: pytest.fail("readable mismatch attempted wait"))
+    with pytest.raises(ad._OwnerIdentityError) as failure:
+        ad._observe_owner_identity(spec, query, processes, health_started_ns=123, owner_alive=True)
+    record = failure.value.owner_identity_observation
+    assert record["decision"] == "REJECTED" and record["observed_owner"] == changed
+    assert record["wait"] is None and record["gpu_query"] == query
+
+
+@pytest.mark.parametrize("dead", [False, True])
+@pytest.mark.parametrize("change", ["none", "missing_fields", "wrong_pid", "readable_int", "extra", "non_json",
+    "unknown_error", "replaced", "integrity", "permission", "different_missing_path"])
+def test_owner_identity_only_strict_disappearing_proc_can_wait(owner_identity_case, monkeypatch, dead, change):
+    spec, query, processes = owner_identity_case
+    observed = _missing_owner_proc(spec["owner"])
+    if change == "none": observed = None
+    elif change == "missing_fields": observed.pop("error")
+    elif change == "wrong_pid": observed["pid"] += 1
+    elif change == "readable_int": observed["readable"] = 0
+    elif change == "extra": observed["unexpected"] = True
+    elif change == "non_json": observed = object()
+    else:
+        observed["error"] = {"unknown_error": "unexpected",
+            "replaced": "HardwareGateError: process was replaced while observed",
+            "integrity": "EvidenceError: executable hash changed", "permission": "PermissionError: access denied",
+            "different_missing_path": "FileNotFoundError: missing '/tmp/python'"}[change]
+    monkeypatch.setattr(hw, "_process_identity", lambda pid: observed)
+    monkeypatch.setattr(ad, "_pidfd_dead", lambda fd: dead)
+    monkeypatch.setattr(ad, "_wait_owner_pidfd", lambda *a: pytest.fail("invalid observation attempted wait"))
+    with pytest.raises(ad._OwnerIdentityError) as failure:
+        ad._observe_owner_identity(spec, query, processes, health_started_ns=123, owner_alive=True)
+    record = failure.value.owner_identity_observation
+    assert record["decision"] == "REJECTED" and record["wait"] is None
+    assert ev.canonical_json_bytes(record)
+
+
+@pytest.mark.parametrize("error_type", ["FileNotFoundError", "ProcessLookupError"])
+def test_owner_identity_wait_is_once_on_original_pidfd_and_has_full_evidence(owner_identity_case, monkeypatch, error_type):
+    spec, query, processes = owner_identity_case
+    observed = _missing_owner_proc(spec["owner"], error_type)
+    monkeypatch.setattr(hw, "_process_identity", lambda pid: observed)
+    answers = iter([False, False, True])
+    monkeypatch.setattr(ad, "_pidfd_dead", lambda fd: next(answers))
+    calls, published = [], []
+    spec["_owner_identity_observation_sink"] = published.append
+    def wait(fd, timeout):
+        calls.append((fd, timeout))
+        assert fd == spec["_owner_pidfd"] and 0 < timeout <= .2
+        return [fd], [], []
+    monkeypatch.setattr(ad, "_wait_owner_pidfd", wait)
+    result = ad._observe_owner_identity(spec, query, processes, health_started_ns=123, owner_alive=True)
+    assert len(calls) == 1 and result["decision"] == "EXIT_CONFIRMED"
+    assert result["owner_alive_after"] is False and result["health_started_ns"] == 123
+    assert result["observed_owner"] == observed and result["wait"]["exit_confirmed"] is True
+    assert result["wait"]["elapsed_ns"] == result["wait"]["finished_ns"] - result["wait"]["started_ns"]
+    assert 0 <= result["wait"]["elapsed_ns"] <= 200_000_000
+    assert [p["decision"] for p in published] == ["OBSERVING", "WAITING_FOR_ORIGINAL_PIDFD", "EXIT_CONFIRMED"]
+    assert published[1]["wait"]["finished_ns"] is None
+    assert result["gpu_query"] == query and result["gpu_processes"] == processes
+
+
+@pytest.mark.parametrize("mode", ["timeout", "oserror", "interrupted", "shape", "wrong_fd",
+                                 "duplicate_fd", "writable", "unconfirmed", "over_budget"])
+def test_owner_identity_wait_fails_closed_without_retry(owner_identity_case, monkeypatch, mode):
+    spec, query, processes = owner_identity_case
+    monkeypatch.setattr(hw, "_process_identity", lambda pid: _missing_owner_proc(spec["owner"]))
+    calls = []
+    def wait(fd, timeout):
+        calls.append((fd, timeout))
+        if mode == "oserror": raise OSError("CPU wait failure")
+        if mode == "interrupted": raise InterruptedError("CPU interrupted wait")
+        if mode == "shape": return [fd]
+        if mode == "wrong_fd": return [fd + 1], [], []
+        if mode == "duplicate_fd": return [fd, fd], [], []
+        if mode == "writable": return [], [fd], []
+        if mode == "timeout": return [], [], []
+        if mode == "over_budget": time.sleep(.21)
+        return [fd], [], []
+    monkeypatch.setattr(ad, "_wait_owner_pidfd", wait)
+    with pytest.raises(ad._OwnerIdentityError) as failure:
+        ad._observe_owner_identity(spec, query, processes, health_started_ns=123, owner_alive=True)
+    record = failure.value.owner_identity_observation
+    assert len(calls) == 1 and calls[0][0] == spec["_owner_pidfd"] and calls[0][1] <= .2
+    assert record["decision"] == "REJECTED" and record["owner_alive_after"] is None
+    assert record["wait"]["exit_confirmed"] is False and record["wait"]["finished_ns"] is not None
+    assert record["health_started_ns"] == 123 and ev.canonical_json_bytes(record)
+
+
+@pytest.mark.parametrize("which", ["identity", "pidfd"])
+def test_owner_identity_reader_exceptions_preserve_raw_context(owner_identity_case, monkeypatch, which):
+    spec, query, processes = owner_identity_case
+    def fail(*args): raise OSError("CPU observer failure")
+    monkeypatch.setattr(hw if which == "identity" else ad,
+                        "_process_identity" if which == "identity" else "_pidfd_dead", fail)
+    with pytest.raises(ad._OwnerIdentityError) as failure:
+        ad._observe_owner_identity(spec, query, processes, health_started_ns=123, owner_alive=True)
+    record = failure.value.owner_identity_observation
+    assert record["gpu_query"] == query and record["gpu_processes"] == processes
+    assert record["decision"] == "REJECTED" and record["completed_ns"] is not None
+
+
+@pytest.mark.parametrize("error", ["HardwareGateError: process was replaced while observed",
+                                  "EvidenceError: changed executable", "PermissionError: denied"])
+def test_post_exit_unreadable_replacement_or_unknown_error_is_never_a_residual(error):
+    owner = gpu_identity(proc(51234))
+    identity = {"pid": owner["pid"], "readable": False, "error": error}
+    with pytest.raises(ad.MonitoredHardwareError, match="disappearing proc"):
+        ad._post_exit_processes([{"pid": owner["pid"], "type": "C", "identity": identity}], owner)
+
+
+@pytest.mark.parametrize("exit_during_wait", [True, False])
+def test_owner_identity_wait_uses_real_owned_cpu_pidfd(owner_identity_case, monkeypatch, exit_during_wait):
+    if sys.platform != "linux": pytest.skip("Linux pidfd is required")
+    import threading
+    spec, query, _ = owner_identity_case
+    ctx = mp.get_context("fork")
+    read_fd, write_fd = os.pipe()
+    worker = ctx.Process(target=_cpu_worker, args=(read_fd,))
+    worker.start()
+    pidfd = ad._open_pidfd(worker.pid)
+    spec = {**spec, "owner": {"pid": worker.pid, "readable": True, "start_ticks": 1}, "_owner_pidfd": pidfd}
+    monkeypatch.setattr(hw, "_process_identity", lambda pid: _missing_owner_proc(spec["owner"]))
+    monkeypatch.setattr(ad, "_pidfd_dead", lambda fd: bool(select.select([fd], [], [], 0)[0]))
+    timer = threading.Timer(.025, lambda: os.write(write_fd, b"x")) if exit_during_wait else None
+    if timer: timer.start()
+    try:
+        if exit_during_wait:
+            result = ad._observe_owner_identity(spec, query, [], health_started_ns=time.monotonic_ns(), owner_alive=True)
+            assert result["decision"] == "EXIT_CONFIRMED" and result["wait"]["readable_fds"] == [pidfd]
+            assert result["wait"]["exit_confirmed"] is True
+            worker.join(1.)
+            assert worker.exitcode == 0
+        else:
+            with pytest.raises(ad._OwnerIdentityError):
+                ad._observe_owner_identity(spec, query, [], health_started_ns=time.monotonic_ns(), owner_alive=True)
+            assert worker.is_alive()
+    finally:
+        if timer: timer.join(1.)
+        os.write(write_fd, b"x")
+        worker.join(1.)
+        if worker.is_alive(): worker.terminate(); worker.join(1.)
+        os.close(pidfd); os.close(read_fd); os.close(write_fd)
 
 
 @pytest.mark.parametrize("memory", [None, float("nan"), 16.01, -1])
@@ -994,7 +1181,10 @@ def _cpu_worker(fd):
     os.read(fd, 1)
 
 
-@pytest.mark.parametrize("stall", ["clock", "health", "sudo_mutation", "footer", "release_gap", "unloaded_formal", None])
+@pytest.mark.parametrize("stall", [
+    "clock", "health", "sudo_mutation", "owner_identity", "owner_late_identity",
+    "owner_wait_health_gap", "no_finish", "footer", "release_gap", "unloaded_formal", None,
+])
 def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_path, monkeypatch, stall):
     if sys.platform != "linux":
         pytest.skip("Linux pidfd is required for this process-level CPU test")
@@ -1004,7 +1194,8 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
     worker = ctx.Process(target=_cpu_worker, args=(worker_read,))
     bystander = ctx.Process(target=_cpu_worker, args=(bystander_read,))
     worker.start(); bystander.start()
-    owner = {"pid": worker.pid, "start_ticks": 1}
+    owner = hw._process_identity(worker.pid)
+    assert owner["readable"] is True
     assert worker.pid != os.getpid() and worker.pid != bystander.pid
     release_observations = []
     def clock(spec):
@@ -1014,28 +1205,57 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
                 "utilization_percent": 0 if stall == "unloaded_formal" else 50,
                 "clock_mhz": 1500, "memory_used_mib": 100, "memory_free_mib": 24000}
     def health(spec, cursor, edac, *, owner_alive):
+        started = time.monotonic_ns()
         if stall == "health": time.sleep(5.)
         if stall == "sudo_mutation":
             raise ad._ExternalSudoJournalError("CPU fixture later sudo clock command", {"native_query": "CPU fixture"})
+        if stall in {"owner_identity", "owner_late_identity"}:
+            if stall == "owner_late_identity": time.sleep(2.15)
+            observation = {
+                "kind": "owner_identity_observation", "decision": "REJECTED",
+                "health_started_ns": started, "owner": owner,
+                "observed_owner": {**owner, "start_ticks": owner["start_ticks"] + 1},
+                "gpu_query": {"native_query": "CPU fixture only"},
+                "gpu_processes": [{"pid": worker.pid, "type": "C", "identity": owner}],
+                "original_pidfd": spec["_owner_pidfd"], "wait": None,
+            }
+            spec["_owner_identity_observation_sink"](copy.deepcopy(observation))
+            raise ad._OwnerIdentityError("CPU fixture readable owner identity changed", observation)
+        owner_observation = None
+        if stall == "owner_wait_health_gap":
+            # Keep the original health start. The main 2 s deadline must stop
+            # the owned child while this health thread waits on its real pidfd.
+            time.sleep(1.88)
+            owner_observation = ad._observe_owner_identity(
+                spec, {"native_query": "CPU fixture only"},
+                [{"pid": worker.pid, "type": "C", "identity": _missing_owner_proc(owner)}],
+                health_started_ns=started, owner_alive=owner_alive)
         pending = False
         if not owner_alive:
             release_observations.append(True)
             pending = stall == "release_gap" and len(release_observations) == 2
-        now = time.monotonic_ns()
-        return {"kind": "health", "started_ns": now, "finished_ns": now,
-                "gpu": {"processes": [{"pid": worker.pid, "type": "C"}] if owner_alive or pending else []},
-                "kernel_health": {"last_cursor": "cpu-fixture", "findings": []},
-                "owner_gpu_release_pending": pending, "owner_pidfd_exited": not owner_alive}
+        row = {"kind": "health", "started_ns": started, "finished_ns": time.monotonic_ns(),
+               "gpu": {"processes": [{"pid": worker.pid, "type": "C"}] if owner_alive or pending else []},
+               "kernel_health": {"last_cursor": "cpu-fixture", "findings": []},
+               "owner_gpu_release_pending": pending, "owner_pidfd_exited": not owner_alive}
+        if owner_observation is not None:
+            row["owner_identity_observation"] = owner_observation
+        return row
     monkeypatch.setattr(ad, "_clock_sample", clock)
     monkeypatch.setattr(ad, "_health_sample", health)
-    if stall == "sudo_mutation":
+    if stall == "owner_wait_health_gap":
+        native_identity = hw._process_identity
+        monkeypatch.setattr(hw, "_process_identity",
+            lambda pid: _missing_owner_proc(owner) if pid == owner["pid"] else native_identity(pid))
+    if stall in {"sudo_mutation", "owner_identity", "owner_late_identity", "owner_wait_health_gap"}:
         stopped = {"value": False}
         original_stop, original_write = ad._stop_owner, ad.ev.write_exclusive_json
         def stop_owned(fd):
             original_stop(fd)
             stopped["value"] = True
         def persist(path, value):
-            if Path(path).name == "external-clock-journal-rejection.json":
+            if Path(path).name in {"external-clock-journal-rejection.json",
+                                    "owner-identity-observation.json", "owner-identity-rejection.json"}:
                 assert stopped["value"], "runtime rejection I/O preceded owned-worker stop"
             return original_write(path, value)
         monkeypatch.setattr(ad, "_stop_owner", stop_owned)
@@ -1047,12 +1267,14 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
                 super().__exit__(*args)
                 raise OSError("CPU fixture footer/fsync failure")
         monkeypatch.setattr(ad.gzip, "GzipFile", BadFooter)
-    policy = {"clock_period_seconds": .2, "health_period_seconds": 1., "clock_max_gap_seconds": 1.,
+    policy = {"clock_period_seconds": .04 if stall == "owner_wait_health_gap" else .2,
+              "health_period_seconds": 1., "clock_max_gap_seconds": 1.,
               "health_max_gap_seconds": 2., "workload_deadline_seconds": 10,
               "owner_exit_timeout_seconds": 5., "post_exit_observation_seconds": 2.,
               "minimum_loaded_clock_samples": 3, "loaded_utilization_min_percent": 10,
               "minimum_preload_clock_samples": 3,
-              "guardian_heartbeat_period_seconds": .1, "guardian_heartbeat_max_gap_seconds": 1.,
+              "guardian_heartbeat_period_seconds": .04 if stall == "owner_wait_health_gap" else .1,
+              "guardian_heartbeat_max_gap_seconds": 1.,
               "policy_sha256": "1" * 64, "gpu_uuid": UUID,
               "authorized_scope": "train_core_30epoch" if stall == "unloaded_formal" else "paired_smoke"}
     marker = tmp_path / "marker.json"
@@ -1067,7 +1289,8 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
     guardian.start()
     right.close(); os.close(pidfd)
     try:
-        if stall not in {"clock", "health", "sudo_mutation"}:
+        if stall not in {"clock", "health", "sudo_mutation", "owner_identity",
+                          "owner_late_identity", "owner_wait_health_gap"}:
             assert select.select([left], [], [], 3.)[0]
             rows, rest = ad._receive(left, b"")
             assert rows[0]["op"] == "ready"
@@ -1076,11 +1299,12 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
             assert heartbeats[-1]["phase"] == "running"
             assert heartbeats[-1]["guardian_identity"]["pid"] == guardian.pid
             time.sleep(.8)
-            ad._send(left, {"op": "finish", "nonce": "private-fixture"})
-            assert select.select([left], [], [], 2.)[0]
-            rows, rest = ad._receive(left, rest)
-            assert rows[0]["op"] == "finish"
-            assert not (tmp_path / "monitor-final.json").exists()
+            if stall != "no_finish":
+                ad._send(left, {"op": "finish", "nonce": "private-fixture"})
+                assert select.select([left], [], [], 2.)[0]
+                rows, rest = ad._receive(left, rest)
+                assert rows[0]["op"] == "finish"
+                assert not (tmp_path / "monitor-final.json").exists()
             os.write(worker_write, b"x")
         guardian.join(7.)
         assert not guardian.is_alive()
@@ -1088,17 +1312,48 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
         assert not worker.is_alive()
         assert bystander.is_alive()
         result = json.loads((tmp_path / "monitor-final.json").read_bytes())
-        assert result["status"] == ("FAIL" if stall in {"clock", "health", "sudo_mutation", "footer", "unloaded_formal"} else "PASS")
+        assert result["status"] == ("PASS" if stall in {None, "release_gap"} else "FAIL")
         heartbeat_rows = [json.loads(line) for line in (tmp_path / "guardian-heartbeat.jsonl").read_bytes().splitlines()]
         for row in heartbeat_rows:
             assert row["monotonic_ns"] >= max(row["last_clock_started_ns"], row["last_health_started_ns"])
+        assert result["sampler_shutdown"]["maximum_seconds"] == 1.
         if stall in {"clock", "health"}:
             assert stall + " observation gap exceeded" in result["failure"]
             assert worker.exitcode < 0
-        elif stall == "sudo_mutation":
+            assert result["sampler_shutdown"]["unfinished_threads"] == ["native-" + stall + "-sampler"]
+        else:
+            assert result["sampler_shutdown"]["unfinished_threads"] == []
+        if stall == "sudo_mutation":
             assert "later sudo clock command" in result["failure"]
             assert worker.exitcode < 0
             assert json.loads((tmp_path / "external-clock-journal-rejection.json").read_bytes()) == {"native_query": "CPU fixture"}
+        elif stall in {"owner_identity", "owner_late_identity"}:
+            expected = "health observation gap exceeded" if stall == "owner_late_identity" else "readable owner identity changed"
+            assert expected in result["failure"]
+            assert worker.exitcode < 0
+            rejection = json.loads((tmp_path / "owner-identity-rejection.json").read_bytes())
+            assert rejection["gpu_query"] == {"native_query": "CPU fixture only"}
+            assert rejection["observed_owner"]["start_ticks"] != owner["start_ticks"]
+            assert json.loads((tmp_path / "owner-identity-observation.json").read_bytes()) == rejection
+            assert any("readable owner identity changed" in error for error in result["sampler_shutdown"]["sample_errors"])
+        elif stall == "owner_wait_health_gap":
+            assert "health observation gap exceeded" in result["failure"]
+            assert worker.exitcode < 0
+            observation = json.loads((tmp_path / "owner-identity-observation.json").read_bytes())
+            wait = observation["wait"]
+            assert observation["decision"] == "EXIT_CONFIRMED" and wait["exit_confirmed"] is True
+            assert 0 < wait["elapsed_ns"] <= 200_000_000
+            records = [json.loads(line)["record"] for line in gzip.decompress(Path(result["samples"]["path"]).read_bytes()).splitlines()]
+            assert not [r for r in records if r["kind"] == "health"], "late health publication crossed admission closure"
+            assert any(wait["started_ns"] <= r["started_ns"] <= wait["finished_ns"] for r in records)
+            assert any(wait["started_ns"] <= r["monotonic_ns"] <= wait["finished_ns"] for r in heartbeat_rows)
+            assert len({r["last_health_started_ns"] for r in heartbeat_rows}) == 1
+            assert all(not r["health_observed"] for r in heartbeat_rows)
+            assert not (tmp_path / "owner-identity-rejection.json").exists()
+        elif stall == "no_finish":
+            assert "worker exited without finish declaration" in result["failure"]
+            assert worker.exitcode == 0
+            assert result["post_exit_health_observations"] == 0
         elif stall == "footer":
             assert "writer failed at close" in result["failure"]
             assert result["sampled_clock_compliance"] is False
@@ -1108,7 +1363,7 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
             assert result["loaded_clock_samples"] == 0
             assert result["sampled_clock_compliance"] is False
             assert worker.exitcode == 0
-        else:
+        elif stall in {None, "release_gap"}:
             assert result["worker_exited"] is True
             assert result["post_exit_health_observations"] >= 2
             assert result["locked_upper_readback_verified"] is False
@@ -1128,6 +1383,8 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
                 previous = record["sha256"]
             assert result["sample_hash_chain"] == {"records": len(records), "last_sha256": previous}
             assert ev.file_reference(tmp_path / "guardian-heartbeat.jsonl") == result["guardian_heartbeat"]
+        for name, ref in result["owner_identity_evidence"].items():
+            assert ev.file_reference(tmp_path / name) == ref
     finally:
         for fd in (worker_write, bystander_write):
             try: os.write(fd, b"x")

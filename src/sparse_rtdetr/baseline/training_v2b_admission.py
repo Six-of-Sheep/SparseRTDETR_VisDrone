@@ -72,6 +72,12 @@ class _ExternalSudoJournalError(MonitoredHardwareError):
         self.external_sudo_rejection = evidence
 
 
+class _OwnerIdentityError(MonitoredHardwareError):
+    def __init__(self, message: str, observation: Mapping[str, Any]) -> None:
+        super().__init__(message)
+        self.owner_identity_observation = _json_copy(observation)
+
+
 def _utc() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -731,6 +737,144 @@ def _clock_sample(spec: Mapping[str, Any]) -> dict[str, Any]:
             "memory_used_mib": used, "memory_free_mib": free, "command": capture}
 
 
+
+_OWNER_EXIT_IDENTITY_WAIT_SECONDS = .2
+_SAMPLER_SHUTDOWN_SECONDS = 1.
+
+
+def _disappearing_owner_identity(value: Any, owner: Mapping[str, Any]) -> bool:
+    # _process_identity also encodes proven replacement/integrity failures as
+    # unreadable. Only a missing process/proc entry may await the original pidfd.
+    return (type(value) is dict and set(value) == {"pid", "readable", "error"}
+            and type(value["pid"]) is int and value["pid"] == owner["pid"]
+            and value["readable"] is False and type(value["error"]) is str
+            and value["error"].startswith(("FileNotFoundError: ", "ProcessLookupError: "))
+            and any(repr("/proc/" + str(owner["pid"]) + "/" + leaf) in value["error"]
+                    for leaf in ("stat", "exe")))
+
+
+def _wait_owner_pidfd(pidfd: int, timeout_seconds: float) -> tuple:
+    """One event wait on the already bound fd; never reopen or retry by PID."""
+    return select.select([pidfd], [], [], timeout_seconds)
+
+
+def _observe_owner_identity(spec: Mapping[str, Any], query: Mapping[str, Any],
+                            processes: list[dict[str, Any]], *, health_started_ns: int,
+                            owner_alive: bool) -> dict[str, Any]:
+    """Resolve only disappearing /proc identity, inside the health sampler budget."""
+    observation = {
+        "schema_version": 1, "kind": "owner_identity_observation",
+        "run_id": spec.get("run_id"), "run_binding_sha256": spec.get("binding_sha256"),
+        "gpu_uuid": spec["policy"]["gpu_uuid"], "owner": _json_copy(spec["owner"]),
+        "health_started_ns": health_started_ns, "owner_alive_input": owner_alive,
+        "original_pidfd": spec["_owner_pidfd"], "gpu_query": _json_copy(query),
+        "gpu_processes": _json_copy(processes), "observed_owner": None,
+        "identity_read_started_ns": None, "identity_read_finished_ns": None,
+        "pidfd_checks": [], "wait": None, "decision": "OBSERVING",
+        "owner_alive_after": None, "completed_ns": None,
+    }
+
+    def publish() -> None:
+        sink = spec.get("_owner_identity_observation_sink")
+        if sink is not None:
+            sink(_json_copy(observation))  # No lock is retained by the caller.
+
+    def reject(message: str) -> None:
+        observation.update(decision="REJECTED", failure=message, completed_ns=time.monotonic_ns())
+        publish()
+        raise _OwnerIdentityError(message, observation)
+
+    def pidfd_check(stage: str) -> bool:
+        row = {"stage": stage, "started_ns": time.monotonic_ns(),
+               "finished_ns": None, "exited": None, "error": None}
+        observation["pidfd_checks"].append(row)
+        try:
+            result = _pidfd_dead(spec["_owner_pidfd"])
+        except BaseException as exc:
+            row.update(finished_ns=time.monotonic_ns(), error=type(exc).__name__ + ": " + str(exc))
+            reject("owner pidfd observation failed")
+        row.update(finished_ns=time.monotonic_ns(), exited=result if type(result) is bool else None)
+        if type(result) is not bool:
+            reject("owner pidfd observation is malformed")
+        return result
+
+    publish()
+    before = pidfd_check("before_identity_read")
+    if type(owner_alive) is not bool:
+        reject("owner liveness input is malformed")
+    if not owner_alive:
+        if not before:
+            reject("original owner pidfd exit evidence regressed")
+        observation.update(decision="EXIT_CONFIRMED", owner_alive_after=False,
+                           completed_ns=time.monotonic_ns())
+        publish()
+        return observation
+
+    observation["identity_read_started_ns"] = time.monotonic_ns()
+    try:
+        observed = hw._process_identity(spec["owner"]["pid"])
+    except BaseException as exc:
+        observation["identity_read_finished_ns"] = time.monotonic_ns()
+        observation["identity_read_error"] = type(exc).__name__ + ": " + str(exc)
+        reject("worker identity reader raised an exception")
+    observation["identity_read_finished_ns"] = time.monotonic_ns()
+    try:
+        observation["observed_owner"] = _json_copy(observed)
+    except (ev.EvidenceError, TypeError, ValueError):
+        observation["observed_owner"] = {"non_json_python_type": type(observed).__module__ + "." + type(observed).__qualname__}
+        reject("worker identity observation is not strict JSON")
+    if (type(observed) is not dict or type(observed.get("readable")) is not bool
+            or type(observed.get("pid")) is not int or observed["pid"] != spec["owner"]["pid"]):
+        reject("worker identity observation is malformed")
+    if observed["readable"]:
+        # This rejection must precede every exit exemption, even an already-dead pidfd.
+        if ev.canonical_json_bytes(observed) != ev.canonical_json_bytes(spec["owner"]):
+            reject("worker process/executable identity changed")
+    elif not _disappearing_owner_identity(observed, spec["owner"]):
+        reject("unreadable worker identity is not an approved disappearing proc entry")
+    after = pidfd_check("after_identity_read")
+    if before and not after:
+        reject("original owner pidfd exit evidence regressed")
+    if not observed["readable"] and not after:
+        began = time.monotonic_ns()
+        wait = {"started_ns": began, "deadline_ns": began + int(_OWNER_EXIT_IDENTITY_WAIT_SECONDS * 1e9),
+                "maximum_seconds": _OWNER_EXIT_IDENTITY_WAIT_SECONDS, "requested_timeout_seconds": None,
+                "call_started_ns": None, "finished_ns": None, "elapsed_ns": None,
+                "readable_fds": None, "writable_fds": None, "exceptional_fds": None,
+                "error": None, "exit_confirmed": False}
+        observation.update(decision="WAITING_FOR_ORIGINAL_PIDFD", wait=wait)
+        publish()
+        remaining = (wait["deadline_ns"] - time.monotonic_ns()) / 1e9
+        if not 0 < remaining <= _OWNER_EXIT_IDENTITY_WAIT_SECONDS:
+            reject("owner pidfd wait budget expired before the event wait")
+        wait.update(requested_timeout_seconds=remaining, call_started_ns=time.monotonic_ns())
+        try:
+            ready = _wait_owner_pidfd(spec["_owner_pidfd"], remaining)
+        except BaseException as exc:
+            wait.update(finished_ns=time.monotonic_ns(), error=type(exc).__name__ + ": " + str(exc))
+            wait["elapsed_ns"] = wait["finished_ns"] - began
+            reject("owner pidfd event wait failed")
+        wait.update(finished_ns=time.monotonic_ns())
+        wait["elapsed_ns"] = wait["finished_ns"] - began
+        if (type(ready) is not tuple or len(ready) != 3
+                or any(type(items) is not list for items in ready)
+                or any(type(fd) is not int for items in ready for fd in items)):
+            reject("owner pidfd event wait returned a malformed result")
+        wait.update(readable_fds=ready[0], writable_fds=ready[1], exceptional_fds=ready[2])
+        if wait["finished_ns"] > wait["deadline_ns"]:
+            reject("owner pidfd event wait exceeded its 0.2 second deadline")
+        if ready != ([spec["_owner_pidfd"]], [], []):
+            reject("owner pidfd event wait timed out or returned an unbound descriptor")
+        after = pidfd_check("after_event_wait")
+        if not after:
+            reject("owner pidfd readiness did not confirm original process exit")
+        wait["exit_confirmed"] = True
+    observation.update(decision="EXIT_CONFIRMED" if after else "LIVE_OWNER_EXACT",
+                       owner_alive_after=not after, completed_ns=time.monotonic_ns())
+    publish()
+    return observation
+
+
 def _post_exit_processes(processes: list[dict[str, Any]], owner: Mapping[str, Any]) -> tuple[list[dict[str, Any]], bool]:
     """Retain all strangers; only the original exiting compute PID may linger."""
     retained, pending = [], False
@@ -739,8 +883,11 @@ def _post_exit_processes(processes: list[dict[str, Any]], owner: Mapping[str, An
             identity = row.get("identity")
             if type(identity) is not dict or type(identity.get("readable")) is not bool:
                 raise MonitoredHardwareError("exiting GPU process identity is malformed")
-            if identity["readable"] and identity != owner:
-                raise MonitoredHardwareError("exited worker PID was reused or its executable identity changed")
+            if identity["readable"]:
+                if ev.canonical_json_bytes(identity) != ev.canonical_json_bytes(owner):
+                    raise MonitoredHardwareError("exited worker PID was reused or its executable identity changed")
+            elif not _disappearing_owner_identity(identity, owner):
+                raise MonitoredHardwareError("exiting GPU identity is not an approved disappearing proc entry")
             pending = True
         else:
             retained.append(row)
@@ -770,13 +917,9 @@ def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any]
     for row in payload["gpu"]["processes"]:
         row["identity"] = hw._process_identity(row["pid"])
     payload["process"] = spec["owner"]
-    if owner_alive:
-        observed_owner = hw._process_identity(spec["owner"]["pid"])
-        # Query start is only a snapshot: normal worker exit may make /proc
-        # unreadable during collection. Only the original pidfd proves exit.
-        owner_alive = not _pidfd_dead(spec["_owner_pidfd"])
-        if owner_alive and observed_owner != spec["owner"]:
-            raise MonitoredHardwareError("worker process/executable identity changed")
+    owner_observation = _observe_owner_identity(
+        spec, query, payload["gpu"]["processes"], health_started_ns=started, owner_alive=owner_alive)
+    owner_alive = owner_observation["owner_alive_after"]
     payload["phase"] = "interval"
     payload["native_files"]["kernel_driver_version"] = hw._native_file(Path("/sys/module/nvidia/version"))
     graphics_identity = _xorg_identity(policy)
@@ -805,7 +948,7 @@ def _health_sample(spec: Mapping[str, Any], cursor: str, edac: Mapping[str, Any]
             "rapl": payload["rapl"], "cpu_temperatures": payload["cpu_temperatures"],
             "graphics_identity": graphics_identity, "edac": current_edac,
             "gpu_query": query, "journal_query": journal, "owner_gpu_release_pending": pending,
-            "owner_pidfd_exited": not owner_alive}
+            "owner_pidfd_exited": not owner_alive, "owner_identity_observation": owner_observation}
     if external_sudo is not None:
         result["external_sudo_journal"] = external_sudo
     return result
@@ -922,8 +1065,15 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
     heartbeat_fd = os.open(heartbeat_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND
                            | getattr(os, "O_NOFOLLOW", 0), 0o600)
     state: dict[str, Any] = {"clock": None, "health": None, "clock_count": 0, "error": None, "loaded": 0,
-                             "owner_alive": True, "own_compute_present": False}
+                             "owner_alive": True, "own_compute_present": False, "sample_errors": []}
     lock, stop = threading.Lock(), threading.Event()
+
+    def observe_owner(value: dict[str, Any]) -> None:
+        # Detached memory only; reads, waits and I/O remain outside this lock.
+        with lock:
+            state["owner_identity_observation"] = value
+
+    spec = {**spec, "_owner_identity_observation_sink": observe_owner}
     writes: queue.Queue[Any] = queue.Queue(maxsize=256)
     log_path = root / "monitor-samples.jsonl.gz"
     started = time.monotonic_ns()
@@ -972,15 +1122,15 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
                     if policy.get("setter_mode") == _EXTERNAL_ADMIN_MODE:
                         kwargs["external_sudo_anchor"] = sudo_anchor
                     row = _health_sample(spec, cursor, edac, **kwargs)
-                if stop.is_set():
-                    return
                 if kind == "health":
                     cursor = row["kernel_health"]["last_cursor"]
                     if policy.get("setter_mode") == _EXTERNAL_ADMIN_MODE:
                         sudo = row["external_sudo_journal"]
                         sudo_anchor = {"cursor": sudo["last_cursor"], "record_sha256": sudo["last_record_sha256"]}
-                writes.put_nowait(row)
                 with lock:
+                    if stop.is_set():
+                        return
+                    writes.put_nowait(row)
                     state[kind] = row
                     if kind == "clock":
                         state["clock_count"] += 1
@@ -993,16 +1143,22 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
                         state["loaded"] += 1
             except BaseException as exc:
                 with lock:
-                    state["error"] = type(exc).__name__ + ": " + str(exc)
+                    message = type(exc).__name__ + ": " + str(exc)
+                    state["error"] = state["error"] or message
+                    state["sample_errors"].append(message)
                     if isinstance(exc, _ExternalSudoJournalError):
-                        state["external_sudo_rejection"] = exc.external_sudo_rejection
+                        state.setdefault("external_sudo_rejection", exc.external_sudo_rejection)
+                    if isinstance(exc, _OwnerIdentityError):
+                        state.setdefault("owner_identity_rejection", exc.owner_identity_observation)
                 return
             stop.wait(max(0., period - (time.monotonic() - began)))
 
     writer_thread = threading.Thread(target=writer, daemon=True)
     writer_thread.start()
-    for kind in ("clock", "health"):
-        threading.Thread(target=sample, args=(kind,), daemon=True).start()
+    sampler_threads = [threading.Thread(target=sample, args=(kind,), daemon=True,
+                                       name="native-" + kind + "-sampler") for kind in ("clock", "health")]
+    for thread in sampler_threads:
+        thread.start()
     buffer = b""
     failure = None
     final_telemetry = None
@@ -1094,14 +1250,29 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
                 time.sleep(.025)
     except BaseException as exc:
         failure = type(exc).__name__ + ": " + str(exc)
-        _stop_owner(pidfd)  # Stop owned computation before attempting any final file I/O.
-        if state.get("external_sudo_rejection") is not None:
-            try:
-                ev.write_exclusive_json(root / "external-clock-journal-rejection.json", state["external_sudo_rejection"])
-            except BaseException as persistence_error:
-                failure += "; rejection evidence persistence failed: " + str(persistence_error)
+        # Close publication before the stop signal can wake a pending pidfd wait.
+        # Error/identity observations still reach state during bounded closure.
+        with lock:
+            stop.set()
+        _stop_owner(pidfd)  # Stop owned computation before any file I/O or thread join.
     finally:
-        stop.set()
+        # Closing admission is atomic with nonblocking sample publication. A
+        # producer can never enqueue behind the writer's terminal sentinel.
+        with lock:
+            stop.set()
+        shutdown_deadline = time.monotonic() + _SAMPLER_SHUTDOWN_SECONDS
+        for thread in sampler_threads:
+            thread.join(max(0., shutdown_deadline - time.monotonic()))
+        alive_samplers = [thread.name for thread in sampler_threads if thread.is_alive()]
+        with lock:
+            late_errors = list(state["sample_errors"])
+            owner_observation = state.get("owner_identity_observation")
+            owner_rejection = state.get("owner_identity_rejection")
+            sudo_rejection = state.get("external_sudo_rejection")
+        if alive_samplers or late_errors:
+            failure = failure or ("sampler did not stop before evidence closure: " + ", ".join(alive_samplers)
+                                  if alive_samplers else "sampler failed during closure: " + late_errors[0])
+            _stop_owner(pidfd)
         try:
             writes.put_nowait(None)
         except queue.Full:
@@ -1110,6 +1281,17 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
             failure = failure or "monitor evidence writer did not close"
         if writer_error:
             failure = failure or "monitor evidence writer failed at close: " + "; ".join(writer_error)
+        observation_refs = {}
+        for name, value in (("owner-identity-observation.json", owner_observation),
+                            ("owner-identity-rejection.json", owner_rejection),
+                            ("external-clock-journal-rejection.json", sudo_rejection)):
+            if value is None:
+                continue
+            try:
+                observation_refs[name] = ev.write_exclusive_json(root / name, value)
+            except BaseException as exc:
+                failure = (failure + "; " if failure else "") + "rejection/observation evidence persistence failed: " + type(exc).__name__ + ": " + str(exc)
+                _stop_owner(pidfd)
         result = {"schema_version": 1, "status": "FAIL" if failure else "PASS",
                   "run_id": spec["run_id"], "run_binding_sha256": spec["binding_sha256"],
                   "policy_sha256": policy["policy_sha256"], "authorized_scope": policy["authorized_scope"],
@@ -1122,7 +1304,10 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
                   "locked_upper_readback_verified": False, "settings_after_exit": "keep_1500_1500",
                   "loaded_clock_samples": state["loaded"], "final_telemetry": final_telemetry,
                   "setter_receipt": spec["setter_reference"], "startup_evidence": spec["startup_reference"],
-                  "strict_native_gate": "BLOCKED", "no_retry_or_fallback": True}
+                  "strict_native_gate": "BLOCKED", "no_retry_or_fallback": True,
+                  "owner_identity_evidence": observation_refs,
+                  "sampler_shutdown": {"maximum_seconds": _SAMPLER_SHUTDOWN_SECONDS,
+                                       "unfinished_threads": alive_samplers, "sample_errors": late_errors}}
         if writer_finished.is_set() and not writer_error:
             result["samples"] = ev.file_reference(log_path)
             result["sample_hash_chain"] = dict(chain)
