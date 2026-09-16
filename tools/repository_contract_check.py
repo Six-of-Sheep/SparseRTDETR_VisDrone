@@ -218,6 +218,20 @@ V2B_PAIRED_SEED_FILES = {
     'tools/summarize_training_v2b_replication.py',
 }
 
+V2B_SEED2_COMPLETION_FILES = {
+    'src/sparse_rtdetr/baseline/training_v2b_seed2_completion.py',
+    'src/sparse_rtdetr/baseline/training_v2b_seed2_completion_campaign.py',
+    'src/sparse_rtdetr/baseline/training_v2b_seed2_completion_summary.py',
+    'src/sparse_rtdetr/baseline/training_v2b_seed2_completion_worker.py',
+    'src/sparse_rtdetr/baseline/training_v2b_seed2_process_logs.py',
+    'tests/test_training_v2b_seed2_completion.py',
+    'tests/test_training_v2b_seed2_completion_summary.py',
+    'tests/test_training_v2b_seed2_process_logs.py',
+    'tools/run_training_v2b_seed2_completion_campaign.py',
+    'tools/run_training_v2b_seed2_completion_worker.py',
+    'tools/summarize_training_v2b_seed2_completion.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -785,6 +799,16 @@ BASELINE_MODEL_IMPORT_FILES |= {
     'tests/test_training_v2b_replication_gate.py',
     'tests/test_training_v2b_replication_worker.py',
     'tests/test_training_v2b_replication_summary.py',
+}
+
+# The completion summary performs a bounded CPU checkpoint read. Its tests and
+# CLI import that same explicitly reviewed bridge; no other new file receives
+# a model-import exemption.
+BASELINE_MODEL_IMPORT_FILES |= {
+    'src/sparse_rtdetr/baseline/training_v2b_seed2_completion_summary.py',
+    'tests/test_training_v2b_seed2_completion.py',
+    'tests/test_training_v2b_seed2_completion_summary.py',
+    'tools/summarize_training_v2b_seed2_completion.py',
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2416,6 +2440,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_RESOLUTION_EVIDENCE_FILES
     if files & V2B_PAIRED_SEED_FILES:
         allowed_files |= V2B_PAIRED_SEED_FILES
+    if files & V2B_SEED2_COMPLETION_FILES:
+        allowed_files |= V2B_SEED2_COMPLETION_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
