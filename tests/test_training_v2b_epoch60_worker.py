@@ -23,6 +23,14 @@ def load_worker():
     return module
 
 
+def load_campaign():
+    spec = importlib.util.spec_from_file_location("epoch60_campaign_test", CAMPAIGN)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_bootstrap_has_no_project_or_model_import_before_authenticated_source_selection():
     tree = ast.parse(WORKER.read_text(encoding="utf-8"))
     top_imports = []
@@ -100,3 +108,26 @@ def test_campaign_declares_the_exact_twelve_stage_plan_and_no_retry():
     assert len(calls) == 1
     assert not any(keyword.arg == "shell" and isinstance(keyword.value, ast.Constant)
                    and keyword.value.value is True for keyword in calls[0].keywords)
+
+
+def test_campaign_creates_execution_parent_before_any_worker_invocation(tmp_path, monkeypatch):
+    campaign = load_campaign()
+    output = tmp_path / "new-campaign"
+    contracts_dir = campaign._create_campaign_directories(output)
+
+    assert contracts_dir == output / "contracts"
+    assert contracts_dir.is_dir()
+    assert (output / "execution").is_dir()
+    assert output.stat().st_mode & 0o777 == 0o700
+    assert contracts_dir.stat().st_mode & 0o777 == 0o700
+    assert (output / "execution").stat().st_mode & 0o777 == 0o700
+
+    observed = []
+
+    def fake_invoke(*args, **kwargs):
+        observed.append((output / "execution").is_dir())
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(campaign, "_invoke", fake_invoke)
+    campaign._invoke(None, None, cwd=tmp_path)
+    assert observed == [True]

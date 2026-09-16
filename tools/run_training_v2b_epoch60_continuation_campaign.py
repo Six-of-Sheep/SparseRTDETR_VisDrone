@@ -69,6 +69,15 @@ def _write_exclusive(path, value):
             "size_bytes": len(raw), "sha256_scope": "complete_file_bytes"}
 
 
+def _create_campaign_directories(output):
+    output.mkdir(mode=0o700)
+    contracts_dir = output / "contracts"
+    contracts_dir.mkdir(mode=0o700)
+    execution_dir = output / "execution"
+    execution_dir.mkdir(mode=0o700)
+    return contracts_dir
+
+
 def _invoke(worker, contract_reference, *, cwd):
     environment = os.environ.copy()
     environment.update(PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1")
@@ -115,9 +124,7 @@ def main(argv=None):
         freeze = continuation.make_epoch60_continuation_freeze(
             t8a_report_reference=t8a_ref, repo_root=repo_root,
             campaign_id=args.campaign_id, output_root=output)
-        output.mkdir(mode=0o700)
-        contracts_dir = output / "contracts"
-        contracts_dir.mkdir(mode=0o700)
+        contracts_dir = _create_campaign_directories(output)
         freeze_reference = _write_exclusive(contracts_dir / "continuation-freeze.json", freeze)
         report["freeze_reference"] = freeze_reference
         report["policy_references"] = policy_refs
