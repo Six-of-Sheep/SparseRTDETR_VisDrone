@@ -78,9 +78,9 @@ def _create_campaign_directories(output):
     return contracts_dir
 
 
-def _invoke(worker, contract_reference, *, cwd):
+def _invoke(worker, contract_reference, *, cwd, startup_environment):
     environment = os.environ.copy()
-    environment.update(PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1")
+    environment.update(startup_environment)
     command = [sys.executable, "-B", str(worker), "--contract", contract_reference["path"],
                "--contract-sha256", contract_reference["sha256"]]
     completed = subprocess.run(command, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
@@ -137,7 +137,10 @@ def main(argv=None):
                 policy_bundle=policies[int(cell_id[4:])], smoke_reference=smoke,
                 replay_reference=replay, matched_reference=matched)
             reference = _write_exclusive(contracts_dir / f"{cell_id}-{stage}.json", contract)
-            invocation = _invoke(worker, reference, cwd=repo_root)
+            invocation = _invoke(
+                worker, reference, cwd=repo_root,
+                startup_environment=contract["startup_environment"],
+            )
             report["gpu_worker_invocations"].append({
                 "cell_id": cell_id, "stage": stage, "contract_reference": reference,
                 "returncode": invocation["returncode"],

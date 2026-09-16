@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import sys
 from typing import Any, Mapping
 
 
@@ -58,10 +59,57 @@ EXECUTION_POLICY = {
 }
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,159}")
+_GPU_UUID = re.compile(
+    r"GPU-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"
+)
+WORKER_ENVIRONMENT_STATIC = {
+    "MKL_THREADING_LAYER": "GNU",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "OMP_NUM_THREADS": "2",
+    "MKL_NUM_THREADS": "2",
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "PYTHONHASHSEED": "0",
+}
+WORKER_CUDA_BACKEND_POLICY = {
+    "cudnn_benchmark": False,
+    "cudnn_deterministic": True,
+    "cudnn_allow_tf32": False,
+    "matmul_allow_tf32": False,
+    "deterministic_algorithms": True,
+    "deterministic_warn_only": False,
+    "cublas_workspace_config": ":4096:8",
+}
 
 
 class Epoch60ContinuationError(RuntimeError):
     """A continuation contract, lineage, identity, or stage is invalid."""
+
+
+def worker_startup_environment(expected_gpu_uuid: Any) -> dict[str, str]:
+    """Return the complete frozen child-process environment overlay.
+
+    This is the single authority used by both the campaign controller and the
+    worker-side gate. It deliberately matches the environment used by the
+    already-certified 30-epoch production campaigns.
+    """
+    _require(type(expected_gpu_uuid) is str
+             and _GPU_UUID.fullmatch(expected_gpu_uuid) is not None,
+             "worker GPU UUID must be complete")
+    return {"CUDA_VISIBLE_DEVICES": expected_gpu_uuid, **WORKER_ENVIRONMENT_STATIC}
+
+
+def validate_worker_process_environment(contract: Mapping[str, Any]) -> dict[str, str]:
+    """Fail before project imports or output creation if startup drifted."""
+    _require(isinstance(contract, Mapping), "worker contract environment is missing")
+    expected = worker_startup_environment(contract.get("expected_gpu_uuid"))
+    _same(contract.get("startup_environment"), expected,
+          "worker declared startup environment")
+    observed = {name: os.environ.get(name) for name in expected}
+    _same(observed, expected, "worker process startup environment")
+    _require(sys.dont_write_bytecode, "worker bytecode generation must be disabled at startup")
+    return observed
 
 
 def _require(value: Any, message: str) -> None:
@@ -274,6 +322,17 @@ def _cell_from_report(cell_id: str, endpoint: Mapping[str, Any], report: Mapping
     _same(source_binding.get("run_id"), source_contract.get("run_id"), cell_id + " run identity")
     _same(source_binding.get("binding_sha256"), endpoint["checkpoint_binding_sha256"],
           cell_id + " checkpoint binding")
+    startup_environment = worker_startup_environment(source_contract["expected_gpu_uuid"])
+    binding_config = source_binding.get("config", {})
+    _same(binding_config.get("cuda_gpu_uuid"), source_contract["expected_gpu_uuid"],
+          cell_id + " source CUDA UUID")
+    _same(binding_config.get("sampling_backend"), "deterministic_gather",
+          cell_id + " source sampling backend")
+    _same(binding_config.get("cuda_backend_policy"), WORKER_CUDA_BACKEND_POLICY,
+          cell_id + " source CUDA backend policy")
+    _same(startup_environment["CUBLAS_WORKSPACE_CONFIG"],
+          binding_config["cuda_backend_policy"]["cublas_workspace_config"],
+          cell_id + " source cuBLAS startup policy")
     historical, historical_ref = _historical_result(source_contract)
     checkpoint_row = historical.get("checkpoints", {}).get("epoch_30")
     _require(type(checkpoint_row) is dict, cell_id + " historical epoch30 checkpoint missing")
@@ -308,6 +367,7 @@ def _cell_from_report(cell_id: str, endpoint: Mapping[str, Any], report: Mapping
         "train_core": copy.deepcopy(source_contract["train_core"]),
         "development_binding": copy.deepcopy(source_contract["development_binding"]),
         "expected_gpu_uuid": source_contract["expected_gpu_uuid"],
+        "startup_environment": startup_environment,
         "num_workers": source_contract["num_workers"],
         "prefetch_factor": source_contract["prefetch_factor"],
         "epoch_order_sha256": _order_schema(
@@ -376,7 +436,7 @@ def validate_epoch60_continuation_freeze(value: Any, *, verify_files: bool = Fal
                 "source_checkpoint_reference", "source_boundary_state_reference",
                 "source_worker_result_reference", "source_binding_sha256", "config", "pretrained",
                 "train_core", "development_binding", "expected_gpu_uuid", "num_workers",
-                "prefetch_factor", "epoch_order_sha256"}
+                "startup_environment", "prefetch_factor", "epoch_order_sha256"}
         _schema(cell, keys, cell_id + " freeze cell")
         seed, size = _cell_dimensions(cell_id)
         _same((cell["cell_id"], cell["seed"], cell["input_size"]),
@@ -403,7 +463,11 @@ def validate_epoch60_continuation_freeze(value: Any, *, verify_files: bool = Fal
                  and cell["config"].get("input_size") == size,
                  cell_id + " configuration drift")
         _require(type(cell["expected_gpu_uuid"]) is str
-                 and cell["expected_gpu_uuid"].startswith("GPU-"), cell_id + " GPU UUID invalid")
+                 and _GPU_UUID.fullmatch(cell["expected_gpu_uuid"]) is not None,
+                 cell_id + " GPU UUID invalid")
+        _same(cell["startup_environment"],
+              worker_startup_environment(cell["expected_gpu_uuid"]),
+              cell_id + " startup environment")
         _require(type(cell["num_workers"]) is int and cell["num_workers"] >= 0,
                  cell_id + " worker count invalid")
         _require(type(cell["prefetch_factor"]) is int and cell["prefetch_factor"] > 0,
@@ -462,6 +526,7 @@ def continuation_worker_contract(freeze: Mapping[str, Any], freeze_reference: Ma
         "development_binding": copy.deepcopy(cell["development_binding"]),
         "expected_gpu_uuid": cell["expected_gpu_uuid"], "num_workers": cell["num_workers"],
         "prefetch_factor": cell["prefetch_factor"],
+        "startup_environment": copy.deepcopy(cell["startup_environment"]),
         "epoch_order_sha256": copy.deepcopy(cell["epoch_order_sha256"]),
         "policy_bundle": copy.deepcopy(policy_bundle),
         "smoke_reference": copy.deepcopy(smoke_reference),
@@ -483,6 +548,7 @@ def validate_continuation_worker_contract(value: Any, freeze: Mapping[str, Any],
             "source_checkpoint_reference", "source_boundary_state_reference",
             "source_binding_sha256", "config", "pretrained", "train_core",
             "development_binding", "expected_gpu_uuid", "num_workers", "prefetch_factor",
+            "startup_environment",
             "epoch_order_sha256", "policy_bundle", "smoke_reference", "replay_reference",
             "matched_reference", "execution_policy", "orchestration_sources"}
     contract = _schema(value, keys, "continuation worker contract")
@@ -507,11 +573,14 @@ def validate_continuation_worker_contract(value: Any, freeze: Mapping[str, Any],
                  "source_checkpoint_reference", "source_boundary_state_reference",
                  "source_binding_sha256", "config", "pretrained", "train_core",
                  "development_binding", "expected_gpu_uuid", "num_workers",
-                 "prefetch_factor", "epoch_order_sha256"):
+                 "startup_environment", "prefetch_factor", "epoch_order_sha256"):
         _same(contract[name], cell[name], "worker lineage " + name)
     _same(contract["execution_policy"], EXECUTION_POLICY, "worker execution policy")
     _same(contract["orchestration_sources"], checked_freeze["orchestration_sources"],
           "worker orchestration inventory")
+    _same(contract["startup_environment"],
+          worker_startup_environment(cell["expected_gpu_uuid"]),
+          "worker startup environment")
     validate_reference(contract["freeze_reference"], "worker freeze reference",
                        verify=verify_files)
     _require(type(contract["policy_bundle"]) is dict and contract["policy_bundle"],
@@ -564,6 +633,15 @@ def validate_continuation_result(value: Any, contract: Mapping[str, Any], *,
         ("freeze_reference", contract["freeze_reference"]),
     ):
         _same(value.get(name), expected, "continuation result " + name)
+    _same(value.get("startup_environment"), contract["startup_environment"],
+          "continuation result startup environment")
+    historical_environment = {
+        name: contract["startup_environment"][name]
+        for name in ("CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "PYTHONNOUSERSITE",
+                     "OMP_NUM_THREADS", "MKL_NUM_THREADS", "CUBLAS_WORKSPACE_CONFIG")
+    }
+    _same(value.get("historical_startup_environment"), historical_environment,
+          "continuation result historical startup environment")
     expected_receipts = (ADDITIONAL_UPDATES if contract["stage"] == "formal60"
                          else 4 if contract["stage"] == "smoke" else 2)
     _same(value.get("receipt_count"), expected_receipts, "continuation receipt count")

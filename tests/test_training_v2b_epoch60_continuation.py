@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -48,6 +49,8 @@ def definition(tmp_path):
             "pretrained": {"authority": True}, "train_core": {"role": "train_core"},
             "development_binding": {"role": "development"},
             "expected_gpu_uuid": "GPU-00000000-0000-0000-0000-000000000000",
+            "startup_environment": gate.worker_startup_environment(
+                "GPU-00000000-0000-0000-0000-000000000000"),
             "num_workers": 2, "prefetch_factor": 2,
             "epoch_order_sha256": copy.deepcopy(orders),
         }
@@ -131,6 +134,63 @@ def test_outer_execution_identity_is_new_but_source_binding_is_unchanged(definit
     assert value["source_binding_sha256"] == definition[0]["cells"]["s1_r640"]["source_binding_sha256"]
 
 
+def test_worker_contract_binds_the_complete_historical_startup_environment(definition):
+    value = contract(definition)
+    assert value["startup_environment"] == {
+        "CUDA_VISIBLE_DEVICES": "GPU-00000000-0000-0000-0000-000000000000",
+        "MKL_THREADING_LAYER": "GNU",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "OMP_NUM_THREADS": "2",
+        "MKL_NUM_THREADS": "2",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "PYTHONHASHSEED": "0",
+    }
+
+
+def test_freeze_rejects_startup_environment_drift(definition):
+    freeze = copy.deepcopy(definition[0])
+    freeze["cells"]["s1_r640"]["startup_environment"]["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    with pytest.raises(gate.Epoch60ContinuationError, match="startup environment drift"):
+        gate.validate_epoch60_continuation_freeze(freeze)
+
+
+@pytest.mark.parametrize("name", [
+    "CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "PYTHONNOUSERSITE",
+    "PYTHONDONTWRITEBYTECODE", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+    "CUBLAS_WORKSPACE_CONFIG", "PYTHONHASHSEED",
+])
+def test_worker_contract_rejects_each_startup_environment_mutation(definition, name):
+    value = contract(definition)
+    value["startup_environment"][name] += "-drift"
+    with pytest.raises(gate.Epoch60ContinuationError, match=r"startup.?environment drift"):
+        gate.validate_continuation_worker_contract(value, definition[0])
+
+
+def test_process_environment_gate_closes_all_keys_before_imports(definition, monkeypatch):
+    value = contract(definition)
+    for name, expected in value["startup_environment"].items():
+        monkeypatch.setenv(name, expected)
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    assert gate.validate_worker_process_environment(value) == value["startup_environment"]
+
+    for missing in value["startup_environment"]:
+        with monkeypatch.context() as scoped:
+            scoped.delenv(missing, raising=False)
+            with pytest.raises(gate.Epoch60ContinuationError,
+                               match="process startup environment drift"):
+                gate.validate_worker_process_environment(value)
+
+
+def test_process_environment_gate_requires_interpreter_bytecode_disable(definition, monkeypatch):
+    value = contract(definition)
+    for name, expected in value["startup_environment"].items():
+        monkeypatch.setenv(name, expected)
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)
+    with pytest.raises(gate.Epoch60ContinuationError, match="bytecode generation"):
+        gate.validate_worker_process_environment(value)
+
+
 def test_smoke_replay_and_formal_require_exact_prerequisites(definition):
     freeze_ref, tmp = definition[1], definition[2]
     smoke = result_reference(tmp, freeze_ref, "s1_r640", "smoke")
@@ -196,6 +256,13 @@ def test_result_validator_enforces_exact_stage_clocks(definition, stage, receipt
               "source_run_id": selected["source_run_id"],
               "source_binding_sha256": selected["source_binding_sha256"],
               "freeze_reference": selected["freeze_reference"], "receipt_count": receipt_count,
+              "startup_environment": selected["startup_environment"],
+              "historical_startup_environment": {
+                  name: selected["startup_environment"][name]
+                  for name in ("CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER",
+                               "PYTHONNOUSERSITE", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+                               "CUBLAS_WORKSPACE_CONFIG")
+              },
               "final_clocks": clocks}
     gate.validate_continuation_result(result, selected)
     mutated = copy.deepcopy(result)

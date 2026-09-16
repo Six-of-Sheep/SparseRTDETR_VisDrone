@@ -129,5 +129,36 @@ def test_campaign_creates_execution_parent_before_any_worker_invocation(tmp_path
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(campaign, "_invoke", fake_invoke)
-    campaign._invoke(None, None, cwd=tmp_path)
+    campaign._invoke(None, None, cwd=tmp_path, startup_environment={})
     assert observed == [True]
+
+
+def test_campaign_invocation_applies_the_complete_contract_environment(tmp_path, monkeypatch):
+    campaign = load_campaign()
+    expected = {
+        "CUDA_VISIBLE_DEVICES": "GPU-00000000-0000-0000-0000-000000000000",
+        "MKL_THREADING_LAYER": "GNU", "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1", "OMP_NUM_THREADS": "2",
+        "MKL_NUM_THREADS": "2", "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "PYTHONHASHSEED": "0",
+    }
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed.update(kwargs["env"])
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(campaign.subprocess, "run", fake_run)
+    monkeypatch.setattr(campaign.sys, "executable", "/frozen/python")
+    campaign._invoke(Path("/worker.py"), {"path": "/contract.json", "sha256": "a" * 64},
+                     cwd=tmp_path, startup_environment=expected)
+    assert {name: observed[name] for name in expected} == expected
+
+
+def test_worker_closes_environment_before_source_import_and_output_creation():
+    source = WORKER.read_text(encoding="utf-8")
+    gate_call = source.index("validate_worker_process_environment(checked)")
+    source_import = source.index("modules = _source_imports(checked)")
+    output_create = source.index("output.mkdir(parents=False, exist_ok=False)")
+    assert gate_call < source_import < output_create
+    assert "historical_startup_environment = control._environment(checked)" in source

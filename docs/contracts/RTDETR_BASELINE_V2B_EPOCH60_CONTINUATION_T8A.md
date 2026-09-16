@@ -35,6 +35,15 @@ Each cell executes three one-shot stages:
 
 For each seed, the 640 arm precedes the 896 arm. The 896 worker authenticates and compares the corresponding 640 logical-window receipts. Any worker failure produces `STOP_NO_RETRY`; the campaign stops and preserves the scene.
 
+Every worker contract also binds one complete startup-environment overlay. The
+campaign controller, the continuation validator, and the historical training
+controller must independently agree on the exact GPU UUID, GNU MKL threading,
+two OMP/MKL threads, Python user-site and bytecode isolation, deterministic
+cuBLAS workspace (`:4096:8`), and hash seed zero. This gate executes before
+repository-package imports, output creation, native admission, or CUDA
+initialization. Environment values must never be supplied piecemeal by an
+outer launch wrapper.
+
 ## Prohibited behavior
 
 - changing training-core or vendor scientific bytes;
@@ -54,6 +63,9 @@ Before any GPU authority is requested:
 - the selected historical checkout must be first on `sys.path`;
 - source training-core identities must remain byte-equal to T8A;
 - fake stage-ledger tests must enforce 4/2/9,120 receipts and the exact target clocks;
+- startup-environment mutation tests must reject every missing or changed key,
+  and the worker must cross-check the same values against the historical
+  production environment validator before creating its output directory;
 - repository checker, tracked Python compile, diff check, cache-zero, targeted tests, and the applicable CPU suite must pass.
 
 CPU acceptance is not GPU readiness, owner authorization, or a training result.

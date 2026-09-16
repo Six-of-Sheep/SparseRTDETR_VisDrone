@@ -254,8 +254,18 @@ def run_continuation_worker(contract, contract_reference, contract_module):
         contract, freeze, verify_files=True)
     _same(_read_reference(contract_module, contract_reference, "worker contract"), checked,
           "invoked continuation contract bytes")
+    startup_environment = contract_module.validate_worker_process_environment(checked)
     modules = _source_imports(checked)
     control = modules["control"]
+    historical_startup_environment = control._environment(checked)
+    _same(
+        historical_startup_environment,
+        {name: startup_environment[name] for name in (
+            "CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "PYTHONNOUSERSITE",
+            "OMP_NUM_THREADS", "MKL_NUM_THREADS", "CUBLAS_WORKSPACE_CONFIG",
+        )},
+        "continuation/historical startup environment authority",
+    )
     output = Path(checked["output_dir"])
     output.mkdir(parents=False, exist_ok=False)
     report = {
@@ -269,6 +279,8 @@ def run_continuation_worker(contract, contract_reference, contract_module):
         "freeze_reference": copy.deepcopy(checked["freeze_reference"]),
         "worker_pid": os.getpid(), "receipts": [], "checkpoints": {},
         "evaluations": [], "replay_checks": [], "scientific_certified": False,
+        "startup_environment": startup_environment,
+        "historical_startup_environment": historical_startup_environment,
         "automatic_retry_or_batch_fallback": False,
         "historical_run_relabelled": False, "source_artifacts_modified": False,
     }
