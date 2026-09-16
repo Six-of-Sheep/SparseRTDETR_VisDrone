@@ -232,6 +232,18 @@ V2B_SEED2_COMPLETION_FILES = {
     'tools/summarize_training_v2b_seed2_completion.py',
 }
 
+# Truthful cross-campaign continuation from four certified epoch-30 boundaries.
+# Training-core bytes stay frozen; these files own only lineage, orchestration,
+# fail-closed stage execution, and independently recomputable evidence.
+V2B_EPOCH60_CONTINUATION_FILES = {
+    'docs/contracts/RTDETR_BASELINE_V2B_EPOCH60_CONTINUATION_T8A.md',
+    'src/sparse_rtdetr/baseline/training_v2b_epoch60_continuation.py',
+    'tests/test_training_v2b_epoch60_continuation.py',
+    'tests/test_training_v2b_epoch60_worker.py',
+    'tools/run_training_v2b_epoch60_continuation_campaign.py',
+    'tools/run_training_v2b_epoch60_continuation_worker.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -809,6 +821,13 @@ BASELINE_MODEL_IMPORT_FILES |= {
     'tests/test_training_v2b_seed2_completion.py',
     'tests/test_training_v2b_seed2_completion_summary.py',
     'tools/summarize_training_v2b_seed2_completion.py',
+}
+
+# The epoch60 worker imports torch only after authenticating its contract and
+# selecting the historical source checkout.  The controller and contract
+# validator remain model-import free.
+BASELINE_MODEL_IMPORT_FILES |= {
+    'tools/run_training_v2b_epoch60_continuation_worker.py',
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2442,6 +2461,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_PAIRED_SEED_FILES
     if files & V2B_SEED2_COMPLETION_FILES:
         allowed_files |= V2B_SEED2_COMPLETION_FILES
+    if files & V2B_EPOCH60_CONTINUATION_FILES:
+        allowed_files |= V2B_EPOCH60_CONTINUATION_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
