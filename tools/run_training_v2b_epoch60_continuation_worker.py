@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import inspect
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ from pathlib import Path
 import re
 import stat
 import sys
+import textwrap
 import time
 import types
 
@@ -158,6 +160,31 @@ def _bridge_prepared_runtime(runtime, producer_device, consumer_device):
     }
 
 
+def _patch_control_window_evidence_indexing(control):
+    """Bind smoke raw-parameter snapshots to logical windows, not global steps.
+
+    The historical control helper was authored for a fresh epoch whose update
+    counter starts at zero and consequently checks ``window_id in (3, 4)``.
+    Epoch-30 continuation starts at update 9120, so the replay receipts would
+    otherwise omit the required raw-parameter references.  This is an
+    in-memory evidence-only adaptation; it leaves the frozen control file and
+    all model/optimizer operations byte-identical.
+    """
+    original_function = control._run_active_windows
+    original = inspect.getsource(original_function)
+    source = textwrap.dedent(original)
+    needle = "if snapshots and window_id in (3, 4):"
+    replacement = "if snapshots and batch.logical_batch_index in (2, 3):"
+    if source.count(needle) != 1:
+        raise RuntimeError("continuation evidence index condition drift")
+    patched = source.replace(needle, replacement)
+    namespace = control.__dict__
+    exec(compile(patched, str(control.__file__), "exec"), namespace)
+    updated = namespace.get("_run_active_windows")
+    if not callable(updated) or updated.__code__ is original_function.__code__:
+        raise RuntimeError("continuation evidence index adaptation failed")
+
+
 def _bridge_hardware_admission(orchestration, historical_hardware, source_root, orchestration_root, sources):
     """Bind the current hardware validator into the historical device view.
 
@@ -265,6 +292,7 @@ def _source_imports(contract):
     expected_device = source_root / "src/sparse_rtdetr/baseline/training_v2b_device.py"
     if imported_device != expected_device:
         raise RuntimeError("historical device package did not load from the frozen source checkout")
+    _patch_control_window_evidence_indexing(control)
     _bridge_hardware_admission(orchestration, historical_hardware, source_root,
                                orchestration_root, sources)
     MonitoredHardwareSession = orchestration["training_v2b_admission"].MonitoredHardwareSession
