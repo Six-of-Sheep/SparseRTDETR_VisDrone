@@ -45,6 +45,19 @@ def test_bootstrap_has_no_project_or_model_import_before_authenticated_source_se
     assert any((node.module or "").startswith("sparse_rtdetr") for node in source_imports)
 
 
+def test_worker_separates_current_hardware_admission_from_frozen_training_source():
+    source = WORKER.read_text(encoding="utf-8")
+    identity_gate = source.index("orchestration admission identity mismatch before import")
+    admission_import = source.index("training_v2b_admission as orchestration_admission")
+    cleanup = source.index("del sys.modules[name]")
+    historical_selection = source.index('source_root = Path(contract["source_repo_root"])')
+    historical_model_import = source.index(
+        "from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components")
+    assert identity_gate < admission_import < cleanup < historical_selection < historical_model_import
+    assert "hardware admission imported torch before frozen source selection" in source
+    assert "from sparse_rtdetr.baseline.training_v2b_admission import" not in source
+
+
 def test_contract_is_hashed_before_project_import(tmp_path):
     worker = load_worker()
     contract = tmp_path / "contract.json"

@@ -109,6 +109,28 @@ def _contract_module(contract):
 def _source_imports(contract):
     if any(name == "sparse_rtdetr" or name.startswith("sparse_rtdetr.") for name in sys.modules):
         raise RuntimeError("repository package imported before source-checkout selection")
+    orchestration_root = Path(contract["repo_root"]).resolve()
+    admission_relative = "src/sparse_rtdetr/baseline/training_v2b_admission.py"
+    admission_path = orchestration_root / admission_relative
+    expected_admission = contract.get("orchestration_sources", {}).get(admission_relative)
+    if type(expected_admission) is not dict or _file_reference(admission_path) != expected_admission:
+        raise RuntimeError("orchestration admission identity mismatch before import")
+    orchestration_package_root = orchestration_root / "src"
+    sys.path.insert(0, str(orchestration_package_root))
+    from sparse_rtdetr.baseline import training_v2b_admission as orchestration_admission
+    imported_admission = Path(orchestration_admission.__file__).resolve()
+    if imported_admission != admission_path:
+        raise RuntimeError("hardware admission did not load from the orchestration checkout")
+    if "torch" in sys.modules:
+        raise RuntimeError("hardware admission imported torch before frozen source selection")
+    MonitoredHardwareSession = orchestration_admission.MonitoredHardwareSession
+    for name in tuple(sys.modules):
+        if name == "sparse_rtdetr" or name.startswith("sparse_rtdetr."):
+            del sys.modules[name]
+    sys.path[:] = [entry for entry in sys.path
+                   if Path(entry or ".").resolve() != orchestration_package_root]
+    if any(name == "sparse_rtdetr" or name.startswith("sparse_rtdetr.") for name in sys.modules):
+        raise RuntimeError("orchestration package cleanup failed before historical source selection")
     source_root = Path(contract["source_repo_root"]).resolve()
     package_root = source_root / "src"
     if not package_root.is_dir():
@@ -117,7 +139,6 @@ def _source_imports(contract):
     sys.dont_write_bytecode = True
     from sparse_rtdetr.baseline import training_v2b_control as control
     from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
-    from sparse_rtdetr.baseline.training_v2b_admission import MonitoredHardwareSession
     from sparse_rtdetr.baseline.training_v2b_data import TrainCoreDataConfig, build_train_core_loader
     from sparse_rtdetr.baseline.training_v2b_development import evaluate_development
     from sparse_rtdetr.baseline.training_v2b_evidence import (
