@@ -47,15 +47,18 @@ def test_bootstrap_has_no_project_or_model_import_before_authenticated_source_se
 
 def test_worker_separates_current_hardware_admission_from_frozen_training_source():
     source = WORKER.read_text(encoding="utf-8")
-    identity_gate = source.index("orchestration admission identity mismatch before import")
-    admission_import = source.index("training_v2b_admission as orchestration_admission")
-    cleanup = source.index("del sys.modules[name]")
     historical_selection = source.index('source_root = Path(contract["source_repo_root"])')
     historical_model_import = source.index(
         "from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components")
-    assert identity_gate < admission_import < cleanup < historical_selection < historical_model_import
-    assert "hardware admission imported torch before frozen source selection" in source
+    runtime_identity_gate = source.index("orchestration runtime identity mismatch")
+    semantic_equality_gate = source.index("orchestration and historical device semantics differ")
+    alias_creation = source.index('alias = "_p3_epoch60_orchestration_runtime"')
+    current_admission = source.index('orchestration["training_v2b_admission"].MonitoredHardwareSession')
+    current_device = source.index('orchestration["training_v2b_device"].prepare_runtime')
+    assert (historical_selection < historical_model_import < runtime_identity_gate
+            < semantic_equality_gate < alias_creation < current_admission < current_device)
     assert "from sparse_rtdetr.baseline.training_v2b_admission import" not in source
+    assert "from sparse_rtdetr.baseline.training_v2b_device import" not in source
 
 
 def test_contract_is_hashed_before_project_import(tmp_path):

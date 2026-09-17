@@ -19,6 +19,7 @@ import re
 import stat
 import sys
 import time
+import types
 
 
 _DIGEST = re.compile(r"[0-9a-f]{64}")
@@ -109,28 +110,6 @@ def _contract_module(contract):
 def _source_imports(contract):
     if any(name == "sparse_rtdetr" or name.startswith("sparse_rtdetr.") for name in sys.modules):
         raise RuntimeError("repository package imported before source-checkout selection")
-    orchestration_root = Path(contract["repo_root"]).resolve()
-    admission_relative = "src/sparse_rtdetr/baseline/training_v2b_admission.py"
-    admission_path = orchestration_root / admission_relative
-    expected_admission = contract.get("orchestration_sources", {}).get(admission_relative)
-    if type(expected_admission) is not dict or _file_reference(admission_path) != expected_admission:
-        raise RuntimeError("orchestration admission identity mismatch before import")
-    orchestration_package_root = orchestration_root / "src"
-    sys.path.insert(0, str(orchestration_package_root))
-    from sparse_rtdetr.baseline import training_v2b_admission as orchestration_admission
-    imported_admission = Path(orchestration_admission.__file__).resolve()
-    if imported_admission != admission_path:
-        raise RuntimeError("hardware admission did not load from the orchestration checkout")
-    if "torch" in sys.modules:
-        raise RuntimeError("hardware admission imported torch before frozen source selection")
-    MonitoredHardwareSession = orchestration_admission.MonitoredHardwareSession
-    for name in tuple(sys.modules):
-        if name == "sparse_rtdetr" or name.startswith("sparse_rtdetr."):
-            del sys.modules[name]
-    sys.path[:] = [entry for entry in sys.path
-                   if Path(entry or ".").resolve() != orchestration_package_root]
-    if any(name == "sparse_rtdetr" or name.startswith("sparse_rtdetr.") for name in sys.modules):
-        raise RuntimeError("orchestration package cleanup failed before historical source selection")
     source_root = Path(contract["source_repo_root"]).resolve()
     package_root = source_root / "src"
     if not package_root.is_dir():
@@ -145,10 +124,49 @@ def _source_imports(contract):
         validate_run_binding, write_exclusive_json,
     )
     from sparse_rtdetr.baseline.training_v2b_runtime import V2BTrainingSession
-    from sparse_rtdetr.baseline.training_v2b_device import prepare_runtime
     imported = Path(sys.modules["sparse_rtdetr.baseline.training_v2b"].__file__).resolve()
     if not imported.is_relative_to(source_root) or imported != source_root / "src/sparse_rtdetr/baseline/training_v2b.py":
         raise RuntimeError("training package did not load from the frozen source checkout")
+
+    orchestration_root = Path(contract["repo_root"]).resolve()
+    baseline_root = orchestration_root / "src/sparse_rtdetr/baseline"
+    sources = contract.get("orchestration_sources", {})
+    names = ("training_v2b_evidence", "training_v2b_hardware",
+             "training_v2b_admission", "training_v2b_device")
+    paths = {}
+    for name in names:
+        relative = f"src/sparse_rtdetr/baseline/{name}.py"
+        path = baseline_root / f"{name}.py"
+        expected = sources.get(relative)
+        if type(expected) is not dict or _file_reference(path) != expected:
+            raise RuntimeError("orchestration runtime identity mismatch: " + name)
+        paths[name] = path
+    historical_device = _file_reference(
+        source_root / "src/sparse_rtdetr/baseline/training_v2b_device.py")
+    current_device = sources["src/sparse_rtdetr/baseline/training_v2b_device.py"]
+    if ((historical_device["sha256"], historical_device["size_bytes"])
+            != (current_device["sha256"], current_device["size_bytes"])):
+        raise RuntimeError("orchestration and historical device semantics differ")
+
+    alias = "_p3_epoch60_orchestration_runtime"
+    if alias in sys.modules or any(name.startswith(alias + ".") for name in sys.modules):
+        raise RuntimeError("orchestration runtime alias already exists")
+    package = types.ModuleType(alias)
+    package.__package__ = alias
+    package.__path__ = [str(baseline_root)]
+    sys.modules[alias] = package
+    orchestration = {}
+    for name in names:
+        qualified = alias + "." + name
+        spec = importlib.util.spec_from_file_location(qualified, paths[name])
+        if spec is None or spec.loader is None:
+            raise RuntimeError("cannot load orchestration runtime module: " + name)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[qualified] = module
+        spec.loader.exec_module(module)
+        orchestration[name] = module
+    MonitoredHardwareSession = orchestration["training_v2b_admission"].MonitoredHardwareSession
+    prepare_runtime = orchestration["training_v2b_device"].prepare_runtime
     return {
         "control": control, "V2BConfig": V2BConfig, "build_v2b_components": build_v2b_components,
         "MonitoredHardwareSession": MonitoredHardwareSession,

@@ -35,6 +35,7 @@ ADDITIONAL_UPDATES = TARGET_UPDATES - SOURCE_UPDATES
 ORCHESTRATION_FILES = (
     "docs/contracts/RTDETR_BASELINE_V2B_EPOCH60_CONTINUATION_T8A.md",
     "src/sparse_rtdetr/baseline/training_v2b_admission.py",
+    "src/sparse_rtdetr/baseline/training_v2b_device.py",
     "src/sparse_rtdetr/baseline/training_v2b_campaign.py",
     "src/sparse_rtdetr/baseline/training_v2b_epoch60_continuation.py",
     "src/sparse_rtdetr/baseline/training_v2b_evidence.py",

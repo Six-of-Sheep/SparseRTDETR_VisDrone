@@ -13,6 +13,10 @@ from sparse_rtdetr.baseline import training_v2b_epoch60_continuation as gate
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_orchestration_inventory_binds_runtime_device_capability_owner():
+    assert "src/sparse_rtdetr/baseline/training_v2b_device.py" in gate.ORCHESTRATION_FILES
+
+
 def write_json(path: Path, value: dict) -> dict:
     path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
                     encoding="utf-8")
