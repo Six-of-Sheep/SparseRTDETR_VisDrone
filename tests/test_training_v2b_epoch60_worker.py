@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import types
 
 import pytest
@@ -55,13 +56,51 @@ def test_worker_separates_current_hardware_admission_from_frozen_training_source
     alias_creation = source.index('alias = "_p3_epoch60_orchestration_runtime"')
     current_admission = source.index('orchestration["training_v2b_admission"].MonitoredHardwareSession')
     current_device = source.index('orchestration["training_v2b_device"].prepare_runtime')
-    canonical_device_owner = source.index(
-        'sys.modules["sparse_rtdetr.baseline.training_v2b_device"] = orchestration[')
+    historical_device = source.index(
+        "from sparse_rtdetr.baseline import training_v2b_device as historical_device")
+    runtime_bridge = source.index("runtime, report[\"runtime_bridge\"] = _bridge_prepared_runtime(")
     assert (historical_selection < runtime_identity_gate < semantic_equality_gate
-            < alias_creation < canonical_device_owner < historical_model_import
-            < current_admission < current_device)
+            < alias_creation < historical_device < historical_model_import
+            < current_admission < current_device < runtime_bridge)
+    assert 'sys.modules["sparse_rtdetr.baseline.training_v2b_device"]' not in source
     assert "from sparse_rtdetr.baseline.training_v2b_admission import" not in source
     assert "from sparse_rtdetr.baseline.training_v2b_device import" not in source
+
+
+def _load_device_copy(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_runtime_bridge_reseals_only_byte_identical_device_implementations(tmp_path):
+    worker = load_worker()
+    source = ROOT / "src/sparse_rtdetr/baseline/training_v2b_device.py"
+    producer_path = tmp_path / "producer_device.py"
+    consumer_path = tmp_path / "consumer_device.py"
+    producer_path.write_bytes(source.read_bytes())
+    consumer_path.write_bytes(source.read_bytes())
+    producer = _load_device_copy(producer_path, "epoch60_producer_device_test")
+    consumer = _load_device_copy(consumer_path, "epoch60_consumer_device_test")
+    runtime = producer.prepare_runtime(device="cpu", seed=19)
+
+    bridged, evidence = worker._bridge_prepared_runtime(runtime, producer, consumer)
+
+    assert type(bridged) is consumer.PreparedRuntime
+    assert consumer.validate_prepared_runtime(bridged) == producer.validate_prepared_runtime(runtime)
+    assert evidence["complete_source_bytes_equal"] is True
+    assert evidence["producer_validation_pass"] is True
+    assert evidence["consumer_validation_pass"] is True
+    assert evidence["canonical_package_aliasing"] is False
+    with pytest.raises(producer.RuntimeDeviceError, match="runtime must come from prepare_runtime"):
+        producer.validate_prepared_runtime(bridged)
+
+    consumer_path.write_bytes(consumer_path.read_bytes() + b"\n")
+    with pytest.raises(RuntimeError, match="source semantics differ"):
+        worker._bridge_prepared_runtime(runtime, producer, consumer)
 
 
 def test_contract_is_hashed_before_project_import(tmp_path):

@@ -107,6 +107,57 @@ def _contract_module(contract):
     return module
 
 
+def _bridge_prepared_runtime(runtime, producer_device, consumer_device):
+    """Re-seal one byte-identical device runtime for the historical package.
+
+    The orchestration checkout owns current-boot admission, while the frozen
+    source checkout owns every canonical ``sparse_rtdetr.*`` model object.
+    Executing identical ``training_v2b_device.py`` bytes under two module names
+    creates distinct private seals and Python classes.  This bridge is the only
+    allowed crossing: it independently validates the producer object, proves
+    the complete producer/consumer source bytes are equal, reconstructs the
+    frozen dataclass with the frozen module's private seal, and validates it
+    again.  It never aliases a current module into the historical package.
+    """
+    producer_ref = _file_reference(producer_device.__file__)
+    consumer_ref = _file_reference(consumer_device.__file__)
+    if producer_ref["path"] == consumer_ref["path"]:
+        raise RuntimeError("runtime bridge requires distinct checkout paths")
+    if ((producer_ref["sha256"], producer_ref["size_bytes"])
+            != (consumer_ref["sha256"], consumer_ref["size_bytes"])):
+        raise RuntimeError("runtime bridge device source semantics differ")
+    if type(runtime) is not producer_device.PreparedRuntime:
+        raise RuntimeError("runtime bridge producer type differs")
+    identity = producer_device.validate_prepared_runtime(runtime)
+    if runtime._identity_sha256 != producer_device._digest(identity):
+        raise RuntimeError("runtime bridge producer seal digest differs")
+    bridged = consumer_device.PreparedRuntime(
+        device=runtime.device,
+        seed=runtime.seed,
+        admitted_binding_sha256=runtime.admitted_binding_sha256,
+        _identity=copy.deepcopy(identity),
+        _identity_sha256=consumer_device._digest(identity),
+        _seal=consumer_device._SEAL,
+    )
+    checked = consumer_device.validate_prepared_runtime(bridged)
+    _same(checked, identity, "runtime bridge identity")
+    return bridged, {
+        "kind": "byte_identical_cross_checkout_prepared_runtime_bridge",
+        "producer_source": producer_ref,
+        "consumer_source": consumer_ref,
+        "complete_source_bytes_equal": True,
+        "producer_module": producer_device.__name__,
+        "consumer_module": consumer_device.__name__,
+        "runtime_identity_sha256": consumer_device._digest(checked),
+        "device": str(bridged.device),
+        "seed": bridged.seed,
+        "admitted_binding_sha256": bridged.admitted_binding_sha256,
+        "producer_validation_pass": True,
+        "consumer_validation_pass": True,
+        "canonical_package_aliasing": False,
+    }
+
+
 def _source_imports(contract):
     if any(name == "sparse_rtdetr" or name.startswith("sparse_rtdetr.") for name in sys.modules):
         raise RuntimeError("repository package imported before source-checkout selection")
@@ -153,10 +204,8 @@ def _source_imports(contract):
         sys.modules[qualified] = module
         spec.loader.exec_module(module)
         orchestration[name] = module
-    sys.modules["sparse_rtdetr.baseline.training_v2b_device"] = orchestration[
-        "training_v2b_device"]
-
     from sparse_rtdetr.baseline import training_v2b_control as control
+    from sparse_rtdetr.baseline import training_v2b_device as historical_device
     from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
     from sparse_rtdetr.baseline.training_v2b_data import TrainCoreDataConfig, build_train_core_loader
     from sparse_rtdetr.baseline.training_v2b_development import evaluate_development
@@ -167,6 +216,10 @@ def _source_imports(contract):
     imported = Path(sys.modules["sparse_rtdetr.baseline.training_v2b"].__file__).resolve()
     if not imported.is_relative_to(source_root) or imported != source_root / "src/sparse_rtdetr/baseline/training_v2b.py":
         raise RuntimeError("training package did not load from the frozen source checkout")
+    imported_device = Path(historical_device.__file__).resolve()
+    expected_device = source_root / "src/sparse_rtdetr/baseline/training_v2b_device.py"
+    if imported_device != expected_device:
+        raise RuntimeError("historical device package did not load from the frozen source checkout")
     MonitoredHardwareSession = orchestration["training_v2b_admission"].MonitoredHardwareSession
     prepare_runtime = orchestration["training_v2b_device"].prepare_runtime
     return {
@@ -178,6 +231,8 @@ def _source_imports(contract):
         "validate_run_binding": validate_run_binding,
         "write_exclusive_json": write_exclusive_json,
         "V2BTrainingSession": V2BTrainingSession, "prepare_runtime": prepare_runtime,
+        "producer_device": orchestration["training_v2b_device"],
+        "consumer_device": historical_device,
     }
 
 
@@ -356,9 +411,11 @@ def run_continuation_worker(contract, contract_reference, contract_module):
             "train_core_30epoch" if checked["stage"] == "formal60" else "paired_smoke",
             43200 if checked["stage"] == "formal60" else 600)
         monitor.start()
-        runtime = modules["prepare_runtime"](
+        producer_runtime = modules["prepare_runtime"](
             device="cuda:0", seed=config.seed, binding=binding,
             gpu_probe=monitor.admission(), expected_gpu_uuid=checked["expected_gpu_uuid"])
+        runtime, report["runtime_bridge"] = _bridge_prepared_runtime(
+            producer_runtime, modules["producer_device"], modules["consumer_device"])
         components = modules["build_v2b_components"](config, runtime=runtime, **arguments)
         _same(cpu.initialization, components.initialization, "CPU/CUDA source initialization")
         del cpu

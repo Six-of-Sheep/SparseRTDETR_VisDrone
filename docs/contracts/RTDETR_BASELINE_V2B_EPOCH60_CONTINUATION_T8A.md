@@ -64,6 +64,31 @@ from a worker result whose stage-completion record has passed this post-exit
 closure. On failure, only the controller-owned worker/guardian identities may be
 signalled, no retry is allowed, and the first scene remains immutable.
 
+## Cross-checkout runtime ownership
+
+The canonical `sparse_rtdetr.*` namespace belongs exclusively to the frozen
+source-training checkout.  Current-boot evidence, hardware admission, and the
+watchdog execute under the private `_p3_epoch60_orchestration_runtime`
+namespace.  A current orchestration module must never be inserted into the
+canonical package namespace, even when its complete source bytes equal the
+historical file.
+
+CUDA preparation is performed by the private orchestration copy of
+`training_v2b_device.py`, because its hardware admission must share the live
+current-boot capability owner.  The resulting runtime may cross into the
+historical model only through the reviewed byte-identical runtime bridge.  The
+bridge requires distinct checkout paths, complete SHA-256 and size equality of
+both device sources, validates the producer runtime and seal, reconstructs the
+historical `PreparedRuntime` with an independently recomputed historical seal,
+and validates it again before model construction.  It records both complete
+file references and the runtime identity digest.  Any source, identity, type,
+seal, device, seed, or admitted-binding discrepancy fails before a training
+window.  No other class, token, module, or model object may cross namespaces.
+
+Acceptance must exercise the real dual-checkout import path and construct the
+historical model with a bridged CPU runtime before GPU launch.  Static import
+ordering or mocked capability tests alone are insufficient.
+
 ## Prohibited behavior
 
 - changing training-core or vendor scientific bytes;
