@@ -686,8 +686,44 @@ def require_native_hardware_admission(probe: NativeHardwareProbe, *, binding: Ma
     # admission ABI, not by exact Python class identity, so a valid alias is
     # not mistaken for caller-supplied JSON.  The admission validator still
     # checks the module/source, live watchdog, binding and fresh telemetry.
-    if _monitored_admission_module(probe) is not None:
-        return require_monitored_hardware_admission(
+    admission_module = _monitored_admission_module(probe)
+    if admission_module is None:
+        # A production worker can execute this hardware module from a
+        # historical package while the live watchdog object belongs to the
+        # current orchestration alias.  In that mixed-import case the local
+        # relative resolver quite correctly rejects the object because its
+        # ``__file__`` is a different checkout.  Recover the module from the
+        # probe's exact class, but only when the alias exposes the reviewed
+        # public ABI and its own resolver accepts the probe.  This preserves
+        # the JSON/look-alike rejection and all live-session checks in the
+        # owner module; it only fixes module-identity routing.
+        probe_class = type(probe)
+        for candidate in tuple(sys.modules.values()):
+            if candidate is None or getattr(candidate, "MonitoredHardwareAdmission", None) is not probe_class:
+                continue
+            resolver = getattr(candidate, "_monitored_admission_module", None)
+            validator = getattr(candidate, "require_monitored_hardware_admission", None)
+            if not callable(resolver) or not callable(validator):
+                continue
+            try:
+                candidate_path = Path(getattr(candidate, "__file__", "")).resolve(strict=True)
+            except (OSError, TypeError, ValueError):
+                continue
+            if (candidate_path.name != "training_v2b_admission.py"
+                    or candidate_path.parent.name != "baseline"
+                    or "sparse_rtdetr" not in candidate_path.parts):
+                continue
+            try:
+                if resolver(probe) is candidate:
+                    admission_module = candidate
+                    break
+            except BaseException:
+                continue
+    if admission_module is not None:
+        validator = getattr(admission_module, "require_monitored_hardware_admission", None)
+        if not callable(validator):
+            raise HardwareGateError("reviewed monitored admission validator is unavailable")
+        return validator(
             probe, binding=binding, expected_gpu_uuid=expected_gpu_uuid,
             max_age_seconds=max_age_seconds,
         )
