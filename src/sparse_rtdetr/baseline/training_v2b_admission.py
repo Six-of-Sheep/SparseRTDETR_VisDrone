@@ -1746,21 +1746,93 @@ class MonitoredHardwareSession:
             self.finish()
 
 
+def _monitored_admission_module(probe: Any) -> Any:
+    """Return the reviewed source module for a live admission, including aliases.
+
+    The continuation worker deliberately loads the current orchestration
+    runtime under a private module alias while the historical train session
+    remains under ``sparse_rtdetr``.  ``type(probe) is`` therefore cannot be
+    the capability boundary: the two imports create distinct Python classes
+    from the same reviewed source file.  Accept only the exact public ABI and
+    a real module loaded from the repository's ``training_v2b_admission.py``;
+    arbitrary dictionaries or look-alike objects never reach the validator.
+    """
+    cls = type(probe)
+    if (cls.__name__ != "MonitoredHardwareAdmission"
+            or cls.__qualname__ != "MonitoredHardwareAdmission"
+            or getattr(cls, "__slots__", None) != ("_session",)):
+        return None
+    module = sys.modules.get(getattr(cls, "__module__", ""))
+    path = getattr(module, "__file__", None)
+    if module is None or type(path) not in (str, os.PathLike):
+        return None
+    try:
+        resolved = Path(path).resolve(strict=True)
+    except OSError:
+        return None
+    if (resolved.name != Path(__file__).name
+            or resolved.parent.name != Path(__file__).parent.name
+            or "sparse_rtdetr" not in resolved.parts):
+        return None
+    return module
+
+
 def require_monitored_hardware_admission(probe: MonitoredHardwareAdmission, *, binding: Mapping[str, Any],
                                          expected_gpu_uuid: str, max_age_seconds: float = 30.) -> dict[str, Any]:
-    if type(probe) is not MonitoredHardwareAdmission:
+    module = _monitored_admission_module(probe)
+    if module is None:
         raise MonitoredHardwareError("supplied JSON cannot grant monitored admission")
     if type(max_age_seconds) not in {int, float} or not math.isfinite(max_age_seconds) or not 0 < max_age_seconds <= 60:
         raise MonitoredHardwareError("invalid native admission age")
     checked = ev.validate_run_binding(binding, verify_files=False)
-    session = probe._session
-    if (checked != session.binding or expected_gpu_uuid != session.policy["gpu_uuid"]
-            or session._admission is not probe):
+    session = getattr(probe, "_session", None)
+    session_type = type(session)
+    session_module = sys.modules.get(getattr(session_type, "__module__", ""))
+    session_binding = getattr(session, "binding", None)
+    session_policy = getattr(session, "policy", None)
+    if (session is None or session_type.__name__ != "MonitoredHardwareSession"
+            or session_type.__qualname__ != "MonitoredHardwareSession"
+            or session_module is not module
+            or type(session_binding) is not dict
+            or type(session_policy) is not dict
+            or checked != session_binding
+            or expected_gpu_uuid != session_policy.get("gpu_uuid")
+            or getattr(session, "_admission", None) is not probe
+            or getattr(session, "_state", None) != "running"
+            or "check" in getattr(session, "__dict__", {})):
         raise MonitoredHardwareError("live monitored capability is bound to another run/device")
-    for ref in session._source_refs:
-        if ev.file_reference(ref["path"]) != ref:
+    session_path = getattr(session_module, "__file__", None)
+    admission_hw = getattr(module, "hw", None)
+    admission_ev = getattr(module, "ev", None)
+    expected_paths = [session_path, getattr(admission_hw, "__file__", None),
+                      getattr(admission_ev, "__file__", None)]
+    refs = getattr(session, "_source_refs", None)
+    if type(refs) is not list or len(refs) != 3:
+        raise MonitoredHardwareError("monitored capability source manifest is invalid")
+    for path, ref in zip(expected_paths, refs):
+        if type(path) not in (str, os.PathLike) or ev.file_reference(path) != ref:
             raise MonitoredHardwareError("admission implementation changed")
-    telemetry = session.check(stage="native_admission")
+    channel = getattr(session, "_channel", None)
+    child = getattr(session, "_child", None)
+    nonce = getattr(session, "_nonce", None)
+    owner = getattr(session, "_owner", None)
+    guardian = getattr(session, "_guardian_identity", None)
+    child_pid = getattr(child, "pid", None)
+    if (not isinstance(channel, socket.socket) or type(child) is not subprocess.Popen
+            or type(child_pid) is not int or child_pid <= 0 or type(nonce) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", nonce) is None or child.poll() is not None
+            or type(owner) is not dict or owner.get("pid") != os.getpid()
+            or owner.get("readable") is not True or type(guardian) is not dict
+            or guardian.get("pid") != child_pid or guardian.get("readable") is not True):
+        raise MonitoredHardwareError("monitored capability is not backed by a live watchdog")
+    # Invoke the class implementation, never an instance-overridden method.
+    checker = session_type.__dict__.get("check")
+    checker_code = getattr(checker, "__code__", None)
+    if (not callable(checker) or checker.__module__ != module.__name__
+            or checker_code is None
+            or Path(checker_code.co_filename).resolve() != Path(session_path).resolve()):
+        raise MonitoredHardwareError("monitored capability checker identity differs")
+    telemetry = checker(session, stage="native_admission")
     now = time.monotonic_ns()
     for field, maximum in (("clock", min(1., max_age_seconds)), ("health", min(2., max_age_seconds))):
         observed = telemetry["clock"]["started_ns"] if field == "clock" else telemetry["health_started_ns"]

@@ -4,8 +4,10 @@ This module never imports torch, initializes CUDA, changes clocks/power limits,
 or starts a workload. A native probe is evidence, not execution authorization.
 The current NVSMI backend exposes no locked graphics-clock upper-bound getter;
 current, maximum, application and supported clocks cannot fill that proof gap.
-Every native probe therefore fails that gate until a separately reviewed native
-readback backend exists. JSON supplied by callers cannot grant GPU admission.
+An immutable ``NativeHardwareProbe`` therefore remains blocked on that finding;
+only a separately reviewed live monitored admission may authorize a workload,
+with an administrator setter receipt and continuous bounded sampling. JSON or
+look-alike objects supplied by callers cannot grant GPU admission.
 """
 from __future__ import annotations
 
@@ -676,9 +678,15 @@ def require_native_hardware_admission(probe: NativeHardwareProbe, *, binding: Ma
                                       expected_gpu_uuid: str, max_age_seconds: float = 30.0) -> dict[str, Any]:
     """Require fresh native admission before CUDA initialization, never a dict."""
     from .training_v2b_admission import (
-        MonitoredHardwareAdmission, require_monitored_hardware_admission,
+        _monitored_admission_module, require_monitored_hardware_admission,
     )
-    if type(probe) is MonitoredHardwareAdmission:
+    # The epoch-60 worker intentionally loads the current orchestration
+    # admission module under a private package alias while the historical
+    # runtime remains under ``sparse_rtdetr``.  Dispatch by the reviewed live
+    # admission ABI, not by exact Python class identity, so a valid alias is
+    # not mistaken for caller-supplied JSON.  The admission validator still
+    # checks the module/source, live watchdog, binding and fresh telemetry.
+    if _monitored_admission_module(probe) is not None:
         return require_monitored_hardware_admission(
             probe, binding=binding, expected_gpu_uuid=expected_gpu_uuid,
             max_age_seconds=max_age_seconds,

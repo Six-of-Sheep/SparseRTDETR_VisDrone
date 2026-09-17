@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import gzip
 import hashlib
+import importlib.util
 import json
 import multiprocessing as mp
 import os
@@ -15,8 +16,10 @@ from pathlib import Path
 import pickle
 import select
 import socket
+import subprocess
 import sys
 import threading
+import types
 import time
 
 import pytest
@@ -1097,6 +1100,68 @@ def test_dispatch_routes_only_exact_new_type(monkeypatch):
     sentinel = {"fixture": True}
     monkeypatch.setattr(ad, "require_monitored_hardware_admission", lambda probe, **kw: sentinel)
     assert hw.require_native_hardware_admission(token, binding={}, expected_gpu_uuid=UUID) is sentinel
+
+
+def test_dispatch_accepts_same_source_admission_loaded_under_orchestration_alias(bound, observation, monkeypatch):
+    """The historical runtime and current orchestration must share one ABI."""
+    alias = "_t8b_admission_alias_fixture"
+    package = types.ModuleType(alias)
+    package.__path__ = [str(Path(ad.__file__).parent)]
+    sys.modules[alias] = package
+    loaded = {}
+    try:
+        for name in ("training_v2b_evidence", "training_v2b_hardware", "training_v2b_admission"):
+            qualified = alias + "." + name
+            spec = importlib.util.spec_from_file_location(qualified, Path(ad.__file__).parent / (name + ".py"))
+            assert spec is not None and spec.loader is not None
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[qualified] = module
+            spec.loader.exec_module(module)
+            loaded[name] = module
+        alias_ad = loaded["training_v2b_admission"]
+        alias_hw = loaded["training_v2b_hardware"]
+        alias_ev = loaded["training_v2b_evidence"]
+        session = object.__new__(alias_ad.MonitoredHardwareSession)
+        session.binding = copy.deepcopy(bound)
+        session.policy = {"gpu_uuid": UUID}
+        session._state = "running"
+        session._owner = alias_hw._process_identity(os.getpid())
+        session._nonce = "a" * 64
+        session._source_refs = [alias_ev.file_reference(path) for path in
+                                (alias_ad.__file__, alias_hw.__file__, alias_ev.__file__)]
+        session._channel = socket.socket()
+        session._child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        session._guardian_identity = alias_hw._process_identity(session._child.pid)
+        telemetry = {"clock": {"started_ns": time.monotonic_ns()},
+                     "health_started_ns": time.monotonic_ns()}
+        session._wait_response = lambda operation: telemetry
+        monkeypatch.setattr(alias_ad, "_send", lambda *args, **kwargs: None)
+        probe = alias_ad.MonitoredHardwareAdmission(alias_ad._TOKEN, session)
+        session._admission = probe
+        assert hw.require_native_hardware_admission(
+            probe, binding=bound, expected_gpu_uuid=UUID) == telemetry
+    finally:
+        session_channel = locals().get("session", None)
+        if session_channel is not None and getattr(session_channel, "_channel", None) is not None:
+            session_channel._channel.close()
+        if session_channel is not None and getattr(session_channel, "_child", None) is not None:
+            session_channel._child.terminate()
+            session_channel._child.wait(timeout=5)
+        for name in ("training_v2b_admission", "training_v2b_hardware", "training_v2b_evidence"):
+            sys.modules.pop(alias + "." + name, None)
+        sys.modules.pop(alias, None)
+
+
+def test_dispatch_rejects_lookalike_admission_from_unreviewed_module():
+    class MonitoredHardwareAdmission:
+        __slots__ = ("_session",)
+        def __init__(self):
+            self._session = object()
+    with pytest.raises(hw.HardwareGateError, match="supplied .*JSON"):
+        hw.require_native_hardware_admission(
+            MonitoredHardwareAdmission(), binding={}, expected_gpu_uuid=UUID)
 
 
 @pytest.mark.parametrize("mode", ["direct", "sudo_n"])
