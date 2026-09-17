@@ -116,18 +116,6 @@ def _source_imports(contract):
         raise RuntimeError("historical source package root missing")
     sys.path[:] = [str(package_root)] + [entry for entry in sys.path if Path(entry or ".").resolve() != package_root]
     sys.dont_write_bytecode = True
-    from sparse_rtdetr.baseline import training_v2b_control as control
-    from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
-    from sparse_rtdetr.baseline.training_v2b_data import TrainCoreDataConfig, build_train_core_loader
-    from sparse_rtdetr.baseline.training_v2b_development import evaluate_development
-    from sparse_rtdetr.baseline.training_v2b_evidence import (
-        validate_run_binding, write_exclusive_json,
-    )
-    from sparse_rtdetr.baseline.training_v2b_runtime import V2BTrainingSession
-    imported = Path(sys.modules["sparse_rtdetr.baseline.training_v2b"].__file__).resolve()
-    if not imported.is_relative_to(source_root) or imported != source_root / "src/sparse_rtdetr/baseline/training_v2b.py":
-        raise RuntimeError("training package did not load from the frozen source checkout")
-
     orchestration_root = Path(contract["repo_root"]).resolve()
     baseline_root = orchestration_root / "src/sparse_rtdetr/baseline"
     sources = contract.get("orchestration_sources", {})
@@ -165,6 +153,20 @@ def _source_imports(contract):
         sys.modules[qualified] = module
         spec.loader.exec_module(module)
         orchestration[name] = module
+    sys.modules["sparse_rtdetr.baseline.training_v2b_device"] = orchestration[
+        "training_v2b_device"]
+
+    from sparse_rtdetr.baseline import training_v2b_control as control
+    from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
+    from sparse_rtdetr.baseline.training_v2b_data import TrainCoreDataConfig, build_train_core_loader
+    from sparse_rtdetr.baseline.training_v2b_development import evaluate_development
+    from sparse_rtdetr.baseline.training_v2b_evidence import (
+        validate_run_binding, write_exclusive_json,
+    )
+    from sparse_rtdetr.baseline.training_v2b_runtime import V2BTrainingSession
+    imported = Path(sys.modules["sparse_rtdetr.baseline.training_v2b"].__file__).resolve()
+    if not imported.is_relative_to(source_root) or imported != source_root / "src/sparse_rtdetr/baseline/training_v2b.py":
+        raise RuntimeError("training package did not load from the frozen source checkout")
     MonitoredHardwareSession = orchestration["training_v2b_admission"].MonitoredHardwareSession
     prepare_runtime = orchestration["training_v2b_device"].prepare_runtime
     return {

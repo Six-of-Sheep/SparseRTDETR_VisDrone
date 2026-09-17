@@ -55,8 +55,11 @@ def test_worker_separates_current_hardware_admission_from_frozen_training_source
     alias_creation = source.index('alias = "_p3_epoch60_orchestration_runtime"')
     current_admission = source.index('orchestration["training_v2b_admission"].MonitoredHardwareSession')
     current_device = source.index('orchestration["training_v2b_device"].prepare_runtime')
-    assert (historical_selection < historical_model_import < runtime_identity_gate
-            < semantic_equality_gate < alias_creation < current_admission < current_device)
+    canonical_device_owner = source.index(
+        'sys.modules["sparse_rtdetr.baseline.training_v2b_device"] = orchestration[')
+    assert (historical_selection < runtime_identity_gate < semantic_equality_gate
+            < alias_creation < canonical_device_owner < historical_model_import
+            < current_admission < current_device)
     assert "from sparse_rtdetr.baseline.training_v2b_admission import" not in source
     assert "from sparse_rtdetr.baseline.training_v2b_device import" not in source
 
