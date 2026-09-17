@@ -44,6 +44,26 @@ repository-package imports, output creation, native admission, or CUDA
 initialization. Environment values must never be supplied piecemeal by an
 outer launch wrapper.
 
+## Native monitor and process-exit closure
+
+`MonitoredHardwareSession.finish()` is a pre-exit identity descriptor, not a
+completed file reference. The guardian can publish `monitor-final.json` only
+after its exact owner process has exited and CUDA has been released. Therefore
+the outer campaign controller must own each worker with a PID-bound supervisor,
+continuously verify the guardian heartbeat, capture stdout/stderr to immutable
+files, observe the worker's natural exit, and then wait for the bound guardian
+final report. A zero return code or a worker-authored `PASS` is insufficient.
+
+Before publishing a stage completion, the controller must independently require
+the monitor final report to be `PASS`, `worker_exited=true`, and
+`sampled_clock_compliance=true`; verify at least three loaded-clock samples and
+all monitor leaf-file identities; cross-bind worker PID, guardian PID, source
+run binding, policy, GPU UUID, launch receipt, exit receipt, contract and result;
+and confirm true stdout/stderr closure. The next stage may be constructed only
+from a worker result whose stage-completion record has passed this post-exit
+closure. On failure, only the controller-owned worker/guardian identities may be
+signalled, no retry is allowed, and the first scene remains immutable.
+
 ## Prohibited behavior
 
 - changing training-core or vendor scientific bytes;
@@ -66,6 +86,12 @@ Before any GPU authority is requested:
 - startup-environment mutation tests must reject every missing or changed key,
   and the worker must cross-check the same values against the historical
   production environment validator before creating its output directory;
+- result tests must distinguish the pre-exit monitor descriptor from a file
+  reference, and post-exit completion tests must reject a failed, missing,
+  cross-bound, or mutated monitor final report even after worker exit code zero;
+- controller structure tests must prove one owned `Popen` site, bounded guardian
+  supervision, immutable log/launch/exit receipts, and exactly twelve verified
+  stage completions with no retry path;
 - repository checker, tracked Python compile, diff check, cache-zero, targeted tests, and the applicable CPU suite must pass.
 
 CPU acceptance is not GPU readiness, owner authorization, or a training result.

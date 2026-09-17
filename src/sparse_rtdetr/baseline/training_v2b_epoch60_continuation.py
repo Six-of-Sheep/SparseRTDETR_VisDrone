@@ -23,6 +23,7 @@ SCHEMA_VERSION = 1
 FREEZE_KIND = "v2b_epoch60_continuation_freeze"
 CONTRACT_KIND = "v2b_epoch60_continuation_worker_contract"
 RESULT_KIND = "v2b_epoch60_continuation_worker_result"
+COMPLETION_KIND = "v2b_epoch60_continuation_stage_completion"
 CELLS = ("s1_r640", "s1_r896", "s2_r640", "s2_r896")
 STAGES = ("smoke", "smoke_replay", "formal60")
 SOURCE_EPOCH = 30
@@ -33,7 +34,11 @@ TARGET_UPDATES = 18240
 ADDITIONAL_UPDATES = TARGET_UPDATES - SOURCE_UPDATES
 ORCHESTRATION_FILES = (
     "docs/contracts/RTDETR_BASELINE_V2B_EPOCH60_CONTINUATION_T8A.md",
+    "src/sparse_rtdetr/baseline/training_v2b_admission.py",
+    "src/sparse_rtdetr/baseline/training_v2b_campaign.py",
     "src/sparse_rtdetr/baseline/training_v2b_epoch60_continuation.py",
+    "src/sparse_rtdetr/baseline/training_v2b_evidence.py",
+    "src/sparse_rtdetr/baseline/training_v2b_hardware.py",
     "tests/test_training_v2b_epoch60_continuation.py",
     "tests/test_training_v2b_epoch60_worker.py",
     "tools/run_training_v2b_epoch60_continuation_campaign.py",
@@ -194,6 +199,51 @@ def validate_reference(value: Any, label: str = "reference", *, verify: bool = F
     _same(value["sha256_scope"], "complete_file_bytes", label + " SHA scope")
     if verify:
         _same(file_reference(path), value, label + " current identity")
+    return copy.deepcopy(value)
+
+
+def validate_monitor_finish_descriptor(value: Any, contract: Mapping[str, Any], *,
+                                       worker_pid: Any = None) -> dict:
+    """Validate the live worker's pre-exit guardian handoff.
+
+    ``MonitoredHardwareSession.finish()`` intentionally returns an identity
+    descriptor, not a completed file reference: the guardian can only publish
+    ``monitor-final.json`` after its owner process has exited.  Treating this
+    descriptor as a normal file reference made the real worker impossible to
+    close even though CPU fakes happened to pass.
+    """
+    keys = {
+        "monitor_final_report", "monitor_pid", "run_id", "guardian_identity",
+        "gpu_uuid", "run_binding_sha256", "policy_sha256", "owner",
+        "worker_must_exit",
+    }
+    _schema(value, keys, "continuation monitor finish descriptor")
+    expected_path = Path(contract["output_dir"]) / "native-hardware/monitor-final.json"
+    _same(_absolute_path(value["monitor_final_report"], "monitor final report"),
+          expected_path, "monitor final report path")
+    _same(value["run_id"], contract["source_run_id"], "monitor source run")
+    _same(value["gpu_uuid"], contract["expected_gpu_uuid"], "monitor GPU UUID")
+    _same(value["run_binding_sha256"], contract["source_binding_sha256"],
+          "monitor run binding")
+    _require(type(value["policy_sha256"]) is str
+             and _DIGEST.fullmatch(value["policy_sha256"]) is not None,
+             "monitor policy SHA-256 invalid")
+    _same(value["worker_must_exit"], True, "monitor worker exit policy")
+    _require(type(value["monitor_pid"]) is int and value["monitor_pid"] > 0,
+             "monitor PID invalid")
+    for name in ("owner", "guardian_identity"):
+        identity = value[name]
+        _require(type(identity) is dict and identity.get("readable") is True
+                 and type(identity.get("pid")) is int and identity["pid"] > 0,
+                 "monitor " + name + " identity invalid")
+    _same(value["guardian_identity"]["pid"], value["monitor_pid"],
+          "monitor guardian PID")
+    _require(value["owner"]["pid"] != value["monitor_pid"],
+             "monitor owner aliases guardian")
+    if worker_pid is not None:
+        _require(type(worker_pid) is int and worker_pid > 0,
+                 "continuation worker PID invalid")
+        _same(value["owner"]["pid"], worker_pid, "monitor owner PID")
     return copy.deepcopy(value)
 
 
@@ -656,8 +706,78 @@ def validate_continuation_result(value: Any, contract: Mapping[str, Any], *,
                     "microsteps": (SOURCE_UPDATES + 4) * 2}
     for name, wanted in expected.items():
         _same(clocks.get(name), wanted, "continuation final clock " + name)
-    for name in ("contract_reference", "restored_boundary_reference", "final_state_reference",
-                 "monitor_reference"):
+    for name in ("contract_reference", "restored_boundary_reference", "final_state_reference"):
         validate_reference(value.get(name), "continuation result " + name,
                            verify=verify_files)
+    worker_pid = value.get("worker_pid")
+    _require(type(worker_pid) is int and worker_pid > 0,
+             "continuation worker PID invalid")
+    validate_monitor_finish_descriptor(
+        value.get("monitor_reference"), contract, worker_pid=worker_pid)
+    return copy.deepcopy(value)
+
+
+def validate_continuation_completion(value: Any, contract: Mapping[str, Any], *,
+                                     verify_files: bool = False) -> dict:
+    """Validate the controller-owned post-exit closure for one stage."""
+    keys = {
+        "schema_version", "kind", "status", "campaign_id", "execution_id",
+        "cell_id", "stage", "contract_reference", "result_reference",
+        "monitor_final_reference", "launch_reference", "exit_reference",
+        "elapsed_seconds", "automatic_retry",
+    }
+    _schema(value, keys, "continuation stage completion")
+    for name, expected in (
+        ("schema_version", SCHEMA_VERSION), ("kind", COMPLETION_KIND),
+        ("status", "PASS"), ("campaign_id", contract["campaign_id"]),
+        ("execution_id", contract["execution_id"]),
+        ("cell_id", contract["cell_id"]), ("stage", contract["stage"]),
+        ("automatic_retry", False),
+    ):
+        _same(value.get(name), expected, "continuation completion " + name)
+    elapsed = value["elapsed_seconds"]
+    _require(type(elapsed) in (int, float) and elapsed >= 0,
+             "continuation completion elapsed time invalid")
+    for name in ("contract_reference", "result_reference", "monitor_final_reference",
+                 "launch_reference", "exit_reference"):
+        validate_reference(value[name], "continuation completion " + name,
+                           verify=verify_files)
+    if not verify_files:
+        return copy.deepcopy(value)
+
+    result = read_json_reference(value["result_reference"], "completed worker result")
+    validate_continuation_result(result, contract, verify_files=True)
+    _same(value["contract_reference"], result["contract_reference"],
+          "completion contract reference")
+    descriptor = validate_monitor_finish_descriptor(
+        result["monitor_reference"], contract, worker_pid=result["worker_pid"])
+    monitor = read_json_reference(value["monitor_final_reference"], "completed monitor final")
+    _same(value["monitor_final_reference"]["path"], descriptor["monitor_final_report"],
+          "completion monitor final path")
+    for name in ("run_id", "run_binding_sha256", "policy_sha256", "monitor_pid",
+                 "owner", "guardian_identity", "gpu_uuid"):
+        _same(monitor.get(name), descriptor[name], "completion monitor " + name)
+    _same(monitor.get("status"), "PASS", "completion monitor status")
+    _same(monitor.get("worker_exited"), True, "completion monitor worker exit")
+    _same(monitor.get("sampled_clock_compliance"), True,
+          "completion sampled clock compliance")
+    _require(type(monitor.get("loaded_clock_samples")) is int
+             and monitor["loaded_clock_samples"] >= 3,
+             "completion loaded clock coverage missing")
+    for name in ("samples", "setter_receipt", "startup_evidence", "guardian_heartbeat"):
+        validate_reference(monitor.get(name), "completion monitor " + name,
+                           verify=True)
+
+    launch = read_json_reference(value["launch_reference"], "completed worker launch")
+    _same(launch.get("pid"), result["worker_pid"], "completion launch PID")
+    _same(launch.get("owner"), descriptor["owner"], "completion launch owner")
+    _same(launch.get("contract"), result["contract_reference"],
+          "completion launch contract")
+    exit_record = read_json_reference(value["exit_reference"], "completed worker exit")
+    _same(exit_record.get("returncode"), 0, "completion worker return code")
+    _same(exit_record.get("pid"), result["worker_pid"], "completion exit PID")
+    _same(exit_record.get("contract"), result["contract_reference"],
+          "completion exit contract")
+    for name in ("stdout", "stderr"):
+        validate_reference(exit_record.get(name), "completion " + name, verify=True)
     return copy.deepcopy(value)

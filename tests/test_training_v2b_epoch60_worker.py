@@ -101,13 +101,21 @@ def test_campaign_declares_the_exact_twelve_stage_plan_and_no_retry():
     text = CAMPAIGN.read_text(encoding="utf-8")
     assert 'len(report["gpu_worker_invocations"]) != 12' in text
     assert '"formal_retry_count": 0' in text
-    assert "while " not in text
-    # One subprocess site owned by the controller, never shell=True.
+    assert 'len(report["completions"]) != 12' in text
+    assert "GuardianSupervisor" in text
+    assert "wait_for_monitored_finish" in text
+    assert "validate_continuation_completion" in text
+    assert "automatic_retry\": False" in text
+    # One owned Popen site, never shell=True.  The only while loop is bounded
+    # supervision of that exact child and its native guardian, not a retry.
     calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
-             and isinstance(node.func, ast.Attribute) and node.func.attr == "run"]
+             and isinstance(node.func, ast.Attribute) and node.func.attr == "Popen"]
     assert len(calls) == 1
     assert not any(keyword.arg == "shell" and isinstance(keyword.value, ast.Constant)
                    and keyword.value.value is True for keyword in calls[0].keywords)
+    loops = [node for node in ast.walk(tree) if isinstance(node, ast.While)]
+    assert len(loops) == 1
+    assert "deadline" in ast.unparse(loops[0])
 
 
 def test_campaign_creates_execution_parent_before_any_worker_invocation(tmp_path, monkeypatch):
@@ -122,15 +130,7 @@ def test_campaign_creates_execution_parent_before_any_worker_invocation(tmp_path
     assert contracts_dir.stat().st_mode & 0o777 == 0o700
     assert (output / "execution").stat().st_mode & 0o777 == 0o700
 
-    observed = []
-
-    def fake_invoke(*args, **kwargs):
-        observed.append((output / "execution").is_dir())
-        return {"returncode": 0, "stdout": "", "stderr": ""}
-
-    monkeypatch.setattr(campaign, "_invoke", fake_invoke)
-    campaign._invoke(None, None, cwd=tmp_path, startup_environment={})
-    assert observed == [True]
+    assert (output / "execution").is_dir()
 
 
 def test_campaign_invocation_applies_the_complete_contract_environment(tmp_path, monkeypatch):
@@ -142,17 +142,21 @@ def test_campaign_invocation_applies_the_complete_contract_environment(tmp_path,
         "MKL_NUM_THREADS": "2", "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
         "PYTHONHASHSEED": "0",
     }
-    observed = {}
-
-    def fake_run(command, **kwargs):
-        observed.update(kwargs["env"])
-        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(campaign.subprocess, "run", fake_run)
-    monkeypatch.setattr(campaign.sys, "executable", "/frozen/python")
-    campaign._invoke(Path("/worker.py"), {"path": "/contract.json", "sha256": "a" * 64},
-                     cwd=tmp_path, startup_environment=expected)
+    monkeypatch.setenv("UNRELATED_PARENT_VALUE", "preserved")
+    observed = campaign._worker_environment(expected)
     assert {name: observed[name] for name in expected} == expected
+    assert observed["UNRELATED_PARENT_VALUE"] == "preserved"
+
+
+def test_campaign_never_accepts_worker_exit_without_closed_monitor():
+    text = CAMPAIGN.read_text(encoding="utf-8")
+    worker_exit = text.index("process.returncode != 0")
+    result_validation = text.index("validate_continuation_result(result, contract")
+    monitor_close = text.index("wait_for_monitored_finish(result")
+    completion_publish = text.index("label + \".completion.json\"")
+    assert worker_exit < result_validation < monitor_close < completion_publish
+    assert 'monitor.get("status") != "PASS"' in text
+    assert '"only_owned_campaign_processes_signalled": True' in text
 
 
 def test_worker_closes_environment_before_source_import_and_output_creation():

@@ -83,6 +83,23 @@ def contract(definition, cell_id="s1_r640", stage="smoke", *, smoke=None,
         replay_reference=replay, matched_reference=matched)
 
 
+def monitor_finish_descriptor(selected, *, worker_pid=1234, monitor_pid=1235):
+    identity = lambda pid: {"pid": pid, "start_ticks": pid * 10, "readable": True,
+                            "executable": {"path": "/frozen/python", "sha256": "f" * 64,
+                                           "size_bytes": 1,
+                                           "sha256_scope": "complete_file_bytes"}}
+    return {
+        "monitor_final_report": str(
+            Path(selected["output_dir"]) / "native-hardware/monitor-final.json"),
+        "monitor_pid": monitor_pid, "run_id": selected["source_run_id"],
+        "guardian_identity": identity(monitor_pid),
+        "gpu_uuid": selected["expected_gpu_uuid"],
+        "run_binding_sha256": selected["source_binding_sha256"],
+        "policy_sha256": "e" * 64, "owner": identity(worker_pid),
+        "worker_must_exit": True,
+    }
+
+
 def test_freeze_separates_historical_training_identity_from_new_execution(definition):
     freeze, _, _ = definition
     checked = gate.validate_epoch60_continuation_freeze(freeze, verify_files=False)
@@ -249,7 +266,7 @@ def test_result_validator_enforces_exact_stage_clocks(definition, stage, receipt
               {"smoke": smoke, "replay": replay} if stage == "formal60" else {})
     selected = contract(definition, stage=stage, **kwargs)
     refs = {name: dummy_reference(tmp, f"{stage}-{name}.json") for name in
-            ("contract_reference", "restored_boundary_reference", "final_state_reference", "monitor_reference")}
+            ("contract_reference", "restored_boundary_reference", "final_state_reference")}
     result = {**refs, "schema_version": 1, "kind": gate.RESULT_KIND, "status": "PASS",
               "campaign_id": selected["campaign_id"], "execution_id": selected["execution_id"],
               "cell_id": selected["cell_id"], "stage": stage,
@@ -263,12 +280,103 @@ def test_result_validator_enforces_exact_stage_clocks(definition, stage, receipt
                                "PYTHONNOUSERSITE", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
                                "CUBLAS_WORKSPACE_CONFIG")
               },
-              "final_clocks": clocks}
+              "final_clocks": clocks, "worker_pid": 1234,
+              "monitor_reference": monitor_finish_descriptor(selected)}
     gate.validate_continuation_result(result, selected)
     mutated = copy.deepcopy(result)
     mutated["final_clocks"]["optimizer_updates"] += 1
     with pytest.raises(gate.Epoch60ContinuationError, match="final clock optimizer_updates drift"):
         gate.validate_continuation_result(mutated, selected)
+
+
+def test_result_monitor_finish_descriptor_is_not_a_file_reference(definition):
+    selected = contract(definition)
+    descriptor = monitor_finish_descriptor(selected)
+    assert gate.validate_monitor_finish_descriptor(
+        descriptor, selected, worker_pid=1234) == descriptor
+    mutated = copy.deepcopy(descriptor)
+    mutated["monitor_final_report"] = str(Path(selected["output_dir"]) / "elsewhere.json")
+    with pytest.raises(gate.Epoch60ContinuationError, match="final report path drift"):
+        gate.validate_monitor_finish_descriptor(mutated, selected, worker_pid=1234)
+
+
+def test_post_exit_completion_requires_passing_bound_monitor(definition):
+    freeze_ref, tmp = definition[1], definition[2]
+    selected = contract(definition)
+    output = Path(selected["output_dir"])
+    native = output / "native-hardware"
+    native.mkdir(parents=True)
+    contract_ref = dummy_reference(tmp, "completion-contract.json")
+    restored = dummy_reference(tmp, "completion-restored.json")
+    final_state = dummy_reference(tmp, "completion-final-state.json")
+    descriptor = monitor_finish_descriptor(selected)
+    result = {
+        "schema_version": 1, "kind": gate.RESULT_KIND, "status": "PASS",
+        "campaign_id": selected["campaign_id"], "execution_id": selected["execution_id"],
+        "cell_id": selected["cell_id"], "stage": selected["stage"],
+        "source_run_id": selected["source_run_id"],
+        "source_binding_sha256": selected["source_binding_sha256"],
+        "freeze_reference": freeze_ref, "receipt_count": 4,
+        "startup_environment": selected["startup_environment"],
+        "historical_startup_environment": {
+            name: selected["startup_environment"][name]
+            for name in ("CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "PYTHONNOUSERSITE",
+                         "OMP_NUM_THREADS", "MKL_NUM_THREADS", "CUBLAS_WORKSPACE_CONFIG")
+        },
+        "final_clocks": {"epoch": 31, "epoch_active": True,
+                         "optimizer_updates": 9124, "microsteps": 18248},
+        "contract_reference": contract_ref,
+        "restored_boundary_reference": restored,
+        "final_state_reference": final_state,
+        "worker_pid": 1234, "monitor_reference": descriptor,
+    }
+    result_ref = write_json(output / "worker-result.json", result)
+    leaves = {name: dummy_reference(tmp, "monitor-" + name + ".json") for name in
+              ("samples", "setter_receipt", "startup_evidence", "guardian_heartbeat")}
+    monitor = {
+        **{name: descriptor[name] for name in (
+            "run_id", "run_binding_sha256", "policy_sha256", "monitor_pid", "owner",
+            "guardian_identity", "gpu_uuid")},
+        **leaves, "status": "PASS", "worker_exited": True,
+        "sampled_clock_compliance": True, "loaded_clock_samples": 3,
+    }
+    monitor_ref = write_json(native / "monitor-final.json", monitor)
+    launch_ref = write_json(tmp / "completion-launch.json", {
+        "pid": 1234, "owner": descriptor["owner"], "contract": contract_ref})
+    stdout_ref = dummy_reference(tmp, "completion.stdout")
+    stderr_ref = dummy_reference(tmp, "completion.stderr")
+    exit_ref = write_json(tmp / "completion-exit.json", {
+        "returncode": 0, "pid": 1234, "contract": contract_ref,
+        "stdout": stdout_ref, "stderr": stderr_ref})
+    completion = {
+        "schema_version": 1, "kind": gate.COMPLETION_KIND, "status": "PASS",
+        "campaign_id": selected["campaign_id"], "execution_id": selected["execution_id"],
+        "cell_id": selected["cell_id"], "stage": selected["stage"],
+        "contract_reference": contract_ref, "result_reference": result_ref,
+        "monitor_final_reference": monitor_ref, "launch_reference": launch_ref,
+        "exit_reference": exit_ref, "elapsed_seconds": 1.0, "automatic_retry": False,
+    }
+    assert gate.validate_continuation_completion(
+        completion, selected, verify_files=True) == completion
+    mutations = (
+        ("status", "FAIL", "monitor status drift"),
+        ("worker_exited", False, "monitor worker exit drift"),
+        ("sampled_clock_compliance", False, "sampled clock compliance drift"),
+        ("loaded_clock_samples", 2, "loaded clock coverage missing"),
+        ("policy_sha256", "d" * 64, "monitor policy_sha256 drift"),
+    )
+    for field, value, message in mutations:
+        changed = copy.deepcopy(monitor)
+        changed[field] = value
+        (native / "monitor-final.json").write_text(
+            json.dumps(changed, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8")
+        mutated_completion = copy.deepcopy(completion)
+        mutated_completion["monitor_final_reference"] = gate.file_reference(
+            native / "monitor-final.json")
+        with pytest.raises(gate.Epoch60ContinuationError, match=message):
+            gate.validate_continuation_completion(
+                mutated_completion, selected, verify_files=True)
 
 
 def test_freeze_rejects_future_order_coverage_or_digest_drift(definition):

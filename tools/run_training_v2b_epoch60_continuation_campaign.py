@@ -78,16 +78,152 @@ def _create_campaign_directories(output):
     return contracts_dir
 
 
-def _invoke(worker, contract_reference, *, cwd, startup_environment):
+def _worker_environment(startup_environment):
     environment = os.environ.copy()
     environment.update(startup_environment)
+    return environment
+
+
+def _invoke(worker, contract_reference, contract, *, cwd, startup_environment, execution):
+    """Own, supervise and close one worker exactly once.
+
+    A worker can only declare that it is about to exit.  The native guardian
+    publishes its authoritative final report after that exit.  Consequently
+    the controller must bind the child PID, supervise the guardian while the
+    child is alive, settle stdout/stderr, wait for the post-exit monitor report,
+    and only then publish a stage completion.
+    """
+    from sparse_rtdetr.baseline.training_v2b_admission import (
+        _validate_policy, wait_for_monitored_finish,
+    )
+    from sparse_rtdetr.baseline.training_v2b_campaign import GuardianSupervisor
+    from sparse_rtdetr.baseline import training_v2b_epoch60_continuation as continuation
+
+    environment = _worker_environment(startup_environment)
     command = [sys.executable, "-B", str(worker), "--contract", contract_reference["path"],
                "--contract-sha256", contract_reference["sha256"]]
-    completed = subprocess.run(command, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                               check=False)
-    return {"argv": command, "returncode": completed.returncode,
-            "stdout": completed.stdout, "stderr": completed.stderr}
+    label = contract["cell_id"] + "-" + contract["stage"]
+    stdout_path = execution / (label + ".stdout.log")
+    stderr_path = execution / (label + ".stderr.log")
+    scope = "train_core_30epoch" if contract["stage"] == "formal60" else "paired_smoke"
+    limit = 43200 if scope == "train_core_30epoch" else 600
+    policy = _validate_policy(contract["policy_bundle"], scope, limit)
+    started = time.monotonic()
+    process = None
+    supervisor = None
+    launch_reference = None
+    result_reference = None
+    monitor = None
+    first_error = first_traceback = None
+    guardian_cleanup = None
+
+    with open(stdout_path, "xb", buffering=0) as stdout, \
+            open(stderr_path, "xb", buffering=0) as stderr:
+        try:
+            process = subprocess.Popen(
+                command, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
+                stdout=stdout, stderr=stderr, start_new_session=True,
+            )
+            supervisor = GuardianSupervisor(
+                process.pid, Path(contract["output_dir"]) / "native-hardware",
+                run_id=contract["source_run_id"],
+                gpu_uuid=contract["expected_gpu_uuid"],
+                policy_sha256=policy["policy_sha256"],
+            )
+            launch_reference = _write_exclusive(execution / (label + ".launch.json"), {
+                "argv": command, "pid": process.pid, "owner": supervisor.owner,
+                "contract": contract_reference, "cell_id": contract["cell_id"],
+                "stage": contract["stage"], "monotonic_started": started,
+            })
+            deadline = started + limit + 300
+            while process.poll() is None:
+                if time.monotonic() > deadline:
+                    raise RuntimeError(label + " exceeded its fixed wall limit; no retry")
+                supervisor.check()
+                time.sleep(.05)
+            result_path = Path(contract["output_dir"]) / "worker-result.json"
+            if process.returncode != 0 or not result_path.is_file():
+                raise RuntimeError(
+                    f"{label} worker failed (exit {process.returncode}); no automatic retry")
+            result_reference = continuation.file_reference(result_path)
+            result = continuation.read_json_reference(
+                result_reference, label + " worker result", verify=True)
+            continuation.validate_continuation_result(result, contract, verify_files=True)
+            monitor = wait_for_monitored_finish(result["monitor_reference"])
+            if monitor.get("status") != "PASS":
+                raise RuntimeError(label + " guardian did not close successfully")
+        except BaseException as exc:
+            first_error, first_traceback = exc, exc.__traceback__
+            if supervisor is not None and process is not None and process.poll() is None:
+                try:
+                    supervisor.stop_owned_worker()
+                except BaseException:
+                    process.kill()
+            elif process is not None and process.poll() is None:
+                process.kill()
+            if process is not None:
+                try:
+                    process.wait(timeout=5.)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5.)
+            if supervisor is not None:
+                try:
+                    guardian_cleanup = supervisor.close_failed_guardian()
+                except BaseException as cleanup_error:
+                    guardian_cleanup = {"status": "ERROR", "type": type(cleanup_error).__name__,
+                                        "message": str(cleanup_error)}
+        finally:
+            if supervisor is not None:
+                supervisor.close()
+
+    stdout_reference = continuation.file_reference(stdout_path)
+    stderr_reference = continuation.file_reference(stderr_path)
+    exit_reference = _write_exclusive(execution / (label + ".exit.json"), {
+        "returncode": None if process is None else process.poll(),
+        "pid": None if process is None else process.pid,
+        "contract": contract_reference,
+        "stdout": stdout_reference, "stderr": stderr_reference,
+    })
+    if first_error is not None:
+        _write_exclusive(execution / (label + ".controller-failure.json"), {
+            "status": "STOP_NO_RETRY", "cell_id": contract["cell_id"],
+            "stage": contract["stage"], "contract_reference": contract_reference,
+            "failure": {"type": type(first_error).__name__, "message": str(first_error)},
+            "only_owned_campaign_processes_signalled": True,
+            "guardian_cleanup": guardian_cleanup, "automatic_retry": False,
+        })
+        raise first_error.with_traceback(first_traceback)
+
+    completion = {
+        "schema_version": 1, "kind": continuation.COMPLETION_KIND, "status": "PASS",
+        "campaign_id": contract["campaign_id"], "execution_id": contract["execution_id"],
+        "cell_id": contract["cell_id"], "stage": contract["stage"],
+        "contract_reference": contract_reference, "result_reference": result_reference,
+        "monitor_final_reference": monitor["final_report_reference"],
+        "launch_reference": launch_reference, "exit_reference": exit_reference,
+        "elapsed_seconds": time.monotonic() - started, "automatic_retry": False,
+    }
+    try:
+        continuation.validate_continuation_completion(completion, contract, verify_files=True)
+    except BaseException as exc:
+        _write_exclusive(execution / (label + ".controller-failure.json"), {
+            "status": "STOP_NO_RETRY", "cell_id": contract["cell_id"],
+            "stage": contract["stage"], "contract_reference": contract_reference,
+            "failure": {"type": type(exc).__name__, "message": str(exc)},
+            "only_owned_campaign_processes_signalled": True,
+            "guardian_cleanup": {"owner_exited": True, "monitor_final_observed": True},
+            "automatic_retry": False,
+        })
+        raise
+    completion_reference = _write_exclusive(
+        execution / (label + ".completion.json"), completion)
+    return {
+        "argv": command, "returncode": 0, "stdout_reference": stdout_reference,
+        "stderr_reference": stderr_reference, "result_reference": result_reference,
+        "completion_reference": completion_reference,
+        "monitor_final_reference": monitor["final_report_reference"],
+    }
 
 
 def main(argv=None):
@@ -110,6 +246,7 @@ def main(argv=None):
     report = {"schema_version": 1, "kind": "v2b_epoch60_continuation_campaign_result",
               "status": "RUNNING", "campaign_id": args.campaign_id,
               "formal_retry_count": 0, "gpu_worker_invocations": [], "results": {},
+              "completions": {},
               "training_core_modified": False, "historical_artifacts_modified": False,
               "started_unix": time.time()}
     try:
@@ -137,24 +274,35 @@ def main(argv=None):
                 policy_bundle=policies[int(cell_id[4:])], smoke_reference=smoke,
                 replay_reference=replay, matched_reference=matched)
             reference = _write_exclusive(contracts_dir / f"{cell_id}-{stage}.json", contract)
-            invocation = _invoke(
-                worker, reference, cwd=repo_root,
-                startup_environment=contract["startup_environment"],
-            )
-            report["gpu_worker_invocations"].append({
+            attempt = {
                 "cell_id": cell_id, "stage": stage, "contract_reference": reference,
-                "returncode": invocation["returncode"],
-                "stdout_sha256": hashlib.sha256(invocation["stdout"].encode()).hexdigest(),
-                "stderr_sha256": hashlib.sha256(invocation["stderr"].encode()).hexdigest(),
+                "status": "STARTED", "automatic_retry": False,
+            }
+            report["gpu_worker_invocations"].append(attempt)
+            try:
+                invocation = _invoke(
+                    worker, reference, contract, cwd=repo_root,
+                    startup_environment=contract["startup_environment"],
+                    execution=output / "execution",
+                )
+            except BaseException as exc:
+                attempt.update(status="STOP_NO_RETRY", returncode=None,
+                               failure={"type": type(exc).__name__, "message": str(exc)})
+                raise
+            attempt.update({
+                "status": "PASS", "returncode": invocation["returncode"],
+                "stdout_reference": invocation["stdout_reference"],
+                "stderr_reference": invocation["stderr_reference"],
+                "monitor_final_reference": invocation["monitor_final_reference"],
             })
             if invocation["returncode"] != 0:
-                raise RuntimeError(f"{cell_id} {stage} worker failed without retry: "
-                                   + invocation["stdout"][-2000:] + invocation["stderr"][-2000:])
-            result_reference = continuation.file_reference(
-                Path(contract["output_dir"]) / "worker-result.json")
+                raise RuntimeError(f"{cell_id} {stage} worker failed without retry")
+            result_reference = invocation["result_reference"]
             result = continuation.read_json_reference(result_reference, f"{cell_id} {stage} result")
             continuation.validate_continuation_result(result, contract, verify_files=True)
-            report["results"][f"{cell_id}:{stage}"] = result_reference
+            key = f"{cell_id}:{stage}"
+            report["results"][key] = result_reference
+            report["completions"][key] = invocation["completion_reference"]
             return result_reference
 
         for seed in (1, 2):
@@ -165,7 +313,8 @@ def main(argv=None):
             replay896 = run(cell896, "smoke_replay", smoke=smoke896, matched=replay640)
             formal640 = run(cell640, "formal60", smoke=smoke640, replay=replay640)
             run(cell896, "formal60", smoke=smoke896, replay=replay896, matched=formal640)
-        if len(report["gpu_worker_invocations"]) != 12 or len(report["results"]) != 12:
+        if (len(report["gpu_worker_invocations"]) != 12
+                or len(report["results"]) != 12 or len(report["completions"]) != 12):
             raise RuntimeError("continuation campaign did not complete the exact twelve-stage plan")
         report["status"] = "PASS"
         report["completed_unix"] = time.time()
