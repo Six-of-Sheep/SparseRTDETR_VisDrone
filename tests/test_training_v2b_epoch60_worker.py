@@ -224,3 +224,11 @@ def test_worker_closes_environment_before_source_import_and_output_creation():
     output_create = source.index("output.mkdir(parents=False, exist_ok=False)")
     assert gate_call < source_import < output_create
     assert "historical_startup_environment = control._environment(checked)" in source
+
+
+def test_worker_uses_explicit_main_process_loader_repair_without_changing_source_topology():
+    source = WORKER.read_text(encoding="utf-8")
+    assert '"loader_runtime_policy"' in source
+    assert 'num_workers=checked["loader_runtime_policy"]["num_workers"]' in source
+    assert '"historical_contract_num_workers": checked["num_workers"]' in source
+    assert '"automatic_batch_or_precision_fallback": False' in source

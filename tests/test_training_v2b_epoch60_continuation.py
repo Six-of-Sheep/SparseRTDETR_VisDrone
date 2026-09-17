@@ -65,6 +65,7 @@ def definition(tmp_path):
         "t8a_report_reference": report_ref,
         "training_core_identities": {"core.py": {"sha256": "a" * 64, "size_bytes": 1}},
         "execution_policy": copy.deepcopy(gate.EXECUTION_POLICY),
+        "loader_runtime_policy": copy.deepcopy(gate.CONTINUATION_LOADER_RUNTIME_POLICY),
         "orchestration_sources": sources, "cells": cells,
     }
     gate.validate_epoch60_continuation_freeze(freeze, verify_files=False)
@@ -277,6 +278,12 @@ def test_result_validator_enforces_exact_stage_clocks(definition, stage, receipt
               "source_run_id": selected["source_run_id"],
               "source_binding_sha256": selected["source_binding_sha256"],
               "freeze_reference": selected["freeze_reference"], "receipt_count": receipt_count,
+              "loader_runtime_policy": selected["loader_runtime_policy"],
+              "loader_runtime_observation": {
+                  "num_workers": 0, "prefetch_factor": 2,
+                  "multiprocessing_context": "spawn", "worker_processes": 0,
+                  "automatic_batch_or_precision_fallback": False,
+              },
               "startup_environment": selected["startup_environment"],
               "historical_startup_environment": {
                   name: selected["startup_environment"][name]
@@ -321,6 +328,12 @@ def test_post_exit_completion_requires_passing_bound_monitor(definition):
         "source_run_id": selected["source_run_id"],
         "source_binding_sha256": selected["source_binding_sha256"],
         "freeze_reference": freeze_ref, "receipt_count": 4,
+        "loader_runtime_policy": selected["loader_runtime_policy"],
+        "loader_runtime_observation": {
+            "num_workers": 0, "prefetch_factor": 2,
+            "multiprocessing_context": "spawn", "worker_processes": 0,
+            "automatic_batch_or_precision_fallback": False,
+        },
         "startup_environment": selected["startup_environment"],
         "historical_startup_environment": {
             name: selected["startup_environment"][name]

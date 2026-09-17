@@ -63,6 +63,20 @@ EXECUTION_POLICY = {
     "development_endpoints": [45, 60],
     "confirmatory_or_test_access": False,
 }
+# The historical source contract keeps its observed two-worker topology. The
+# fresh continuation runs the loader in the authenticated worker process after
+# R12 exposed a native DataLoader-worker abort; this is runtime-only and does
+# not change sampling, batches, or checkpoint semantics.
+CONTINUATION_LOADER_RUNTIME_POLICY = {
+    "num_workers": 0,
+    "prefetch_factor": 2,
+    "multiprocessing_context": "spawn",
+    "persistent_workers": False,
+    "pin_memory": False,
+    "worker_processes": 0,
+    "automatic_batch_or_precision_fallback": False,
+    "scientific_semantics_unchanged": True,
+}
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,159}")
 _GPU_UUID = re.compile(
@@ -448,6 +462,7 @@ def make_epoch60_continuation_freeze(*, t8a_report_reference: Mapping[str, Any],
         "t8a_report_reference": report_ref,
         "training_core_identities": copy.deepcopy(report["training_core_identities"]),
         "execution_policy": copy.deepcopy(EXECUTION_POLICY),
+        "loader_runtime_policy": copy.deepcopy(CONTINUATION_LOADER_RUNTIME_POLICY),
         "orchestration_sources": _orchestration_inventory(root), "cells": cells,
     }
     return validate_epoch60_continuation_freeze(freeze, verify_files=True)
@@ -456,7 +471,7 @@ def make_epoch60_continuation_freeze(*, t8a_report_reference: Mapping[str, Any],
 def validate_epoch60_continuation_freeze(value: Any, *, verify_files: bool = False) -> dict:
     keys = {"schema_version", "kind", "campaign_id", "repo_root", "output_root",
             "source_epoch", "target_epoch", "t8a_report_reference", "training_core_identities",
-            "execution_policy", "orchestration_sources", "cells"}
+            "execution_policy", "loader_runtime_policy", "orchestration_sources", "cells"}
     freeze = _schema(value, keys, "continuation freeze")
     _same(freeze["schema_version"], SCHEMA_VERSION, "freeze schema version")
     _same(freeze["kind"], FREEZE_KIND, "freeze kind")
@@ -467,6 +482,8 @@ def validate_epoch60_continuation_freeze(value: Any, *, verify_files: bool = Fal
     _same(freeze["source_epoch"], SOURCE_EPOCH, "freeze source epoch")
     _same(freeze["target_epoch"], TARGET_EPOCH, "freeze target epoch")
     _same(freeze["execution_policy"], EXECUTION_POLICY, "freeze execution policy")
+    _same(freeze["loader_runtime_policy"], CONTINUATION_LOADER_RUNTIME_POLICY,
+          "freeze loader runtime policy")
     validate_reference(freeze["t8a_report_reference"], "freeze T8A report", verify=verify_files)
     _require(type(freeze["training_core_identities"]) is dict
              and freeze["training_core_identities"], "freeze training core inventory missing")
@@ -580,6 +597,7 @@ def continuation_worker_contract(freeze: Mapping[str, Any], freeze_reference: Ma
         "startup_environment": copy.deepcopy(cell["startup_environment"]),
         "epoch_order_sha256": copy.deepcopy(cell["epoch_order_sha256"]),
         "policy_bundle": copy.deepcopy(policy_bundle),
+        "loader_runtime_policy": copy.deepcopy(checked["loader_runtime_policy"]),
         "smoke_reference": copy.deepcopy(smoke_reference),
         "replay_reference": copy.deepcopy(replay_reference),
         "matched_reference": copy.deepcopy(matched_reference),
@@ -601,7 +619,8 @@ def validate_continuation_worker_contract(value: Any, freeze: Mapping[str, Any],
             "development_binding", "expected_gpu_uuid", "num_workers", "prefetch_factor",
             "startup_environment",
             "epoch_order_sha256", "policy_bundle", "smoke_reference", "replay_reference",
-            "matched_reference", "execution_policy", "orchestration_sources"}
+            "matched_reference", "execution_policy", "loader_runtime_policy",
+            "orchestration_sources"}
     contract = _schema(value, keys, "continuation worker contract")
     _same(contract["schema_version"], SCHEMA_VERSION, "worker schema version")
     _same(contract["kind"], CONTRACT_KIND, "worker kind")
@@ -627,6 +646,8 @@ def validate_continuation_worker_contract(value: Any, freeze: Mapping[str, Any],
                  "startup_environment", "prefetch_factor", "epoch_order_sha256"):
         _same(contract[name], cell[name], "worker lineage " + name)
     _same(contract["execution_policy"], EXECUTION_POLICY, "worker execution policy")
+    _same(contract["loader_runtime_policy"], CONTINUATION_LOADER_RUNTIME_POLICY,
+          "worker loader runtime policy")
     _same(contract["orchestration_sources"], checked_freeze["orchestration_sources"],
           "worker orchestration inventory")
     _same(contract["startup_environment"],
@@ -686,6 +707,18 @@ def validate_continuation_result(value: Any, contract: Mapping[str, Any], *,
         _same(value.get(name), expected, "continuation result " + name)
     _same(value.get("startup_environment"), contract["startup_environment"],
           "continuation result startup environment")
+    _same(value.get("loader_runtime_policy"), contract["loader_runtime_policy"],
+          "continuation result loader runtime policy")
+    observed_loader = value.get("loader_runtime_observation")
+    _require(type(observed_loader) is dict, "continuation loader runtime observation missing")
+    _same(observed_loader.get("num_workers"), 0, "continuation runtime worker count")
+    _same(observed_loader.get("prefetch_factor"), 2, "continuation runtime prefetch")
+    _same(observed_loader.get("multiprocessing_context"), "spawn",
+          "continuation runtime multiprocessing context")
+    _same(observed_loader.get("worker_processes"), 0,
+          "continuation runtime worker process count")
+    _same(observed_loader.get("automatic_batch_or_precision_fallback"), False,
+          "continuation runtime fallback")
     historical_environment = {
         name: contract["startup_environment"][name]
         for name in ("CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "PYTHONNOUSERSITE",

@@ -44,6 +44,15 @@ repository-package imports, output creation, native admission, or CUDA
 initialization. Environment values must never be supplied piecemeal by an
 outer launch wrapper.
 
+The historical source contracts retain their observed `num_workers=2` value.
+The fresh continuation execution contract separately freezes a runtime-only
+loader policy of `num_workers=0`, `prefetch_factor=2`, `persistent_workers=false`,
+and `pin_memory=false` after the R12 native DataLoader-worker abort. This policy
+does not alter the logical batch plan, sampling order, augmentation, model,
+optimizer, checkpoint, or evaluator semantics; it is recorded in every new
+worker contract and result and is never an automatic batch or precision
+fallback.
+
 ## Native monitor and process-exit closure
 
 `MonitoredHardwareSession.finish()` is a pre-exit identity descriptor, not a

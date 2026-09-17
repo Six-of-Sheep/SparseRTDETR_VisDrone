@@ -377,6 +377,8 @@ def run_continuation_worker(contract, contract_reference, contract_module):
         "evaluations": [], "replay_checks": [], "scientific_certified": False,
         "startup_environment": startup_environment,
         "historical_startup_environment": historical_startup_environment,
+        "loader_runtime_policy": copy.deepcopy(checked["loader_runtime_policy"]),
+        "loader_runtime_observation": None,
         "automatic_retry_or_batch_fallback": False,
         "historical_run_relabelled": False, "source_artifacts_modified": False,
     }
@@ -394,12 +396,24 @@ def run_continuation_worker(contract, contract_reference, contract_module):
         loader = modules["build_train_core_loader"](
             modules["TrainCoreDataConfig"](
                 seed=config.seed, input_size=config.input_size, logical_batch_size=16,
-                num_workers=checked["num_workers"], prefetch_factor=checked["prefetch_factor"]),
+                num_workers=checked["loader_runtime_policy"]["num_workers"],
+                prefetch_factor=checked["loader_runtime_policy"]["prefetch_factor"]),
             annotation_file=data["annotation"]["path"], annotation_sha256=data["annotation"]["sha256"],
             manifest_file=data["manifest"]["path"], manifest_sha256=data["manifest"]["sha256"],
             image_root=data["image_root"], repo_root=checked["source_repo_root"])
         if len(loader.dataset) != 4869 or loader.batches_per_epoch != 304:
             raise RuntimeError("continuation loader differs from the frozen source input")
+        report["loader_runtime_observation"] = {
+            "num_workers": loader.config.num_workers,
+            "prefetch_factor": loader.config.prefetch_factor,
+            "multiprocessing_context": loader.config.multiprocessing_context,
+            "persistent_workers": False,
+            "pin_memory": False,
+            "worker_processes": 0,
+            "historical_contract_num_workers": checked["num_workers"],
+            "automatic_batch_or_precision_fallback": False,
+            "scientific_semantics_unchanged": True,
+        }
         arguments = {"repo_root": checked["source_repo_root"],
                      "pretrained_path": checked["pretrained"]["path"],
                      "pretrained_sha256": checked["pretrained"]["sha256"]}
