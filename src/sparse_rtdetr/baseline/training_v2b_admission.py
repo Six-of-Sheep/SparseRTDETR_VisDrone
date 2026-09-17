@@ -102,10 +102,11 @@ def _publish_exclusive(path: Path, value: Mapping[str, Any]) -> dict[str, Any]:
             os.fsync(directory)
         finally:
             os.close(directory)
-        return ev.file_reference(path)
     finally:
         if temporary.exists():
             temporary.unlink()
+    # Do not expose the temporary hard-link count to strict evidence readers.
+    return ev.file_reference(path)
 
 
 def _read_reference(ref: Mapping[str, Any]) -> Any:
@@ -926,6 +927,7 @@ def _clock_sample(spec: Mapping[str, Any]) -> dict[str, Any]:
 
 _OWNER_EXIT_IDENTITY_WAIT_SECONDS = .2
 _SAMPLER_SHUTDOWN_SECONDS = 1.
+_WRITER_CLOSE_SECONDS = 10.
 
 
 def _disappearing_owner_identity(value: Any, owner: Mapping[str, Any]) -> bool:
@@ -1463,7 +1465,7 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
             writes.put_nowait(None)
         except queue.Full:
             failure = failure or "monitor evidence queue could not close"
-        if not writer_finished.wait(2.):
+        if not writer_finished.wait(_WRITER_CLOSE_SECONDS):
             failure = failure or "monitor evidence writer did not close"
         if writer_error:
             failure = failure or "monitor evidence writer failed at close: " + "; ".join(writer_error)

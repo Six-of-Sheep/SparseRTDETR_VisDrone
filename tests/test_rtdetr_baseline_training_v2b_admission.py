@@ -1154,15 +1154,24 @@ def test_setter_acknowledgement_rejects_wrong_target_range_or_diagnostics(text):
 def test_atomic_publication_never_exposes_partial_json_or_overwrites(tmp_path, monkeypatch):
     target = tmp_path / "complete.json"
     original = os.link
+    original_reference = ad.ev.file_reference
     observed = []
+    observed_nlinks = []
     def link(source, destination, **kwargs):
         assert not target.exists()
         assert json.loads(Path(source).read_bytes()) == {"complete": True}
         observed.append(True)
         return original(source, destination, **kwargs)
+    def reference(path):
+        absolute = Path(path).absolute()
+        if absolute == target.absolute():
+            observed_nlinks.append(absolute.lstat().st_nlink)
+        return original_reference(path)
     monkeypatch.setattr(ad.os, "link", link)
+    monkeypatch.setattr(ad.ev, "file_reference", reference)
     reference = ad._publish_exclusive(target, {"complete": True})
-    assert observed and ev.file_reference(target) == reference
+    assert observed and original_reference(target) == reference
+    assert observed_nlinks == [1]
     monkeypatch.setattr(ad.os, "link", original)
     with pytest.raises(FileExistsError): ad._publish_exclusive(target, {"complete": False})
     assert json.loads(target.read_bytes()) == {"complete": True}
@@ -1183,7 +1192,7 @@ def _cpu_worker(fd):
 
 @pytest.mark.parametrize("stall", [
     "clock", "health", "sudo_mutation", "owner_identity", "owner_late_identity",
-    "owner_wait_health_gap", "no_finish", "footer", "release_gap", "unloaded_formal", None,
+    "owner_wait_health_gap", "no_finish", "footer", "slow_footer", "release_gap", "unloaded_formal", None,
 ])
 def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_path, monkeypatch, stall):
     if sys.platform != "linux":
@@ -1267,6 +1276,14 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
                 super().__exit__(*args)
                 raise OSError("CPU fixture footer/fsync failure")
         monkeypatch.setattr(ad.gzip, "GzipFile", BadFooter)
+    elif stall == "slow_footer":
+        original_gzip = ad.gzip.GzipFile
+        class SlowFooter(original_gzip):
+            def __exit__(self, *args):
+                result = super().__exit__(*args)
+                time.sleep(2.2)
+                return result
+        monkeypatch.setattr(ad.gzip, "GzipFile", SlowFooter)
     policy = {"clock_period_seconds": .04 if stall == "owner_wait_health_gap" else .2,
               "health_period_seconds": 1., "clock_max_gap_seconds": 1.,
               "health_max_gap_seconds": 2., "workload_deadline_seconds": 10,
@@ -1312,7 +1329,7 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
         assert not worker.is_alive()
         assert bystander.is_alive()
         result = json.loads((tmp_path / "monitor-final.json").read_bytes())
-        assert result["status"] == ("PASS" if stall in {None, "release_gap"} else "FAIL")
+        assert result["status"] == ("PASS" if stall in {None, "release_gap", "slow_footer"} else "FAIL")
         heartbeat_rows = [json.loads(line) for line in (tmp_path / "guardian-heartbeat.jsonl").read_bytes().splitlines()]
         for row in heartbeat_rows:
             assert row["monotonic_ns"] >= max(row["last_clock_started_ns"], row["last_health_started_ns"])
@@ -1363,7 +1380,7 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
             assert result["loaded_clock_samples"] == 0
             assert result["sampled_clock_compliance"] is False
             assert worker.exitcode == 0
-        elif stall in {None, "release_gap"}:
+        elif stall in {None, "release_gap", "slow_footer"}:
             assert result["worker_exited"] is True
             assert result["post_exit_health_observations"] >= 2
             assert result["locked_upper_readback_verified"] is False
