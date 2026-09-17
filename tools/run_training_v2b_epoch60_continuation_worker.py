@@ -314,6 +314,43 @@ def _component_map(components):
             ("model", "ema", "postprocessor", "engine", "runtime", "optimizer", "scheduler", "warmup")}
 
 
+def _run_smoke_with_midpoint(control, session, monitor, output, checkpoints, receipts,
+                             replay_checks, matched_index):
+    """Run four continuation windows while persisting the true window-2 state.
+
+    The frozen control helper names its midpoint condition in terms of the
+    absolute optimizer update counter.  A continuation begins at update 9120,
+    so that condition can never fire.  Execute two windows, seal the midpoint,
+    then two more windows.  The second helper call reuses the same epoch
+    receipt directory without changing any receipt bytes or training semantics.
+    """
+    components = session.components
+    kwargs = {
+        "session": session, "monitor": monitor, "output": output,
+        "paired_index": {}, "replay_index": {}, "snapshots": True,
+        "checkpoints": checkpoints, "receipts": receipts,
+        "replay_checks": replay_checks, "matched_index": matched_index,
+    }
+    control._run_active_windows(**kwargs, limit=2, save_midpoint=False)
+    checkpoints["window_2"] = control._write_checkpoint(
+        session, output, "checkpoint-window-02", monitor,
+    )
+
+    receipt_dir = output / "receipts" / f"epoch-{components.engine.epoch:03d}"
+    original_mkdir = Path.mkdir
+
+    def mkdir(path, mode=0o777, parents=False, exist_ok=False):
+        if path == receipt_dir and not exist_ok:
+            return original_mkdir(path, mode=mode, parents=parents, exist_ok=True)
+        return original_mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
+
+    Path.mkdir = mkdir
+    try:
+        control._run_active_windows(**kwargs, limit=2, save_midpoint=False)
+    finally:
+        Path.mkdir = original_mkdir
+
+
 def _execute_stage(contract, session, monitor, output, report, *, control,
                    evaluate_development, write_exclusive_json, replay_index, matched_index):
     components, loader = session.components, session.loader
@@ -332,10 +369,9 @@ def _execute_stage(contract, session, monitor, output, report, *, control,
 
     if contract["stage"] == "smoke":
         begin_epoch(31)
-        control._run_active_windows(
-            session, monitor, output, limit=4, paired_index={}, replay_index={},
-            save_midpoint=True, snapshots=True, checkpoints=checkpoints, receipts=receipts,
-            replay_checks=replay_checks, matched_index=matched_index)
+        _run_smoke_with_midpoint(
+            control, session, monitor, output, checkpoints, receipts,
+            replay_checks, matched_index)
         checkpoints["window_4"] = control._write_checkpoint(
             session, output, "checkpoint-window-04", monitor)
     elif contract["stage"] == "smoke_replay":
