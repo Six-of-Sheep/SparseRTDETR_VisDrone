@@ -38,13 +38,17 @@ from . import training_v2b_evidence as ev
 from . import training_v2b_hardware as hw
 
 _TOKEN = object()
-_ANCHOR_MANIFEST_SHA = "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56e7bd98b0"
+_ANCHOR_MANIFEST_SHAS = frozenset({
+    "3a0f6fd00b84daf535205831be48ac2fb43820bd512f85df0cf35f56e7bd98b0",
+    "2b53b925d0392e1e84b6e08b38440fde998cf2e0335e06cf3ebf9fd622984709",
+})
 _AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889059b85"
 _REPAIR_AUTHORIZATION_SHA = "c8b46cc3d91e941c32047806e41e518476b00ce8e1deb62cb58deb42e9869e75"
 _RESOLUTION_896_AUTHORIZATION_SHA = "ece816c4bfc93b62c403a00986a738f853b86e91a05953531ab93c0998538819"
 _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA = "0ea553eef36857f9686fa8bad3ad2b708af9f22a83f8f194b4405157a6a3b055"
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
+_EXTERNAL_CLOCK_RECEIPT_V2_SHA = "be59e1cc6bf143f0351b8f72d8f4ec57681aad9ca500afd4fcbd0e994c9ce3f5"
 _EXTERNAL_ADMIN_MODE = "external_admin_acknowledged"
 _EXTERNAL_CLOCK_PROVENANCE = "user_supplied_original_terminal+native_command_journal"
 _EXTERNAL_TERMINAL_TRAILER = "Connection to 192.168.0.198 closed."
@@ -150,7 +154,7 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
         raise MonitoredHardwareError("resolution evidence authorization requires external_admin_acknowledged; native clock setters are not authorized")
     root = Path(reference_dir).absolute()
     manifest_ref = ev.file_reference(root / "manifest.json")
-    if manifest_ref["sha256"] != _ANCHOR_MANIFEST_SHA:
+    if manifest_ref["sha256"] not in _ANCHOR_MANIFEST_SHAS:
         raise MonitoredHardwareError("unreviewed exception authority manifest")
     manifest = _read_reference(manifest_ref)
     names = ("current-hardware.json", "process-identities.json", "xorg-logind-session.json",
@@ -210,7 +214,14 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
     if setter_mode == _EXTERNAL_ADMIN_MODE:
         receipt = _validate_external_clock_receipt(external_clock_receipt, result)
         result["external_clock_receipt"] = dict(external_clock_receipt)
-        result["external_journal_executable"] = dict(_read_reference(receipt["native_journal_query"])["executable"])
+        query = _read_reference(receipt["native_journal_query"])
+        executable = query.get("executable")
+        if executable is None and receipt.get("schema_version") == 2:
+            executable = native["commands"]["kernel_journal"]["executable"]
+        if type(executable) is not dict:
+            raise MonitoredHardwareError("external journal executable identity is unavailable")
+        ev._verify_reference(executable)
+        result["external_journal_executable"] = dict(executable)
     result["bundle_sha256"] = ev.canonical_sha256(result)
     return result
 
@@ -500,6 +511,129 @@ def _setter(policy: Mapping[str, Any], baseline: Mapping[str, Any]) -> dict[str,
     return receipt
 
 
+def _validate_external_clock_receipt_v2(reference: Mapping[str, Any],
+                                        policy: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate a current-boot setter from native sudo records and fresh telemetry.
+
+    Version 2 deliberately removes the unverifiable copied terminal transcript.
+    It binds the exact root sudo command/open/close chain, the current boot and
+    GPU, and an independently captured 1500/1500 telemetry row.  This remains
+    an acknowledgement rather than a configured-ceiling getter; every start
+    still performs fresh admission and continuous fail-closed monitoring.
+    """
+    ev._validate_reference_shape(reference)
+    if (reference.get("sha256") != _EXTERNAL_CLOCK_RECEIPT_V2_SHA
+            or ev.file_reference(reference["path"]) != reference):
+        raise MonitoredHardwareError("external clock receipt v2 differs from reviewed complete bytes")
+    receipt = _read_reference(reference)
+    required = {
+        "schema_version", "kind", "provenance", "host", "boot_id", "gpu_uuid",
+        "pci_bus_id", "command_argv", "native_sudo_pid",
+        "native_command_realtime_timestamp_us", "command_journal_record_sha256",
+        "native_command_journal", "native_journal_query", "post_set_clock_observation",
+        "clock_min_mhz", "clock_max_mhz", "locked_upper_readback_verified",
+        "locally_executed_setter", "native_return_success", "meaning",
+    }
+    if type(receipt) is not dict or set(receipt) != required:
+        raise MonitoredHardwareError("external clock receipt v2 schema differs")
+    fixed = {
+        "schema_version": 2,
+        "kind": "native_journal_and_fresh_telemetry_clock_receipt",
+        "provenance": "current_boot_native_sudo_journal+fresh_native_clock_observation",
+        "clock_min_mhz": 1500, "clock_max_mhz": 1500,
+        "locked_upper_readback_verified": False,
+        "locally_executed_setter": False, "native_return_success": None,
+    }
+    if any(type(receipt[name]) is not type(value) or receipt[name] != value
+           for name, value in fixed.items()):
+        raise MonitoredHardwareError("external clock receipt v2 semantics differs")
+    for name in ("host", "boot_id", "gpu_uuid", "pci_bus_id"):
+        if receipt[name] != policy[name]:
+            raise MonitoredHardwareError("external clock receipt v2 identity differs: " + name)
+    refs = {}
+    for name in ("native_command_journal", "native_journal_query", "post_set_clock_observation"):
+        refs[name] = ev._verify_reference(receipt[name])
+        if ev.file_reference(receipt[name]["path"]) != receipt[name]:
+            raise MonitoredHardwareError("external clock receipt v2 reference differs: " + name)
+    argv = [policy["expected_nvidia_smi_executable"]["path"], "-i", policy["gpu_uuid"],
+            "--lock-gpu-clocks=1500,1500"]
+    if receipt["command_argv"] != argv:
+        raise MonitoredHardwareError("external clock receipt v2 command differs")
+    pid = receipt["native_sudo_pid"]
+    if type(pid) is not int or pid <= 0:
+        raise MonitoredHardwareError("external clock receipt v2 sudo PID is unavailable")
+    rows = _strict_journal_jsonl(refs["native_command_journal"])
+    if len(rows) != 3:
+        raise MonitoredHardwareError("external clock receipt v2 sudo chain is incomplete")
+    command, opened, closed = rows
+    if ev.canonical_sha256(command) != receipt["command_journal_record_sha256"]:
+        raise MonitoredHardwareError("external clock receipt v2 command record differs")
+    identity = {
+        "_HOSTNAME": policy["host"], "_BOOT_ID": policy["boot_id"].replace("-", ""),
+        "_PID": str(pid), "_UID": "1000", "_AUDIT_LOGINUID": "1000",
+        "_EXE": "/usr/bin/sudo", "_COMM": "sudo", "SYSLOG_IDENTIFIER": "sudo",
+        "_CMDLINE": "sudo " + " ".join(argv),
+    }
+    if any(any(row.get(key) != value for key, value in identity.items()) for row in rows):
+        raise MonitoredHardwareError("external clock receipt v2 native sudo identity differs")
+    if [row.get("_GID") for row in rows] != ["1000", "0", "0"]:
+        raise MonitoredHardwareError("external clock receipt v2 privilege transition differs")
+    for key in ("_AUDIT_SESSION", "_SYSTEMD_SESSION", "_SYSTEMD_INVOCATION_ID", "_MACHINE_ID"):
+        if (type(command.get(key)) is not str or not command[key]
+                or any(row.get(key) != command[key] for row in rows)):
+            raise MonitoredHardwareError("external clock receipt v2 session identity differs")
+    if command["_AUDIT_SESSION"] != command["_SYSTEMD_SESSION"]:
+        raise MonitoredHardwareError("external clock receipt v2 audit/logind session differs")
+    pattern = (r"[ \t]*lyy : TTY=[^;\r\n]+ ; PWD=[^;\r\n]+ ; USER=root ; COMMAND="
+               + re.escape(" ".join(argv)))
+    if re.fullmatch(pattern, command.get("MESSAGE", "")) is None:
+        raise MonitoredHardwareError("external clock receipt v2 command message differs")
+    if (opened.get("MESSAGE") != "pam_unix(sudo:session): session opened for user root(uid=0) by lyy(uid=1000)"
+            or closed.get("MESSAGE") != "pam_unix(sudo:session): session closed for user root"):
+        raise MonitoredHardwareError("external clock receipt v2 session acknowledgement differs")
+    for key in ("__REALTIME_TIMESTAMP", "__MONOTONIC_TIMESTAMP"):
+        values = [row.get(key) for row in rows]
+        if (any(type(value) is not str or not value.isdecimal() or int(value) <= 0 for value in values)
+                or not int(values[0]) < int(values[1]) < int(values[2])):
+            raise MonitoredHardwareError("external clock receipt v2 timestamps differ")
+    if receipt["native_command_realtime_timestamp_us"] != command["__REALTIME_TIMESTAMP"]:
+        raise MonitoredHardwareError("external clock receipt v2 selected timestamp differs")
+    query = ev.strict_json_loads(refs["native_journal_query"])
+    expected_query = ["/usr/bin/journalctl", "-b", "_PID=" + str(pid), "--output=json", "--no-pager"]
+    if (query.get("argv") != expected_query or query.get("returncode") != 0
+            or query.get("stderr", {}).get("utf8") != ""
+            or query.get("stdout", {}).get("utf8", "").encode("utf-8") != refs["native_command_journal"]):
+        raise MonitoredHardwareError("external clock receipt v2 journal query differs")
+    observed = ev.strict_json_loads(refs["post_set_clock_observation"])
+    if (type(observed) is not dict or observed.get("schema_version") != 1
+            or observed.get("boot_id") != policy["boot_id"] or observed.get("host") != policy["host"]
+            or observed.get("gpu_uuid") != policy["gpu_uuid"]
+            or observed.get("pci_bus_id") != policy["pci_bus_id"]
+            or observed.get("graphics_clock_mhz") != 1500 or observed.get("sm_clock_mhz") != 1500):
+        raise MonitoredHardwareError("external clock receipt v2 telemetry identity/value differs")
+    clock_query = observed.get("query", {})
+    expected_clock = [policy["expected_nvidia_smi_executable"]["path"], "--id=" + policy["gpu_uuid"],
+                      "--query-gpu=uuid,pci.bus_id,clocks.current.graphics,clocks.current.sm,utilization.gpu,memory.used,memory.free",
+                      "--format=csv,noheader,nounits"]
+    if (clock_query.get("argv") != expected_clock or clock_query.get("returncode") != 0
+            or clock_query.get("stderr", {}).get("utf8") != ""):
+        raise MonitoredHardwareError("external clock receipt v2 telemetry query differs")
+    fields = [field.strip() for field in clock_query.get("stdout", {}).get("utf8", "").strip().split(",")]
+    if fields[:4] != [policy["gpu_uuid"], policy["pci_bus_id"], "1500", "1500"]:
+        raise MonitoredHardwareError("external clock receipt v2 telemetry row differs")
+    return receipt
+
+
+def _validate_external_clock_receipt(reference: Mapping[str, Any],
+                                     policy: Mapping[str, Any]) -> dict[str, Any]:
+    sha256 = reference.get("sha256") if type(reference) is dict else None
+    if sha256 == _EXTERNAL_CLOCK_RECEIPT_SHA:
+        return _validate_external_clock_receipt_v1(reference, policy)
+    if sha256 == _EXTERNAL_CLOCK_RECEIPT_V2_SHA:
+        return _validate_external_clock_receipt_v2(reference, policy)
+    raise MonitoredHardwareError("external clock receipt is not a reviewed version")
+
+
 def _setter_acknowledgement(text: str, policy: Mapping[str, Any]) -> dict[str, Any]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if len(lines) != 2 or lines[1] != "All done.":
@@ -529,7 +663,7 @@ def _strict_journal_jsonl(raw: bytes) -> list[dict[str, Any]]:
     return rows
 
 
-def _validate_external_clock_receipt(reference: Mapping[str, Any], policy: Mapping[str, Any]) -> dict[str, Any]:
+def _validate_external_clock_receipt_v1(reference: Mapping[str, Any], policy: Mapping[str, Any]) -> dict[str, Any]:
     """Verify reviewed bytes, not a caller-declared success or a locked-cap getter.
 
     These historical records do not grant admission by themselves. Every start
@@ -656,8 +790,10 @@ def _external_clock_evidence(policy: Mapping[str, Any], baseline: Mapping[str, A
             "locally_executed_setter": False, "command": None,
             "native_exitcode": None, "native_exit_code": None, "native_return_success": None,
             "reported_acknowledgement_success": True, "acknowledgement_verified": True,
-            "success_ack_observed": True, "provenance": _EXTERNAL_CLOCK_PROVENANCE,
-            "stdout_source": "user_supplied_terminal", "validation_errors": [],
+            "success_ack_observed": True, "provenance": reviewed["provenance"],
+            "stdout_source": ("user_supplied_terminal" if reviewed["schema_version"] == 1
+                              else "not_required_native_journal_plus_telemetry"),
+            "validation_errors": [],
             "reviewed_at_utc": _utc(), "time_source": "native_sudo_journal_record",
             "native_command_realtime_timestamp_us": reviewed["native_command_realtime_timestamp_us"],
             "native_sudo_journal_anchor": {"cursor": journal[0]["__CURSOR"],
@@ -673,8 +809,13 @@ def _external_clock_evidence(policy: Mapping[str, Any], baseline: Mapping[str, A
 def _external_clock_integrity_references(policy: Mapping[str, Any]) -> list[dict[str, Any]]:
     receipt = _validate_external_clock_receipt(policy["external_clock_receipt"], policy)
     query = _read_reference(receipt["native_journal_query"])
-    return [dict(policy["external_clock_receipt"]),
-            *(dict(receipt[name]) for name in _EXTERNAL_REFERENCE_FIELDS), dict(query["executable"])]
+    if receipt["schema_version"] == 1:
+        references = [dict(receipt[name]) for name in _EXTERNAL_REFERENCE_FIELDS]
+        references.append(dict(query["executable"]))
+    else:
+        references = [dict(receipt[name]) for name in
+                      ("native_command_journal", "native_journal_query", "post_set_clock_observation")]
+    return [dict(policy["external_clock_receipt"]), *references]
 
 
 def _known_sudo_clock_mutation(row: Mapping[str, Any]) -> bool:

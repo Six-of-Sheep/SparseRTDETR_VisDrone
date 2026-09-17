@@ -462,7 +462,7 @@ def policy_bundle(tmp_path, monkeypatch, observation):
         docs[name] = {"CPU_fixture": True}
     refs = {name: ev.write_exclusive_json(root / name, doc) for name, doc in docs.items()}
     manifest = ev.write_exclusive_json(root / "manifest.json", {"files": refs})
-    monkeypatch.setattr(ad, "_ANCHOR_MANIFEST_SHA", manifest["sha256"])
+    monkeypatch.setattr(ad, "_ANCHOR_MANIFEST_SHAS", frozenset({manifest["sha256"]}))
     auth = tmp_path / "user-authorization.txt"
     auth.write_text("CPU fixture: no hardware authorization\n")
     auth_ref = ev.file_reference(auth)
@@ -1404,3 +1404,8 @@ def test_finish_report_failure_is_not_admission(tmp_path):
     path.write_text(json.dumps({**ref, "status": "FAIL", "worker_exited": True, "failure": "clock gap"}))
     with pytest.raises(ad.MonitoredHardwareError, match="clock gap"):
         ad.wait_for_monitored_finish(ref)
+
+
+def test_current_boot_authority_and_native_receipt_v2_anchors_are_frozen():
+    assert "2b53b925d0392e1e84b6e08b38440fde998cf2e0335e06cf3ebf9fd622984709" in ad._ANCHOR_MANIFEST_SHAS
+    assert ad._EXTERNAL_CLOCK_RECEIPT_V2_SHA == "be59e1cc6bf143f0351b8f72d8f4ec57681aad9ca500afd4fcbd0e994c9ce3f5"

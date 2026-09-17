@@ -95,3 +95,19 @@ Before any GPU authority is requested:
 - repository checker, tracked Python compile, diff check, cache-zero, targeted tests, and the applicable CPU suite must pass.
 
 CPU acceptance is not GPU readiness, owner authorization, or a training result.
+
+## Current-boot authority after host reboot
+
+Every reboot invalidates the reviewed hardware authority, Xorg identity, RAPL
+limits, and external clock receipt.  The continuation may use the 2026-09-17
+current-boot authority only when its complete manifest SHA-256 is
+`2b53b925d0392e1e84b6e08b38440fde998cf2e0335e06cf3ebf9fd622984709`.
+The associated version-2 clock receipt SHA-256 is
+`be59e1cc6bf143f0351b8f72d8f4ec57681aad9ca500afd4fcbd0e994c9ce3f5`.
+
+Receipt version 2 replaces copied terminal text with the exact same-boot sudo
+command/open/close journal chain plus a fresh native 1500/1500 MHz telemetry
+observation.  It is still not a configured-ceiling getter.  Fresh admission,
+continuous 200 ms sampling, the one-second maximum gap, foreign-process
+rejection, and post-exit monitor certification remain mandatory.  The current
+boot authority does not itself launch or authorize training.
