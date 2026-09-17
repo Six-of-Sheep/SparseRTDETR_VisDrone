@@ -185,6 +185,21 @@ def _bridge_hardware_admission(orchestration, historical_hardware, source_root, 
     historical_hardware.require_native_hardware_admission = validator
     if historical_hardware.require_native_hardware_admission is not validator:
         raise RuntimeError("hardware validator bridge installation failed")
+    # ``training_v2b_runtime`` imports this validator at module import time.
+    # The historical session therefore retains a direct reference to the
+    # historical function even after the module attribute above is bridged.
+    # Replace that already-imported binding as well; otherwise the first
+    # logical CUDA window can still dispatch to the legacy JSON-only gate.
+    runtime_module = sys.modules.get("sparse_rtdetr.baseline.training_v2b_runtime")
+    if runtime_module is None:
+        raise RuntimeError("historical runtime module was not loaded")
+    runtime_module.require_native_hardware_admission = validator
+    if runtime_module.require_native_hardware_admission is not validator:
+        raise RuntimeError("runtime hardware validator bridge installation failed")
+    session_method = getattr(runtime_module.V2BTrainingSession, "train_batch", None)
+    if (session_method is None
+            or session_method.__globals__.get("require_native_hardware_admission") is not validator):
+        raise RuntimeError("historical session validator binding drift")
 
 
 def _source_imports(contract):
