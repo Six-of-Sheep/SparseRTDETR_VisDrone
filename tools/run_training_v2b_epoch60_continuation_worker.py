@@ -158,6 +158,35 @@ def _bridge_prepared_runtime(runtime, producer_device, consumer_device):
     }
 
 
+def _bridge_hardware_admission(orchestration, historical_hardware, source_root, orchestration_root, sources):
+    """Bind the current hardware validator into the historical device view.
+
+    The historical device source is byte-identical to the current device
+    source, but its lazy relative import can resolve the historical hardware
+    module after the package switch.  Keep both checkout identities explicit,
+    then bind only the already-authenticated current function in memory.  No
+    historical file is changed and every call still executes the current
+    validator's live admission checks.
+    """
+    relative = "src/sparse_rtdetr/baseline/training_v2b_hardware.py"
+    current_module = orchestration["training_v2b_hardware"]
+    current_path = Path(current_module.__file__).resolve()
+    historical_path = Path(historical_hardware.__file__).resolve()
+    if current_path != orchestration_root / relative:
+        raise RuntimeError("current hardware module path drift")
+    if historical_path != source_root / relative:
+        raise RuntimeError("historical hardware module path drift")
+    current_ref = _file_reference(current_path)
+    if current_ref != sources[relative]:
+        raise RuntimeError("current hardware module identity drift")
+    validator = getattr(current_module, "require_native_hardware_admission", None)
+    if not callable(validator) or getattr(validator, "__module__", None) != current_module.__name__:
+        raise RuntimeError("current hardware validator owner drift")
+    historical_hardware.require_native_hardware_admission = validator
+    if historical_hardware.require_native_hardware_admission is not validator:
+        raise RuntimeError("hardware validator bridge installation failed")
+
+
 def _source_imports(contract):
     if any(name == "sparse_rtdetr" or name.startswith("sparse_rtdetr.") for name in sys.modules):
         raise RuntimeError("repository package imported before source-checkout selection")
@@ -205,6 +234,7 @@ def _source_imports(contract):
         spec.loader.exec_module(module)
         orchestration[name] = module
     from sparse_rtdetr.baseline import training_v2b_control as control
+    from sparse_rtdetr.baseline import training_v2b_hardware as historical_hardware
     from sparse_rtdetr.baseline import training_v2b_device as historical_device
     from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
     from sparse_rtdetr.baseline.training_v2b_data import TrainCoreDataConfig, build_train_core_loader
@@ -220,6 +250,8 @@ def _source_imports(contract):
     expected_device = source_root / "src/sparse_rtdetr/baseline/training_v2b_device.py"
     if imported_device != expected_device:
         raise RuntimeError("historical device package did not load from the frozen source checkout")
+    _bridge_hardware_admission(orchestration, historical_hardware, source_root,
+                               orchestration_root, sources)
     MonitoredHardwareSession = orchestration["training_v2b_admission"].MonitoredHardwareSession
     prepare_runtime = orchestration["training_v2b_device"].prepare_runtime
     return {
