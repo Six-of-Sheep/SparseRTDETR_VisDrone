@@ -1769,17 +1769,44 @@ def require_monitored_hardware_admission(probe: MonitoredHardwareAdmission, *, b
     return telemetry
 
 
+def _wait_for_single_link_publication(path: Path, end: float) -> tuple[Path, bytes]:
+    """Wait through the intentional two-link publication handoff.
+
+    ``_publish_exclusive`` first links complete fsynced bytes at the final name
+    and then removes the private staging link.  The final name is therefore
+    readable atomically before it is terminal evidence.  A controller must not
+    mistake that short ``nlink == 2`` interval for a malformed final artifact.
+    """
+    while True:
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            info = None
+        if info is not None:
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+                raise MonitoredHardwareError("monitor final report is not a regular non-symlink file")
+            if info.st_nlink == 1:
+                opened, raw = ev._read_regular(path)
+                after = opened.lstat()
+                if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
+                     after.st_ctime_ns, after.st_nlink)
+                        != (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                            info.st_ctime_ns, 1)):
+                    raise MonitoredHardwareError("monitor final report changed during terminal publication")
+                return opened, raw
+        if time.monotonic() >= end:
+            raise MonitoredHardwareError(
+                "monitor final report did not reach single-link terminal publication")
+        time.sleep(.01)
+
+
 def wait_for_monitored_finish(reference: Mapping[str, Any], *, timeout_seconds: float = 15.) -> dict[str, Any]:
     """Controller only, after worker exit. Reading this report grants no capability."""
     if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 60:
         raise MonitoredHardwareError("invalid final report wait bound")
     path = Path(reference["monitor_final_report"])
     end = time.monotonic() + timeout_seconds
-    while not path.exists():
-        if time.monotonic() >= end:
-            raise MonitoredHardwareError("monitor final report unavailable")
-        time.sleep(.05)
-    path, raw = ev._read_regular(path)
+    path, raw = _wait_for_single_link_publication(path, end)
     report_reference = {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
                         "size_bytes": len(raw), "sha256_scope": "complete_file_bytes"}
     report = ev.strict_json_loads(raw)

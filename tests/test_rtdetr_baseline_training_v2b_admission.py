@@ -16,6 +16,7 @@ import pickle
 import select
 import socket
 import sys
+import threading
 import time
 
 import pytest
@@ -1412,6 +1413,51 @@ def test_independent_watchdog_stops_only_owned_cpu_worker_or_waits_for_exit(tmp_
         left.close()
         for fd in (worker_read, worker_write, bystander_read, bystander_write):
             os.close(fd)
+
+
+def _complete_monitor_payload(tmp_path, target):
+    marker = tmp_path / "terminal-marker.json"
+    marker.write_text("{}\n")
+    marker_ref = ev.file_reference(marker)
+    descriptor = {
+        "monitor_final_report": str(target), "run_id": "fixture",
+        "run_binding_sha256": "2" * 64, "policy_sha256": "1" * 64,
+        "monitor_pid": 123, "owner": {"pid": 12},
+        "guardian_identity": {"pid": 123}, "gpu_uuid": UUID,
+    }
+    payload = {
+        **descriptor, "status": "PASS", "worker_exited": True,
+        "samples": marker_ref, "setter_receipt": marker_ref,
+        "startup_evidence": marker_ref, "guardian_heartbeat": marker_ref,
+    }
+    return descriptor, payload
+
+
+def test_finish_reader_waits_for_atomic_hardlink_cleanup(tmp_path):
+    target = tmp_path / "monitor-final.json"
+    temporary = tmp_path / ".monitor-final.staged.tmp"
+    descriptor, payload = _complete_monitor_payload(tmp_path, target)
+    ev.write_exclusive_json(temporary, payload)
+    os.link(temporary, target)
+    assert target.lstat().st_nlink == 2
+    cleanup = threading.Thread(target=lambda: (time.sleep(.05), temporary.unlink()))
+    cleanup.start()
+    result = ad.wait_for_monitored_finish(descriptor, timeout_seconds=.5)
+    cleanup.join()
+    assert result["status"] == "PASS"
+    assert result["final_report_reference"] == ev.file_reference(target)
+    assert target.lstat().st_nlink == 1
+
+
+def test_finish_reader_fails_closed_if_staging_link_never_closes(tmp_path):
+    target = tmp_path / "monitor-final.json"
+    temporary = tmp_path / ".monitor-final.staged.tmp"
+    descriptor, payload = _complete_monitor_payload(tmp_path, target)
+    ev.write_exclusive_json(temporary, payload)
+    os.link(temporary, target)
+    with pytest.raises(ad.MonitoredHardwareError, match="single-link terminal publication"):
+        ad.wait_for_monitored_finish(descriptor, timeout_seconds=.05)
+    assert target.lstat().st_nlink == 2
 
 
 def test_finish_report_failure_is_not_admission(tmp_path):
