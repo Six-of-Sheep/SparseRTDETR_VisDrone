@@ -50,6 +50,10 @@ _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA = "0ea553eef36857f9686fa8bad3ad2b708af9f2
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
 _EXTERNAL_CLOCK_RECEIPT_V2_SHA = "be59e1cc6bf143f0351b8f72d8f4ec57681aad9ca500afd4fcbd0e994c9ce3f5"
+_EXTERNAL_CLOCK_RECEIPT_V2_REVIEWED_SHAS = frozenset({
+    _EXTERNAL_CLOCK_RECEIPT_V2_SHA,
+    "bd11d6af5f4a1c0e6df56cd6a04f66ce55f0b488e1103867ba1cdeb9783dfc0c",
+})
 _EXTERNAL_ADMIN_MODE = "external_admin_acknowledged"
 _EXTERNAL_CLOCK_PROVENANCE = "user_supplied_original_terminal+native_command_journal"
 _EXTERNAL_TERMINAL_TRAILER = "Connection to 192.168.0.198 closed."
@@ -524,7 +528,7 @@ def _validate_external_clock_receipt_v2(reference: Mapping[str, Any],
     still performs fresh admission and continuous fail-closed monitoring.
     """
     ev._validate_reference_shape(reference)
-    if (reference.get("sha256") != _EXTERNAL_CLOCK_RECEIPT_V2_SHA
+    if (reference.get("sha256") not in _EXTERNAL_CLOCK_RECEIPT_V2_REVIEWED_SHAS
             or ev.file_reference(reference["path"]) != reference):
         raise MonitoredHardwareError("external clock receipt v2 differs from reviewed complete bytes")
     receipt = _read_reference(reference)
@@ -631,7 +635,7 @@ def _validate_external_clock_receipt(reference: Mapping[str, Any],
     sha256 = reference.get("sha256") if type(reference) is dict else None
     if sha256 == _EXTERNAL_CLOCK_RECEIPT_SHA:
         return _validate_external_clock_receipt_v1(reference, policy)
-    if sha256 == _EXTERNAL_CLOCK_RECEIPT_V2_SHA:
+    if sha256 in _EXTERNAL_CLOCK_RECEIPT_V2_REVIEWED_SHAS:
         return _validate_external_clock_receipt_v2(reference, policy)
     raise MonitoredHardwareError("external clock receipt is not a reviewed version")
 
