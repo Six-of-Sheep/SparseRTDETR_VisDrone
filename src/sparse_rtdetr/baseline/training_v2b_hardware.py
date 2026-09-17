@@ -714,11 +714,21 @@ def require_native_hardware_admission(probe: NativeHardwareProbe, *, binding: Ma
                     or "sparse_rtdetr" not in candidate_path.parts):
                 continue
             try:
-                if resolver(probe) is candidate:
-                    admission_module = candidate
-                    break
+                resolved = resolver(probe)
             except BaseException:
-                continue
+                resolved = None
+            # The owner validator below performs the definitive live-session
+            # and source-reference checks.  A resolver returning ``None`` can
+            # only mean that its local package view differs from the probe's
+            # package view; once the candidate is the exact class owner from
+            # a reviewed repository path, dispatch to that validator so it can
+            # report the real binding failure instead of treating the object as
+            # JSON evidence.
+            if resolved is candidate or (
+                    getattr(candidate, "__name__", "").endswith(".training_v2b_admission")
+                    and getattr(candidate, "MonitoredHardwareAdmission", None) is probe_class):
+                admission_module = candidate
+                break
     if admission_module is not None:
         validator = getattr(admission_module, "require_monitored_hardware_admission", None)
         if not callable(validator):
@@ -727,7 +737,23 @@ def require_native_hardware_admission(probe: NativeHardwareProbe, *, binding: Ma
             probe, binding=binding, expected_gpu_uuid=expected_gpu_uuid,
             max_age_seconds=max_age_seconds,
         )
-    payload = _check_capability(probe, binding, max_age_seconds=max_age_seconds)
+    try:
+        payload = _check_capability(probe, binding, max_age_seconds=max_age_seconds)
+    except HardwareGateError as exc:
+        # Keep the legacy rejection wording for callers while exposing the
+        # exact object identity needed to diagnose a mixed-import worker.  No
+        # caller-controlled payload is accepted by this diagnostic path.
+        cls = type(probe)
+        module_name = getattr(cls, "__module__", "")
+        module = sys.modules.get(module_name)
+        raise HardwareGateError(
+            str(exc) + "; probe_class_module=" + str(module_name)
+            + "; probe_class_name=" + str(getattr(cls, "__name__", None))
+            + "; probe_class_qualname=" + str(getattr(cls, "__qualname__", None))
+            + "; probe_slots=" + repr(getattr(cls, "__slots__", None))
+            + "; probe_module_present=" + str(module is not None)
+            + "; probe_module_file=" + str(getattr(module, "__file__", None))
+        ) from exc
     if payload["policy"]["expected_gpu_uuid"] != expected_gpu_uuid or not payload.get("gpu") or payload["gpu"]["uuid"] != expected_gpu_uuid:
         raise HardwareGateError("native hardware admission GPU UUID differs")
     if payload["policy_sha256"] != canonical_sha256(payload["policy"]):
