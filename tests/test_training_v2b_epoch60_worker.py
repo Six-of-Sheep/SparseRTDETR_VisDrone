@@ -232,3 +232,13 @@ def test_worker_uses_explicit_main_process_loader_repair_without_changing_source
     assert 'num_workers=checked["loader_runtime_policy"]["num_workers"]' in source
     assert '"historical_contract_num_workers": checked["num_workers"]' in source
     assert '"automatic_batch_or_precision_fallback": False' in source
+
+
+def test_worker_uses_a_narrow_in_memory_bridge_for_continuation_evaluation_endpoints():
+    source = WORKER.read_text(encoding="utf-8")
+    assert "historical development evaluation endpoint drift" in source
+    assert "continuation_only_in_memory_evaluation_endpoint_bridge" in source
+    assert "development.EVALUATION_EPOCHS = tuple(sorted(set(original) | {45, 60}))" in source
+    assert "development.EVALUATION_EPOCHS = original" in source
+    assert '"source_bytes_modified": False' in source
+    assert '"training_semantics_modified": False' in source

@@ -280,7 +280,7 @@ def _source_imports(contract):
     from sparse_rtdetr.baseline import training_v2b_device as historical_device
     from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
     from sparse_rtdetr.baseline.training_v2b_data import TrainCoreDataConfig, build_train_core_loader
-    from sparse_rtdetr.baseline.training_v2b_development import evaluate_development
+    from sparse_rtdetr.baseline import training_v2b_development as development
     from sparse_rtdetr.baseline.training_v2b_evidence import (
         validate_run_binding, write_exclusive_json,
     )
@@ -297,12 +297,43 @@ def _source_imports(contract):
                                orchestration_root, sources)
     MonitoredHardwareSession = orchestration["training_v2b_admission"].MonitoredHardwareSession
     prepare_runtime = orchestration["training_v2b_device"].prepare_runtime
+    historical_evaluation_epochs = tuple(development.EVALUATION_EPOCHS)
+    if historical_evaluation_epochs != (10, 20, 30):
+        raise RuntimeError("historical development evaluation endpoint drift")
+
+    def evaluate_continuation_development(*args, **kwargs):
+        """Allow only the frozen continuation endpoints in this process.
+
+        The historical evaluator intentionally accepts the original 30-epoch
+        endpoints. T8B evaluates the same bound development role at epochs 45
+        and 60; this narrow in-memory bridge extends only the endpoint allow-
+        list and restores the historical value immediately afterwards. It does
+        not modify source bytes, data bindings, model semantics, or geometry.
+        """
+        original = development.EVALUATION_EPOCHS
+        if original != historical_evaluation_epochs:
+            raise RuntimeError("development endpoint bridge state drift")
+        development.EVALUATION_EPOCHS = tuple(sorted(set(original) | {45, 60}))
+        try:
+            return development.evaluate_development(*args, **kwargs)
+        finally:
+            development.EVALUATION_EPOCHS = original
+
+    development_endpoint_bridge = {
+        "kind": "continuation_only_in_memory_evaluation_endpoint_bridge",
+        "historical_evaluation_epochs": list(historical_evaluation_epochs),
+        "continuation_evaluation_epochs": [45, 60],
+        "source_bytes_modified": False,
+        "data_binding_modified": False,
+        "training_semantics_modified": False,
+    }
     return {
         "control": control, "V2BConfig": V2BConfig, "build_v2b_components": build_v2b_components,
         "MonitoredHardwareSession": MonitoredHardwareSession,
         "TrainCoreDataConfig": TrainCoreDataConfig,
         "build_train_core_loader": build_train_core_loader,
-        "evaluate_development": evaluate_development,
+        "evaluate_development": evaluate_continuation_development,
+        "development_endpoint_bridge": development_endpoint_bridge,
         "validate_run_binding": validate_run_binding,
         "write_exclusive_json": write_exclusive_json,
         "V2BTrainingSession": V2BTrainingSession, "prepare_runtime": prepare_runtime,
@@ -490,6 +521,7 @@ def run_continuation_worker(contract, contract_reference, contract_module):
         "historical_startup_environment": historical_startup_environment,
         "loader_runtime_policy": copy.deepcopy(checked["loader_runtime_policy"]),
         "loader_runtime_observation": None,
+        "development_endpoint_bridge": copy.deepcopy(modules["development_endpoint_bridge"]),
         "automatic_retry_or_batch_fallback": False,
         "historical_run_relabelled": False, "source_artifacts_modified": False,
     }
