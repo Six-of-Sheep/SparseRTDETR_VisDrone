@@ -300,6 +300,15 @@ def _source_imports(contract):
     historical_evaluation_epochs = tuple(development.EVALUATION_EPOCHS)
     if historical_evaluation_epochs != (10, 20, 30):
         raise RuntimeError("historical development evaluation endpoint drift")
+    original_policy = development._policy
+
+    def historical_policy(input_size=development.INPUT_SIZE):
+        current = development.EVALUATION_EPOCHS
+        development.EVALUATION_EPOCHS = historical_evaluation_epochs
+        try:
+            return original_policy(input_size)
+        finally:
+            development.EVALUATION_EPOCHS = current
 
     def evaluate_continuation_development(*args, **kwargs):
         """Allow only the frozen continuation endpoints in this process.
@@ -314,15 +323,18 @@ def _source_imports(contract):
         if original != historical_evaluation_epochs:
             raise RuntimeError("development endpoint bridge state drift")
         development.EVALUATION_EPOCHS = tuple(sorted(set(original) | {45, 60}))
+        development._policy = historical_policy
         try:
             return development.evaluate_development(*args, **kwargs)
         finally:
+            development._policy = original_policy
             development.EVALUATION_EPOCHS = original
 
     development_endpoint_bridge = {
         "kind": "continuation_only_in_memory_evaluation_endpoint_bridge",
         "historical_evaluation_epochs": list(historical_evaluation_epochs),
         "continuation_evaluation_epochs": [45, 60],
+        "policy_validation_uses_historical_epochs": True,
         "source_bytes_modified": False,
         "data_binding_modified": False,
         "training_semantics_modified": False,

@@ -240,5 +240,9 @@ def test_worker_uses_a_narrow_in_memory_bridge_for_continuation_evaluation_endpo
     assert "continuation_only_in_memory_evaluation_endpoint_bridge" in source
     assert "development.EVALUATION_EPOCHS = tuple(sorted(set(original) | {45, 60}))" in source
     assert "development.EVALUATION_EPOCHS = original" in source
+    assert "policy_validation_uses_historical_epochs" in source
+    assert "development.EVALUATION_EPOCHS = historical_evaluation_epochs" in source
+    assert "development._policy = historical_policy" in source
+    assert "development._policy = original_policy" in source
     assert '"source_bytes_modified": False' in source
     assert '"training_semantics_modified": False' in source
