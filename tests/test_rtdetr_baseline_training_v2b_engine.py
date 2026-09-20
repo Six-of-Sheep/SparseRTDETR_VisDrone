@@ -53,6 +53,26 @@ class TargetNormalizedLoss(nn.Module):
         return losses
 
 
+class MutatingDetector(TinyDetector):
+    """Model-side in-place writes must not mutate loader-owned inputs."""
+
+    def forward(self, images, targets=None):
+        images.add_(0.25)
+        if targets:
+            targets[0]["boxes"].mul_(0.5)
+        return super().forward(images, targets=targets)
+
+
+class NestedMutatingDetector(TinyDetector):
+    """Nested mutable target tensors must also be isolated from the loader."""
+
+    def forward(self, images, targets=None):
+        images.add_(0.25)
+        targets[0]["nested"]["boxes"].mul_(0.25)
+        targets[0]["nested"]["deep"][0]["labels"].add_(1)
+        return super().forward(images, targets=targets)
+
+
 class CountingSGD(torch.optim.SGD):
     def __init__(self, parameters, lr=0.07):
         super().__init__(parameters, lr=lr)
@@ -171,6 +191,41 @@ def test_accumulation_one_preserves_vendor_preweighted_sum():
     report = engine.train_window(images, targets)
     assert report["coefficients"] == [1.0]
     assert report["loss"] == pytest.approx(expected)
+
+
+def test_engine_owns_inputs_before_vendor_forward_mutation():
+    engine, _, _, _ = make_engine(model=MutatingDetector())
+    images = images_for()
+    targets = targets_for([0, 1, 3, 0])
+    original_images = images.clone()
+    original_boxes = [target["boxes"].clone() for target in targets]
+    engine.begin_epoch(1)
+    engine.train_window(images, targets)
+    assert torch.equal(images, original_images)
+    for target, boxes in zip(targets, original_boxes):
+        assert torch.equal(target["boxes"], boxes)
+
+
+def test_engine_deepcopies_nested_target_tensors_before_vendor_forward_mutation():
+    engine, _, _, _ = make_engine(model=NestedMutatingDetector())
+    images = images_for()
+    targets = targets_for([0, 1, 3, 0])
+    for target in targets:
+        target["nested"] = {
+            "boxes": target["boxes"].clone(),
+            "deep": [{"labels": target["labels"].clone()}],
+        }
+    original_images = images.clone()
+    original_nested_boxes = [target["nested"]["boxes"].clone() for target in targets]
+    original_nested_labels = [
+        target["nested"]["deep"][0]["labels"].clone() for target in targets
+    ]
+    engine.begin_epoch(1)
+    engine.train_window(images, targets)
+    assert torch.equal(images, original_images)
+    for target, boxes, labels in zip(targets, original_nested_boxes, original_nested_labels):
+        assert torch.equal(target["nested"]["boxes"], boxes)
+        assert torch.equal(target["nested"]["deep"][0]["labels"], labels)
 
 
 def test_dynamic_loss_keys_and_empty_microbatch_are_not_forced_to_21():

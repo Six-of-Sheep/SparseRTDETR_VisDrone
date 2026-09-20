@@ -13,6 +13,7 @@ batch strided-gradient defect in PyTorch 2.4.1. CUDA keeps its native path.
 from __future__ import annotations
 
 import contextlib
+import copy
 import math
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -426,6 +427,11 @@ class AccumulationEngine:
         try:
             checked_targets, counts = self._validate_window(images, targets)
             self._training_mode()
+            # The loader-owned logical batch is immutable evidence. Vendor
+            # model/criterion code may normalize or annotate inputs in place,
+            # so give the engine private storage before the first forward.
+            owned_images = images.clone()
+            owned_targets = copy.deepcopy(checked_targets)
             target_total = sum(counts)
             denominator = max(target_total, 1)
             micro_target_counts = [
@@ -444,8 +450,8 @@ class AccumulationEngine:
                     range(0, self.logical_batch_size, self.physical_batch_size)
                 ):
                     stop = start + self.physical_batch_size
-                    micro_images = images[start:stop].to(device=self.device)
-                    micro_targets = _move(checked_targets[start:stop], self.device)
+                    micro_images = owned_images[start:stop].to(device=self.device)
+                    micro_targets = _move(owned_targets[start:stop], self.device)
                     context = (
                         torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)
                         if self.amp_dtype == "bfloat16" else contextlib.nullcontext()
