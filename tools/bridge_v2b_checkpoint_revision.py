@@ -131,7 +131,8 @@ def _authenticated_parent(parent_path: Path, parent_sha: str) -> tuple[bytes, di
 
 
 def _current_binding(repo_root: Path, parent: dict[str, Any],
-                     pretrained_path: Path, pretrained_sha256: str) -> dict[str, Any]:
+                     pretrained_path: Path, pretrained_sha256: str,
+                     run_id: str) -> dict[str, Any]:
     """Construct the exact current R36 binding without initializing CUDA."""
     from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
     from sparse_rtdetr.baseline.training_v2b_data import (
@@ -175,7 +176,7 @@ def _current_binding(repo_root: Path, parent: dict[str, Any],
         repo_root=repo_root,
     )
     binding = build_train_core_run_binding(
-        components, loader, run_id="v2b-rev1-s2-r896-bridge-001",
+        components, loader, run_id=run_id,
         repo_root=repo_root, requested_device="cuda:0",
         cuda_gpu_uuid=old_config["cuda_gpu_uuid"],
     )
@@ -184,17 +185,35 @@ def _current_binding(repo_root: Path, parent: dict[str, Any],
     if binding["data"] != old["data"]:
         raise ValueError("current train_core data identity differs from parent")
     if binding["config"] != old["config"]:
-        raise ValueError("current training config differs from parent")
+        # The parent was sealed under an earlier mount point.  The pretrained
+        # bytes are authority-bound by SHA/size and strict-load metadata; the
+        # physical path is only a runtime locator and is the sole permitted
+        # config drift during this bridge.
+        old_pretrained = old["config"].get("pretrained")
+        new_pretrained = binding["config"].get("pretrained")
+        old_without_path = copy.deepcopy(old_pretrained)
+        new_without_path = copy.deepcopy(new_pretrained)
+        old_without_path.pop("path", None)
+        new_without_path.pop("path", None)
+        old_config_without_path = copy.deepcopy(old["config"])
+        new_config_without_path = copy.deepcopy(binding["config"])
+        old_config_without_path["pretrained"] = old_without_path
+        new_config_without_path["pretrained"] = new_without_path
+        if (old_config_without_path != new_config_without_path
+                or old_without_path.get("sha256") != pretrained_sha256
+                or new_without_path.get("sha256") != pretrained_sha256):
+            raise ValueError("current training config differs from parent")
     return binding
 
 
 def _bridge_binding(current: dict[str, Any], parent: dict[str, Any],
-                    contracts: dict[str, str]) -> dict[str, Any]:
+                    contracts: dict[str, str], *,
+                    bridge_id: str = "v2b-r35-e053-to-rev1-s2-r896-003") -> dict[str, Any]:
     binding = copy.deepcopy(current)
     binding.pop("binding_sha256", None)
     bridge_record = {
         "kind": "revision_bridge",
-        "bridge_id": "v2b-r35-e053-to-rev1-s2-r896-002",
+        "bridge_id": bridge_id,
         "parent_campaign": PARENT_CAMPAIGN,
         "parent_epoch": PARENT_EPOCH,
         "parent_checkpoint_sha256": contracts["parent_checkpoint_sha256"],
@@ -219,11 +238,10 @@ def _bridge_binding(current: dict[str, Any], parent: dict[str, Any],
         },
         "state_policy": "model_optimizer_ema_rng_loader_scheduler_warmup_engine_unchanged",
     }
-    # Keep the ordinary run-binding top-level schema intact.  The explicit
-    # bridge metadata is part of the bound config, so normal validators still
-    # authenticate it without a generic bypass.
-    binding["config"] = copy.deepcopy(binding["config"])
-    binding["config"]["revision_bridge"] = bridge_record
+    # Keep the ordinary run-binding config as the canonical live training
+    # configuration.  Bridge lineage is bound separately as provenance so the
+    # ordinary session validator can remain exact without a bypass.
+    binding["provenance"] = {"revision_bridge": bridge_record}
     binding["binding_sha256"] = canonical_sha(binding)
     return binding
 
@@ -279,14 +297,14 @@ def _state_identity(parent: dict[str, Any], state_doc: dict[str, Any]) -> dict[s
 
 
 def _gpu_smoke_auth(contract_dir: Path, bridge_manifest_sha: str,
-                    derived_sha: str, contracts: dict[str, str]) -> str:
-    path = contract_dir / "gpu_smoke_authorization_r2.json"
+                    derived_sha: str, contracts: dict[str, str], *,
+                    path: Path, smoke_authorization_id: str) -> str:
     if path.exists():
         raise ValueError("GPU smoke authorization already exists")
     body = {
         "schema_version": 1,
         "kind": "pre_formal_gpu_smoke",
-        "smoke_authorization_id": "smoke-v2b-rev1-s2-r896-bridge-002",
+        "smoke_authorization_id": smoke_authorization_id,
         "checkpoint_sha256": derived_sha,
         "bridge_manifest_sha256": bridge_manifest_sha,
         "training_contract_sha256": contracts["training_contract_sha256"],
@@ -310,7 +328,9 @@ def _gpu_smoke_auth(contract_dir: Path, bridge_manifest_sha: str,
 
 def bridge(repo_root: Path, contract_dir: Path, parent_path: Path,
            parent_state_path: Path, output_root: Path,
-           parent_sha: str) -> dict[str, Any]:
+           parent_sha: str, *, bridge_id: str,
+           run_id: str, authorization_path: Path,
+           smoke_authorization_id: str) -> dict[str, Any]:
     raw_parent, parent = _authenticated_parent(parent_path, parent_sha)
     state_doc = read_state_json(parent_state_path)
     contracts = {
@@ -360,14 +380,14 @@ def bridge(repo_root: Path, contract_dir: Path, parent_path: Path,
     weights_authority = next(authority for authority in authority_doc["authorities"]
                              if authority.get("logical_type") == "presnet18_vd_pretrained")
     pretrained_path = Path(weights_authority["runtime_locator"]["path"]) / weights[0]["relative_path"]
-    current = _current_binding(repo_root, parent, pretrained_path, weights[0]["sha256"])
-    binding = _bridge_binding(current, parent, contracts)
+    current = _current_binding(repo_root, parent, pretrained_path, weights[0]["sha256"], run_id)
+    binding = _bridge_binding(current, parent, contracts, bridge_id=bridge_id)
     derived_path, derived_sha = _publish_derived(parent, binding, output_root)
     state_identity = _state_identity(parent, state_doc)
     manifest_body = {
         "schema_version": 1,
         "kind": "revision_bridge",
-        "bridge_id": binding["config"]["revision_bridge"]["bridge_id"],
+        "bridge_id": binding["provenance"]["revision_bridge"]["bridge_id"],
         "parent": {
             "campaign": PARENT_CAMPAIGN,
             "epoch": PARENT_EPOCH,
@@ -391,7 +411,7 @@ def bridge(repo_root: Path, contract_dir: Path, parent_path: Path,
             "optimizer_updates": 16112, "microsteps": 32224,
         },
         "state_identity": state_identity,
-        "preserved_failure": binding["config"]["revision_bridge"]["preserved_failure"],
+        "preserved_failure": binding["provenance"]["revision_bridge"]["preserved_failure"],
         "runtime_locator": {
             "output_root": str(output_root.resolve()),
             "checkpoint": str(derived_path.resolve()),
@@ -399,7 +419,10 @@ def bridge(repo_root: Path, contract_dir: Path, parent_path: Path,
     }
     manifest_path = output_root / "checkpoint-epoch-053-rev1-bridge.json"
     manifest_sha = write_json(manifest_path, manifest_body)
-    auth_sha = _gpu_smoke_auth(contract_dir, manifest_sha, derived_sha, contracts)
+    auth_sha = _gpu_smoke_auth(
+        contract_dir, manifest_sha, derived_sha, contracts,
+        path=authorization_path, smoke_authorization_id=smoke_authorization_id,
+    )
     return {
         "status": "PASS",
         "classification": "REV1_CHECKPOINT_BRIDGE_READY",
@@ -410,7 +433,7 @@ def bridge(repo_root: Path, contract_dir: Path, parent_path: Path,
         "bridge_manifest_sha256": manifest_sha,
         "new_binding_sha256": binding["binding_sha256"],
         "gpu_smoke_authorization_sha256": auth_sha,
-        "gpu_smoke_authorization": str(contract_dir / "gpu_smoke_authorization_r2.json"),
+        "gpu_smoke_authorization": str(authorization_path),
         "state_identity": state_identity,
         "optimizer_updates": 16112,
         "microsteps": 32224,
@@ -428,13 +451,22 @@ def main() -> int:
     parser.add_argument("--parent-state", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--parent-sha256", required=True)
+    parser.add_argument("--bridge-id", default="v2b-r35-e053-to-rev1-s2-r896-003")
+    parser.add_argument("--run-id", default="v2b-rev1-s2-r896-bridge-003")
+    parser.add_argument("--smoke-authorization-id",
+                        default="smoke-v2b-rev1-s2-r896-bridge-003")
+    parser.add_argument("--authorization-path", type=Path)
     args = parser.parse_args()
     try:
+        authorization_path = (args.authorization_path or
+                              args.contract_dir / "gpu_smoke_authorization_r3.json")
         print(json.dumps(bridge(
             args.repo_root.resolve(strict=True), args.contract_dir.resolve(strict=True),
             args.parent_checkpoint.resolve(strict=True),
             args.parent_state.resolve(strict=True), args.output_root.resolve(),
-            args.parent_sha256,
+            args.parent_sha256, bridge_id=args.bridge_id, run_id=args.run_id,
+            authorization_path=authorization_path.resolve(),
+            smoke_authorization_id=args.smoke_authorization_id,
         ), sort_keys=True, indent=2))
         return 0
     except Exception as exc:

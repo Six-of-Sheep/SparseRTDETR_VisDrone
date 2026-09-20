@@ -264,6 +264,7 @@ V2B_CONTRACT_REV1_FILES = {
     'contracts/v2b/rev001/smoke_authorization.json',
     'contracts/v2b/rev001/gpu_smoke_authorization.json',
     'contracts/v2b/rev001/gpu_smoke_authorization_r2.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r3.json',
     'tools/bridge_v2b_checkpoint_revision.py',
     'tools/verify_v2b_checkpoint_revision.py',
     'tests/test_v2b_checkpoint_revision.py',

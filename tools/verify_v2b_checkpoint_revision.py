@@ -56,9 +56,14 @@ def verify(parent_path: Path, parent_sha: str, derived_path: Path,
     body = {key: value for key, value in binding.items() if key != "binding_sha256"}
     if hashlib.sha256(canonical_bytes(body)).hexdigest() != binding["binding_sha256"]:
         raise ValueError("derived binding canonical digest mismatch")
-    bridge = binding.get("revision_bridge") or binding.get("config", {}).get("revision_bridge")
+    if "revision_bridge" in binding.get("config", {}):
+        raise ValueError("bridge-v1 binding schema is superseded")
+    provenance = binding.get("provenance")
+    bridge = provenance.get("revision_bridge") if type(provenance) is dict else None
     if type(bridge) is not dict or bridge.get("kind") != "revision_bridge":
-        raise ValueError("revision_bridge metadata missing")
+        raise ValueError("top-level revision_bridge provenance missing")
+    if bridge.get("bridge_id") != "v2b-r35-e053-to-rev1-s2-r896-003":
+        raise ValueError("unexpected bridge-v2 identity")
     if (bridge.get("parent_campaign") != PARENT_CAMPAIGN
             or bridge.get("parent_epoch") != PARENT_EPOCH
             or bridge.get("parent_checkpoint_sha256") != parent_sha
@@ -89,7 +94,7 @@ def verify(parent_path: Path, parent_sha: str, derived_path: Path,
     ):
         if not (contract_dir / name).is_file():
             raise ValueError("missing REV1 contract: " + name)
-    auth = read_json(contract_dir / "gpu_smoke_authorization_r2.json")
+    auth = read_json(contract_dir / "gpu_smoke_authorization_r3.json")
     if (auth.get("status") != "PENDING_NOT_EXECUTED"
             or auth.get("consumed") is not False
             or auth.get("formal_launch_permitted") is not False):

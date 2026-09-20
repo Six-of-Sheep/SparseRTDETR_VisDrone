@@ -39,8 +39,9 @@ def test_bridge_binding_digest_and_failure_are_explicit():
     assert result["binding_sha256"] == bridge.canonical_sha(
         {k: v for k, v in result.items() if k != "binding_sha256"}
     )
-    assert result["config"]["revision_bridge"]["kind"] == "revision_bridge"
-    assert result["config"]["revision_bridge"]["preserved_failure"]["replayed"] is False
+    assert "revision_bridge" not in result["config"]
+    assert result["provenance"]["revision_bridge"]["kind"] == "revision_bridge"
+    assert result["provenance"]["revision_bridge"]["preserved_failure"]["replayed"] is False
 
 
 def test_payload_descriptor_detects_tensor_mutation():

@@ -413,13 +413,17 @@ def validate_run_binding(binding: Mapping[str, Any], *, verify_files: bool = Tru
     if type(binding) is not dict:
         raise EvidenceError("run binding must be a dict")
     required = {"schema_version", "run_id", "code", "config", "initial_weights", "data", "binding_sha256"}
-    if set(binding) != required or binding["schema_version"] != _SCHEMA:
+    allowed = required | {"provenance"}
+    if not required <= set(binding) or not set(binding) <= allowed or binding["schema_version"] != _SCHEMA:
         raise EvidenceError("run binding schema mismatch")
     if type(binding["run_id"]) is not str or not binding["run_id"]:
         raise EvidenceError("run_id must be a nonempty string")
     for key in ("code", "config", "initial_weights", "data"):
         if type(binding[key]) is not dict or not binding[key]:
             raise EvidenceError(key + " identity must be a nonempty dict")
+    if "provenance" in binding:
+        if type(binding["provenance"]) is not dict or not binding["provenance"]:
+            raise EvidenceError("run binding provenance must be a nonempty dict")
     body = {key: value for key, value in binding.items() if key != "binding_sha256"}
     if _sha(binding["binding_sha256"], "binding hash") != canonical_sha256(body):
         raise EvidenceError("run binding digest mismatch")
