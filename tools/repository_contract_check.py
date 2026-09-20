@@ -256,6 +256,16 @@ V2B_CONTRACT_REV1_FILES = {
     'tools/verify_v2b_contract_revision.py',
     'tools/evaluate_v2b_checkpoint.py',
     'tests/test_v2b_contract_revision.py',
+    'contracts/v2b/rev001/training_contract.json',
+    'contracts/v2b/rev001/execution_source.json',
+    'contracts/v2b/rev001/lineage.json',
+    'contracts/v2b/rev001/execution_contract.json',
+    'contracts/v2b/rev001/campaign_authorization.json',
+    'contracts/v2b/rev001/smoke_authorization.json',
+    'tools/v2b_training_execution_contracts.py',
+    'tools/seal_v2b_training_execution.py',
+    'tools/verify_v2b_training_execution.py',
+    'tests/test_v2b_training_execution_contracts.py',
 }
 
 V2A_FILES = {
