@@ -254,6 +254,7 @@ V2B_CONTRACT_REV1_FILES = {
     'contracts/v2b/rev001/revision.json',
     'tools/seal_v2b_contract_revision.py',
     'tools/verify_v2b_contract_revision.py',
+    'tools/evaluate_v2b_checkpoint.py',
     'tests/test_v2b_contract_revision.py',
 }
 
@@ -841,6 +842,7 @@ BASELINE_MODEL_IMPORT_FILES |= {
 # validator remain model-import free.
 BASELINE_MODEL_IMPORT_FILES |= {
     'tools/run_training_v2b_epoch60_continuation_worker.py',
+    'tools/evaluate_v2b_checkpoint.py',
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
