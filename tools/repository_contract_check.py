@@ -262,6 +262,11 @@ V2B_CONTRACT_REV1_FILES = {
     'contracts/v2b/rev001/execution_contract.json',
     'contracts/v2b/rev001/campaign_authorization.json',
     'contracts/v2b/rev001/smoke_authorization.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r2.json',
+    'tools/bridge_v2b_checkpoint_revision.py',
+    'tools/verify_v2b_checkpoint_revision.py',
+    'tests/test_v2b_checkpoint_revision.py',
     'tools/v2b_training_execution_contracts.py',
     'tools/seal_v2b_training_execution.py',
     'tools/verify_v2b_training_execution.py',
@@ -853,6 +858,15 @@ BASELINE_MODEL_IMPORT_FILES |= {
 BASELINE_MODEL_IMPORT_FILES |= {
     'tools/run_training_v2b_epoch60_continuation_worker.py',
     'tools/evaluate_v2b_checkpoint.py',
+}
+
+# The explicit REV1 checkpoint bridge and its tests authenticate a real
+# torch payload; they are bounded by the bridge verifier and are not generic
+# model-import entry points.
+BASELINE_MODEL_IMPORT_FILES |= {
+    'tools/bridge_v2b_checkpoint_revision.py',
+    'tools/verify_v2b_checkpoint_revision.py',
+    'tests/test_v2b_checkpoint_revision.py',
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
