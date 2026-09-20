@@ -244,6 +244,19 @@ V2B_EPOCH60_CONTINUATION_FILES = {
     'tools/run_training_v2b_epoch60_continuation_worker.py',
 }
 
+# REV1 is an explicit, read-only contract graph.  Its JSON files intentionally
+# carry runtime locators, which are operational metadata and not source
+# identity.  Keep the file set explicit; do not permit a repository-wide glob.
+V2B_CONTRACT_REV1_FILES = {
+    'contracts/v2b/rev001/external_authorities.json',
+    'contracts/v2b/rev001/scientific_source.json',
+    'contracts/v2b/rev001/evaluation_contract.json',
+    'contracts/v2b/rev001/revision.json',
+    'tools/seal_v2b_contract_revision.py',
+    'tools/verify_v2b_contract_revision.py',
+    'tests/test_v2b_contract_revision.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -1025,6 +1038,10 @@ def _source_policy_failures(root: Path, files: set[str]) -> list[str]:
     forbidden_path = re.compile("(?:" + re.escape(media_path) + "|" + re.escape(home_path) + "|" + re.escape(mount_path) + "|" + re.escape(file_scheme) + r"|https?://[^\s]+@)")
     forbidden_import = re.compile(r"(?m)^\s*(?:from|import)\s+(?:torch|ultralytics|rtdetr)\b")
     for relative in sorted(files - LEGACY_FILES):
+        if relative.startswith("contracts/v2b/rev001/"):
+            # Runtime locators are deliberately present in these contracts;
+            # their canonical identity is checked by the REV1 verifier.
+            continue
         if relative.startswith(VENDOR_PREFIX):
             continue
         path = root / relative
@@ -2518,6 +2535,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_SEED2_COMPLETION_FILES
     if files & V2B_EPOCH60_CONTINUATION_FILES:
         allowed_files |= V2B_EPOCH60_CONTINUATION_FILES
+    if files & V2B_CONTRACT_REV1_FILES:
+        allowed_files |= V2B_CONTRACT_REV1_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
