@@ -21,6 +21,31 @@ from typing import Any, Mapping, Sequence
 
 SCHEMA_VERSION = 1
 MODULE_NAME = "sparse_rtdetr.baseline.training_v2b_smoke_controller"
+LAYOUT_VERSION = 1
+
+
+class LaunchDirectoryError(RuntimeError):
+    """The controller/runner launch-directory ownership contract was violated."""
+
+
+def _layout(root: Path) -> dict[str, Path]:
+    return {
+        "controller": root / "controller",
+        "handshake": root / "handshake",
+        "runner": root / "runner",
+    }
+
+
+def _create_runner_workspace(root: Path) -> Path:
+    """Create the runner-owned child exactly once; never create the launch root."""
+    if not root.is_dir():
+        raise LaunchDirectoryError("LAUNCH_ROOT_MISSING")
+    runner = _layout(root)["runner"]
+    try:
+        runner.mkdir(parents=False, exist_ok=False)
+    except FileExistsError as exc:
+        raise LaunchDirectoryError("RUNNER_WORKSPACE_ALREADY_EXISTS") from exc
+    return runner
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -71,8 +96,10 @@ def build_plan(
     """Build a fully explicit launch plan; no shell command is assembled."""
     return {
         "schema_version": SCHEMA_VERSION,
+        "layout_schema_version": LAYOUT_VERSION,
         "launch_id": launch_id,
         "evidence_root": str(evidence_root),
+        "layout": {name: str(path) for name, path in _layout(evidence_root).items()},
         "cwd": str(repo_root),
         "python_executable": str(python_executable),
         "runner_argv": list(runner_argv),
@@ -96,6 +123,7 @@ def _quote_env(env: Mapping[str, str]) -> str:
 def _wrapper_text(plan: Mapping[str, Any], wrapper: Path, stdout_path: Path, stderr_path: Path) -> str:
     """Return a POSIX wrapper which records child launch and exit separately."""
     root = Path(str(plan["evidence_root"]))
+    layout = _layout(root)
     started = {
         "schema_version": SCHEMA_VERSION,
         "event": "STARTED",
@@ -104,17 +132,25 @@ def _wrapper_text(plan: Mapping[str, Any], wrapper: Path, stdout_path: Path, std
         "python_executable": plan["python_executable"],
         "argv": plan["argv"],
         "session_name": plan["session_name"],
+        "layout": {name: str(path) for name, path in layout.items()},
     }
     started_literal = shlex.quote(canonical_bytes(started).decode("utf-8"))
-    env_prefix = _quote_env(plan["environment"])
+    runtime_environment = {
+        **dict(plan["environment"]),
+        "REV1_LAUNCH_ROOT": str(root),
+        "REV1_CONTROLLER_DIR": str(layout["controller"]),
+        "REV1_HANDSHAKE_DIR": str(layout["handshake"]),
+        "REV1_RUNNER_DIR": str(layout["runner"]),
+    }
+    env_prefix = _quote_env(runtime_environment)
     command = " ".join(shlex.quote(str(x)) for x in plan["argv"])
     if env_prefix:
         command = env_prefix + " " + command
     stdout_q = shlex.quote(str(stdout_path))
     stderr_q = shlex.quote(str(stderr_path))
-    runner_started = root / "runner-started.json"
-    exit_path = root / "exit.json"
-    started_path = root / "started.json"
+    runner_started = layout["handshake"] / "runner-started.json"
+    exit_path = layout["handshake"] / "exit.json"
+    started_path = layout["handshake"] / "started.json"
     return "\n".join(
         [
             "#!/bin/sh",
@@ -137,7 +173,7 @@ def _wrapper_text(plan: Mapping[str, Any], wrapper: Path, stdout_path: Path, std
 
 
 def _write_evidence(root: Path, value: Mapping[str, Any]) -> None:
-    _atomic_json(root / "launch-evidence.json", value)
+    _atomic_json(_layout(root)["controller"] / "launch-evidence.json", value)
 
 
 def _status_from_files(root: Path, ready: dict[str, Any] | None, exit_data: dict[str, Any] | None) -> str:
@@ -154,9 +190,13 @@ def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
     if root.exists():
         raise FileExistsError(f"evidence root already exists: {root}")
     root.mkdir(parents=True)
-    stdout_path = root / "stdout.log"
-    stderr_path = root / "stderr.log"
-    wrapper = root / "runner-wrapper.sh"
+    layout = _layout(root)
+    layout["controller"].mkdir(parents=False, exist_ok=False)
+    layout["handshake"].mkdir(parents=False, exist_ok=False)
+    # The runner owns layout["runner"] and must create it itself exactly once.
+    stdout_path = layout["controller"] / "stdout.log"
+    stderr_path = layout["controller"] / "stderr.log"
+    wrapper = layout["controller"] / "runner-wrapper.sh"
     request = {
         "schema_version": SCHEMA_VERSION,
         "launch_id": plan["launch_id"],
@@ -165,6 +205,7 @@ def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
         "wrapper": str(wrapper),
         "stdout_path": str(stdout_path),
         "stderr_path": str(stderr_path),
+        "layout": {name: str(path) for name, path in layout.items()},
     }
     _write_evidence(root, request)
     cwd = Path(str(plan["cwd"]))
@@ -204,14 +245,14 @@ def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
     _write_evidence(root, request)
 
     ready_deadline = time.monotonic() + float(plan["ready_timeout_seconds"])
-    ready = _read_json(_marker(root, "ready.json"))
-    exit_data = _read_json(_marker(root, "exit.json"))
+    ready = _read_json(_marker(layout["handshake"], "ready.json"))
+    exit_data = _read_json(_marker(layout["handshake"], "exit.json"))
     while ready is None and exit_data is None and time.monotonic() < ready_deadline:
         time.sleep(0.05)
-        ready = _read_json(_marker(root, "ready.json"))
-        exit_data = _read_json(_marker(root, "exit.json"))
-    request["started_observed"] = _read_json(_marker(root, "started.json")) is not None
-    request["runner_started_observed"] = _read_json(_marker(root, "runner-started.json")) is not None
+        ready = _read_json(_marker(layout["handshake"], "ready.json"))
+        exit_data = _read_json(_marker(layout["handshake"], "exit.json"))
+    request["started_observed"] = _read_json(_marker(layout["handshake"], "started.json")) is not None
+    request["runner_started_observed"] = _read_json(_marker(layout["handshake"], "runner-started.json")) is not None
     if ready is None:
         request.update({
             "status": _status_from_files(root, ready, exit_data),
@@ -227,12 +268,12 @@ def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
     exit_deadline = time.monotonic() + float(plan["exit_timeout_seconds"])
     while exit_data is None and time.monotonic() < exit_deadline:
         time.sleep(0.05)
-        exit_data = _read_json(_marker(root, "exit.json"))
+        exit_data = _read_json(_marker(layout["handshake"], "exit.json"))
     request.update({
         "status": _status_from_files(root, ready, exit_data),
         "exit": exit_data,
-        "started_observed": _read_json(_marker(root, "started.json")) is not None,
-        "runner_started_observed": _read_json(_marker(root, "runner-started.json")) is not None,
+        "started_observed": _read_json(_marker(layout["handshake"], "started.json")) is not None,
+        "runner_started_observed": _read_json(_marker(layout["handshake"], "runner-started.json")) is not None,
         "phase": "FINAL",
     })
     request["stdout"] = stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.exists() else ""
@@ -243,10 +284,16 @@ def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
 
 def _noop_runner(args: argparse.Namespace) -> int:
     root = Path(args.evidence_root)
-    root.mkdir(parents=True, exist_ok=True)
+    runner = _create_runner_workspace(root)
+    handshake = _layout(root)["handshake"]
     time.sleep(float(args.ready_delay))
+    _atomic_json(runner / "runner-evidence.json", {
+        "schema_version": SCHEMA_VERSION, "event": "RUNNER_WORKSPACE_CREATED",
+        "launch_id": args.launch_id, "root": str(root), "runner": str(runner),
+        "cwd": os.getcwd(), "python_executable": sys.executable,
+    })
     _atomic_json(
-        root / "ready.json",
+        handshake / "ready.json",
         {
             "schema_version": SCHEMA_VERSION,
             "event": "READY",

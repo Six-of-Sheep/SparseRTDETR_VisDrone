@@ -46,7 +46,9 @@ def test_canonical_json_is_deterministic():
 def test_invalid_tmux_executable_is_reported(tmp_path):
     result = controller.launch(_plan(tmp_path))
     assert result["status"] == "TMUX_CREATE_FAILED"
-    assert (tmp_path / "evidence" / "launch-evidence.json").is_file()
+    assert (tmp_path / "evidence" / "controller" / "launch-evidence.json").is_file()
+    assert (tmp_path / "evidence" / "handshake").is_dir()
+    assert not (tmp_path / "evidence" / "runner").exists()
 
 
 def test_invalid_cwd_is_reported_before_tmux(tmp_path):
@@ -118,7 +120,7 @@ def test_real_wrapper_negative_outcomes_preserve_stderr_and_exit(tmp_path):
     assert "runner boom" in result["stderr"]
 
     ready_root = tmp_path / "quick-normal"
-    ready_code = "from pathlib import Path; Path(%r).write_text('{\\\"event\\\":\\\"READY\\\"}\\n')" % str(ready_root / "ready.json")
+    ready_code = "from pathlib import Path; Path(%r).write_text('{\\\"event\\\":\\\"READY\\\"}\\n')" % str(ready_root / "handshake" / "ready.json")
     result = controller.launch(_plan(tmp_path, evidence_root=ready_root, tmux_executable=fake, runner_argv=["-c", ready_code]))
     assert result["status"] == "COMPLETED"
     assert result["exit"]["exit_code"] == 0
@@ -127,3 +129,41 @@ def test_real_wrapper_negative_outcomes_preserve_stderr_and_exit(tmp_path):
     result = controller.launch(timeout)
     assert result["status"] == "READY_NOT_OBSERVED"
     time.sleep(0.3)
+
+
+def test_directory_ownership_contract_is_explicit(tmp_path):
+    root = tmp_path / "launch"
+    root.mkdir()
+    layout = controller._layout(root)
+    layout["controller"].mkdir()
+    layout["handshake"].mkdir()
+    runner = controller._create_runner_workspace(root)
+    assert runner == layout["runner"]
+    assert layout["controller"].is_dir()
+    assert layout["handshake"].is_dir()
+    with pytest.raises(controller.LaunchDirectoryError, match="RUNNER_WORKSPACE_ALREADY_EXISTS"):
+        controller._create_runner_workspace(root)
+    assert layout["controller"].is_dir()
+
+
+def test_runner_requires_controller_created_root(tmp_path):
+    with pytest.raises(controller.LaunchDirectoryError, match="LAUNCH_ROOT_MISSING"):
+        controller._create_runner_workspace(tmp_path / "missing-root")
+
+
+def test_controller_root_and_handshake_are_not_runner_workspace(tmp_path):
+    fake = _fake_tmux(tmp_path)
+    root = tmp_path / "ownership-positive"
+    code = (
+        "import os; from pathlib import Path; "
+        "runner=Path(os.environ['REV1_RUNNER_DIR']); runner.mkdir(parents=False, exist_ok=False); "
+        "Path(os.environ['REV1_HANDSHAKE_DIR'], 'ready.json').write_text('{\\\"event\\\":\\\"READY\\\"}\\n')"
+    )
+    result = controller.launch(_plan(tmp_path, evidence_root=root, tmux_executable=fake, runner_argv=["-c", code]))
+    assert result["status"] == "COMPLETED"
+    assert (root / "controller" / "launch-evidence.json").is_file()
+    assert (root / "handshake" / "started.json").is_file()
+    assert (root / "handshake" / "runner-started.json").is_file()
+    assert (root / "handshake" / "ready.json").is_file()
+    assert (root / "handshake" / "exit.json").is_file()
+    assert (root / "runner").is_dir()
