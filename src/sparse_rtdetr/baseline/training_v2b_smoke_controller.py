@@ -213,7 +213,14 @@ def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
     request["started_observed"] = _read_json(_marker(root, "started.json")) is not None
     request["runner_started_observed"] = _read_json(_marker(root, "runner-started.json")) is not None
     if ready is None:
-        request.update({"status": _status_from_files(root, ready, exit_data), "ready_observed": False, "exit": exit_data, "phase": "FINAL"})
+        request.update({
+            "status": _status_from_files(root, ready, exit_data),
+            "ready_observed": False,
+            "exit": exit_data,
+            "stdout": stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.exists() else "",
+            "stderr": stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else "",
+            "phase": "FINAL",
+        })
         _write_evidence(root, request)
         return request
     request["ready_observed"] = ready

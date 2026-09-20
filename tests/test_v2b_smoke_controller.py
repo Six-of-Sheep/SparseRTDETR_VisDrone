@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,34 @@ def test_import_failure_and_runner_exception_keep_traceable_exit(tmp_path):
     (root / "stderr.log").write_text("RuntimeError: runner boom\n", encoding="utf-8")
     assert controller._status_from_files(root, {"event": "READY"}, {"exit_code": 1}) == "RUNNER_NONZERO_EXIT"
     assert "runner boom" in (root / "stderr.log").read_text(encoding="utf-8")
+
+
+def _fake_tmux(tmp_path: Path) -> Path:
+    fake = tmp_path / "fake-tmux"
+    fake.write_text("#!/bin/sh\nlast=\nfor arg in \"$@\"; do last=\"$arg\"; done\n\"$last\" >/dev/null 2>&1 &\nexit 0\n", encoding="utf-8")
+    fake.chmod(0o700)
+    return fake
+
+
+def test_real_wrapper_negative_outcomes_preserve_stderr_and_exit(tmp_path):
+    fake = _fake_tmux(tmp_path)
+    import_failure = _plan(tmp_path, evidence_root=tmp_path / "import-failure", tmux_executable=fake, runner_argv=["-c", "import module_that_does_not_exist_for_rev1"])
+    result = controller.launch(import_failure)
+    assert result["status"] == "RUNNER_EXITED_BEFORE_READY"
+    assert "ModuleNotFoundError" in result["stderr"]
+
+    exception = _plan(tmp_path, evidence_root=tmp_path / "runner-exception", tmux_executable=fake, runner_argv=["-c", "raise RuntimeError('runner boom')"])
+    result = controller.launch(exception)
+    assert result["status"] == "RUNNER_EXITED_BEFORE_READY"
+    assert "runner boom" in result["stderr"]
+
+    ready_root = tmp_path / "quick-normal"
+    ready_code = "from pathlib import Path; Path(%r).write_text('{\\\"event\\\":\\\"READY\\\"}\\n')" % str(ready_root / "ready.json")
+    result = controller.launch(_plan(tmp_path, evidence_root=ready_root, tmux_executable=fake, runner_argv=["-c", ready_code]))
+    assert result["status"] == "COMPLETED"
+    assert result["exit"]["exit_code"] == 0
+
+    timeout = _plan(tmp_path, evidence_root=tmp_path / "ready-timeout", tmux_executable=fake, runner_argv=["-c", "import time; time.sleep(0.25)"], ready_timeout=0.05, exit_timeout=0.05)
+    result = controller.launch(timeout)
+    assert result["status"] == "READY_NOT_OBSERVED"
+    time.sleep(0.3)
