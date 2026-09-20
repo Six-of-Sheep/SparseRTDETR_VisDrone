@@ -265,6 +265,9 @@ V2B_CONTRACT_REV1_FILES = {
     'contracts/v2b/rev001/gpu_smoke_authorization.json',
     'contracts/v2b/rev001/gpu_smoke_authorization_r2.json',
     'contracts/v2b/rev001/gpu_smoke_authorization_r3.json',
+    'contracts/v2b/rev001/execution_source_r2.json',
+    'contracts/v2b/rev001/execution_contract_r2.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r4.json',
     'tools/bridge_v2b_checkpoint_revision.py',
     'tools/verify_v2b_checkpoint_revision.py',
     'tests/test_v2b_checkpoint_revision.py',
@@ -272,6 +275,9 @@ V2B_CONTRACT_REV1_FILES = {
     'tools/seal_v2b_training_execution.py',
     'tools/verify_v2b_training_execution.py',
     'tests/test_v2b_training_execution_contracts.py',
+    'src/sparse_rtdetr/baseline/training_v2b_smoke_controller.py',
+    'tools/verify_v2b_smoke_launcher.py',
+    'tests/test_v2b_smoke_controller.py',
 }
 
 V2A_FILES = {
