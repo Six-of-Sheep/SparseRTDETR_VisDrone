@@ -1108,12 +1108,63 @@ def _scientific_dependency_failures(root: Path) -> list[str]:
     return failures
 
 
-def _vendor_inventory(root: Path) -> list[dict[str, object]]:
+def _vendor_inventory(
+    root: Path,
+    *,
+    declared: list[dict[str, object]] | None = None,
+    failures: list[str] | None = None,
+) -> list[dict[str, object]]:
+    """Read vendor identity rows without treating generated cache as source.
+
+    The manifest is the immutable source of truth. When it is available, only
+    declared files are hashed, while an additional scan rejects tracked or
+    non-ignored unknown files. Ignored generated Python cache is deliberately
+    outside the identity boundary. declared=None retains the raw-scan behavior
+    for generic callers.
+    """
+
     vendor_root = root / "vendor" / "rtdetrv2_pytorch"
+    if declared is None:
+        paths = [
+            path
+            for path in sorted(vendor_root.rglob("*"))
+            if path.is_file() and not path.is_symlink()
+        ]
+    else:
+        declared_paths = {
+            item.get("relative_path")
+            for item in declared
+            if isinstance(item, dict) and isinstance(item.get("relative_path"), str)
+        }
+        paths = []
+        for relative in sorted(declared_paths):
+            if not relative.startswith(VENDOR_PREFIX):
+                continue
+            path = root / relative
+            if path.is_symlink():
+                if failures is not None:
+                    failures.append(f"vendor symlink: {relative}")
+                continue
+            if not path.is_file():
+                if failures is not None:
+                    failures.append(f"missing vendor file: {relative}")
+                continue
+            paths.append(path)
+
+        if failures is not None:
+            tracked_files = _git_tracked_files(root)
+            ignore_patterns = _gitignore_patterns(root)
+            for path in sorted(vendor_root.rglob("*")):
+                if not path.is_file() or path.is_symlink():
+                    continue
+                relative = path.relative_to(root).as_posix()
+                if relative in declared_paths:
+                    continue
+                if relative in tracked_files or not _gitignored(relative, ignore_patterns):
+                    failures.append(f"unexpected vendor file: {relative}")
+
     inventory = []
-    for path in sorted(vendor_root.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
+    for path in paths:
         relative = path.relative_to(root).as_posix()
         inventory.append({
             "relative_path": relative,
@@ -1192,8 +1243,12 @@ def _check_vendor(root: Path, failures: list[str]) -> None:
     if set(manifest) != expected_fields:
         failures.append("upstream manifest field set mismatch")
 
-    actual = _vendor_inventory(root)
     declared = manifest.get("files")
+    actual = _vendor_inventory(
+        root,
+        declared=declared if isinstance(declared, list) else None,
+        failures=failures,
+    )
     if not isinstance(declared, list) or declared != sorted(declared, key=lambda item: item.get("relative_path", "")):
         failures.append("upstream manifest files are not sorted")
     elif declared != actual:

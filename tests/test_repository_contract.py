@@ -15,6 +15,89 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class RepositoryContractTests(unittest.TestCase):
+    @staticmethod
+    def _vendor_rows(root: Path, relative_paths: list[str]) -> list[dict[str, object]]:
+        rows = []
+        for relative in relative_paths:
+            path = root / relative
+            stat_result = path.stat()
+            rows.append({
+                "relative_path": relative,
+                "size_bytes": stat_result.st_size,
+                "sha256": CHECKER._sha256(path),
+                "executable": bool(stat_result.st_mode & 0o111),
+                "source_role": CHECKER._vendor_source_role(relative),
+            })
+        return sorted(rows, key=lambda item: item["relative_path"])
+
+    def test_vendor_inventory_uses_declared_source_and_ignores_nested_python_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+            source = root / "vendor/rtdetrv2_pytorch/src/module.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("value = 1\n", encoding="utf-8")
+            for relative in (
+                "vendor/rtdetrv2_pytorch/src/__pycache__/module.cpython-310.pyc",
+                "vendor/rtdetrv2_pytorch/src/nested/__pycache__/other.cpython-310.pyc",
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"generated-bytecode")
+            declared = self._vendor_rows(root, ["vendor/rtdetrv2_pytorch/src/module.py"])
+            failures: list[str] = []
+            actual = CHECKER._vendor_inventory(root, declared=declared, failures=failures)
+            self.assertEqual(actual, declared)
+            self.assertEqual(failures, [])
+
+    def test_vendor_inventory_rejects_declared_mutation_deletion_and_bad_sha(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+            source = root / "vendor/rtdetrv2_pytorch/src/module.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("value = 1\n", encoding="utf-8")
+            declared = self._vendor_rows(root, ["vendor/rtdetrv2_pytorch/src/module.py"])
+
+            source.write_text("value = 2\n", encoding="utf-8")
+            mutated = CHECKER._vendor_inventory(root, declared=declared, failures=[])
+            self.assertNotEqual(mutated, declared)
+
+            source.unlink()
+            missing_failures: list[str] = []
+            missing = CHECKER._vendor_inventory(root, declared=declared, failures=missing_failures)
+            self.assertEqual(missing, [])
+            self.assertIn("missing vendor file: vendor/rtdetrv2_pytorch/src/module.py", missing_failures)
+
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("value = 1\n", encoding="utf-8")
+            bad_sha = [dict(declared[0], sha256="0" * 64)]
+            actual = CHECKER._vendor_inventory(root, declared=bad_sha, failures=[])
+            self.assertNotEqual(actual, bad_sha)
+
+    def test_vendor_inventory_rejects_nonignored_and_tracked_unknown_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+            source = root / "vendor/rtdetrv2_pytorch/src/module.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("value = 1\n", encoding="utf-8")
+            declared = self._vendor_rows(root, ["vendor/rtdetrv2_pytorch/src/module.py"])
+            unexpected = root / "vendor/rtdetrv2_pytorch/src/unexpected.py"
+            unexpected.write_text("value = 2\n", encoding="utf-8")
+            failures: list[str] = []
+            CHECKER._vendor_inventory(root, declared=declared, failures=failures)
+            self.assertIn("unexpected vendor file: vendor/rtdetrv2_pytorch/src/unexpected.py", failures)
+
+            with mock.patch.object(
+                CHECKER,
+                "_git_tracked_files",
+                return_value={"vendor/rtdetrv2_pytorch/src/unexpected.py"},
+            ):
+                tracked_failures: list[str] = []
+                CHECKER._vendor_inventory(root, declared=declared, failures=tracked_failures)
+            self.assertIn("unexpected vendor file: vendor/rtdetrv2_pytorch/src/unexpected.py", tracked_failures)
+
     def test_contract_passes(self):
         self.assertTrue(CHECKER.check_repository(ROOT))
 
