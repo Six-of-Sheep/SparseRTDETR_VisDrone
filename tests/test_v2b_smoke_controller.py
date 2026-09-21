@@ -304,3 +304,70 @@ def test_versioned_contract_path_rejects_old_or_external_path(tmp_path):
     external.write_text("{}\n", encoding="utf-8")
     with pytest.raises(Exception, match="VERSIONED_CONTRACT_PATH_MISMATCH"):
         controller.validate_versioned_contract_path(tmp_path, external, "gpu_smoke_authorization_")
+
+
+def _gpu_csv(uuid="GPU-11111111-2222-3333-4444-555555555555", pci="00000000:01:00.0",
+             name="NVIDIA GeForce RTX 4090 D", used="15", free="24067",
+             util="0", temp="51", clock="1500"):
+    return f"0, {uuid}, {pci}, {name}, {used}, {free}, {util}, {temp}, {clock}\n"
+
+
+def test_gpu_identity_parser_accepts_bound_physical_gpu():
+    result = controller.parse_gpu_identity_query(
+        _gpu_csv(),
+        "",
+        expected_gpu_uuid="GPU-11111111-2222-3333-4444-555555555555",
+        expected_pci_bus_id="00000000:01:00.0",
+        expected_gpu_name="NVIDIA GeForce RTX 4090 D",
+    )
+    assert result["status"] == "PASS"
+    assert result["physical_gpu"]["uuid"].startswith("GPU-")
+    assert result["telemetry"]["memory_free_mib"] == 24067.0
+
+
+@pytest.mark.parametrize(
+    "kwargs,compute,reason",
+    [
+        ({"expected_gpu_uuid": "GPU-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}, "", "GPU_UUID_MISSING_OR_AMBIGUOUS"),
+        ({"expected_pci_bus_id": "00000000:02:00.0"}, "", "GPU_PCI_BUS_MISMATCH"),
+        ({"expected_gpu_name": "Other GPU"}, "", "GPU_NAME_MISMATCH"),
+        ({}, "123, python, 100 MiB\n", "EXTERNAL_GPU_COMPUTE_PROCESS"),
+        ({"max_clock_mhz": 1400}, "", "GPU_HEALTH_ADMISSION_MISMATCH"),
+    ],
+)
+def test_gpu_identity_parser_rejects_identity_or_admission_drift(kwargs, compute, reason):
+    values = {
+        "expected_gpu_uuid": "GPU-11111111-2222-3333-4444-555555555555",
+        "expected_pci_bus_id": "00000000:01:00.0",
+        "expected_gpu_name": "NVIDIA GeForce RTX 4090 D",
+    }
+    values.update(kwargs)
+    with pytest.raises(controller.GPUIdentityPreflightError, match=reason):
+        controller.parse_gpu_identity_query(_gpu_csv(), compute, **values)
+
+
+def test_gpu_identity_probe_uses_nvidia_smi_and_logical_cuda_mapping(monkeypatch, tmp_path):
+    calls = []
+    class Completed:
+        def __init__(self, stdout, returncode=0, stderr=""):
+            self.stdout, self.returncode, self.stderr = stdout, returncode, stderr
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        if "--query-gpu=" in " ".join(argv):
+            return Completed(_gpu_csv())
+        if "--query-compute-apps=" in " ".join(argv):
+            return Completed("")
+        return Completed('{"cuda_available": true, "cuda_initialized": false, "device_count": 1, "device_name": "NVIDIA GeForce RTX 4090 D"}\n')
+    monkeypatch.setattr(controller.subprocess, "run", fake_run)
+    result = controller.probe_visible_gpu_identity(
+        expected_gpu_uuid="GPU-11111111-2222-3333-4444-555555555555",
+        expected_pci_bus_id="00000000:01:00.0",
+        expected_gpu_name="NVIDIA GeForce RTX 4090 D",
+        python_executable=tmp_path / "python",
+        nvidia_smi_executable=tmp_path / "nvidia-smi",
+        startup_environment={"CUDA_VISIBLE_DEVICES": "GPU-11111111-2222-3333-4444-555555555555"},
+    )
+    assert result["logical_cuda"]["device"] == "cuda:0"
+    assert result["logical_cuda"]["cuda_visible_devices"].startswith("GPU-")
+    assert len(calls) == 3
+    assert all(".uuid" not in " ".join(call[0]) for call in calls)

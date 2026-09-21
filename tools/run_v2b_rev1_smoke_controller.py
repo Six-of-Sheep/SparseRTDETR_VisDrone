@@ -11,14 +11,16 @@ import hashlib
 import json
 from pathlib import Path
 
-from sparse_rtdetr.baseline.training_v2b_smoke_controller import build_plan, launch, validate_versioned_contract_path
+from sparse_rtdetr.baseline.training_v2b_smoke_controller import (
+    build_plan, launch, validate_versioned_contract_path, probe_visible_gpu_identity,
+)
 from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     RuntimeLocatorError, resolve_bridge, resolve_policy_authority, load_canonical_json,
 )
 
 
 RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
-EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-007"
+EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-008"
 
 
 def canonical(value: object) -> bytes:
@@ -156,6 +158,27 @@ def main() -> int:
     auth_path = validate_versioned_contract_path(repo, Path(args.auth), "gpu_smoke_authorization_")
     execution_path = validate_versioned_contract_path(repo, Path(args.exec_contract), "execution_contract_")
     expected_environment = startup_environment(contract, gpu_uuid=args.gpu_uuid, cpu_rehearsal=args.cpu_rehearsal)
+    gpu_identity_preflight = None
+    if not args.cpu_rehearsal:
+        policy_doc = resolved_policy.get("policy") or {}
+        hardware = policy_doc.get("hardware_policy") or {}
+        expected_nvidia_smi = (
+            (policy_doc.get("expected_nvidia_smi_executable") or {}).get("path")
+            or "/usr/bin/nvidia-smi"
+        )
+        gpu_identity_preflight = probe_visible_gpu_identity(
+            expected_gpu_uuid=args.gpu_uuid,
+            expected_pci_bus_id=str(policy_doc.get("pci_bus_id") or ""),
+            expected_gpu_name=str(hardware.get("expected_gpu_name") or ""),
+            python_executable=Path(args.python_executable),
+            nvidia_smi_executable=Path(expected_nvidia_smi),
+            startup_environment=expected_environment,
+            max_used_memory_mib=int(hardware.get("preflight_max_used_memory_mib", 1024)),
+            min_free_memory_mib=int(hardware.get("preflight_min_free_memory_mib", 20_000)),
+            max_utilization_percent=int(hardware.get("preflight_max_utilization_percent", 5)),
+            max_temperature_c=int(hardware.get("gpu_stop_temperature_c", 80)),
+            max_clock_mhz=int(hardware.get("graphics_clock_upper_mhz", 1500)),
+        )
     runner_argv = [
         args.runner,
         "--root", args.root,
@@ -189,6 +212,8 @@ def main() -> int:
         "authorization": {"path": str(auth_path), "id": args.auth_id, "sha256": args.auth_sha},
         "execution_contract": {"path": str(execution_path), "sha256": args.exec_contract_sha},
     }
+    if gpu_identity_preflight is not None:
+        runtime_objects["gpu_identity_preflight"] = gpu_identity_preflight
     plan = build_plan(
         launch_id=f"rev1-gpu-smoke-{args.auth_id}" + ("-cpu-rehearsal" if args.cpu_rehearsal else ""),
         evidence_root=Path(args.root), repo_root=repo,

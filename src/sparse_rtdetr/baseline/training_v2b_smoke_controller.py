@@ -7,6 +7,7 @@ evidence is intentionally separate from the scientific source identity.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -32,6 +33,172 @@ class LaunchDirectoryError(RuntimeError):
 
 class StartupEnvironmentError(RuntimeError):
     """The child did not observe the controller's bound startup environment."""
+
+
+class GPUIdentityPreflightError(RuntimeError):
+    """Physical/logical GPU identity or admission preflight failed."""
+
+
+_GPU_UUID_RE = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+
+
+def parse_gpu_identity_query(
+    gpu_query: str,
+    compute_query: str,
+    *,
+    expected_gpu_uuid: str,
+    expected_pci_bus_id: str,
+    expected_gpu_name: str,
+    max_used_memory_mib: int = 1024,
+    min_free_memory_mib: int = 20_000,
+    max_utilization_percent: int = 5,
+    max_temperature_c: int = 80,
+    max_clock_mhz: int = 1500,
+) -> dict[str, Any]:
+    """Parse a fixed nvidia-smi query without importing or initializing CUDA."""
+    if _GPU_UUID_RE.fullmatch(expected_gpu_uuid) is None:
+        raise GPUIdentityPreflightError("GPU_UUID_UNAVAILABLE")
+    rows = []
+    for raw in csv.reader(line for line in gpu_query.splitlines() if line.strip()):
+        fields = [item.strip() for item in raw]
+        if len(fields) < 9:
+            raise GPUIdentityPreflightError("GPU_IDENTITY_QUERY_MALFORMED")
+        rows.append({
+            "index": fields[0], "uuid": fields[1], "pci_bus_id": fields[2],
+            "name": fields[3], "memory_used_mib": fields[4],
+            "memory_free_mib": fields[5], "utilization_percent": fields[6],
+            "temperature_c": fields[7], "clock_sm_mhz": fields[8],
+        })
+    matches = [row for row in rows if row["uuid"] == expected_gpu_uuid]
+    if len(matches) != 1:
+        raise GPUIdentityPreflightError("GPU_UUID_MISSING_OR_AMBIGUOUS")
+    selected = matches[0]
+    if selected["pci_bus_id"] != expected_pci_bus_id:
+        raise GPUIdentityPreflightError("GPU_PCI_BUS_MISMATCH")
+    if selected["name"] != expected_gpu_name:
+        raise GPUIdentityPreflightError("GPU_NAME_MISMATCH")
+    try:
+        used = float(selected["memory_used_mib"])
+        free = float(selected["memory_free_mib"])
+        utilization = float(selected["utilization_percent"])
+        temperature = float(selected["temperature_c"])
+        clock = float(selected["clock_sm_mhz"])
+    except ValueError as exc:
+        raise GPUIdentityPreflightError("GPU_TELEMETRY_UNREADABLE") from exc
+    if used > max_used_memory_mib or free < min_free_memory_mib:
+        raise GPUIdentityPreflightError("GPU_MEMORY_ADMISSION_MISMATCH")
+    if utilization > max_utilization_percent:
+        raise GPUIdentityPreflightError("GPU_UTILIZATION_ADMISSION_MISMATCH")
+    if temperature >= max_temperature_c or clock > max_clock_mhz:
+        raise GPUIdentityPreflightError("GPU_HEALTH_ADMISSION_MISMATCH")
+    process_text = compute_query.strip()
+    if process_text and "no running processes" not in process_text.lower():
+        raise GPUIdentityPreflightError("EXTERNAL_GPU_COMPUTE_PROCESS")
+    return {
+        "status": "PASS",
+        "physical_gpu": {
+            "index": int(selected["index"]),
+            "uuid": selected["uuid"],
+            "pci_bus_id": selected["pci_bus_id"],
+            "name": selected["name"],
+        },
+        "telemetry": {
+            "memory_used_mib": used, "memory_free_mib": free,
+            "utilization_percent": utilization, "temperature_c": temperature,
+            "clock_sm_mhz": clock,
+        },
+        "compute_processes": [],
+    }
+
+
+def probe_visible_gpu_identity(
+    *,
+    expected_gpu_uuid: str,
+    expected_pci_bus_id: str,
+    expected_gpu_name: str,
+    python_executable: Path,
+    nvidia_smi_executable: Path,
+    startup_environment: Mapping[str, str],
+    max_used_memory_mib: int = 1024,
+    min_free_memory_mib: int = 20_000,
+    max_utilization_percent: int = 5,
+    max_temperature_c: int = 80,
+    max_clock_mhz: int = 1500,
+) -> dict[str, Any]:
+    """Verify physical identity first, then UUID-selected logical cuda:0."""
+    query_args = [
+        str(nvidia_smi_executable),
+        "--query-gpu=index,uuid,pci.bus_id,name,memory.used,memory.free,utilization.gpu,temperature.gpu,clocks.sm",
+        "--format=csv,noheader,nounits",
+    ]
+    compute_args = [
+        str(nvidia_smi_executable),
+        "--query-compute-apps=pid,process_name,used_memory",
+        "--format=csv,noheader,nounits",
+    ]
+    env = dict(os.environ)
+    env.update({"LC_ALL": "C", "LANG": "C", "PAGER": "", "SYSTEMD_PAGER": ""})
+    try:
+        gpu_proc = subprocess.run(query_args, stdin=subprocess.DEVNULL, capture_output=True,
+                                  text=True, check=False, timeout=20, env=env)
+        compute_proc = subprocess.run(compute_args, stdin=subprocess.DEVNULL, capture_output=True,
+                                      text=True, check=False, timeout=20, env=env)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise GPUIdentityPreflightError("GPU_HARDWARE_PROBE_UNAVAILABLE") from exc
+    if gpu_proc.returncode != 0 or gpu_proc.stderr:
+        raise GPUIdentityPreflightError("GPU_HARDWARE_PROBE_FAILED")
+    if compute_proc.returncode != 0 or compute_proc.stderr:
+        raise GPUIdentityPreflightError("GPU_COMPUTE_PROBE_FAILED")
+    physical = parse_gpu_identity_query(
+        gpu_proc.stdout, compute_proc.stdout,
+        expected_gpu_uuid=expected_gpu_uuid,
+        expected_pci_bus_id=expected_pci_bus_id,
+        expected_gpu_name=expected_gpu_name,
+        max_used_memory_mib=max_used_memory_mib,
+        min_free_memory_mib=min_free_memory_mib,
+        max_utilization_percent=max_utilization_percent,
+        max_temperature_c=max_temperature_c,
+        max_clock_mhz=max_clock_mhz,
+    )
+    env.update({str(key): str(value) for key, value in startup_environment.items()})
+    code = (
+        "import json, torch; "
+        "available=bool(torch.cuda.is_available()); "
+        "count=int(torch.cuda.device_count()); "
+        "initialized=bool(torch.cuda.is_initialized()); "
+        "name=torch.cuda.get_device_name(0) if available and count == 1 else None; "
+        "print(json.dumps({'cuda_available':available,'device_count':count,"
+        "'cuda_initialized':initialized,'device_name':name}, sort_keys=True))"
+    )
+    try:
+        logical_proc = subprocess.run(
+            [str(python_executable), "-c", code], stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, check=False, timeout=60, env=env,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise GPUIdentityPreflightError("CUDA_LOGICAL_PROBE_UNAVAILABLE") from exc
+    if logical_proc.returncode != 0 or logical_proc.stderr:
+        raise GPUIdentityPreflightError("CUDA_LOGICAL_PROBE_FAILED")
+    try:
+        logical = json.loads(logical_proc.stdout.strip())
+    except json.JSONDecodeError as exc:
+        raise GPUIdentityPreflightError("CUDA_LOGICAL_PROBE_MALFORMED") from exc
+    if (logical.get("cuda_available") is not True or logical.get("device_count") != 1
+            or logical.get("device_name") != expected_gpu_name):
+        raise GPUIdentityPreflightError("CUDA_LOGICAL_DEVICE_MISMATCH")
+    if env.get("CUDA_VISIBLE_DEVICES") != expected_gpu_uuid:
+        raise GPUIdentityPreflightError("CUDA_VISIBLE_DEVICES_MAPPING_MISMATCH")
+    return {
+        **physical,
+        "logical_cuda": {
+            "device": "cuda:0",
+            "device_count": logical["device_count"],
+            "device_name": logical["device_name"],
+            "cuda_visible_devices": env["CUDA_VISIBLE_DEVICES"],
+            "mapping_basis": "UUID-selected CUDA_VISIBLE_DEVICES with one logical device",
+            "cuda_initialized": logical["cuda_initialized"],
+        },
+    }
 
 
 def validate_versioned_contract_path(repo: Path, candidate: Path, prefix: str) -> Path:
