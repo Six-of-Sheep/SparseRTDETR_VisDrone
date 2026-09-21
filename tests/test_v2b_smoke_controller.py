@@ -232,3 +232,54 @@ def test_wrapper_explicitly_propagates_startup_environment(tmp_path):
     assert "CUBLAS_WORKSPACE_CONFIG=:4096:8" in text
     assert "PYTHONHASHSEED=0" in text
     assert "CUDA_VISIBLE_DEVICES=GPU-test" in text
+
+
+def _sealed_plan(tmp_path: Path, *, runner_argv=None):
+    objects = {
+        "policy_authority": {"path": str(tmp_path / "authority.json"), "authority_id": "hardware-policy:test", "identity_sha256": "a" * 64},
+        "policy": {"resolved_path": str(tmp_path / "runtime" / "policy.json"), "sha256": "b" * 64, "size_bytes": 12},
+        "bridge_checkpoint": {"path": str(tmp_path / "bridge.pt"), "sha256": "c" * 64},
+        "bridge_manifest": {"path": str(tmp_path / "bridge.json"), "sha256": "d" * 64},
+        "authorization": {"path": str(tmp_path / "auth.json"), "id": "smoke-test", "sha256": "e" * 64},
+        "execution_contract": {"path": str(tmp_path / "execution.json"), "sha256": "f" * 64},
+    }
+    argv = runner_argv or [
+        "runner.py", "--root", str(tmp_path / "evidence"),
+        "--derived", str(tmp_path / "bridge.pt"), "--manifest", str(tmp_path / "bridge.json"),
+        "--auth", str(tmp_path / "auth.json"), "--execution-contract", str(tmp_path / "execution.json"),
+        "--policy-authority", str(tmp_path / "authority.json"), "--policy-authority-id", "hardware-policy:test",
+        "--policy-authority-identity-sha", "a" * 64,
+    ]
+    plan = controller.build_plan(
+        launch_id="sealed", evidence_root=tmp_path / "evidence", repo_root=tmp_path,
+        python_executable=Path(sys.executable), runner_argv=argv, tmux_executable=Path("tmux"),
+        session_name="sealed", environment={}, runtime_objects=objects,
+    )
+    plan["launch_plan_sha256"] = controller.canonical_sha256({k: v for k, v in plan.items() if k != "launch_plan_sha256"})
+    return plan
+
+
+def test_final_launch_plan_matches_sealed_runtime_objects(tmp_path):
+    plan = _sealed_plan(tmp_path)
+    assert controller.verify_final_launch_plan(plan) == plan["launch_plan_sha256"]
+
+
+def test_final_launch_plan_rejects_old_policy_path_before_tmux(tmp_path):
+    plan = _sealed_plan(tmp_path, runner_argv=_sealed_plan(tmp_path)["runner_argv"] + ["--policy", "/old/policy.json"])
+    plan["launch_plan_sha256"] = controller.canonical_sha256({k: v for k, v in plan.items() if k != "launch_plan_sha256"})
+    with pytest.raises(Exception, match="physical policy argv is forbidden"):
+        controller.verify_final_launch_plan(plan)
+
+
+def test_final_launch_plan_rejects_mutation_after_seal(tmp_path):
+    plan = _sealed_plan(tmp_path)
+    plan["runner_argv"][plan["runner_argv"].index("--manifest") + 1] = "/old/manifest.json"
+    with pytest.raises(Exception, match="does not match sealed plan"):
+        controller.verify_final_launch_plan(plan)
+
+
+def test_final_launch_plan_rejects_digest_drift(tmp_path):
+    plan = _sealed_plan(tmp_path)
+    plan["runtime_objects"]["policy"]["resolved_path"] = "/different/policy.json"
+    with pytest.raises(Exception, match="launch plan digest drift"):
+        controller.verify_final_launch_plan(plan)

@@ -12,6 +12,9 @@ import json
 from pathlib import Path
 
 from sparse_rtdetr.baseline.training_v2b_smoke_controller import build_plan, launch
+from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
+    RuntimeLocatorError, resolve_bridge, resolve_policy_authority, load_canonical_json,
+)
 
 
 RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
@@ -36,7 +39,7 @@ def load_execution_contract(path: Path, expected_sha: str, expected_source_sha: 
         raise RuntimeError("EXECUTION_CONTRACT_NON_CANONICAL")
     if value.get("execution_contract_sha256") != expected_sha:
         raise RuntimeError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if value.get("execution_contract_id") != "v2b-execution-contract-005":
+    if value.get("execution_contract_id") != "v2b-execution-contract-006":
         raise RuntimeError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: item for key, item in value.items() if key != "execution_contract_sha256"}
     if value.get("execution_contract_sha256") != hashlib.sha256(canonical(without_runtime(body))).hexdigest():
@@ -63,6 +66,52 @@ def startup_environment(contract: dict, *, gpu_uuid: str, cpu_rehearsal: bool) -
     return result
 
 
+def _arg_value(argv: list[str], name: str) -> str:
+    try:
+        index = argv.index(name)
+    except ValueError as exc:
+        raise RuntimeLocatorError(f"FINAL_LAUNCH_PLAN_MISMATCH: missing {name}") from exc
+    if index + 1 >= len(argv):
+        raise RuntimeLocatorError(f"FINAL_LAUNCH_PLAN_MISMATCH: missing value for {name}")
+    return str(argv[index + 1])
+
+
+def verify_final_launch_plan(plan: dict) -> str:
+    """Verify the exact argv that will reach tmux before it is created."""
+    objects = plan.get("runtime_objects")
+    if not isinstance(objects, dict):
+        raise RuntimeLocatorError("FINAL_LAUNCH_PLAN_MISMATCH: runtime objects missing")
+    argv = [str(item) for item in plan.get("runner_argv", [])]
+    forbidden = {"--policy", "--policy-sha", "--policy-size"}
+    if forbidden.intersection(argv):
+        raise RuntimeLocatorError("FINAL_LAUNCH_PLAN_MISMATCH: physical policy argv is forbidden")
+    authority = objects.get("policy_authority") or {}
+    policy = objects.get("policy") or {}
+    expected = {
+        "--policy-authority": authority.get("path"),
+        "--policy-authority-id": authority.get("authority_id"),
+        "--policy-authority-identity-sha": authority.get("identity_sha256"),
+        "--root": plan.get("evidence_root"),
+        "--derived": (objects.get("bridge_checkpoint") or {}).get("path"),
+        "--manifest": (objects.get("bridge_manifest") or {}).get("path"),
+        "--auth": (objects.get("authorization") or {}).get("path"),
+        "--execution-contract": (objects.get("execution_contract") or {}).get("path"),
+    }
+    for name, expected_value in expected.items():
+        if not expected_value or _arg_value(argv, name) != str(expected_value):
+            raise RuntimeLocatorError(
+                f"FINAL_LAUNCH_PLAN_MISMATCH: {name} does not match sealed plan"
+            )
+    resolved_policy = policy.get("resolved_path")
+    if not resolved_policy or resolved_policy in argv:
+        raise RuntimeLocatorError("FINAL_LAUNCH_PLAN_MISMATCH: resolved policy leaked as caller argv")
+    digest_body = {key: value for key, value in plan.items() if key != "launch_plan_sha256"}
+    digest = hashlib.sha256(canonical(digest_body)).hexdigest()
+    if plan.get("launch_plan_sha256") != digest:
+        raise RuntimeLocatorError("FINAL_LAUNCH_PLAN_MISMATCH: launch plan digest drift")
+    return digest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True)
@@ -73,9 +122,9 @@ def main() -> int:
     parser.add_argument("--derived", required=True)
     parser.add_argument("--derived-sha", required=True)
     parser.add_argument("--manifest", required=True)
-    parser.add_argument("--policy", required=True)
-    parser.add_argument("--policy-sha", required=True)
-    parser.add_argument("--policy-size", type=int)
+    parser.add_argument("--policy-authority", required=True)
+    parser.add_argument("--policy-authority-id", required=True)
+    parser.add_argument("--policy-authority-identity-sha", required=True)
     parser.add_argument("--auth", required=True)
     parser.add_argument("--auth-id", required=True)
     parser.add_argument("--auth-sha", required=True)
@@ -89,6 +138,28 @@ def main() -> int:
     parser.add_argument("--cpu-rehearsal", action="store_true")
     args = parser.parse_args()
     contract = load_execution_contract(Path(args.exec_contract), args.exec_contract_sha, args.exec_source_sha)
+    repo = Path(args.repo).resolve(strict=True)
+    authority_path = Path(args.policy_authority).resolve(strict=True)
+    expected_authority = (repo / "contracts" / "v2b" / "rev001" / "runtime_policy_authority_r1.json").resolve(strict=True)
+    if authority_path != expected_authority:
+        raise RuntimeLocatorError("POLICY_AUTHORITY_PATH_MISMATCH")
+    resolved_policy = resolve_policy_authority(
+        authority_path,
+        authority_id=args.policy_authority_id,
+        expected_identity_sha256=args.policy_authority_identity_sha,
+    )
+    resolve_bridge(
+        Path(args.derived), checkpoint_sha256=args.derived_sha,
+        manifest=Path(args.manifest), manifest_sha256=args.bridge_manifest_sha,
+    )
+    auth_path = Path(args.auth).resolve(strict=True)
+    expected_auth = (repo / "contracts" / "v2b" / "rev001" / "gpu_smoke_authorization_r8.json").resolve(strict=True)
+    if auth_path != expected_auth:
+        raise RuntimeLocatorError("AUTHORIZATION_PATH_MISMATCH")
+    execution_path = Path(args.exec_contract).resolve(strict=True)
+    expected_execution = (repo / "contracts" / "v2b" / "rev001" / "execution_contract_r6.json").resolve(strict=True)
+    if execution_path != expected_execution:
+        raise RuntimeLocatorError("EXECUTION_CONTRACT_PATH_MISMATCH")
     expected_environment = startup_environment(contract, gpu_uuid=args.gpu_uuid, cpu_rehearsal=args.cpu_rehearsal)
     runner_argv = [
         args.runner,
@@ -97,40 +168,42 @@ def main() -> int:
         "--derived", args.derived,
         "--derived-sha", args.derived_sha,
         "--manifest", args.manifest,
-        "--policy", args.policy,
-        "--policy-sha", args.policy_sha,
-        "--auth", args.auth,
+        "--auth", str(auth_path),
         "--auth-id", args.auth_id,
         "--auth-sha", args.auth_sha,
         "--exec-source-sha", args.exec_source_sha,
         "--exec-contract-sha", args.exec_contract_sha,
-        "--execution-contract", args.exec_contract,
+        "--execution-contract", str(execution_path),
         "--bridge-binding-sha", args.bridge_binding_sha,
         "--bridge-manifest-sha", args.bridge_manifest_sha,
         "--training-contract-sha", args.training_contract_sha,
         "--gpu-uuid", args.gpu_uuid,
+        "--policy-authority", str(authority_path),
+        "--policy-authority-id", args.policy_authority_id,
+        "--policy-authority-identity-sha", args.policy_authority_identity_sha,
     ]
-    if args.policy_size is not None:
-        runner_argv += ["--policy-size", str(args.policy_size)]
-    runner_argv += ["--cpu-rehearsal" if args.cpu_rehearsal else ""]
-    runner_argv = [item for item in runner_argv if item]
+    if args.cpu_rehearsal:
+        runner_argv += ["--cpu-rehearsal"]
     environment = dict(expected_environment)
-    environment.update({
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "PYTHONPATH": str(Path(args.repo) / "src"),
-    })
+    environment.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(repo / "src")})
+    runtime_objects = {
+        "policy_authority": {"path": str(authority_path), "authority_id": args.policy_authority_id, "identity_sha256": args.policy_authority_identity_sha},
+        "policy": {"resolved_path": resolved_policy["file"]["path"], "sha256": resolved_policy["file"]["sha256"], "size_bytes": resolved_policy["file"]["size_bytes"]},
+        "bridge_checkpoint": {"path": str(Path(args.derived)), "sha256": args.derived_sha},
+        "bridge_manifest": {"path": str(Path(args.manifest)), "sha256": args.bridge_manifest_sha},
+        "authorization": {"path": str(auth_path), "id": args.auth_id, "sha256": args.auth_sha},
+        "execution_contract": {"path": str(execution_path), "sha256": args.exec_contract_sha},
+    }
     plan = build_plan(
-        launch_id="rev1-gpu-smoke-bridge007-cpu-rehearsal" if args.cpu_rehearsal else "rev1-gpu-smoke-bridge007",
-        evidence_root=Path(args.root),
-        repo_root=Path(args.repo),
-        python_executable=Path(args.python_executable),
-        runner_argv=runner_argv,
-        tmux_executable=Path("tmux"),
-        session_name=args.session,
-        environment=environment,
-        ready_timeout=300.0,
-        exit_timeout=300.0,
+        launch_id="rev1-gpu-smoke-bridge008-cpu-rehearsal" if args.cpu_rehearsal else "rev1-gpu-smoke-bridge008",
+        evidence_root=Path(args.root), repo_root=repo,
+        python_executable=Path(args.python_executable), runner_argv=runner_argv,
+        tmux_executable=Path("tmux"), session_name=args.session,
+        environment=environment, runtime_objects=runtime_objects,
+        ready_timeout=300.0, exit_timeout=300.0,
     )
+    plan["launch_plan_sha256"] = hashlib.sha256(canonical(plan)).hexdigest()
+    verify_final_launch_plan(plan)
     result = launch(plan)
     print(json.dumps(result, sort_keys=True, indent=2))
     return 0 if result.get("status") == "COMPLETED" else 2

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot REV1 bridge-005 GPU pre-formal smoke.
+"""One-shot REV1 bridge-008 GPU pre-formal smoke.
 
 This file is uploaded to /tmp only.  It does not belong to the scientific or
 execution source identity and is never used for formal continuation.
@@ -35,7 +35,7 @@ from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     RuntimeLocatorError,
     load_canonical_json,
     resolve_bridge,
-    resolve_policy,
+    resolve_policy_authority,
 )
 from sparse_rtdetr.baseline.training_v2b_smoke_controller import verify_startup_environment
 
@@ -46,9 +46,12 @@ REPO: Path | None = None
 DERIVED: Path | None = None
 DERIVED_SHA = ""
 BRIDGE_MANIFEST_PATH: Path | None = None
-POLICY_PATH: Path | None = None
+POLICY_PATH: Path | None = None  # resolved runtime-only path, never a caller input
 POLICY_SHA = ""
 POLICY_SIZE: int | None = None
+POLICY_AUTHORITY_PATH: Path | None = None
+POLICY_AUTHORITY_ID = ""
+POLICY_AUTHORITY_IDENTITY_SHA = ""
 GPU_UUID = ""
 AUTH_ID = ""
 AUTH_SHA = ""
@@ -63,7 +66,8 @@ SCHEMA_VERSION = 1
 
 
 def _configured() -> None:
-    if not all((REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH, POLICY_PATH, POLICY_SHA,
+    if not all((REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH,
+                POLICY_AUTHORITY_PATH, POLICY_AUTHORITY_ID, POLICY_AUTHORITY_IDENTITY_SHA,
                 AUTH_ID, AUTH_SHA, AUTH_PATH, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA,
                 EXEC_CONTRACT_PATH, BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA)):
         raise RuntimeLocatorError("runtime launch arguments are incomplete")
@@ -74,13 +78,15 @@ def _configuration_argv() -> list[str]:
     return [
         "--repo", str(REPO), "--derived", str(DERIVED), "--derived-sha", DERIVED_SHA,
         "--manifest", str(BRIDGE_MANIFEST_PATH),
-        "--policy", str(POLICY_PATH), "--policy-sha", POLICY_SHA,
+        "--policy-authority", str(POLICY_AUTHORITY_PATH),
+        "--policy-authority-id", POLICY_AUTHORITY_ID,
+        "--policy-authority-identity-sha", POLICY_AUTHORITY_IDENTITY_SHA,
         "--auth", str(AUTH_PATH), "--auth-id", AUTH_ID, "--auth-sha", AUTH_SHA,
         "--exec-source-sha", EXEC_SOURCE_SHA, "--exec-contract-sha", EXEC_CONTRACT_SHA,
         "--execution-contract", str(EXEC_CONTRACT_PATH),
         "--bridge-binding-sha", BRIDGE_BINDING_SHA, "--bridge-manifest-sha", BRIDGE_MANIFEST_SHA,
         "--training-contract-sha", TRAINING_CONTRACT_SHA, "--gpu-uuid", GPU_UUID,
-    ] + (["--policy-size", str(POLICY_SIZE)] if POLICY_SIZE is not None else [])
+    ]
 
 
 def canonical(value: Any) -> bytes:
@@ -141,13 +147,16 @@ def owned_input_sha(images: torch.Tensor, targets: list[dict]) -> dict[str, str]
 
 
 def load_policy() -> dict:
+    global POLICY_PATH, POLICY_SHA, POLICY_SIZE
     _configured()
-    resolved = resolve_policy(
-        POLICY_PATH,
-        expected_sha256=POLICY_SHA,
-        expected_size_bytes=POLICY_SIZE,
-        expected_gpu_uuid=GPU_UUID,
+    resolved = resolve_policy_authority(
+        POLICY_AUTHORITY_PATH,
+        authority_id=POLICY_AUTHORITY_ID,
+        expected_identity_sha256=POLICY_AUTHORITY_IDENTITY_SHA,
     )
+    POLICY_PATH = Path(resolved["file"]["path"])
+    POLICY_SHA = str(resolved["file"]["sha256"])
+    POLICY_SIZE = int(resolved["file"]["size_bytes"])
     policy = dict(resolved["policy"])
     for runtime_field in ("authorized_scope", "workload_deadline_seconds", "minimum_loaded_clock_samples", "policy_sha256"):
         policy.pop(runtime_field, None)
@@ -161,7 +170,7 @@ def _execution_contract() -> dict[str, Any]:
     contract = load_canonical_json(EXEC_CONTRACT_PATH)
     if contract.get("execution_contract_sha256") != EXEC_CONTRACT_SHA:
         raise RuntimeLocatorError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if contract.get("execution_contract_id") != "v2b-execution-contract-005":
+    if contract.get("execution_contract_id") != "v2b-execution-contract-006":
         raise RuntimeLocatorError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: value for key, value in contract.items() if key != "execution_contract_sha256"}
     if contract.get("execution_contract_sha256") != sha_bytes(canonical(without_runtime(body))):
@@ -248,7 +257,7 @@ def _run_revision_verifier(root: Path) -> dict[str, Any]:
     policy_authority = contract_dir / "runtime_policy_authority_r1.json"
     command = [
         sys.executable,
-        str(REPO / "tools" / "verify_v2b_smoke_launcher_r5.py"),
+        str(REPO / "tools" / "verify_v2b_smoke_launcher_r6.py"),
         "--repo-root", str(REPO),
         "--contract-dir", str(contract_dir),
         "--bridge", str(DERIVED),
@@ -359,7 +368,7 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
     )
     loader = build_loader(binding, repo=REPO)
     cpu_binding = build_train_core_run_binding(
-        components, loader, run_id="v2b-rev1-s2-r896-bridge-007-cpu",
+        components, loader, run_id="v2b-rev1-s2-r896-bridge-008-cpu",
         repo_root=REPO, requested_device="cpu", cuda_gpu_uuid=None,
     )
     cpu_binding["provenance"] = copy.deepcopy(binding["provenance"])
@@ -580,9 +589,9 @@ def main() -> int:
     parser.add_argument("--derived", required=True)
     parser.add_argument("--derived-sha", required=True)
     parser.add_argument("--manifest", required=True)
-    parser.add_argument("--policy", required=True)
-    parser.add_argument("--policy-sha", required=True)
-    parser.add_argument("--policy-size", type=int)
+    parser.add_argument("--policy-authority", required=True)
+    parser.add_argument("--policy-authority-id", required=True)
+    parser.add_argument("--policy-authority-identity-sha", required=True)
     parser.add_argument("--auth", required=True)
     parser.add_argument("--auth-id", required=True)
     parser.add_argument("--auth-sha", required=True)
@@ -595,11 +604,17 @@ def main() -> int:
     parser.add_argument("--gpu-uuid", required=True)
     args = parser.parse_args()
     global REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH, POLICY_PATH, POLICY_SHA, POLICY_SIZE
+    global POLICY_AUTHORITY_PATH, POLICY_AUTHORITY_ID, POLICY_AUTHORITY_IDENTITY_SHA
     global AUTH_PATH, AUTH_ID, AUTH_SHA, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA, EXEC_CONTRACT_PATH
     global BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA, GPU_UUID
-    REPO, DERIVED, BRIDGE_MANIFEST_PATH, POLICY_PATH = map(Path, (args.repo, args.derived, args.manifest, args.policy))
+    REPO, DERIVED, BRIDGE_MANIFEST_PATH = map(Path, (args.repo, args.derived, args.manifest))
+    POLICY_PATH = None
+    POLICY_SHA = ""
+    POLICY_SIZE = None
+    POLICY_AUTHORITY_PATH = Path(args.policy_authority)
+    POLICY_AUTHORITY_ID = args.policy_authority_id
+    POLICY_AUTHORITY_IDENTITY_SHA = args.policy_authority_identity_sha
     DERIVED_SHA = args.derived_sha
-    POLICY_SHA, POLICY_SIZE = args.policy_sha, args.policy_size
     AUTH_PATH, AUTH_ID, AUTH_SHA = Path(args.auth), args.auth_id, args.auth_sha
     EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA = args.exec_source_sha, args.exec_contract_sha
     EXEC_CONTRACT_PATH = Path(args.execution_contract)

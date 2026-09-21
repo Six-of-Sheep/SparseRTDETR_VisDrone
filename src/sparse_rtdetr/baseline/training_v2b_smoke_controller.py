@@ -7,6 +7,7 @@ evidence is intentionally separate from the scientific source identity.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -118,6 +119,7 @@ def build_plan(
     tmux_executable: Path,
     session_name: str,
     environment: Mapping[str, str] | None = None,
+    runtime_objects: Mapping[str, Any] | None = None,
     ready_timeout: float = 10.0,
     exit_timeout: float = 10.0,
 ) -> dict[str, Any]:
@@ -133,12 +135,58 @@ def build_plan(
         "runner_argv": list(runner_argv),
         "argv": [str(python_executable), *list(runner_argv)],
         "environment": dict(sorted((environment or {}).items())),
+        "runtime_objects": dict(runtime_objects or {}),
         "tmux_executable": str(tmux_executable),
         "session_name": session_name,
         "tmux_argv": [str(tmux_executable), "new-session", "-d", "-s", session_name, "-c", str(repo_root)],
         "ready_timeout_seconds": float(ready_timeout),
         "exit_timeout_seconds": float(exit_timeout),
     }
+
+
+def _plan_arg_value(argv: Sequence[str], name: str) -> str:
+    try:
+        index = list(argv).index(name)
+    except ValueError as exc:
+        raise LaunchDirectoryError(f"FINAL_LAUNCH_PLAN_MISMATCH: missing {name}") from exc
+    if index + 1 >= len(argv):
+        raise LaunchDirectoryError(f"FINAL_LAUNCH_PLAN_MISMATCH: missing value for {name}")
+    return str(argv[index + 1])
+
+
+def verify_final_launch_plan(plan: Mapping[str, Any]) -> str:
+    """Verify the exact runner argv before the tmux process is created."""
+    objects = plan.get("runtime_objects")
+    if not isinstance(objects, Mapping):
+        raise LaunchDirectoryError("FINAL_LAUNCH_PLAN_MISMATCH: runtime objects missing")
+    argv = [str(item) for item in plan.get("runner_argv", [])]
+    if {"--policy", "--policy-sha", "--policy-size"}.intersection(argv):
+        raise LaunchDirectoryError("FINAL_LAUNCH_PLAN_MISMATCH: physical policy argv is forbidden")
+    authority = objects.get("policy_authority") or {}
+    policy = objects.get("policy") or {}
+    expected = {
+        "--policy-authority": authority.get("path"),
+        "--policy-authority-id": authority.get("authority_id"),
+        "--policy-authority-identity-sha": authority.get("identity_sha256"),
+        "--root": plan.get("evidence_root"),
+        "--derived": (objects.get("bridge_checkpoint") or {}).get("path"),
+        "--manifest": (objects.get("bridge_manifest") or {}).get("path"),
+        "--auth": (objects.get("authorization") or {}).get("path"),
+        "--execution-contract": (objects.get("execution_contract") or {}).get("path"),
+    }
+    for name, expected_value in expected.items():
+        if not expected_value or _plan_arg_value(argv, name) != str(expected_value):
+            raise LaunchDirectoryError(
+                f"FINAL_LAUNCH_PLAN_MISMATCH: {name} does not match sealed plan"
+            )
+    resolved_policy = policy.get("resolved_path")
+    if not resolved_policy or resolved_policy in argv:
+        raise LaunchDirectoryError("FINAL_LAUNCH_PLAN_MISMATCH: resolved policy leaked as caller argv")
+    digest_body = {key: value for key, value in plan.items() if key != "launch_plan_sha256"}
+    digest = hashlib.sha256(canonical_bytes(digest_body)).hexdigest()
+    if plan.get("launch_plan_sha256") != digest:
+        raise LaunchDirectoryError("FINAL_LAUNCH_PLAN_MISMATCH: launch plan digest drift")
+    return digest
 
 
 def _quote_env(env: Mapping[str, str]) -> str:

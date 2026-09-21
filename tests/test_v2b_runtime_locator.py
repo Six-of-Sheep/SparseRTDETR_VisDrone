@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from sparse_rtdetr.baseline.training_v2b_runtime_locator import RuntimeLocatorError, resolve_bridge, resolve_file, resolve_policy
+from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
+    RuntimeLocatorError, resolve_bridge, resolve_file, resolve_policy, resolve_policy_authority,
+)
 
 
 def _write(path: Path, data: bytes) -> str:
@@ -86,3 +88,51 @@ def test_bridge_wrong_artifact_and_manifest_fail_closed(tmp_path: Path) -> None:
         resolve_bridge(bridge, checkpoint_sha256="0" * 64, manifest=manifest, manifest_sha256=manifest_sha)
     with pytest.raises(RuntimeLocatorError, match="sha256 mismatch"):
         resolve_bridge(bridge, checkpoint_sha256=bridge_sha, manifest=manifest, manifest_sha256="0" * 64)
+
+
+def _write_authority(tmp_path: Path, policy_path: Path, raw: bytes) -> tuple[Path, str, str]:
+    digest = _write(policy_path, raw)
+    identity = {"gpu_uuid": "GPU-X", "sha256": digest, "size_bytes": len(raw)}
+    canonical = (json.dumps(identity, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    identity_sha = hashlib.sha256(canonical).hexdigest()
+    authority = {
+        "authority_id": "hardware-policy:test",
+        "identity": identity,
+        "identity_sha256": identity_sha,
+        "runtime_locator": {"path": str(policy_path), "sha256": digest, "size_bytes": len(raw)},
+        "schema_version": 1,
+    }
+    authority_path = tmp_path / "authority.json"
+    authority_path.write_bytes((json.dumps(authority, sort_keys=True, separators=(",", ":")) + "\n").encode())
+    return authority_path, identity_sha, digest
+
+
+def test_policy_authority_resolves_sealed_locator_and_mount_override(tmp_path: Path) -> None:
+    raw = b'{"gpu_uuid":"GPU-X"}\n'
+    authority_path, identity_sha, digest = _write_authority(tmp_path, tmp_path / "mount-a" / "policy.json", raw)
+    result = resolve_policy_authority(authority_path, authority_id="hardware-policy:test", expected_identity_sha256=identity_sha)
+    assert result["file"]["sha256"] == digest
+    relocated = tmp_path / "mount-b" / "policy.json"
+    relocated.parent.mkdir()
+    relocated.write_bytes(raw)
+    moved = resolve_policy_authority(authority_path, authority_id="hardware-policy:test", expected_identity_sha256=identity_sha, locator_override=relocated)
+    assert moved["locator_source"] == "override"
+    assert moved["file"]["path"] == str(relocated)
+
+
+@pytest.mark.parametrize("kind", ["wrong_authority_sha", "wrong_content", "wrong_id"])
+def test_policy_authority_fail_closed(tmp_path: Path, kind: str) -> None:
+    raw = b'{"gpu_uuid":"GPU-X"}\n'
+    authority_path, identity_sha, digest = _write_authority(tmp_path, tmp_path / "policy.json", raw)
+    if kind == "wrong_authority_sha":
+        with pytest.raises(RuntimeLocatorError, match="identity mismatch"):
+            resolve_policy_authority(authority_path, authority_id="hardware-policy:test", expected_identity_sha256="0" * 64)
+    elif kind == "wrong_id":
+        with pytest.raises(RuntimeLocatorError, match="authority id mismatch"):
+            resolve_policy_authority(authority_path, authority_id="hardware-policy:wrong", expected_identity_sha256=identity_sha)
+    else:
+        bad = tmp_path / "bad" / "policy.json"
+        bad.parent.mkdir()
+        bad.write_bytes(b"wrong\n")
+        with pytest.raises(RuntimeLocatorError, match="(size mismatch|sha256 mismatch)"):
+            resolve_policy_authority(authority_path, authority_id="hardware-policy:test", expected_identity_sha256=identity_sha, locator_override=bad)

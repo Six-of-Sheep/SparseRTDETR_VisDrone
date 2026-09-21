@@ -149,6 +149,59 @@ def resolve_policy(
     return {"file": row, "policy": doc}
 
 
+def resolve_policy_authority(
+    authority_document: str | Path,
+    *,
+    authority_id: str,
+    expected_identity_sha256: str,
+    locator_override: str | Path | None = None,
+) -> dict[str, Any]:
+    """Resolve a hardware policy only through its sealed logical authority.
+
+    The authority document is the only caller-visible policy reference. Its
+    embedded runtime locator is resolved and then checked against the sealed
+    content identity. ``locator_override`` is reserved for relocation tests;
+    production callers leave it unset.
+    """
+    document = load_canonical_json(authority_document)
+    if document.get("authority_id") != authority_id:
+        raise RuntimeLocatorError("policy authority id mismatch")
+    identity = document.get("identity")
+    if not isinstance(identity, dict):
+        raise RuntimeLocatorError("policy authority identity missing")
+    canonical_identity = json.dumps(
+        identity, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ) + "\n"
+    actual_identity_sha = hashlib.sha256(canonical_identity.encode("utf-8")).hexdigest()
+    if actual_identity_sha != expected_identity_sha256:
+        raise RuntimeLocatorError(
+            f"policy authority identity mismatch: {actual_identity_sha} != {expected_identity_sha256}"
+        )
+    runtime = document.get("runtime_locator")
+    if not isinstance(runtime, dict):
+        raise RuntimeLocatorError("policy authority runtime locator missing")
+    expected_sha = identity.get("sha256")
+    expected_size = identity.get("size_bytes")
+    if runtime.get("sha256") != expected_sha or runtime.get("size_bytes") != expected_size:
+        raise RuntimeLocatorError("policy authority runtime self-binding mismatch")
+    chosen = Path(locator_override) if locator_override is not None else Path(str(runtime.get("path", "")))
+    if not str(chosen):
+        raise RuntimeLocatorError("policy authority runtime path missing")
+    resolved = resolve_policy(
+        chosen,
+        expected_sha256=str(expected_sha),
+        expected_size_bytes=int(expected_size),
+        expected_gpu_uuid=identity.get("gpu_uuid"),
+    )
+    return {
+        "authority_id": authority_id,
+        "authority_identity_sha256": expected_identity_sha256,
+        "authority": document,
+        "locator_source": "override" if locator_override is not None else "authority",
+        **resolved,
+    }
+
+
 def resolve_authority_file(
     authority_document: str | Path,
     *,
