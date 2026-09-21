@@ -284,6 +284,21 @@ V2B_CONTRACT_REV1_FILES = {
     'tests/test_v2b_smoke_controller.py',
 }
 
+# REV1 runtime-locator execution is an explicit extension of the contract
+# graph.  Keep these files enumerated: a repository-wide glob would make an
+# unrelated runtime artifact silently part of the execution surface.
+V2B_RUNTIME_LOCATOR_FILES = {
+    'contracts/v2b/rev001/execution_source_r4.json',
+    'contracts/v2b/rev001/execution_contract_r4.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r6.json',
+    'contracts/v2b/rev001/runtime_policy_authority_r1.json',
+    'src/sparse_rtdetr/baseline/training_v2b_runtime_locator.py',
+    'tests/test_v2b_runtime_locator.py',
+    'tools/run_v2b_rev1_gpu_smoke.py',
+    'tools/run_v2b_rev1_smoke_controller.py',
+    'tools/verify_v2b_smoke_launcher_r4.py',
+}
+
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
     "src/sparse_rtdetr/baseline/training_v2a_contract.py",
@@ -878,6 +893,13 @@ BASELINE_MODEL_IMPORT_FILES |= {
     'tools/bridge_v2b_checkpoint_revision.py',
     'tools/verify_v2b_checkpoint_revision.py',
     'tests/test_v2b_checkpoint_revision.py',
+}
+
+# The REV1 smoke runner is a deliberately bounded, identity-gated torch
+# entry point.  Its import is allowed explicitly; the controller and verifier
+# remain covered by the ordinary source policy.
+BASELINE_MODEL_IMPORT_FILES |= {
+    'tools/run_v2b_rev1_gpu_smoke.py',
 }
 
 SCIENTIFIC_ENTRY_ROOTS = (
@@ -2574,6 +2596,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_EPOCH60_CONTINUATION_FILES
     if files & V2B_CONTRACT_REV1_FILES:
         allowed_files |= V2B_CONTRACT_REV1_FILES
+    if files & V2B_RUNTIME_LOCATOR_FILES:
+        allowed_files |= V2B_RUNTIME_LOCATOR_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
