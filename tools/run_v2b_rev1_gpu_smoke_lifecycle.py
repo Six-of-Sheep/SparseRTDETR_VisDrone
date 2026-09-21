@@ -129,6 +129,25 @@ def child_environment(args: argparse.Namespace, *, cpu: bool) -> dict[str, str]:
     return env
 
 
+def write_ready_marker(args: argparse.Namespace, root: Path, *, mode: str) -> None:
+    write_json(root / "handshake" / "ready.json", {
+        "schema_version": 1,
+        "event": "READY",
+        "pid": os.getpid(),
+        "cwd": str(Path(args.repo)),
+        "python_executable": str(args.python_executable),
+        "mode": mode,
+        "cuda_initialized": False,
+        "training_started": False,
+        "execution_source_sha256": args.exec_source_sha,
+        "execution_contract_sha256": args.exec_contract_sha,
+        "authorization_id": args.auth_id,
+        "authorization_sha256": args.auth_sha,
+        "bridge_checkpoint_sha256": args.derived_sha,
+        "next_boundary": {"epoch": 54, "logical_batch_index": 0},
+    })
+
+
 def run_cpu_rehearsal(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
@@ -146,6 +165,7 @@ def run_cpu_rehearsal(args: argparse.Namespace) -> dict[str, Any]:
     training_report = read_json(training_root / "cpu-rehearsal-report.json")
     if training_report.get("status") != "READY" or training_report.get("cuda_initialized") is not False:
         raise RuntimeError("CPU training-child rehearsal did not remain CUDA-free")
+    write_ready_marker(args, root, mode="cpu_rehearsal")
     restore = run_child(
         "RESTORE_CHILD_CPU_REHEARSAL",
         args_for_child(args, restore_root) + ["--cpu-rehearsal"],
@@ -172,10 +192,20 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     if not root.is_dir():
         raise RuntimeError("lifecycle launch root is not a directory")
+    preflight_root = root / "preflight-child"
     training_root = root / "training-child"
     quiescence_root = root / "quiescence-child"
     restore_root = root / "restore-child"
     env = child_environment(args, cpu=False)
+    preflight = run_child(
+        "PREFLIGHT_CHILD",
+        args_for_child(args, preflight_root) + ["--quiescence-probe"],
+        cwd=Path(args.repo), env=env, evidence_root=preflight_root,
+    )
+    preflight_report = read_json(preflight_root / "quiescence-report.json")
+    if preflight_report.get("status") != "PASS" or preflight_report.get("cuda_initialized") is not False:
+        raise RuntimeError("preflight child failed before READY")
+    write_ready_marker(args, root, mode="gpu_smoke")
     training = run_child(
         "TRAINING_CHILD",
         args_for_child(args, training_root) + ["--training-child"],
@@ -206,6 +236,7 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError("restore child did not pass deterministic preview")
     report = {
         "status": "REV1_GPU_PREFORMAL_SMOKE_PASS",
+        "preflight_child": preflight, "preflight_report": preflight_report,
         "training_child": training, "training_report": training_report,
         "quiescence_child": quiescence, "quiescence_report": quiescence_report,
         "restore_child": restore, "restore_report": restore_report,
