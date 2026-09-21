@@ -20,7 +20,7 @@ from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
 
 
 RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
-EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-010"
+EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-011"
 
 
 def canonical(value: object) -> bytes:
