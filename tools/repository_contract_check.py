@@ -291,12 +291,16 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'contracts/v2b/rev001/execution_source_r4.json',
     'contracts/v2b/rev001/execution_contract_r4.json',
     'contracts/v2b/rev001/gpu_smoke_authorization_r6.json',
+    'contracts/v2b/rev001/execution_source_r5.json',
+    'contracts/v2b/rev001/execution_contract_r5.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r7.json',
     'contracts/v2b/rev001/runtime_policy_authority_r1.json',
     'src/sparse_rtdetr/baseline/training_v2b_runtime_locator.py',
     'tests/test_v2b_runtime_locator.py',
     'tools/run_v2b_rev1_gpu_smoke.py',
     'tools/run_v2b_rev1_smoke_controller.py',
     'tools/verify_v2b_smoke_launcher_r4.py',
+    'tools/verify_v2b_smoke_launcher_r5.py',
 }
 
 V2A_FILES = {

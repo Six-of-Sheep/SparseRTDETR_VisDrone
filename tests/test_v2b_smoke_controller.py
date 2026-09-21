@@ -21,7 +21,7 @@ def _plan(tmp_path: Path, **overrides):
         runner_argv=["-c", "pass"],
         tmux_executable=Path("/missing/tmux"),
         session_name="test-session",
-        environment={"CUDA_VISIBLE_DEVICES": ""},
+        environment={"CUDA_VISIBLE_DEVICES": "", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONHASHSEED": "0"},
         ready_timeout=0.1,
         exit_timeout=0.1,
     )
@@ -167,3 +167,68 @@ def test_controller_root_and_handshake_are_not_runner_workspace(tmp_path):
     assert (root / "handshake" / "ready.json").is_file()
     assert (root / "handshake" / "exit.json").is_file()
     assert (root / "runner").is_dir()
+def test_startup_environment_exact_match_and_parent_override():
+    expected = {
+        "CUDA_VISIBLE_DEVICES": "",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "MKL_THREADING_LAYER": "GNU",
+        "PYTHONHASHSEED": "0",
+    }
+    observed = controller.verify_startup_environment(
+        expected,
+        environ={
+            "CUDA_VISIBLE_DEVICES": "",
+            "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+            "MKL_THREADING_LAYER": "GNU",
+            "PYTHONHASHSEED": "0",
+        },
+    )
+    assert observed == expected
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        {
+            "CUDA_VISIBLE_DEVICES": "",
+            "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+            "MKL_THREADING_LAYER": "GNU",
+        },
+        {
+            "CUDA_VISIBLE_DEVICES": "",
+            "CUBLAS_WORKSPACE_CONFIG": ":16:8",
+            "MKL_THREADING_LAYER": "GNU",
+            "PYTHONHASHSEED": "0",
+        },
+    ],
+)
+def test_startup_environment_missing_or_wrong_is_fail_closed(environment):
+    expected = {
+        "CUDA_VISIBLE_DEVICES": "",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "MKL_THREADING_LAYER": "GNU",
+        "PYTHONHASHSEED": "0",
+    }
+    with pytest.raises(controller.StartupEnvironmentError, match="STARTUP_ENVIRONMENT_MISMATCH"):
+        controller.verify_startup_environment(expected, environ=environment)
+
+
+def test_wrapper_explicitly_propagates_startup_environment(tmp_path):
+    plan = _plan(
+        tmp_path,
+        environment={
+            "CUDA_VISIBLE_DEVICES": "GPU-test",
+            "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+            "MKL_THREADING_LAYER": "GNU",
+            "PYTHONHASHSEED": "0",
+        },
+    )
+    text = controller._wrapper_text(
+        plan,
+        tmp_path / "wrapper.sh",
+        tmp_path / "stdout.log",
+        tmp_path / "stderr.log",
+    )
+    assert "CUBLAS_WORKSPACE_CONFIG=:4096:8" in text
+    assert "PYTHONHASHSEED=0" in text
+    assert "CUDA_VISIBLE_DEVICES=GPU-test" in text

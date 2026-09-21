@@ -37,6 +37,7 @@ from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     resolve_bridge,
     resolve_policy,
 )
+from sparse_rtdetr.baseline.training_v2b_smoke_controller import verify_startup_environment
 
 
 # All physical values below are supplied by the runtime launch contract.  They
@@ -54,6 +55,7 @@ AUTH_SHA = ""
 AUTH_PATH: Path | None = None
 EXEC_SOURCE_SHA = ""
 EXEC_CONTRACT_SHA = ""
+EXEC_CONTRACT_PATH: Path | None = None
 BRIDGE_BINDING_SHA = ""
 BRIDGE_MANIFEST_SHA = ""
 TRAINING_CONTRACT_SHA = ""
@@ -63,7 +65,7 @@ SCHEMA_VERSION = 1
 def _configured() -> None:
     if not all((REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH, POLICY_PATH, POLICY_SHA,
                 AUTH_ID, AUTH_SHA, AUTH_PATH, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA,
-                BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA)):
+                EXEC_CONTRACT_PATH, BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA)):
         raise RuntimeLocatorError("runtime launch arguments are incomplete")
 
 
@@ -75,6 +77,7 @@ def _configuration_argv() -> list[str]:
         "--policy", str(POLICY_PATH), "--policy-sha", POLICY_SHA,
         "--auth", str(AUTH_PATH), "--auth-id", AUTH_ID, "--auth-sha", AUTH_SHA,
         "--exec-source-sha", EXEC_SOURCE_SHA, "--exec-contract-sha", EXEC_CONTRACT_SHA,
+        "--execution-contract", str(EXEC_CONTRACT_PATH),
         "--bridge-binding-sha", BRIDGE_BINDING_SHA, "--bridge-manifest-sha", BRIDGE_MANIFEST_SHA,
         "--training-contract-sha", TRAINING_CONTRACT_SHA, "--gpu-uuid", GPU_UUID,
     ] + (["--policy-size", str(POLICY_SIZE)] if POLICY_SIZE is not None else [])
@@ -86,6 +89,17 @@ def canonical(value: Any) -> bytes:
 
 def sha_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
+
+
+def without_runtime(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: without_runtime(item) for key, item in value.items() if key not in RUNTIME_KEYS}
+    if isinstance(value, list):
+        return [without_runtime(item) for item in value]
+    return value
 
 
 def sha_file(path: Path) -> str:
@@ -140,6 +154,59 @@ def load_policy() -> dict:
     return policy
 
 
+def _execution_contract() -> dict[str, Any]:
+    _configured()
+    assert EXEC_CONTRACT_PATH is not None
+    raw = EXEC_CONTRACT_PATH.read_bytes()
+    contract = load_canonical_json(EXEC_CONTRACT_PATH)
+    if contract.get("execution_contract_sha256") != EXEC_CONTRACT_SHA:
+        raise RuntimeLocatorError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
+    if contract.get("execution_contract_id") != "v2b-execution-contract-005":
+        raise RuntimeLocatorError("EXECUTION_CONTRACT_REVISION_MISMATCH")
+    body = {key: value for key, value in contract.items() if key != "execution_contract_sha256"}
+    if contract.get("execution_contract_sha256") != sha_bytes(canonical(without_runtime(body))):
+        raise RuntimeLocatorError("EXECUTION_CONTRACT_DIGEST_MISMATCH")
+    if contract.get("execution_source_sha256") != EXEC_SOURCE_SHA:
+        raise RuntimeLocatorError("EXECUTION_SOURCE_BINDING_MISMATCH")
+    if contract.get("training_contract_sha256") != TRAINING_CONTRACT_SHA:
+        raise RuntimeLocatorError("TRAINING_CONTRACT_BINDING_MISMATCH")
+    return contract
+
+
+def _verify_startup_environment(root: Path, *, cpu_rehearsal: bool) -> dict[str, Any]:
+    contract = _execution_contract()
+    authority = contract.get("startup_environment")
+    if not isinstance(authority, dict):
+        raise RuntimeLocatorError("STARTUP_ENVIRONMENT_AUTHORITY_MISSING")
+    static = authority.get("static")
+    mode_name = "cpu_rehearsal" if cpu_rehearsal else "gpu"
+    mode = authority.get(mode_name)
+    if not isinstance(static, dict) or not isinstance(mode, dict):
+        raise RuntimeLocatorError("STARTUP_ENVIRONMENT_AUTHORITY_INVALID")
+    expected = {str(key): str(value) for key, value in static.items()}
+    expected.update({str(key): str(value) for key, value in mode.items()})
+    if not cpu_rehearsal and expected.get("CUDA_VISIBLE_DEVICES") != GPU_UUID:
+        raise RuntimeLocatorError("STARTUP_ENVIRONMENT_GPU_BINDING_MISMATCH")
+    if cpu_rehearsal and expected.get("CUDA_VISIBLE_DEVICES") != "":
+        raise RuntimeLocatorError("STARTUP_ENVIRONMENT_CPU_BINDING_MISMATCH")
+    try:
+        observed = verify_startup_environment(expected)
+    except Exception as exc:
+        raise RuntimeLocatorError(str(exc)) from exc
+    evidence = {
+        "status": "PASS",
+        "mode": mode_name,
+        "execution_contract_sha256": EXEC_CONTRACT_SHA,
+        "expected": expected,
+        "observed": observed,
+        "python_dont_write_bytecode": bool(sys.dont_write_bytecode),
+    }
+    _write(root / "startup-environment.json", evidence)
+    if not sys.dont_write_bytecode:
+        raise RuntimeLocatorError("STARTUP_ENVIRONMENT_MISMATCH: bytecode generation enabled")
+    return evidence
+
+
 def make_config(binding: dict) -> V2BConfig:
     old = binding["config"]
     fields = ("seed", "input_size", "physical_batch_size", "accumulation_steps", "amp_dtype",
@@ -181,7 +248,7 @@ def _run_revision_verifier(root: Path) -> dict[str, Any]:
     policy_authority = contract_dir / "runtime_policy_authority_r1.json"
     command = [
         sys.executable,
-        str(REPO / "tools" / "verify_v2b_smoke_launcher_r4.py"),
+        str(REPO / "tools" / "verify_v2b_smoke_launcher_r5.py"),
         "--repo-root", str(REPO),
         "--contract-dir", str(contract_dir),
         "--bridge", str(DERIVED),
@@ -220,6 +287,7 @@ def _ready(root: Path, binding: dict, restored: dict) -> None:
 
 def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
     _configured()
+    _verify_startup_environment(root, cpu_rehearsal=False)
     payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
     binding = payload["binding"]
     config = make_config(binding)
@@ -261,6 +329,7 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
         raise RuntimeError("launch root missing")
     runner_workspace = root / "runner"
     runner_workspace.mkdir(parents=False, exist_ok=False)
+    startup_environment = _verify_startup_environment(root, cpu_rehearsal=True)
     verification = _run_revision_verifier(root)
     bridge = resolve_bridge(
         DERIVED,
@@ -290,7 +359,7 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
     )
     loader = build_loader(binding, repo=REPO)
     cpu_binding = build_train_core_run_binding(
-        components, loader, run_id="v2b-rev1-s2-r896-bridge-006-cpu",
+        components, loader, run_id="v2b-rev1-s2-r896-bridge-007-cpu",
         repo_root=REPO, requested_device="cpu", cuda_gpu_uuid=None,
     )
     cpu_binding["provenance"] = copy.deepcopy(binding["provenance"])
@@ -316,6 +385,7 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
         "python_executable": sys.executable,
         "cuda_initialized": bool(torch.cuda.is_initialized()),
         "training_started": False,
+        "startup_environment": startup_environment,
         "authorization_id": AUTH_ID,
         "authorization_sha256": AUTH_SHA,
         "bridge_checkpoint_sha256": DERIVED_SHA,
@@ -331,6 +401,7 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
         "status": "READY",
         "cuda_initialized": False,
         "training_started": False,
+        "startup_environment": startup_environment,
         "runtime_locator": {
             "policy": policy.get("policy_sha256"),
             "bridge": bridge["checkpoint"],
@@ -368,6 +439,7 @@ def run(root: Path) -> dict:
     }
     _write(root / "smoke-start.json", report)
     try:
+        startup_environment = _verify_startup_environment(root, cpu_rehearsal=False)
         bridge = resolve_bridge(
             DERIVED,
             checkpoint_sha256=DERIVED_SHA,
@@ -389,6 +461,7 @@ def run(root: Path) -> dict:
         report["gpu_operations"] = 1
         report["gpu_admission"] = {"status": "PASS", "monitor_root": str(root / "native-hardware"),
                                     "policy_sha256": policy.get("policy_sha256"), "gpu_uuid": GPU_UUID}
+        report["startup_environment"] = startup_environment
         runtime = prepare_runtime(device="cuda:0", seed=config.seed, binding=binding,
                                   gpu_probe=monitor.admission(), expected_gpu_uuid=GPU_UUID)
         weights = Path(binding["config"]["pretrained"]["path"])
@@ -515,19 +588,21 @@ def main() -> int:
     parser.add_argument("--auth-sha", required=True)
     parser.add_argument("--exec-source-sha", required=True)
     parser.add_argument("--exec-contract-sha", required=True)
+    parser.add_argument("--execution-contract", required=True)
     parser.add_argument("--bridge-binding-sha", required=True)
     parser.add_argument("--bridge-manifest-sha", required=True)
     parser.add_argument("--training-contract-sha", required=True)
     parser.add_argument("--gpu-uuid", required=True)
     args = parser.parse_args()
     global REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH, POLICY_PATH, POLICY_SHA, POLICY_SIZE
-    global AUTH_PATH, AUTH_ID, AUTH_SHA, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA
+    global AUTH_PATH, AUTH_ID, AUTH_SHA, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA, EXEC_CONTRACT_PATH
     global BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA, GPU_UUID
     REPO, DERIVED, BRIDGE_MANIFEST_PATH, POLICY_PATH = map(Path, (args.repo, args.derived, args.manifest, args.policy))
     DERIVED_SHA = args.derived_sha
     POLICY_SHA, POLICY_SIZE = args.policy_sha, args.policy_size
     AUTH_PATH, AUTH_ID, AUTH_SHA = Path(args.auth), args.auth_id, args.auth_sha
     EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA = args.exec_source_sha, args.exec_contract_sha
+    EXEC_CONTRACT_PATH = Path(args.execution_contract)
     BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA = args.bridge_binding_sha, args.bridge_manifest_sha
     TRAINING_CONTRACT_SHA, GPU_UUID = args.training_contract_sha, args.gpu_uuid
     auth_doc = load_canonical_json(AUTH_PATH)

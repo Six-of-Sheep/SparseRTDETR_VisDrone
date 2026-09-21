@@ -28,6 +28,34 @@ class LaunchDirectoryError(RuntimeError):
     """The controller/runner launch-directory ownership contract was violated."""
 
 
+class StartupEnvironmentError(RuntimeError):
+    """The child did not observe the controller's bound startup environment."""
+
+
+def verify_startup_environment(
+    expected: Mapping[str, str],
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Compare the bound startup variables without trusting ambient shell state.
+
+    Only the execution-contract allowlist is compared. Runtime-only variables
+    such as PATH, PYTHONPATH, and the evidence-root variables are deliberately
+    outside the canonical startup policy and are supplied by the controller.
+    """
+    if not isinstance(expected, Mapping) or not expected:
+        raise StartupEnvironmentError("STARTUP_ENVIRONMENT_MISMATCH: empty expected environment")
+    source = os.environ if environ is None else environ
+    observed = {name: source.get(name) for name in sorted(expected)}
+    expected_sorted = {name: str(expected[name]) for name in sorted(expected)}
+    if observed != expected_sorted:
+        raise StartupEnvironmentError(
+            "STARTUP_ENVIRONMENT_MISMATCH: "
+            + json.dumps({"expected": expected_sorted, "observed": observed}, sort_keys=True)
+        )
+    return observed
+
+
 def _layout(root: Path) -> dict[str, Path]:
     return {
         "controller": root / "controller",
@@ -132,6 +160,7 @@ def _wrapper_text(plan: Mapping[str, Any], wrapper: Path, stdout_path: Path, std
         "python_executable": plan["python_executable"],
         "argv": plan["argv"],
         "session_name": plan["session_name"],
+        "startup_environment": dict(plan["environment"]),
         "layout": {name: str(path) for name, path in layout.items()},
     }
     started_literal = shlex.quote(canonical_bytes(started).decode("utf-8"))
@@ -344,7 +373,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--duration", type=float, default=0.15)
     parser.add_argument("--ready-timeout", type=float, default=5.0)
     parser.add_argument("--exit-timeout", type=float, default=5.0)
-    parser.add_argument("--environment-name", action="append", default=["PYTHONNOUSERSITE", "PYTHONDONTWRITEBYTECODE", "PYTHONPATH", "CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "OMP_NUM_THREADS", "MKL_NUM_THREADS"])
+    parser.add_argument("--environment-name", action="append", default=["PYTHONNOUSERSITE", "PYTHONDONTWRITEBYTECODE", "PYTHONPATH", "CUDA_VISIBLE_DEVICES", "MKL_THREADING_LAYER", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "CUBLAS_WORKSPACE_CONFIG", "PYTHONHASHSEED"])
     args = parser.parse_args(argv)
     if args.noop_runner:
         return _noop_runner(args)
