@@ -35,14 +35,14 @@ def without_runtime(value: object) -> object:
     return value
 
 
-def load_execution_contract(path: Path, expected_sha: str, expected_source_sha: str) -> dict:
+def load_execution_contract(path: Path, expected_sha: str, expected_source_sha: str, expected_contract_id: str) -> dict:
     raw = path.read_bytes()
     value = json.loads(raw.decode("utf-8"))
     if raw != canonical(value):
         raise RuntimeError("EXECUTION_CONTRACT_NON_CANONICAL")
     if value.get("execution_contract_sha256") != expected_sha:
         raise RuntimeError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if value.get("execution_contract_id") != EXPECTED_EXECUTION_CONTRACT_ID:
+    if value.get("execution_contract_id") != expected_contract_id:
         raise RuntimeError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: item for key, item in value.items() if key != "execution_contract_sha256"}
     if value.get("execution_contract_sha256") != hashlib.sha256(canonical(without_runtime(body))).hexdigest():
@@ -139,8 +139,11 @@ def main() -> int:
     parser.add_argument("--training-contract-sha", required=True)
     parser.add_argument("--gpu-uuid", required=True)
     parser.add_argument("--cpu-rehearsal", action="store_true")
+    parser.add_argument("--expected-execution-contract-id", default=EXPECTED_EXECUTION_CONTRACT_ID)
+    parser.add_argument("--execution-source")
+    parser.add_argument("--revision-verifier")
     args = parser.parse_args()
-    contract = load_execution_contract(Path(args.exec_contract), args.exec_contract_sha, args.exec_source_sha)
+    contract = load_execution_contract(Path(args.exec_contract), args.exec_contract_sha, args.exec_source_sha, args.expected_execution_contract_id)
     repo = Path(args.repo).resolve(strict=True)
     authority_path = Path(args.policy_authority).resolve(strict=True)
     expected_authority = (repo / "contracts" / "v2b" / "rev001" / "runtime_policy_authority_r1.json").resolve(strict=True)
@@ -199,7 +202,12 @@ def main() -> int:
         "--policy-authority", str(authority_path),
         "--policy-authority-id", args.policy_authority_id,
         "--policy-authority-identity-sha", args.policy_authority_identity_sha,
+        "--expected-execution-contract-id", args.expected_execution_contract_id,
     ]
+    if args.execution_source:
+        runner_argv += ["--execution-source", args.execution_source]
+    if args.revision_verifier:
+        runner_argv += ["--revision-verifier", args.revision_verifier]
     if args.cpu_rehearsal:
         runner_argv += ["--cpu-rehearsal"]
     environment = dict(expected_environment)

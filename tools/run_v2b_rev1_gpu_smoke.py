@@ -59,6 +59,10 @@ AUTH_PATH: Path | None = None
 EXEC_SOURCE_SHA = ""
 EXEC_CONTRACT_SHA = ""
 EXEC_CONTRACT_PATH: Path | None = None
+EXECUTION_SOURCE_PATH: Path | None = None
+REVISION_VERIFIER_PATH: Path | None = None
+EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-011"
+TRAINING_CHILD_MODE = False
 BRIDGE_BINDING_SHA = ""
 BRIDGE_MANIFEST_SHA = ""
 TRAINING_CONTRACT_SHA = ""
@@ -75,7 +79,7 @@ def _configured() -> None:
 
 def _configuration_argv() -> list[str]:
     _configured()
-    return [
+    argv = [
         "--repo", str(REPO), "--derived", str(DERIVED), "--derived-sha", DERIVED_SHA,
         "--manifest", str(BRIDGE_MANIFEST_PATH),
         "--policy-authority", str(POLICY_AUTHORITY_PATH),
@@ -86,7 +90,13 @@ def _configuration_argv() -> list[str]:
         "--execution-contract", str(EXEC_CONTRACT_PATH),
         "--bridge-binding-sha", BRIDGE_BINDING_SHA, "--bridge-manifest-sha", BRIDGE_MANIFEST_SHA,
         "--training-contract-sha", TRAINING_CONTRACT_SHA, "--gpu-uuid", GPU_UUID,
+        "--expected-execution-contract-id", EXPECTED_EXECUTION_CONTRACT_ID,
     ]
+    if EXECUTION_SOURCE_PATH is not None:
+        argv += ["--execution-source", str(EXECUTION_SOURCE_PATH)]
+    if REVISION_VERIFIER_PATH is not None:
+        argv += ["--revision-verifier", str(REVISION_VERIFIER_PATH)]
+    return argv
 
 
 def canonical(value: Any) -> bytes:
@@ -170,7 +180,7 @@ def _execution_contract() -> dict[str, Any]:
     contract = load_canonical_json(EXEC_CONTRACT_PATH)
     if contract.get("execution_contract_sha256") != EXEC_CONTRACT_SHA:
         raise RuntimeLocatorError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if contract.get("execution_contract_id") != "v2b-execution-contract-011":
+    if contract.get("execution_contract_id") != EXPECTED_EXECUTION_CONTRACT_ID:
         raise RuntimeLocatorError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: value for key, value in contract.items() if key != "execution_contract_sha256"}
     if contract.get("execution_contract_sha256") != sha_bytes(canonical(without_runtime(body))):
@@ -253,17 +263,19 @@ def _run_revision_verifier(root: Path) -> dict[str, Any]:
     runner process.
     """
     _configured()
-    contract_dir = REPO / "contracts" / "v2b" / "rev001"
+    contract_dir = EXEC_CONTRACT_PATH.parent if EXEC_CONTRACT_PATH is not None else REPO / "contracts" / "v2b" / "rev001"
     policy_authority = contract_dir / "runtime_policy_authority_r1.json"
+    execution_source = EXECUTION_SOURCE_PATH or contract_dir / "execution_source_r11.json"
+    verifier = REVISION_VERIFIER_PATH or REPO / "tools" / "verify_v2b_smoke_launcher_r11.py"
     command = [
         sys.executable,
-        str(REPO / "tools" / "verify_v2b_smoke_launcher_r11.py"),
+        str(verifier),
         "--repo-root", str(REPO),
         "--contract-dir", str(contract_dir),
         "--bridge", str(DERIVED),
         "--bridge-manifest", str(BRIDGE_MANIFEST_PATH),
         "--policy-authority", str(policy_authority),
-        "--execution-source", str(REPO / "contracts" / "v2b" / "rev001" / "execution_source_r11.json"),
+        "--execution-source", str(execution_source),
         "--execution-source-sha", EXEC_SOURCE_SHA,
         "--execution-contract", str(EXEC_CONTRACT_PATH),
         "--execution-contract-sha", EXEC_CONTRACT_SHA,
@@ -299,6 +311,49 @@ def _ready(root: Path, binding: dict, restored: dict) -> None:
         "binding_sha256": binding["binding_sha256"], "restore": restored,
         "next_boundary": {"epoch": 54, "logical_batch_index": 0},
     })
+
+
+
+def _quiescence_probe(root: Path) -> dict[str, Any]:
+    """Validate runtime identity and hardware quiescence without CUDA init."""
+    _configured()
+    startup = _verify_startup_environment(root, cpu_rehearsal=False)
+    verification = _run_revision_verifier(root)
+    bridge = resolve_bridge(
+        DERIVED, checkpoint_sha256=DERIVED_SHA, manifest=BRIDGE_MANIFEST_PATH,
+        manifest_sha256=BRIDGE_MANIFEST_SHA,
+    )
+    payload = torch.load(DERIVED, map_location="cpu", weights_only=True)
+    binding = payload["binding"]
+    if binding.get("binding_sha256") != BRIDGE_BINDING_SHA:
+        raise RuntimeLocatorError("bridge binding SHA mismatch")
+    policy = load_policy()
+    monitor = MonitoredHardwareSession(
+        binding, policy, root / "quiescence-native-hardware", "paired_smoke"
+    )
+    try:
+        monitor.start()
+        admission = monitor.admission()
+        report = {
+            "status": "PASS",
+            "startup_environment": startup,
+            "revision_verifier": verification,
+            "bridge_checkpoint_sha256": DERIVED_SHA,
+            "bridge_manifest_sha256": BRIDGE_MANIFEST_SHA,
+            "binding_sha256": binding["binding_sha256"],
+            "policy_sha256": policy.get("policy_sha256"),
+            "owner_none_admission": True,
+            "cuda_initialized": bool(torch.cuda.is_initialized()),
+            "training_started": False,
+            "gpu_admission": admission,
+        }
+        if report["cuda_initialized"]:
+            raise RuntimeError("quiescence probe initialized CUDA")
+        _write(root / "quiescence-report.json", report)
+        return report
+    finally:
+        if monitor._state == "running":
+            monitor.finish()
 
 
 def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
@@ -543,6 +598,33 @@ def run(root: Path) -> dict:
         monitor = None
         del session, components, loader, runtime
         torch.cuda.empty_cache()
+        if TRAINING_CHILD_MODE:
+            report.update({
+                "status": "TRAINING_CHILD_PASS",
+                "restore": restored,
+                "epoch54_window1": preview,
+                "ownership_before": input_before,
+                "ownership_after": input_after,
+                "ownership_pass": True,
+                "window_record": record,
+                "loss_terms": loss_terms,
+                "loss_term_count": len(loss_terms),
+                "finite_loss_and_gradient": True,
+                "optimizer_updates_after": 16113,
+                "microsteps_after": 32226,
+                "ema_updates_after": ema_updates,
+                "timing_seconds": elapsed,
+                "gpu_memory": gpu_memory,
+                "smoke_checkpoint": checkpoint,
+                "smoke_checkpoint_path": str(smoke_checkpoint),
+                "smoke_checkpoint_sha256": smoke_sha,
+                "monitor_finish": monitor_report,
+                "training_child_terminated": True,
+                "formal_authorization_consumed": False,
+                "formal_launch_permitted": False,
+            })
+            _write(root / "training-report.json", report)
+            return report
         roundtrip_cmd = [sys.executable, __file__, "--roundtrip", "--checkpoint", str(smoke_checkpoint),
                          "--checkpoint-sha", smoke_sha, "--root", str(root)] + _configuration_argv()
         roundtrip_proc = subprocess.run(roundtrip_cmd, cwd=str(REPO), capture_output=True, text=True, check=False)
@@ -590,6 +672,11 @@ def main() -> int:
     parser.add_argument("--root", required=True)
     parser.add_argument("--roundtrip", action="store_true")
     parser.add_argument("--cpu-rehearsal", action="store_true")
+    parser.add_argument("--training-child", action="store_true")
+    parser.add_argument("--quiescence-probe", action="store_true")
+    parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-011")
+    parser.add_argument("--execution-source")
+    parser.add_argument("--revision-verifier")
     parser.add_argument("--checkpoint")
     parser.add_argument("--checkpoint-sha")
     parser.add_argument("--repo", required=True)
@@ -613,7 +700,8 @@ def main() -> int:
     global REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH, POLICY_PATH, POLICY_SHA, POLICY_SIZE
     global POLICY_AUTHORITY_PATH, POLICY_AUTHORITY_ID, POLICY_AUTHORITY_IDENTITY_SHA
     global AUTH_PATH, AUTH_ID, AUTH_SHA, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA, EXEC_CONTRACT_PATH
-    global BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA, GPU_UUID
+    global EXECUTION_SOURCE_PATH, REVISION_VERIFIER_PATH, EXPECTED_EXECUTION_CONTRACT_ID
+    global TRAINING_CHILD_MODE, BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA, GPU_UUID
     REPO, DERIVED, BRIDGE_MANIFEST_PATH = map(Path, (args.repo, args.derived, args.manifest))
     POLICY_PATH = None
     POLICY_SHA = ""
@@ -625,6 +713,10 @@ def main() -> int:
     AUTH_PATH, AUTH_ID, AUTH_SHA = Path(args.auth), args.auth_id, args.auth_sha
     EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA = args.exec_source_sha, args.exec_contract_sha
     EXEC_CONTRACT_PATH = Path(args.execution_contract)
+    EXECUTION_SOURCE_PATH = Path(args.execution_source) if args.execution_source else None
+    REVISION_VERIFIER_PATH = Path(args.revision_verifier) if args.revision_verifier else None
+    EXPECTED_EXECUTION_CONTRACT_ID = str(args.expected_execution_contract_id)
+    TRAINING_CHILD_MODE = bool(args.training_child)
     BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA = args.bridge_binding_sha, args.bridge_manifest_sha
     TRAINING_CONTRACT_SHA, GPU_UUID = args.training_contract_sha, args.gpu_uuid
     auth_doc = load_canonical_json(AUTH_PATH)
@@ -632,6 +724,14 @@ def main() -> int:
         raise RuntimeLocatorError("smoke authorization identity mismatch")
     if auth_doc.get("consumed") is not False or auth_doc.get("formal_launch_permitted") is not False:
         raise RuntimeLocatorError("smoke authorization is not pending and fail-closed")
+    if args.quiescence_probe:
+        value = _quiescence_probe(Path(args.root))
+        print(json.dumps(value, sort_keys=True, indent=2))
+        return 0
+    if args.training_child:
+        value = run(Path(args.root))
+        print(json.dumps(value, sort_keys=True, indent=2))
+        return 0
     if args.roundtrip:
         value = _roundtrip(Path(args.checkpoint), str(args.checkpoint_sha), Path(args.root))
         print(json.dumps(value, sort_keys=True, indent=2))
