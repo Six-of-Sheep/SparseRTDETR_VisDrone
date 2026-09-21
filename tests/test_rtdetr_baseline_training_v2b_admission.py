@@ -484,6 +484,25 @@ def test_policy_bundle_is_common_but_scoped_admission_hash_is_distinct(policy_bu
     assert first["expected_nvml_library"]["sha256"]
 
 
+def test_phase_aware_policy_preserves_training_loaded_requirement(policy_bundle):
+    training = ad._validate_policy(policy_bundle, "paired_smoke", 600, monitor_phase="training")
+    quiescence = ad._validate_policy(policy_bundle, "paired_smoke", 600, monitor_phase="quiescence")
+    restore = ad._validate_policy(policy_bundle, "paired_smoke", 600, monitor_phase="restore")
+    assert training["monitor_phase"] == "training"
+    assert training["loaded_samples_required"] is True
+    assert training["minimum_loaded_clock_samples"] == 3
+    for phase, selected in (("quiescence", quiescence), ("restore", restore)):
+        assert selected["monitor_phase"] == phase
+        assert selected["loaded_samples_required"] is False
+        assert selected["minimum_loaded_clock_samples"] == 0
+    assert len({training["policy_sha256"], quiescence["policy_sha256"], restore["policy_sha256"]}) == 3
+
+
+def test_phase_aware_policy_rejects_non_training_scope(policy_bundle):
+    with pytest.raises(ad.MonitoredHardwareError, match="paired_smoke"):
+        ad._validate_policy(policy_bundle, "train_core_30epoch", 43200, monitor_phase="restore")
+
+
 @pytest.mark.parametrize("field", ["clock_max_mhz", "xorg_memory_max_mib", "known_bert_records", "expected_nvml_library"])
 def test_caller_cannot_edit_reviewed_policy(policy_bundle, field):
     policy_bundle[field] = "caller-supplied replacement"

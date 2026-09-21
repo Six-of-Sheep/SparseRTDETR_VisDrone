@@ -86,3 +86,36 @@ def test_parse_stdout_requires_one_json_object(tmp_path: Path) -> None:
     path = tmp_path / "stdout.log"
     path.write_text('{"status":"PASS"}', encoding="utf-8")
     assert _lifecycle.parse_stdout_json(path)["status"] == "PASS"
+
+
+def _monitor_report(status: str = "PASS", *, worker_exited: bool = True) -> dict:
+    return {
+        "status": "PASS", "monitor_final": {
+            "status": status, "worker_exited": worker_exited,
+            "transaction_id": "smoke-test", "monitor_phase": "restore",
+        },
+    }
+
+
+def test_require_monitor_final_accepts_logical_pass_only_with_monitor_pass() -> None:
+    final = _lifecycle.require_monitor_final(_monitor_report(), "restore", "smoke-test")
+    assert final["status"] == "PASS"
+
+
+def test_require_monitor_final_rejects_logical_pass_with_monitor_failure() -> None:
+    try:
+        _lifecycle.require_monitor_final(_monitor_report("FAIL"), "restore", "smoke-test")
+    except RuntimeError as exc:
+        assert "monitor-final failed" in str(exc)
+    else:
+        raise AssertionError("monitor failure was accepted")
+
+
+def test_require_monitor_final_rejects_missing_or_live_monitor() -> None:
+    for report in ({"status": "PASS"}, _monitor_report("PASS", worker_exited=False)):
+        try:
+            _lifecycle.require_monitor_final(report, "restore", "smoke-test")
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("incomplete monitor final was accepted")

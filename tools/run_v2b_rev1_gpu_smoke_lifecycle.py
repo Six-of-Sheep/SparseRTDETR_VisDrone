@@ -93,6 +93,20 @@ def parse_stdout_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def require_monitor_final(report: dict[str, Any], label: str, transaction_id: str) -> dict[str, Any]:
+    """A logical child PASS is insufficient until its independent monitor closes PASS."""
+    final = report.get("monitor_final")
+    if not isinstance(final, dict):
+        raise RuntimeError(f"{label} missing monitor-final evidence")
+    if final.get("status") != "PASS" or final.get("worker_exited") is not True:
+        raise RuntimeError(f"{label} monitor-final failed: {final.get('failure')}")
+    if final.get("transaction_id") != transaction_id:
+        raise RuntimeError(f"{label} monitor transaction identity mismatch")
+    if final.get("monitor_phase") not in {"training", "quiescence", "restore"}:
+        raise RuntimeError(f"{label} monitor phase missing or invalid")
+    return final
+
+
 def args_for_child(args: argparse.Namespace, root: Path) -> list[str]:
     runner = Path(args.repo) / "tools" / "run_v2b_rev1_gpu_smoke.py"
     command = [
@@ -207,6 +221,7 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
     preflight_report = read_json(preflight_root / "quiescence-report.json")
     if preflight_report.get("status") != "PASS" or preflight_report.get("cuda_initialized") is not False:
         raise RuntimeError("preflight child failed before READY")
+    require_monitor_final(preflight_report, "preflight", args.auth_id)
     write_ready_marker(args, root, mode="gpu_smoke")
     training = run_child(
         "TRAINING_CHILD",
@@ -216,6 +231,7 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
     training_report = read_json(training_root / "training-report.json")
     if training_report.get("status") != "TRAINING_CHILD_PASS":
         raise RuntimeError("training child did not publish TRAINING_CHILD_PASS")
+    require_monitor_final(training_report, "training", args.auth_id)
     checkpoint = Path(str(training_report["smoke_checkpoint_path"]))
     checkpoint_sha = str(training_report["smoke_checkpoint_sha256"])
     quiescence = run_child(
@@ -226,6 +242,7 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
     quiescence_report = read_json(quiescence_root / "quiescence-report.json")
     if quiescence_report.get("status") != "PASS" or quiescence_report.get("cuda_initialized") is not False:
         raise RuntimeError("quiescence child failed owner=None admission")
+    require_monitor_final(quiescence_report, "quiescence", args.auth_id)
     restore = run_child(
         "RESTORE_CHILD",
         args_for_child(args, restore_root) + [
@@ -236,6 +253,7 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
     restore_report = parse_stdout_json(restore_root / "stdout.log")
     if restore_report.get("status") != "PASS" or restore_report.get("deterministic") is not True:
         raise RuntimeError("restore child did not pass deterministic preview")
+    require_monitor_final(restore_report, "restore", args.auth_id)
     report = {
         "status": "REV1_GPU_PREFORMAL_SMOKE_PASS",
         "preflight_child": preflight, "preflight_report": preflight_report,

@@ -60,6 +60,7 @@ _EXTERNAL_TERMINAL_TRAILER = "Connection to 192.168.0.198 closed."
 _EXTERNAL_REFERENCE_FIELDS = ("user_attestation", "terminal_transcript", "native_command_journal",
                               "native_journal_query", "prior_journal_tool_capture")
 _SCOPES = {"paired_smoke": 600, "train_core_30epoch": 43_200}
+_MONITOR_PHASES = {"training", "quiescence", "restore"}
 _PROC = Path("/proc")
 _EDAC = Path("/sys/devices/system/edac/mc")
 _FRAME_LIMIT = 2 * 1024 * 1024
@@ -232,7 +233,8 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
     return result
 
 
-def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int) -> dict[str, Any]:
+def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int,
+                     *, monitor_phase: str = "training") -> dict[str, Any]:
     if type(bundle) is not dict:
         raise MonitoredHardwareError("policy bundle must be an exact reviewed declaration")
     expected = build_policy_bundle(Path(bundle["authority"]["path"]).parent,
@@ -245,8 +247,14 @@ def _validate_policy(bundle: Mapping[str, Any], scope: str, deadline: int) -> di
     if (type(scope) is not str or scope not in scope_limits
             or type(deadline) is not int or not 1 <= deadline <= scope_limits[scope]):
         raise MonitoredHardwareError("workload deadline or scope is not authorized")
+    if monitor_phase not in _MONITOR_PHASES:
+        raise MonitoredHardwareError("monitor phase is not authorized")
+    if monitor_phase != "training" and scope != "paired_smoke":
+        raise MonitoredHardwareError("non-training monitor phases require paired_smoke scope")
     expected.update(authorized_scope=scope, workload_deadline_seconds=deadline,
-                    minimum_loaded_clock_samples=3)
+                    monitor_phase=monitor_phase,
+                    loaded_samples_required=monitor_phase == "training",
+                    minimum_loaded_clock_samples=3 if monitor_phase == "training" else 0)
     expected["policy_sha256"] = ev.canonical_sha256(expected)
     return expected
 
@@ -1234,7 +1242,11 @@ def _stop_owner(pidfd: int) -> None:
 
 def _telemetry(state: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[str, Any]:
     clock, health = state.get("clock"), state.get("health")
-    return {"run_id": spec["run_id"], "run_binding_sha256": spec["binding_sha256"],
+    return {"run_id": spec["run_id"],
+            "checkpoint_provenance_run_id": spec.get("checkpoint_provenance_run_id", spec["run_id"]),
+            "transaction_id": spec.get("transaction_id"),
+            "monitor_phase": spec["policy"].get("monitor_phase", "training"),
+            "run_binding_sha256": spec["binding_sha256"],
             "policy_sha256": spec["policy"]["policy_sha256"], "owner": spec["owner"],
             "gpu_uuid": spec["policy"]["gpu_uuid"], "authorized_scope": spec["policy"]["authorized_scope"],
             "clock": {k: v for k, v in (clock or {}).items() if k != "command"},
@@ -1415,7 +1427,8 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
                         post_exit_health += 1
                 if post_exit_health >= 2 and now - dead_ns >= policy["post_exit_observation_seconds"] * 1e9:
                     final_telemetry = snapshot
-                    if state["loaded"] < policy["minimum_loaded_clock_samples"]:
+                    if (policy.get("loaded_samples_required", True)
+                            and state["loaded"] < policy["minimum_loaded_clock_samples"]):
                         raise MonitoredHardwareError("insufficient loaded clock observations for " + policy["authorized_scope"])
                     break
             if not dead and channel_open and select.select([control], [], [], .025)[0]:
@@ -1486,7 +1499,11 @@ def _watchdog_main(spec: dict[str, Any], control: socket.socket, pidfd: int) -> 
                 failure = (failure + "; " if failure else "") + "rejection/observation evidence persistence failed: " + type(exc).__name__ + ": " + str(exc)
                 _stop_owner(pidfd)
         result = {"schema_version": 1, "status": "FAIL" if failure else "PASS",
-                  "run_id": spec["run_id"], "run_binding_sha256": spec["binding_sha256"],
+                  "run_id": spec["run_id"],
+                  "checkpoint_provenance_run_id": spec.get("checkpoint_provenance_run_id", spec["run_id"]),
+                  "transaction_id": spec.get("transaction_id"),
+                  "monitor_phase": policy.get("monitor_phase", "training"),
+                  "run_binding_sha256": spec["binding_sha256"],
                   "policy_sha256": policy["policy_sha256"], "authorized_scope": policy["authorized_scope"],
                   "gpu_uuid": policy["gpu_uuid"],
                   "owner": spec["owner"], "monitor_pid": os.getpid(), "finished_utc": _utc(),
@@ -1533,19 +1550,25 @@ class MonitoredHardwareAdmission:
 class MonitoredHardwareSession:
     def __init__(self, binding: Mapping[str, Any], policy_bundle: Mapping[str, Any],
                  evidence_dir: str | os.PathLike[str], authorized_scope: str,
-                 workload_deadline_seconds: int = 600) -> None:
+                 workload_deadline_seconds: int = 600, *,
+                 monitor_phase: str = "training",
+                 transaction_id: str | None = None) -> None:
+        self.monitor_phase = monitor_phase
+        self.transaction_id = transaction_id
         evidence_authority = (type(policy_bundle) is dict
                               and type(policy_bundle.get("authorization_reference")) is dict
                               and policy_bundle["authorization_reference"].get("sha256")
                               == _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA)
         if evidence_authority:
-            self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+            self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds,
+                                           monitor_phase=monitor_phase)
             metadata = ev.validate_run_binding(binding, verify_files=False)
             _validate_resolution_evidence_binding(metadata, self.policy, authorized_scope)
             self.binding = ev.validate_run_binding(metadata)
         else:
             self.binding = ev.validate_run_binding(binding)
-            self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds)
+            self.policy = _validate_policy(policy_bundle, authorized_scope, workload_deadline_seconds,
+                                           monitor_phase=monitor_phase)
         if self.policy["authorization_reference"]["sha256"] == _RESOLUTION_896_AUTHORIZATION_SHA:
             dimensions = {"input_size": 896, "physical_batch_size": 8, "accumulation_steps": 2}
             if any(type(self.binding["config"].get(key)) is not int
@@ -1620,6 +1643,9 @@ class MonitoredHardwareSession:
                     "pidfd_backend": _pidfd_backend(),
                     "nvidia_smi_path": post["commands"]["gpu_xml"]["executable"]["path"],
                     "edac": edac, "integrity_references": refs, "run_id": self.binding["run_id"],
+                    "checkpoint_provenance_run_id": self.binding["run_id"],
+                    "transaction_id": self.transaction_id,
+                    "monitor_phase": self.monitor_phase,
                     "binding_sha256": self.binding["binding_sha256"], "nonce": self._nonce,
                     "evidence_dir": str(self.root), "setter_reference": setter_ref,
                     "startup_reference": startup_ref}
@@ -1659,7 +1685,11 @@ class MonitoredHardwareSession:
                 "clock_max_gap_seconds": self.policy["clock_max_gap_seconds"],
                 "health_max_gap_seconds": self.policy["health_max_gap_seconds"],
                 "collector_sources": self._source_refs, "monitor_spec_reference": spec_ref,
-                "run_id": self.binding["run_id"], "run_binding_sha256": self.binding["binding_sha256"],
+                "run_id": self.binding["run_id"],
+                "checkpoint_provenance_run_id": self.binding["run_id"],
+                "transaction_id": self.transaction_id,
+                "monitor_phase": self.monitor_phase,
+                "run_binding_sha256": self.binding["binding_sha256"],
                 "policy_sha256": self.policy["policy_sha256"], "setter_receipt": setter_ref,
                 "clock_readback_verified": False})
             return self
@@ -1737,6 +1767,9 @@ class MonitoredHardwareSession:
         self._state = "finishing"
         return {"monitor_final_report": str(self.root / "monitor-final.json"),
                 "monitor_pid": self._child.pid, "run_id": self.binding["run_id"],
+                "checkpoint_provenance_run_id": self.binding["run_id"],
+                "transaction_id": self.transaction_id,
+                "monitor_phase": self.monitor_phase,
                 "guardian_identity": self._guardian_identity, "gpu_uuid": self.policy["gpu_uuid"],
                 "run_binding_sha256": self.binding["binding_sha256"], "policy_sha256": self.policy["policy_sha256"],
                 "owner": self._owner, "worker_must_exit": True}
@@ -1887,8 +1920,10 @@ def wait_for_monitored_finish(reference: Mapping[str, Any], *, timeout_seconds: 
     report_reference = {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
                         "size_bytes": len(raw), "sha256_scope": "complete_file_bytes"}
     report = ev.strict_json_loads(raw)
-    for key in ("run_id", "run_binding_sha256", "policy_sha256", "monitor_pid", "owner", "guardian_identity", "gpu_uuid"):
-        if report.get(key) != reference.get(key):
+    for key in ("run_id", "checkpoint_provenance_run_id", "transaction_id", "monitor_phase",
+                "run_binding_sha256", "policy_sha256", "monitor_pid", "owner",
+                "guardian_identity", "gpu_uuid"):
+        if key in reference and report.get(key) != reference.get(key):
             raise MonitoredHardwareError("monitor final evidence binding differs")
     if report.get("status") != "PASS" or report.get("worker_exited") is not True:
         raise MonitoredHardwareError("monitor workload failed: " + str(report.get("failure")))

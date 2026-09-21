@@ -19,7 +19,9 @@ from typing import Any
 import torch
 
 from sparse_rtdetr.baseline.training_v2b import V2BConfig, build_v2b_components
-from sparse_rtdetr.baseline.training_v2b_admission import MonitoredHardwareSession
+from sparse_rtdetr.baseline.training_v2b_admission import (
+    MonitoredHardwareSession, wait_for_monitored_finish,
+)
 from sparse_rtdetr.baseline.training_v2b_control import capture_control_state
 from sparse_rtdetr.baseline.training_v2b_data import (
     TrainCoreDataConfig, augmented_tensor_sha256, build_train_core_loader,
@@ -269,12 +271,59 @@ def _gpu_admission_evidence(root: Path, monitor: MonitoredHardwareSession,
     published record contains only stable, serializable identity fields.
     """
     admission = monitor.admission()
-    return {
+    evidence = {
         "status": "PASS",
-        "monitor_root": str(root / "quiescence-native-hardware"),
+        "monitor_root": str(getattr(monitor, "root", root / "quiescence-native-hardware")),
         "policy_sha256": policy.get("policy_sha256"),
         "gpu_uuid": policy.get("gpu_uuid"),
         "capability_type": type(admission).__name__,
+    }
+    if hasattr(monitor, "monitor_phase"):
+        evidence["monitor_phase"] = monitor.monitor_phase
+    if hasattr(monitor, "transaction_id"):
+        evidence["transaction_id"] = monitor.transaction_id
+    return evidence
+
+
+def _finish_monitor(monitor: MonitoredHardwareSession) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Publish and then verify the independent monitor's terminal report."""
+    reference = monitor.finish()
+    final = wait_for_monitored_finish(reference)
+    return reference, final
+
+
+def _restore_evidence(session: V2BTrainingSession, loader: Any, restored: dict[str, Any],
+                      checkpoint: Path, checkpoint_sha: str, next_window: dict[str, Any]) -> dict[str, Any]:
+    state = capture_control_state(session.components, loader, full=True)
+    clocks = state["clocks"]
+    return {
+        "validated": True,
+        "validation_method": "V2BTrainingSession.restore strict state/layout/RNG/sampler checks",
+        "restore_input_checkpoint_path": str(checkpoint),
+        "restore_input_checkpoint_sha256": checkpoint_sha,
+        "restored": dict(restored),
+        "counters": {
+            "epoch": restored["epoch"],
+            "optimizer_updates": restored["optimizer_updates"],
+            "microsteps": restored["microsteps"],
+            "ema_updates": int(session.components.ema.updates),
+        },
+        "next_boundary": {
+            "epoch": next_window["epoch"],
+            "logical_batch_index": next_window["logical_batch_index"],
+        },
+        "state_digests": {
+            "model": state["raw_state_sha256"],
+            "optimizer": state["optimizer_state_sha256"],
+            "ema": state["ema_state_sha256"],
+            "rng": sha_bytes(canonical_json_bytes(state["rng"])),
+            "loader_sampler": sha_bytes(canonical_json_bytes(clocks["loader"])),
+            "scheduler_warmup": sha_bytes(canonical_json_bytes({
+                "scheduler": clocks["scheduler"], "warmup": clocks["warmup"],
+            })),
+            "engine": sha_bytes(canonical_json_bytes(clocks["engine"])),
+        },
+        "clock_state": clocks,
     }
 
 
@@ -354,7 +403,8 @@ def _quiescence_probe(root: Path) -> dict[str, Any]:
         raise RuntimeLocatorError("bridge binding SHA mismatch")
     policy = load_policy()
     monitor = MonitoredHardwareSession(
-        binding, policy, root / "quiescence-native-hardware", "paired_smoke"
+        binding, policy, root / "quiescence-native-hardware", "paired_smoke",
+        monitor_phase="quiescence", transaction_id=AUTH_ID,
     )
     try:
         monitor.start()
@@ -373,11 +423,15 @@ def _quiescence_probe(root: Path) -> dict[str, Any]:
         }
         if report["cuda_initialized"]:
             raise RuntimeError("quiescence probe initialized CUDA")
+        monitor_reference, monitor_final = _finish_monitor(monitor)
+        monitor = None
+        report["monitor_finish"] = monitor_reference
+        report["monitor_final"] = monitor_final
         _write(root / "quiescence-report.json", report)
         return report
     finally:
-        if monitor._state == "running":
-            monitor.finish()
+        if monitor is not None and monitor._state == "running":
+            monitor.abort("quiescence logical path did not reach verified monitor final")
 
 
 def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
@@ -388,7 +442,9 @@ def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
     config = make_config(binding)
     policy = load_policy()
     hw_root = root / "roundtrip-native-hardware"
-    monitor = MonitoredHardwareSession(binding, policy, hw_root, "paired_smoke")
+    monitor = MonitoredHardwareSession(
+        binding, policy, hw_root, "paired_smoke", monitor_phase="restore", transaction_id=AUTH_ID,
+    )
     try:
         monitor.start()
         runtime = prepare_runtime(device="cuda:0", seed=config.seed, binding=binding,
@@ -407,14 +463,19 @@ def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
         second = next(loader.preview_batches(1)).evidence()
         if first != second:
             raise RuntimeError("epoch54/window2 deterministic preview differs")
+        monitor_reference, monitor_final = _finish_monitor(monitor)
+        monitor = None
+        restore_evidence = _restore_evidence(session, loader, restored, checkpoint, checkpoint_sha, first)
         return {
             "status": "PASS", "restored": restored, "next_window_first": first,
             "next_window_second": second, "deterministic": True,
+            "restore_evidence": restore_evidence,
+            "monitor_finish": monitor_reference, "monitor_final": monitor_final,
             "monitor_root": str(hw_root),
         }
     finally:
-        if monitor._state == "running":
-            monitor.finish()
+        if monitor is not None and monitor._state == "running":
+            monitor.abort("roundtrip logical path did not reach verified monitor final")
 
 
 def cpu_rehearsal(root: Path) -> dict[str, Any]:
@@ -551,7 +612,10 @@ def run(root: Path) -> dict:
             raise RuntimeError("bridge binding SHA mismatch")
         config = make_config(binding)
         policy = load_policy()
-        monitor = MonitoredHardwareSession(binding, policy, root / "native-hardware", "paired_smoke")
+        monitor = MonitoredHardwareSession(
+            binding, policy, root / "native-hardware", "paired_smoke",
+            monitor_phase="training", transaction_id=AUTH_ID,
+        )
         monitor.start()
         report["gpu_operations"] = 1
         report["gpu_admission"] = {"status": "PASS", "monitor_root": str(root / "native-hardware"),
@@ -618,7 +682,7 @@ def run(root: Path) -> dict:
             "peak_reserved": int(torch.cuda.max_memory_reserved(0)),
         }
         ema_updates = int(components.ema.updates)
-        monitor_report = monitor.finish()
+        monitor_report, monitor_final = _finish_monitor(monitor)
         monitor = None
         del session, components, loader, runtime
         torch.cuda.empty_cache()
@@ -643,6 +707,7 @@ def run(root: Path) -> dict:
                 "smoke_checkpoint_path": str(smoke_checkpoint),
                 "smoke_checkpoint_sha256": smoke_sha,
                 "monitor_finish": monitor_report,
+                "monitor_final": monitor_final,
                 "training_child_terminated": True,
                 "formal_authorization_consumed": False,
                 "formal_launch_permitted": False,
@@ -671,7 +736,7 @@ def run(root: Path) -> dict:
             "timing_seconds": elapsed,
             "gpu_memory": gpu_memory,
             "smoke_checkpoint": checkpoint, "smoke_checkpoint_sha256": smoke_sha,
-            "monitor_finish": monitor_report, "roundtrip": roundtrip,
+            "monitor_finish": monitor_report, "monitor_final": monitor_final, "roundtrip": roundtrip,
             "formal_authorization_consumed": False, "formal_launch_permitted": False,
         })
         report["evidence_sha256"] = sha_bytes(canonical({k: v for k, v in report.items() if k != "evidence_sha256"}))
