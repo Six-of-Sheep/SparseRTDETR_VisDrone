@@ -322,6 +322,7 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'contracts/v2b/rev001/execution_source_r11.json',
     'contracts/v2b/rev001/execution_contract_r11.json',
     'contracts/v2b/rev001/gpu_smoke_authorization_r12.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r13.json',
     'tools/verify_v2b_smoke_launcher_r9.py',
     'tools/verify_v2b_smoke_launcher_r10.py',
     'tools/verify_v2b_smoke_launcher_r11.py',
