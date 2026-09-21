@@ -259,6 +259,25 @@ def _write(path: Path, value: Any) -> None:
     path.write_bytes(canonical(value))
 
 
+def _gpu_admission_evidence(root: Path, monitor: MonitoredHardwareSession,
+                            policy: dict[str, Any]) -> dict[str, Any]:
+    """Return JSON evidence without serializing the live capability object.
+
+    MonitoredHardwareAdmission is deliberately an in-process capability
+    handle and must never cross an evidence/JSON boundary. Calling
+    monitor.admission() still proves that the live capability exists; the
+    published record contains only stable, serializable identity fields.
+    """
+    admission = monitor.admission()
+    return {
+        "status": "PASS",
+        "monitor_root": str(root / "quiescence-native-hardware"),
+        "policy_sha256": policy.get("policy_sha256"),
+        "gpu_uuid": policy.get("gpu_uuid"),
+        "capability_type": type(admission).__name__,
+    }
+
+
 def _run_revision_verifier(root: Path) -> dict[str, Any]:
     """Run the tracked REV1 identity verifier before declaring READY.
 
@@ -339,7 +358,6 @@ def _quiescence_probe(root: Path) -> dict[str, Any]:
     )
     try:
         monitor.start()
-        admission = monitor.admission()
         report = {
             "status": "PASS",
             "startup_environment": startup,
@@ -351,7 +369,7 @@ def _quiescence_probe(root: Path) -> dict[str, Any]:
             "owner_none_admission": True,
             "cuda_initialized": bool(torch.cuda.is_initialized()),
             "training_started": False,
-            "gpu_admission": admission,
+            "gpu_admission": _gpu_admission_evidence(root, monitor, policy),
         }
         if report["cuda_initialized"]:
             raise RuntimeError("quiescence probe initialized CUDA")

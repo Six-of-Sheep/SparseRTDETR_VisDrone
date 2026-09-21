@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import subprocess
 import sys
@@ -8,6 +9,15 @@ from pathlib import Path
 
 
 ENTRYPOINT = Path(__file__).resolve().parents[1] / "tools" / "run_v2b_rev1_smoke_entrypoint.py"
+GPU_SMOKE = Path(__file__).resolve().parents[1] / "tools" / "run_v2b_rev1_gpu_smoke.py"
+
+
+def _load_gpu_smoke_module():
+    spec = importlib.util.spec_from_file_location("v2b_gpu_smoke_test_module", GPU_SMOKE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _invocation(
@@ -96,3 +106,23 @@ def test_parent_environment_cannot_substitute_for_missing_bound_value(tmp_path):
     result = _run(invocation, parent_pythonpath=str((tmp_path / "src").resolve()))
     assert result.returncode != 0
     assert "CONTROLLER_ENVIRONMENT_MISSING:PYTHONPATH" in result.stderr
+
+
+def test_gpu_admission_evidence_does_not_serialize_live_capability(tmp_path):
+    module = _load_gpu_smoke_module()
+
+    class Monitor:
+        def admission(self):
+            return object()
+
+    evidence = module._gpu_admission_evidence(
+        tmp_path, Monitor(), {"policy_sha256": "policy", "gpu_uuid": "gpu"}
+    )
+    json.dumps(evidence, sort_keys=True)
+    assert evidence == {
+        "capability_type": "object",
+        "gpu_uuid": "gpu",
+        "monitor_root": str(tmp_path / "quiescence-native-hardware"),
+        "policy_sha256": "policy",
+        "status": "PASS",
+    }

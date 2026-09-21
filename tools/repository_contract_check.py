@@ -360,6 +360,11 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'tools/run_v2b_rev1_smoke_entrypoint.py',
     'tools/verify_v2b_smoke_launcher_r21.py',
     'tests/test_v2b_smoke_entrypoint.py',
+    'contracts/v2b/rev001/execution_source_r22.json',
+    'contracts/v2b/rev001/execution_contract_r22.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r21.json',
+    'tools/verify_v2b_smoke_launcher_r22.py',
+    'tools/verify_v2b_frozen_launch_plan_r24.py',
 }
 
 V2A_FILES = {
