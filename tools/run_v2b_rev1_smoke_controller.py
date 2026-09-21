@@ -11,9 +11,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 
 from sparse_rtdetr.baseline.training_v2b_smoke_controller import (
-    build_plan, launch, validate_versioned_contract_path, probe_visible_gpu_identity,
+    build_plan, launch, run_owned_scratch_probe, validate_versioned_contract_path,
+    probe_visible_gpu_identity,
 )
 from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     RuntimeLocatorError, resolve_bridge, resolve_policy_authority, load_canonical_json,
@@ -21,7 +23,7 @@ from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
 
 
 RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
-EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-011"
+EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-025"
 
 
 def canonical(value: object) -> bytes:
@@ -114,6 +116,104 @@ def verify_final_launch_plan(plan: dict) -> str:
     if plan.get("launch_plan_sha256") != digest:
         raise RuntimeLocatorError("FINAL_LAUNCH_PLAN_MISMATCH: launch plan digest drift")
     return digest
+
+
+def _replace_arg(argv: list[str], name: str, value: str) -> list[str]:
+    try:
+        index = argv.index(name)
+    except ValueError as exc:
+        raise RuntimeError(f"HIDDEN_PROBE_ARG_MISSING:{name}") from exc
+    if index + 1 >= len(argv):
+        raise RuntimeError(f"HIDDEN_PROBE_ARG_VALUE_MISSING:{name}")
+    result = list(argv)
+    result[index + 1] = str(value)
+    return result
+
+
+def _hidden_probe_contract(contract: dict) -> dict:
+    probe = contract.get("hidden_probe")
+    required = {
+        "required": True,
+        "mode": "cpu_rehearsal",
+        "controller_owns_scratch_root": True,
+        "child_requires_existing_root": True,
+        "cleanup_required": True,
+        "cuda_visible_devices": "",
+        "cuda_initialized": False,
+        "training_started": False,
+    }
+    if not isinstance(probe, dict) or any(probe.get(key) != value for key, value in required.items()):
+        raise RuntimeError("HIDDEN_PROBE_CONTRACT_MISSING_OR_INVALID")
+    return probe
+
+
+def run_hidden_probe(
+    *,
+    args: argparse.Namespace,
+    repo: Path,
+    contract: dict,
+    runner_argv: list[str],
+    expected_environment: dict[str, str],
+    formal_root: Path,
+) -> dict:
+    """Exercise the direct child with a controller-owned temporary root."""
+    _hidden_probe_contract(contract)
+    if formal_root.exists() or formal_root.is_symlink():
+        raise RuntimeError("FORMAL_EVIDENCE_ROOT_PREEXISTS")
+    direct_runner = (repo / "tools" / "run_v2b_rev1_gpu_smoke.py").resolve(strict=True)
+    probe_argv = list(runner_argv)
+    probe_argv[0] = str(direct_runner)
+    probe_argv = _replace_arg(probe_argv, "--root", "__REV1_HIDDEN_PROBE_ROOT__")
+    if "--cpu-rehearsal" not in probe_argv:
+        probe_argv.append("--cpu-rehearsal")
+    env = dict(os.environ)
+    env.update({str(key): str(value) for key, value in expected_environment.items()})
+    env.update({
+        "CUDA_VISIBLE_DEVICES": "",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": str(repo / "src"),
+    })
+    env.pop("REV1_PRELAUNCH_ONLY", None)
+
+    def command(root: Path) -> list[str]:
+        return [
+            str(args.python_executable),
+            *_replace_arg(probe_argv, "--root", str(root)),
+        ]
+
+    def inspect(root: Path, completed) -> dict:
+        report_path = root / "cpu-rehearsal-report.json"
+        if completed.returncode != 0:
+            raise RuntimeError(
+                "HIDDEN_PROBE_FAILED: "
+                f"returncode={completed.returncode}; stderr={completed.stderr[-2000:]}"
+            )
+        if not report_path.is_file():
+            raise RuntimeError("HIDDEN_PROBE_REPORT_MISSING")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        if (
+            report.get("status") != "READY"
+            or report.get("cuda_initialized") is not False
+            or report.get("training_started") is not False
+            or report.get("deterministic") is not True
+        ):
+            raise RuntimeError("HIDDEN_PROBE_INVARIANT_FAILURE")
+        return {"report": report}
+
+    result = run_owned_scratch_probe(
+        command, cwd=repo, env=env, timeout=300.0, inspect=inspect,
+    )
+    if formal_root.exists() or formal_root.is_symlink():
+        raise RuntimeError("FORMAL_EVIDENCE_ROOT_CREATED_DURING_HIDDEN_PROBE")
+    result.update({
+        "status": "PASS",
+        "cuda_initialized": False,
+        "training_started": False,
+        "formal_evidence_root_absent_before_after": True,
+        "scratch_root_absent_after": True,
+        "direct_child": str(direct_runner),
+    })
+    return result
 
 
 def main() -> int:
@@ -244,6 +344,26 @@ def main() -> int:
     # controller import/validation path from a clean parent environment
     # without creating a launch root or a tmux session.
     if os.environ.get("REV1_PRELAUNCH_ONLY") == "1":
+        try:
+            hidden_probe = run_hidden_probe(
+                args=args,
+                repo=repo,
+                contract=contract,
+                runner_argv=runner_argv,
+                expected_environment=startup_environment(
+                    contract, gpu_uuid=args.gpu_uuid, cpu_rehearsal=True,
+                ),
+                formal_root=Path(args.root),
+            )
+        except Exception as exc:
+            print(json.dumps({
+                "status": "PRELAUNCH_HIDDEN_PROBE_FAIL",
+                "error": f"{type(exc).__name__}:{exc}",
+                "tmux_would_be_created": False,
+                "cuda_initialized_by_controller": False,
+                "training_started": False,
+            }, sort_keys=True, indent=2), file=sys.stderr)
+            return 2
         print(json.dumps({
             "status": "PRELAUNCH_WOULD_LAUNCH_PASS",
             "launch_plan_sha256": plan["launch_plan_sha256"],
@@ -251,6 +371,7 @@ def main() -> int:
             "tmux_would_be_created": True,
             "cuda_initialized_by_controller": False,
             "training_started": False,
+            "hidden_probe": hidden_probe,
         }, sort_keys=True, indent=2))
         return 0
     result = launch(plan)

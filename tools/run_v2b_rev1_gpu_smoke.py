@@ -773,7 +773,7 @@ def main() -> int:
     parser.add_argument("--cpu-rehearsal", action="store_true")
     parser.add_argument("--training-child", action="store_true")
     parser.add_argument("--quiescence-probe", action="store_true")
-    parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-011")
+    parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-025")
     parser.add_argument("--execution-source")
     parser.add_argument("--revision-verifier")
     parser.add_argument("--invocation", required=True)

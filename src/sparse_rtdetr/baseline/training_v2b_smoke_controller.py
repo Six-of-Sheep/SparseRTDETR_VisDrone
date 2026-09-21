@@ -16,10 +16,11 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 
 SCHEMA_VERSION = 1
@@ -257,6 +258,95 @@ def _create_runner_workspace(root: Path) -> Path:
     except FileExistsError as exc:
         raise LaunchDirectoryError("RUNNER_WORKSPACE_ALREADY_EXISTS") from exc
     return runner
+
+
+def _scratch_root_is_safe(root: Path, namespace: Path) -> bool:
+    """Require a non-symlink scratch directory below the approved namespace."""
+    if root.is_symlink():
+        return False
+    try:
+        resolved = root.resolve(strict=False)
+        parent = resolved.parent
+        return parent == namespace or namespace in parent.parents
+    except (OSError, RuntimeError):
+        return False
+
+
+def run_owned_scratch_probe(
+    command: Sequence[str] | Callable[[Path], Sequence[str]],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    namespace: Path = Path("/tmp"),
+    scratch_root: Path | None = None,
+    timeout: float = 300.0,
+    inspect: Callable[[Path, subprocess.CompletedProcess[str]], Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Own one temporary probe root, run a child, and prove cleanup.
+
+    The child still receives an already-created root and therefore preserves
+    the direct ``cpu_rehearsal(root)`` contract. This helper is execution-only:
+    it never creates a formal evidence/output/checkpoint root.
+    """
+    try:
+        namespace = namespace.resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        raise LaunchDirectoryError("HIDDEN_PROBE_NAMESPACE_UNAVAILABLE") from exc
+    if namespace.is_symlink() or not namespace.is_dir():
+        raise LaunchDirectoryError("HIDDEN_PROBE_NAMESPACE_INVALID")
+    if scratch_root is None:
+        try:
+            root = Path(tempfile.mkdtemp(prefix="rev1-hidden-probe-", dir=str(namespace)))
+        except OSError as exc:
+            raise LaunchDirectoryError("HIDDEN_PROBE_SCRATCH_CREATE_FAILED") from exc
+    else:
+        root = Path(scratch_root)
+        if root.exists() or root.is_symlink():
+            raise LaunchDirectoryError("HIDDEN_PROBE_SCRATCH_COLLISION")
+        if not _scratch_root_is_safe(root, namespace):
+            raise LaunchDirectoryError("HIDDEN_PROBE_SCRATCH_PATH_UNSAFE")
+        try:
+            root.mkdir(mode=0o700, parents=False, exist_ok=False)
+        except OSError as exc:
+            raise LaunchDirectoryError("HIDDEN_PROBE_SCRATCH_CREATE_FAILED") from exc
+    if root.is_symlink() or not root.is_dir() or not _scratch_root_is_safe(root, namespace):
+        raise LaunchDirectoryError("HIDDEN_PROBE_SCRATCH_IDENTITY_INVALID")
+    try:
+        os.chmod(root, 0o700)
+        argv = list(command(root) if callable(command) else command)
+        if not argv:
+            raise LaunchDirectoryError("HIDDEN_PROBE_COMMAND_EMPTY")
+        try:
+            completed = subprocess.run(
+                argv, cwd=str(cwd), env=dict(env), capture_output=True, text=True,
+                timeout=float(timeout), check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise LaunchDirectoryError("HIDDEN_PROBE_TIMEOUT") from exc
+        result: dict[str, Any] = {
+            "status": "PASS" if completed.returncode == 0 else "FAIL",
+            "returncode": int(completed.returncode),
+            "argv": argv,
+            "cwd": str(cwd),
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+            "scratch_root": str(root),
+        }
+        if inspect is not None:
+            result.update(dict(inspect(root, completed)))
+        return result
+    finally:
+        try:
+            if root.is_symlink():
+                root.unlink()
+            elif root.exists():
+                shutil.rmtree(root)
+            if root.exists() or root.is_symlink():
+                raise LaunchDirectoryError("HIDDEN_PROBE_CLEANUP_FAILED")
+        except LaunchDirectoryError:
+            raise
+        except OSError as exc:
+            raise LaunchDirectoryError("HIDDEN_PROBE_CLEANUP_FAILED") from exc
 
 
 def canonical_bytes(value: Any) -> bytes:

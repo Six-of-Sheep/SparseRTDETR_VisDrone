@@ -151,6 +151,56 @@ def test_runner_requires_controller_created_root(tmp_path):
         controller._create_runner_workspace(tmp_path / "missing-root")
 
 
+def test_owned_scratch_probe_creates_and_cleans_root(tmp_path):
+    script = tmp_path / "probe.py"
+    script.write_text(
+        "import json,sys; from pathlib import Path; "
+        "root=Path(sys.argv[1]); assert root.is_dir(); "
+        "(root/'cpu-rehearsal-report.json').write_text(json.dumps({"
+        "'status':'READY','cuda_initialized':False,'training_started':False,'deterministic':True}))",
+        encoding="utf-8",
+    )
+    root_holder = {}
+
+    def command(root):
+        root_holder["root"] = root
+        return [sys.executable, str(script), str(root)]
+
+    result = controller.run_owned_scratch_probe(
+        command, cwd=tmp_path, env=dict(os.environ),
+    )
+    assert result["returncode"] == 0
+    assert root_holder["root"].exists() is False
+
+
+def test_owned_scratch_probe_rejects_collision_and_unsafe_path(tmp_path):
+    collision = tmp_path / "collision"
+    collision.mkdir()
+    with pytest.raises(controller.LaunchDirectoryError, match="SCRATCH_COLLISION"):
+        controller.run_owned_scratch_probe(
+            [sys.executable, "-c", "pass"], cwd=tmp_path,
+            env=dict(os.environ), scratch_root=collision,
+        )
+    unsafe = Path("/var") / "rev1-hidden-probe-unsafe"
+    with pytest.raises(controller.LaunchDirectoryError, match="PATH_UNSAFE"):
+        controller.run_owned_scratch_probe(
+            [sys.executable, "-c", "pass"], cwd=tmp_path,
+            env=dict(os.environ), scratch_root=unsafe,
+        )
+
+
+def test_owned_scratch_probe_cleanup_failure_is_fail_closed(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        controller.shutil, "rmtree",
+        lambda path: (_ for _ in ()).throw(OSError("busy")),
+    )
+    with pytest.raises(controller.LaunchDirectoryError, match="CLEANUP_FAILED"):
+        controller.run_owned_scratch_probe(
+            [sys.executable, "-c", "pass"], cwd=tmp_path,
+            env=dict(os.environ),
+        )
+
+
 def test_controller_root_and_handshake_are_not_runner_workspace(tmp_path):
     fake = _fake_tmux(tmp_path)
     root = tmp_path / "ownership-positive"

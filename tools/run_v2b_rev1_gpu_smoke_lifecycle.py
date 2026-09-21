@@ -290,7 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bridge-manifest-sha", required=True)
     parser.add_argument("--training-contract-sha", required=True)
     parser.add_argument("--gpu-uuid", required=True)
-    parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-011")
+    parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-025")
     parser.add_argument("--execution-source")
     parser.add_argument("--revision-verifier")
     parser.add_argument("--structured-invocation", required=True)
