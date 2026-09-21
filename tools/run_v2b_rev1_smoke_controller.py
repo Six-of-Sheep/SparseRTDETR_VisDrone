@@ -164,6 +164,9 @@ def run_hidden_probe(
     probe_argv = list(runner_argv)
     probe_argv[0] = str(direct_runner)
     probe_argv = _replace_arg(probe_argv, "--root", "__REV1_HIDDEN_PROBE_ROOT__")
+    if "--structured-invocation" in probe_argv:
+        invocation_index = probe_argv.index("--structured-invocation")
+        probe_argv[invocation_index] = "--invocation"
     if "--cpu-rehearsal" not in probe_argv:
         probe_argv.append("--cpu-rehearsal")
     env = dict(os.environ)
