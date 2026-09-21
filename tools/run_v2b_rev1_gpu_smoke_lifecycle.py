@@ -131,7 +131,9 @@ def child_environment(args: argparse.Namespace, *, cpu: bool) -> dict[str, str]:
 
 def run_cpu_rehearsal(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.root)
-    root.mkdir(parents=True, exist_ok=False)
+    root.mkdir(parents=True, exist_ok=True)
+    if not root.is_dir():
+        raise RuntimeError("lifecycle launch root is not a directory")
     training_root = root / "training-child"
     restore_root = root / "restore-child"
     base = args_for_child(args, training_root)
@@ -167,7 +169,9 @@ def run_cpu_rehearsal(args: argparse.Namespace) -> dict[str, Any]:
 
 def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.root)
-    root.mkdir(parents=True, exist_ok=False)
+    root.mkdir(parents=True, exist_ok=True)
+    if not root.is_dir():
+        raise RuntimeError("lifecycle launch root is not a directory")
     training_root = root / "training-child"
     quiescence_root = root / "quiescence-child"
     restore_root = root / "restore-child"
