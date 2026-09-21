@@ -170,7 +170,7 @@ def _execution_contract() -> dict[str, Any]:
     contract = load_canonical_json(EXEC_CONTRACT_PATH)
     if contract.get("execution_contract_sha256") != EXEC_CONTRACT_SHA:
         raise RuntimeLocatorError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if contract.get("execution_contract_id") != "v2b-execution-contract-009":
+    if contract.get("execution_contract_id") != "v2b-execution-contract-010":
         raise RuntimeLocatorError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: value for key, value in contract.items() if key != "execution_contract_sha256"}
     if contract.get("execution_contract_sha256") != sha_bytes(canonical(without_runtime(body))):
@@ -257,13 +257,13 @@ def _run_revision_verifier(root: Path) -> dict[str, Any]:
     policy_authority = contract_dir / "runtime_policy_authority_r1.json"
     command = [
         sys.executable,
-        str(REPO / "tools" / "verify_v2b_smoke_launcher_r9.py"),
+        str(REPO / "tools" / "verify_v2b_smoke_launcher_r10.py"),
         "--repo-root", str(REPO),
         "--contract-dir", str(contract_dir),
         "--bridge", str(DERIVED),
         "--bridge-manifest", str(BRIDGE_MANIFEST_PATH),
         "--policy-authority", str(policy_authority),
-        "--execution-source", str(REPO / "contracts" / "v2b" / "rev001" / "execution_source_r9.json"),
+        "--execution-source", str(REPO / "contracts" / "v2b" / "rev001" / "execution_source_r10.json"),
         "--execution-source-sha", EXEC_SOURCE_SHA,
         "--execution-contract", str(EXEC_CONTRACT_PATH),
         "--execution-contract-sha", EXEC_CONTRACT_SHA,

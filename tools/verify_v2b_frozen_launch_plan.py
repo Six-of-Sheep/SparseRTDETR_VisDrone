@@ -58,6 +58,8 @@ def plan_identity_view(plan: dict[str,Any]) -> dict[str,Any]:
         raise ValueError("exact argv missing auth SHA value")
     argv[index+1]=PLAN_AUTH_MARKER
     body["exact_argv"]=argv
+    # Normalize the repeated auth digest in the display command as well.
+    body["exact_launch_command"]=shlex.join(argv)
     return body
 
 def verify_plan(plan_path: Path, auth_path: Path, repo: Path) -> dict[str,Any]:
@@ -88,7 +90,7 @@ def verify_plan(plan_path: Path, auth_path: Path, repo: Path) -> dict[str,Any]:
     if plan["repository_root"] != plan["working_directory"]: raise ValueError("repo/cwd mismatch")
     if not SESSION_RE.fullmatch(plan["tmux_session_name"]): raise ValueError("invalid tmux session name")
     if UUID_RE.fullmatch(plan["cuda_mapping"]["cuda_visible_devices"]) is None: raise ValueError("GPU UUID mapping invalid")
-    for key in ("repository_root","working_directory","interpreter","launcher","resolved_checkpoint_locator","resolved_manifest_locator","policy_authority_path","execution_contract_path","authorization_path","frozen_launch_plan_path"):
+    for key in ("repository_root","working_directory","interpreter","launcher","resolved_checkpoint_locator","resolved_manifest_locator","policy_authority_path","execution_contract_path","authorization_path","plan_path"):
         path=Path(plan[key])
         if key not in ("local_output_root","external_evidence_root") and not path.exists(): raise ValueError(f"locator unavailable: {key}")
     if plan["repository_root"] != str(repo.resolve()): raise ValueError("repository root drift")
