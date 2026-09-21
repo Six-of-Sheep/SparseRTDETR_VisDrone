@@ -61,6 +61,8 @@ EXEC_CONTRACT_SHA = ""
 EXEC_CONTRACT_PATH: Path | None = None
 EXECUTION_SOURCE_PATH: Path | None = None
 REVISION_VERIFIER_PATH: Path | None = None
+STRUCTURED_INVOCATION_PATH: Path | None = None
+FROZEN_PLAN_SHA = ""
 EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-011"
 TRAINING_CHILD_MODE = False
 BRIDGE_BINDING_SHA = ""
@@ -73,7 +75,8 @@ def _configured() -> None:
     if not all((REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH,
                 POLICY_AUTHORITY_PATH, POLICY_AUTHORITY_ID, POLICY_AUTHORITY_IDENTITY_SHA,
                 AUTH_ID, AUTH_SHA, AUTH_PATH, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA,
-                EXEC_CONTRACT_PATH, BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA)):
+                EXEC_CONTRACT_PATH, BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA,
+                STRUCTURED_INVOCATION_PATH, FROZEN_PLAN_SHA)):
         raise RuntimeLocatorError("runtime launch arguments are incomplete")
 
 
@@ -96,6 +99,8 @@ def _configuration_argv() -> list[str]:
         argv += ["--execution-source", str(EXECUTION_SOURCE_PATH)]
     if REVISION_VERIFIER_PATH is not None:
         argv += ["--revision-verifier", str(REVISION_VERIFIER_PATH)]
+    if STRUCTURED_INVOCATION_PATH is not None:
+        argv += ["--invocation", str(STRUCTURED_INVOCATION_PATH), "--plan-sha", FROZEN_PLAN_SHA]
     return argv
 
 
@@ -282,6 +287,7 @@ def _run_revision_verifier(root: Path) -> dict[str, Any]:
         "--authorization", str(AUTH_PATH),
         "--authorization-id", AUTH_ID,
         "--authorization-sha", AUTH_SHA,
+        "--invocation", str(STRUCTURED_INVOCATION_PATH), "--plan-sha", FROZEN_PLAN_SHA,
     ]
     environment = dict(os.environ)
     environment["CUDA_VISIBLE_DEVICES"] = ""
@@ -677,6 +683,8 @@ def main() -> int:
     parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-011")
     parser.add_argument("--execution-source")
     parser.add_argument("--revision-verifier")
+    parser.add_argument("--invocation", required=True)
+    parser.add_argument("--plan-sha", required=True)
     parser.add_argument("--checkpoint")
     parser.add_argument("--checkpoint-sha")
     parser.add_argument("--repo", required=True)
@@ -700,7 +708,7 @@ def main() -> int:
     global REPO, DERIVED, DERIVED_SHA, BRIDGE_MANIFEST_PATH, POLICY_PATH, POLICY_SHA, POLICY_SIZE
     global POLICY_AUTHORITY_PATH, POLICY_AUTHORITY_ID, POLICY_AUTHORITY_IDENTITY_SHA
     global AUTH_PATH, AUTH_ID, AUTH_SHA, EXEC_SOURCE_SHA, EXEC_CONTRACT_SHA, EXEC_CONTRACT_PATH
-    global EXECUTION_SOURCE_PATH, REVISION_VERIFIER_PATH, EXPECTED_EXECUTION_CONTRACT_ID
+    global EXECUTION_SOURCE_PATH, REVISION_VERIFIER_PATH, STRUCTURED_INVOCATION_PATH, FROZEN_PLAN_SHA, EXPECTED_EXECUTION_CONTRACT_ID
     global TRAINING_CHILD_MODE, BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA, TRAINING_CONTRACT_SHA, GPU_UUID
     REPO, DERIVED, BRIDGE_MANIFEST_PATH = map(Path, (args.repo, args.derived, args.manifest))
     POLICY_PATH = None
@@ -715,6 +723,10 @@ def main() -> int:
     EXEC_CONTRACT_PATH = Path(args.execution_contract)
     EXECUTION_SOURCE_PATH = Path(args.execution_source) if args.execution_source else None
     REVISION_VERIFIER_PATH = Path(args.revision_verifier) if args.revision_verifier else None
+    STRUCTURED_INVOCATION_PATH = Path(args.invocation).resolve(strict=True)
+    FROZEN_PLAN_SHA = str(args.plan_sha)
+    if len(FROZEN_PLAN_SHA) != 64 or any(ch not in "0123456789abcdef" for ch in FROZEN_PLAN_SHA):
+        raise RuntimeLocatorError("STRUCTURED_INVOCATION_PLAN_SHA_INVALID")
     EXPECTED_EXECUTION_CONTRACT_ID = str(args.expected_execution_contract_id)
     TRAINING_CHILD_MODE = bool(args.training_child)
     BRIDGE_BINDING_SHA, BRIDGE_MANIFEST_SHA = args.bridge_binding_sha, args.bridge_manifest_sha

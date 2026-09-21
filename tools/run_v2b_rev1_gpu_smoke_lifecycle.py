@@ -112,6 +112,8 @@ def args_for_child(args: argparse.Namespace, root: Path) -> list[str]:
         "--training-contract-sha", args.training_contract_sha,
         "--gpu-uuid", args.gpu_uuid,
         "--expected-execution-contract-id", args.expected_execution_contract_id,
+        "--invocation", args.structured_invocation,
+        "--plan-sha", args.plan_sha,
     ]
     if args.execution_source:
         command += ["--execution-source", args.execution_source]
@@ -273,6 +275,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-011")
     parser.add_argument("--execution-source")
     parser.add_argument("--revision-verifier")
+    parser.add_argument("--structured-invocation", required=True)
+    parser.add_argument("--plan-sha", required=True)
     parser.add_argument("--cpu-rehearsal", action="store_true")
     return parser
 

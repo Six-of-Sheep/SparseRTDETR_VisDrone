@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from sparse_rtdetr.baseline.training_v2b_smoke_controller import (
@@ -142,6 +143,7 @@ def main() -> int:
     parser.add_argument("--expected-execution-contract-id", default=EXPECTED_EXECUTION_CONTRACT_ID)
     parser.add_argument("--execution-source")
     parser.add_argument("--revision-verifier")
+    parser.add_argument("--structured-invocation", required=True)
     args = parser.parse_args()
     contract = load_execution_contract(Path(args.exec_contract), args.exec_contract_sha, args.exec_source_sha, args.expected_execution_contract_id)
     repo = Path(args.repo).resolve(strict=True)
@@ -208,6 +210,12 @@ def main() -> int:
         runner_argv += ["--execution-source", args.execution_source]
     if args.revision_verifier:
         runner_argv += ["--revision-verifier", args.revision_verifier]
+    invocation_path = Path(args.structured_invocation).resolve(strict=True)
+    invocation = load_canonical_json(invocation_path)
+    plan_sha = str(invocation.get("plan_sha256", ""))
+    if len(plan_sha) != 64 or any(ch not in "0123456789abcdef" for ch in plan_sha):
+        raise RuntimeLocatorError("STRUCTURED_INVOCATION_PLAN_SHA_INVALID")
+    runner_argv += ["--structured-invocation", str(invocation_path), "--plan-sha", plan_sha]
     if args.cpu_rehearsal:
         runner_argv += ["--cpu-rehearsal"]
     environment = dict(expected_environment)
@@ -232,6 +240,19 @@ def main() -> int:
     )
     plan["launch_plan_sha256"] = hashlib.sha256(canonical(plan)).hexdigest()
     verify_final_launch_plan(plan)
+    # The production entrypoint can use this mode to verify the complete
+    # controller import/validation path from a clean parent environment
+    # without creating a launch root or a tmux session.
+    if os.environ.get("REV1_PRELAUNCH_ONLY") == "1":
+        print(json.dumps({
+            "status": "PRELAUNCH_WOULD_LAUNCH_PASS",
+            "launch_plan_sha256": plan["launch_plan_sha256"],
+            "tmux_session": args.session,
+            "tmux_would_be_created": True,
+            "cuda_initialized_by_controller": False,
+            "training_started": False,
+        }, sort_keys=True, indent=2))
+        return 0
     result = launch(plan)
     print(json.dumps(result, sort_keys=True, indent=2))
     return 0 if result.get("status") == "COMPLETED" else 2
