@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -31,6 +32,20 @@ class LaunchDirectoryError(RuntimeError):
 
 class StartupEnvironmentError(RuntimeError):
     """The child did not observe the controller's bound startup environment."""
+
+
+def validate_versioned_contract_path(repo: Path, candidate: Path, prefix: str) -> Path:
+    """Accept only a non-symlink, versioned contract under rev001."""
+    contract_dir = (repo / "contracts" / "v2b" / "rev001").resolve(strict=True)
+    raw = Path(candidate)
+    if raw.is_symlink():
+        raise ValueError("VERSIONED_CONTRACT_PATH_MISMATCH: symlink is forbidden")
+    resolved = raw.resolve(strict=True)
+    if resolved.parent != contract_dir or not resolved.is_file():
+        raise ValueError("VERSIONED_CONTRACT_PATH_MISMATCH: contract must be under rev001")
+    if not re.fullmatch(re.escape(prefix) + r"r[0-9]+\.json", resolved.name):
+        raise ValueError("VERSIONED_CONTRACT_PATH_MISMATCH: unexpected contract name")
+    return resolved
 
 
 def verify_startup_environment(

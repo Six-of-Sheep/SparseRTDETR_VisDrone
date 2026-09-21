@@ -283,3 +283,24 @@ def test_final_launch_plan_rejects_digest_drift(tmp_path):
     plan["runtime_objects"]["policy"]["resolved_path"] = "/different/policy.json"
     with pytest.raises(Exception, match="launch plan digest drift"):
         controller.verify_final_launch_plan(plan)
+
+
+def test_versioned_contract_path_accepts_new_authorization_revision(tmp_path):
+    contract_dir = tmp_path / "contracts" / "v2b" / "rev001"
+    contract_dir.mkdir(parents=True)
+    candidate = contract_dir / "gpu_smoke_authorization_r9.json"
+    candidate.write_text("{}\n", encoding="utf-8")
+    assert controller.validate_versioned_contract_path(tmp_path, candidate, "gpu_smoke_authorization_") == candidate
+
+
+def test_versioned_contract_path_rejects_old_or_external_path(tmp_path):
+    contract_dir = tmp_path / "contracts" / "v2b" / "rev001"
+    contract_dir.mkdir(parents=True)
+    old = contract_dir / "gpu_smoke_authorization.json"
+    old.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(Exception, match="VERSIONED_CONTRACT_PATH_MISMATCH"):
+        controller.validate_versioned_contract_path(tmp_path, old, "gpu_smoke_authorization_")
+    external = tmp_path / "gpu_smoke_authorization_r9.json"
+    external.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(Exception, match="VERSIONED_CONTRACT_PATH_MISMATCH"):
+        controller.validate_versioned_contract_path(tmp_path, external, "gpu_smoke_authorization_")

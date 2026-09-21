@@ -11,13 +11,14 @@ import hashlib
 import json
 from pathlib import Path
 
-from sparse_rtdetr.baseline.training_v2b_smoke_controller import build_plan, launch
+from sparse_rtdetr.baseline.training_v2b_smoke_controller import build_plan, launch, validate_versioned_contract_path
 from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     RuntimeLocatorError, resolve_bridge, resolve_policy_authority, load_canonical_json,
 )
 
 
 RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
+EXPECTED_EXECUTION_CONTRACT_ID = "v2b-execution-contract-007"
 
 
 def canonical(value: object) -> bytes:
@@ -39,7 +40,7 @@ def load_execution_contract(path: Path, expected_sha: str, expected_source_sha: 
         raise RuntimeError("EXECUTION_CONTRACT_NON_CANONICAL")
     if value.get("execution_contract_sha256") != expected_sha:
         raise RuntimeError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if value.get("execution_contract_id") != "v2b-execution-contract-006":
+    if value.get("execution_contract_id") != EXPECTED_EXECUTION_CONTRACT_ID:
         raise RuntimeError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: item for key, item in value.items() if key != "execution_contract_sha256"}
     if value.get("execution_contract_sha256") != hashlib.sha256(canonical(without_runtime(body))).hexdigest():
@@ -152,14 +153,8 @@ def main() -> int:
         Path(args.derived), checkpoint_sha256=args.derived_sha,
         manifest=Path(args.manifest), manifest_sha256=args.bridge_manifest_sha,
     )
-    auth_path = Path(args.auth).resolve(strict=True)
-    expected_auth = (repo / "contracts" / "v2b" / "rev001" / "gpu_smoke_authorization_r8.json").resolve(strict=True)
-    if auth_path != expected_auth:
-        raise RuntimeLocatorError("AUTHORIZATION_PATH_MISMATCH")
-    execution_path = Path(args.exec_contract).resolve(strict=True)
-    expected_execution = (repo / "contracts" / "v2b" / "rev001" / "execution_contract_r6.json").resolve(strict=True)
-    if execution_path != expected_execution:
-        raise RuntimeLocatorError("EXECUTION_CONTRACT_PATH_MISMATCH")
+    auth_path = validate_versioned_contract_path(repo, Path(args.auth), "gpu_smoke_authorization_")
+    execution_path = validate_versioned_contract_path(repo, Path(args.exec_contract), "execution_contract_")
     expected_environment = startup_environment(contract, gpu_uuid=args.gpu_uuid, cpu_rehearsal=args.cpu_rehearsal)
     runner_argv = [
         args.runner,
@@ -195,7 +190,7 @@ def main() -> int:
         "execution_contract": {"path": str(execution_path), "sha256": args.exec_contract_sha},
     }
     plan = build_plan(
-        launch_id="rev1-gpu-smoke-bridge008-cpu-rehearsal" if args.cpu_rehearsal else "rev1-gpu-smoke-bridge008",
+        launch_id=f"rev1-gpu-smoke-{args.auth_id}" + ("-cpu-rehearsal" if args.cpu_rehearsal else ""),
         evidence_root=Path(args.root), repo_root=repo,
         python_executable=Path(args.python_executable), runner_argv=runner_argv,
         tmux_executable=Path("tmux"), session_name=args.session,

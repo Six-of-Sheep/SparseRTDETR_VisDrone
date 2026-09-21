@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot REV1 bridge-008 GPU pre-formal smoke.
+"""One-shot REV1 GPU pre-formal smoke with versioned runtime bindings.
 
 This file is uploaded to /tmp only.  It does not belong to the scientific or
 execution source identity and is never used for formal continuation.
@@ -170,7 +170,7 @@ def _execution_contract() -> dict[str, Any]:
     contract = load_canonical_json(EXEC_CONTRACT_PATH)
     if contract.get("execution_contract_sha256") != EXEC_CONTRACT_SHA:
         raise RuntimeLocatorError("EXECUTION_CONTRACT_IDENTITY_MISMATCH")
-    if contract.get("execution_contract_id") != "v2b-execution-contract-006":
+    if contract.get("execution_contract_id") != "v2b-execution-contract-007":
         raise RuntimeLocatorError("EXECUTION_CONTRACT_REVISION_MISMATCH")
     body = {key: value for key, value in contract.items() if key != "execution_contract_sha256"}
     if contract.get("execution_contract_sha256") != sha_bytes(canonical(without_runtime(body))):
@@ -257,12 +257,19 @@ def _run_revision_verifier(root: Path) -> dict[str, Any]:
     policy_authority = contract_dir / "runtime_policy_authority_r1.json"
     command = [
         sys.executable,
-        str(REPO / "tools" / "verify_v2b_smoke_launcher_r6.py"),
+        str(REPO / "tools" / "verify_v2b_smoke_launcher_r7.py"),
         "--repo-root", str(REPO),
         "--contract-dir", str(contract_dir),
         "--bridge", str(DERIVED),
         "--bridge-manifest", str(BRIDGE_MANIFEST_PATH),
         "--policy-authority", str(policy_authority),
+        "--execution-source", str(REPO / "contracts" / "v2b" / "rev001" / "execution_source_r7.json"),
+        "--execution-source-sha", EXEC_SOURCE_SHA,
+        "--execution-contract", str(EXEC_CONTRACT_PATH),
+        "--execution-contract-sha", EXEC_CONTRACT_SHA,
+        "--authorization", str(AUTH_PATH),
+        "--authorization-id", AUTH_ID,
+        "--authorization-sha", AUTH_SHA,
     ]
     environment = dict(os.environ)
     environment["CUDA_VISIBLE_DEVICES"] = ""
@@ -368,7 +375,7 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
     )
     loader = build_loader(binding, repo=REPO)
     cpu_binding = build_train_core_run_binding(
-        components, loader, run_id="v2b-rev1-s2-r896-bridge-008-cpu",
+        components, loader, run_id=f"{AUTH_ID}-cpu",
         repo_root=REPO, requested_device="cpu", cuda_gpu_uuid=None,
     )
     cpu_binding["provenance"] = copy.deepcopy(binding["provenance"])
