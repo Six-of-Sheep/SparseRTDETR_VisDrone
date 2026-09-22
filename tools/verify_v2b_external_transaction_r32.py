@@ -81,8 +81,14 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     repo = args.repo_root.resolve(strict=True)
     contract = load(args.execution_contract.resolve(strict=True))
     source = load(args.execution_source.resolve(strict=True))
-    plan = load(args.plan.resolve(strict=True))
     invocation = load(args.invocation.resolve(strict=True))
+    plan_path = args.plan.resolve(strict=True) if args.plan is not None else Path(str(invocation.get("plan_path", ""))).resolve(strict=True)
+    plan = load(plan_path)
+    plan_sha = args.plan_sha or str(invocation.get("plan_sha256", ""))
+    if len(plan_sha) != 64 or any(ch not in "0123456789abcdef" for ch in plan_sha):
+        raise ValueError("plan SHA is invalid")
+    if invocation.get("plan_sha256") != plan_sha:
+        raise ValueError("invocation plan SHA mismatch")
     auth = load(args.authorization.resolve(strict=True))
     if contract.get("execution_contract_id") != "v2b-execution-contract-032":
         raise ValueError("execution contract revision mismatch")
@@ -96,9 +102,9 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("execution contract digest mismatch")
     if contract.get("execution_source_sha256") != args.execution_source_sha:
         raise ValueError("execution source binding mismatch")
-    if plan.get("frozen_plan_sha256") != args.plan_sha or sha_bytes(canonical(plan_identity(plan))) != args.plan_sha:
+    if plan.get("frozen_plan_sha256") != plan_sha or sha_bytes(canonical(plan_identity(plan))) != plan_sha:
         raise ValueError("frozen plan digest mismatch")
-    if invocation.get("plan_sha256") != args.plan_sha:
+    if invocation.get("plan_sha256") != plan_sha:
         raise ValueError("invocation plan binding mismatch")
     if invocation.get("authorization_sha256") != args.authorization_sha:
         raise ValueError("invocation authorization binding mismatch")
@@ -106,7 +112,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("authorization SHA mismatch")
     if auth.get("authorization_sha256") != sha_bytes(canonical({k: v for k, v in auth.items() if k != "authorization_sha256"})):
         raise ValueError("authorization digest mismatch")
-    if auth.get("frozen_plan_sha256") != args.plan_sha or plan.get("frozen_plan_sha256") != args.plan_sha:
+    if auth.get("frozen_plan_sha256") != plan_sha or plan.get("frozen_plan_sha256") != plan_sha:
         raise ValueError("authorization frozen-plan binding mismatch")
     if auth.get("smoke_authorization_id") != args.authorization_id:
         raise ValueError("authorization ID mismatch")
@@ -144,7 +150,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         ("repository_root", str(repo)),
         ("working_directory", str(repo)),
         ("authorization_path", str(args.authorization.resolve())),
-        ("plan_path", str(args.plan.resolve())),
+        ("plan_path", str(plan_path)),
         ("evidence_root", str(evidence)),
     ):
         if invocation.get(key) != expected:
@@ -165,18 +171,18 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError(f"{key} mismatch")
     if sha_file(args.bridge) != args.checkpoint_sha or sha_file(args.bridge_manifest) != args.manifest_sha:
         raise ValueError("checkpoint or manifest bytes mismatch")
-    return {"status": "PASS", "mode": "external_transaction", "plan_sha256": args.plan_sha, "authorization_sha256": args.authorization_sha, "git": plan["git"], "authorization_path": str(auth_path)}
+    return {"status": "PASS", "mode": "external_transaction", "plan_sha256": plan_sha, "authorization_sha256": args.authorization_sha, "git": plan["git"], "authorization_path": str(auth_path)}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, required=True)
-    parser.add_argument("--plan", type=Path, required=True)
+    parser.add_argument("--plan", type=Path, required=False)
     parser.add_argument("--authorization", type=Path, required=True)
     parser.add_argument("--invocation", type=Path, required=True)
     parser.add_argument("--authorization-id", required=True)
     parser.add_argument("--authorization-sha", required=True)
-    parser.add_argument("--plan-sha", required=True)
+    parser.add_argument("--plan-sha", required=False)
     parser.add_argument("--execution-source", type=Path, required=True)
     parser.add_argument("--execution-source-sha", required=True)
     parser.add_argument("--execution-contract", type=Path, required=True)
