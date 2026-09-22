@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shlex
 import subprocess
 import re
@@ -163,7 +164,10 @@ def main() -> int:
         auth["authorization_sha256"] if item == AUTH_MARKER else item
         for item in controller_argv
     ]
-    invocation = {"schema_version": 3, "kind": "structured_smoke_invocation_v2", "invocation_id": args.authorization_id, "authorization_id": args.authorization_id, "authorization_sha256": auth["authorization_sha256"], "plan_sha256": plan["frozen_plan_sha256"], "execution_source_id": source["execution_source_id"], "execution_source_sha256": args.source_sha, "execution_contract_id": args.contract_id, "execution_contract_sha256": args.contract_sha, "repository_root": str(repo), "working_directory": str(repo), "controller_python": args.python, "controller_launcher": str(args.controller), "controller_argv": actual_controller_argv, "entrypoint": str(args.entrypoint), "entrypoint_argv": [args.python, str(args.entrypoint), "--invocation", str(invocation_path)], "transaction_root": str(root), "authorization_path": str(auth_path), "plan_path": str(plan_path), "evidence_root": str(evidence), "output_root": str(output), "controller_env": {"PYTHONPATH": str(repo / "src"), "PYTHONHASHSEED": "0", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONNOUSERSITE": "1", "CUDA_VISIBLE_DEVICES": args.gpu_uuid}, "runner_env": {"PYTHONPATH": str(repo / "src"), "PYTHONHASHSEED": "0", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONNOUSERSITE": "1", "CUDA_VISIBLE_DEVICES": args.gpu_uuid}}
+    required_host_environment = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")}
+    if any(not value for value in required_host_environment.values()):
+        raise ValueError("PATH and HOME must be present when sealing invocation")
+    invocation = {"schema_version": 3, "kind": "structured_smoke_invocation_v2", "invocation_id": args.authorization_id, "authorization_id": args.authorization_id, "authorization_sha256": auth["authorization_sha256"], "plan_sha256": plan["frozen_plan_sha256"], "execution_source_id": source["execution_source_id"], "execution_source_sha256": args.source_sha, "execution_contract_id": args.contract_id, "execution_contract_sha256": args.contract_sha, "repository_root": str(repo), "working_directory": str(repo), "controller_python": args.python, "controller_launcher": str(args.controller), "controller_argv": actual_controller_argv, "entrypoint": str(args.entrypoint), "entrypoint_argv": [args.python, str(args.entrypoint), "--invocation", str(invocation_path)], "transaction_root": str(root), "authorization_path": str(auth_path), "plan_path": str(plan_path), "evidence_root": str(evidence), "output_root": str(output), "controller_env": {"PATH": required_host_environment["PATH"], "HOME": required_host_environment["HOME"], "PYTHONPATH": str(repo / "src"), "PYTHONHASHSEED": "0", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONNOUSERSITE": "1", "CUDA_VISIBLE_DEVICES": args.gpu_uuid}, "runner_env": {"PATH": required_host_environment["PATH"], "HOME": required_host_environment["HOME"], "PYTHONPATH": str(repo / "src"), "PYTHONHASHSEED": "0", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONNOUSERSITE": "1", "CUDA_VISIBLE_DEVICES": args.gpu_uuid}}
     write_new(plan_path, plan)
     write_new(auth_path, auth)
     write_new(invocation_path, invocation)
