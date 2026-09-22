@@ -12,9 +12,6 @@ from typing import Any
 
 RUNTIME_KEYS = {"runtime_locator", "runtime_file_count", "runtime_locators", "state_runtime_locator"}
 SCIENTIFIC_SHA = "15f4ce16e373f08cf192b73adbb09b2de90f64ef640a5d8f3b1df44c586e92f8"
-BRIDGE_SHA = "9bff29777aee263e89c35f9efc537af65cb8d921acedd3b9178bf5e16a2bd5db"
-BRIDGE_BINDING_SHA = "492e767fda77b7217039c12bf9c58b4f39b2c922fc99d4b9ef222f83ebb2b579"
-BRIDGE_MANIFEST_SHA = "9bb2a9a5baff861f75cb1c4af3a59844808097ae5edfbbe31fcb322256e05b8b"
 TRAINING_SHA = "bafdcbfbd219de288c3947595902d47bf37031bfdc2e9b01d36cd9f1ee2177c4"
 BRIDGE_GPU_UUID = "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8"
 SOURCE_ID = "v2b-exec-027"
@@ -159,17 +156,19 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("authorization identity mismatch")
     if auth.get("execution_source_sha256") != args.execution_source_sha or auth.get("execution_contract_sha256") != args.execution_contract_sha:
         raise ValueError("authorization execution binding mismatch")
-    if auth.get("checkpoint_sha256") != BRIDGE_SHA or auth.get("bridge_binding_sha256") != BRIDGE_BINDING_SHA or auth.get("bridge_manifest_sha256") != BRIDGE_MANIFEST_SHA:
+    bridge = args.bridge.resolve(strict=True)
+    manifest = args.bridge_manifest.resolve(strict=True)
+    actual_bridge_sha = sha_file(bridge)
+    actual_manifest_sha = sha_file(manifest)
+    manifest_doc = load(manifest)
+    actual_binding_sha = (manifest_doc.get("binding_transition") or {}).get("new_binding_sha256")
+    if auth.get("checkpoint_sha256") != actual_bridge_sha or auth.get("bridge_binding_sha256") != actual_binding_sha or auth.get("bridge_manifest_sha256") != actual_manifest_sha:
         raise ValueError("bridge identity mismatch")
     if auth.get("status") != "PENDING_NOT_EXECUTED" or auth.get("consumed") is not False or auth.get("formal_launch_permitted") is not False:
         raise ValueError("authorization not pending fail-closed")
     auth_body = {k: v for k, v in auth.items() if k != "authorization_sha256"}
     if digest(without_runtime(auth_body)) != args.authorization_sha:
         raise ValueError("authorization digest mismatch")
-    bridge = args.bridge.resolve(strict=True)
-    manifest = args.bridge_manifest.resolve(strict=True)
-    if sha_file(bridge) != BRIDGE_SHA or sha_file(manifest) != BRIDGE_MANIFEST_SHA:
-        raise ValueError("bridge artifact identity mismatch")
     policy = load(args.policy_authority.resolve(strict=True))
     if policy.get("authority_id") != "hardware-policy:t8b:paired-smoke-r2" or policy.get("identity", {}).get("sha256") != policy.get("runtime_locator", {}).get("sha256"):
         raise ValueError("policy authority mismatch")
@@ -184,8 +183,8 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         "authorization_sha256": args.authorization_sha,
         "invocation": invocation,
         "scientific_source_sha256": SCIENTIFIC_SHA,
-        "checkpoint_sha256": BRIDGE_SHA,
-        "bridge_manifest_sha256": BRIDGE_MANIFEST_SHA,
+        "checkpoint_sha256": actual_bridge_sha,
+        "bridge_manifest_sha256": actual_manifest_sha,
     }
 
 
