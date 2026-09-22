@@ -167,7 +167,17 @@ def main() -> int:
     required_host_environment = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")}
     if any(not value for value in required_host_environment.values()):
         raise ValueError("PATH and HOME must be present when sealing invocation")
-    invocation = {"schema_version": 3, "kind": "structured_smoke_invocation_v2", "invocation_id": args.authorization_id, "authorization_id": args.authorization_id, "authorization_sha256": auth["authorization_sha256"], "plan_sha256": plan["frozen_plan_sha256"], "execution_source_id": source["execution_source_id"], "execution_source_sha256": args.source_sha, "execution_contract_id": args.contract_id, "execution_contract_sha256": args.contract_sha, "repository_root": str(repo), "working_directory": str(repo), "controller_python": args.python, "controller_launcher": str(args.controller), "controller_argv": actual_controller_argv, "entrypoint": str(args.entrypoint), "entrypoint_argv": [args.python, str(args.entrypoint), "--invocation", str(invocation_path)], "transaction_root": str(root), "authorization_path": str(auth_path), "plan_path": str(plan_path), "evidence_root": str(evidence), "output_root": str(output), "controller_env": {"PATH": required_host_environment["PATH"], "HOME": required_host_environment["HOME"], "PYTHONPATH": str(repo / "src"), "PYTHONHASHSEED": "0", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONNOUSERSITE": "1", "CUDA_VISIBLE_DEVICES": args.gpu_uuid}, "runner_env": {"PATH": required_host_environment["PATH"], "HOME": required_host_environment["HOME"], "PYTHONPATH": str(repo / "src"), "PYTHONHASHSEED": "0", "CUBLAS_WORKSPACE_CONFIG": ":4096:8", "PYTHONNOUSERSITE": "1", "CUDA_VISIBLE_DEVICES": args.gpu_uuid}}
+    static_environment = dict(contract.get("startup_environment", {}).get("static") or {})
+    if not static_environment or any(not isinstance(key, str) or not isinstance(value, str) for key, value in static_environment.items()):
+        raise ValueError("execution contract static startup environment is invalid")
+    controller_environment = {
+        **required_host_environment,
+        **static_environment,
+        "PYTHONPATH": str(repo / "src"),
+        "CUDA_VISIBLE_DEVICES": args.gpu_uuid,
+    }
+    runner_environment = dict(controller_environment)
+    invocation = {"schema_version": 3, "kind": "structured_smoke_invocation_v2", "invocation_id": args.authorization_id, "authorization_id": args.authorization_id, "authorization_sha256": auth["authorization_sha256"], "plan_sha256": plan["frozen_plan_sha256"], "execution_source_id": source["execution_source_id"], "execution_source_sha256": args.source_sha, "execution_contract_id": args.contract_id, "execution_contract_sha256": args.contract_sha, "repository_root": str(repo), "working_directory": str(repo), "controller_python": args.python, "controller_launcher": str(args.controller), "controller_argv": actual_controller_argv, "entrypoint": str(args.entrypoint), "entrypoint_argv": [args.python, str(args.entrypoint), "--invocation", str(invocation_path)], "transaction_root": str(root), "authorization_path": str(auth_path), "plan_path": str(plan_path), "evidence_root": str(evidence), "output_root": str(output), "controller_env": controller_environment, "runner_env": runner_environment}
     write_new(plan_path, plan)
     write_new(auth_path, auth)
     write_new(invocation_path, invocation)
