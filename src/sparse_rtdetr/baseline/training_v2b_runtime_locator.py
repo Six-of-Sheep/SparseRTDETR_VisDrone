@@ -11,6 +11,7 @@ import json
 import os
 import stat
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -21,6 +22,11 @@ class RuntimeLocatorError(ValueError):
 
     def __init__(self, detail: str):
         super().__init__(f"{self.prefix}: {detail}")
+
+
+_TRANSACTION_ROOT_RE = re.compile(
+    r"SparseRTDETR_VisDrone_v2b_rev1_gpu_smoke_bridge[0-9]{3}_[0-9]{8}"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -86,6 +92,68 @@ def resolve_file(
         "sha256": actual,
         "symlink": False,
     }
+
+
+def _path_has_symlink_component(path: Path) -> bool:
+    absolute = Path(os.path.abspath(path))
+    current = Path(absolute.anchor)
+    for component in absolute.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _strict_absolute_path(path: str | Path, *, label: str) -> Path:
+    candidate = Path(path)
+    if not candidate.is_absolute() or ".." in candidate.parts or "." in candidate.parts:
+        raise RuntimeLocatorError(f"{label} must be a canonical absolute path")
+    if _path_has_symlink_component(candidate):
+        raise RuntimeLocatorError(f"{label} contains a symlink component")
+    resolved = candidate.resolve(strict=False)
+    if resolved != candidate:
+        raise RuntimeLocatorError(f"{label} path alias is forbidden")
+    return candidate
+
+
+def validate_external_transaction_authorization(
+    path: str | Path,
+    *,
+    evidence_root: str | Path,
+    execution_contract: dict[str, Any],
+) -> Path:
+    """Resolve the only permitted external authorization locator.
+
+    The contract supplies the approved parent namespace.  The caller supplies
+    only the evidence root and candidate path; both must resolve to the same
+    transaction directory, whose authorization filename is fixed.
+    """
+    if execution_contract.get("authorization_mode") != "external_transaction":
+        raise RuntimeLocatorError("external authorization mode is not enabled")
+    locator = execution_contract.get("runtime_locator") or {}
+    parent_value = locator.get("external_transaction_parent")
+    if not isinstance(parent_value, str) or not parent_value:
+        raise RuntimeLocatorError("external transaction parent is missing")
+    approved_parent_raw = _strict_absolute_path(parent_value, label="external transaction parent")
+    approved_parent = approved_parent_raw.resolve(strict=True)
+    if not approved_parent.is_dir() or approved_parent.is_symlink():
+        raise RuntimeLocatorError("external transaction parent is not a directory")
+    evidence = _strict_absolute_path(evidence_root, label="evidence root")
+    transaction = evidence.parent
+    if transaction.parent != approved_parent:
+        raise RuntimeLocatorError("transaction root escapes approved namespace")
+    if _TRANSACTION_ROOT_RE.fullmatch(transaction.name) is None:
+        raise RuntimeLocatorError("invalid transaction root name")
+    if _path_has_symlink_component(transaction) or not transaction.is_dir():
+        raise RuntimeLocatorError("transaction root is not a regular directory")
+    if evidence != transaction / "evidence" or not evidence.is_dir():
+        raise RuntimeLocatorError("evidence root is not transaction-scoped")
+    candidate = _strict_absolute_path(path, label="external authorization")
+    resolved = candidate.resolve(strict=True)
+    if resolved != transaction / "authorization.json":
+        raise RuntimeLocatorError("authorization must be transaction/authorization.json")
+    _regular_non_symlink(resolved)
+    return resolved
 
 
 def _load_json(path: str | Path, *, require_canonical: bool) -> dict[str, Any]:

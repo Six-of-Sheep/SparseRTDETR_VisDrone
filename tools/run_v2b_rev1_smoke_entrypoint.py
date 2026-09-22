@@ -62,7 +62,7 @@ def load_invocation(path: Path) -> dict[str, Any]:
     value = json.loads(raw.decode("utf-8"))
     if raw != canonical(value):
         raise ValueError("INVOCATION_NON_CANONICAL")
-    if not isinstance(value, dict) or value.get("schema_version") != 2:
+    if not isinstance(value, dict) or value.get("schema_version") not in {2, 3}:
         raise ValueError("INVOCATION_SCHEMA_MISMATCH")
     if any(
         marker in item for item in walk_strings(value) for marker in PLACEHOLDER_MARKERS

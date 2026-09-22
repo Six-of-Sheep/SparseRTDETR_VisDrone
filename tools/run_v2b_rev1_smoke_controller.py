@@ -19,6 +19,7 @@ from sparse_rtdetr.baseline.training_v2b_smoke_controller import (
 )
 from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     RuntimeLocatorError, resolve_bridge, resolve_policy_authority, load_canonical_json,
+    validate_external_transaction_authorization,
 )
 
 
@@ -263,7 +264,12 @@ def main() -> int:
         Path(args.derived), checkpoint_sha256=args.derived_sha,
         manifest=Path(args.manifest), manifest_sha256=args.bridge_manifest_sha,
     )
-    auth_path = validate_versioned_contract_path(repo, Path(args.auth), "gpu_smoke_authorization_")
+    if contract.get("authorization_mode") == "external_transaction":
+        auth_path = validate_external_transaction_authorization(
+            args.auth, evidence_root=args.root, execution_contract=contract,
+        )
+    else:
+        auth_path = validate_versioned_contract_path(repo, Path(args.auth), "gpu_smoke_authorization_")
     execution_path = validate_versioned_contract_path(repo, Path(args.exec_contract), "execution_contract_")
     expected_environment = startup_environment(contract, gpu_uuid=args.gpu_uuid, cpu_rehearsal=args.cpu_rehearsal)
     gpu_identity_preflight = None

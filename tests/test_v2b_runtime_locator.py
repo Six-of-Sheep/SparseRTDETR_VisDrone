@@ -12,6 +12,7 @@ import pytest
 
 from sparse_rtdetr.baseline.training_v2b_runtime_locator import (
     RuntimeLocatorError, resolve_bridge, resolve_file, resolve_policy, resolve_policy_authority,
+    validate_external_transaction_authorization,
 )
 
 
@@ -88,6 +89,46 @@ def test_bridge_wrong_artifact_and_manifest_fail_closed(tmp_path: Path) -> None:
         resolve_bridge(bridge, checkpoint_sha256="0" * 64, manifest=manifest, manifest_sha256=manifest_sha)
     with pytest.raises(RuntimeLocatorError, match="sha256 mismatch"):
         resolve_bridge(bridge, checkpoint_sha256=bridge_sha, manifest=manifest, manifest_sha256="0" * 64)
+
+
+def _external_transaction(tmp_path: Path) -> tuple[Path, Path, dict]:
+    parent = tmp_path / "artifacts"
+    root = parent / "SparseRTDETR_VisDrone_v2b_rev1_gpu_smoke_bridge035_20260922"
+    evidence = root / "evidence"
+    evidence.mkdir(parents=True)
+    auth = root / "authorization.json"
+    auth.write_bytes(b"{}\n")
+    contract = {
+        "authorization_mode": "external_transaction",
+        "runtime_locator": {"external_transaction_parent": str(parent)},
+    }
+    return auth, evidence, contract
+
+
+def test_external_transaction_authorization_is_root_scoped(tmp_path: Path) -> None:
+    auth, evidence, contract = _external_transaction(tmp_path)
+    assert validate_external_transaction_authorization(
+        auth, evidence_root=evidence, execution_contract=contract,
+    ) == auth
+
+
+@pytest.mark.parametrize("kind", ["wrong_root", "wrong_name", "symlink"])
+def test_external_transaction_authorization_fails_closed(tmp_path: Path, kind: str) -> None:
+    auth, evidence, contract = _external_transaction(tmp_path)
+    if kind == "wrong_root":
+        candidate = tmp_path / "outside" / "authorization.json"
+        candidate.parent.mkdir()
+        candidate.write_bytes(b"{}\n")
+    elif kind == "wrong_name":
+        candidate = auth.parent / "other.json"
+        candidate.write_bytes(b"{}\n")
+    else:
+        candidate = auth.parent / "link.json"
+        candidate.symlink_to(auth)
+    with pytest.raises(RuntimeLocatorError):
+        validate_external_transaction_authorization(
+            candidate, evidence_root=evidence, execution_contract=contract,
+        )
 
 
 def _write_authority(tmp_path: Path, policy_path: Path, raw: bytes) -> tuple[Path, str, str]:

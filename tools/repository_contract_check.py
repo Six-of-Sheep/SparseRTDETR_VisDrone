@@ -397,6 +397,14 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'tools/verify_v2b_smoke_launcher_r31.py',
 }
 
+V2B_EXTERNAL_TRANSACTION_FILES = {
+    'contracts/v2b/rev001/execution_source_r32.json',
+    'contracts/v2b/rev001/execution_contract_r32.json',
+    'tools/verify_v2b_external_transaction_r32.py',
+    'tools/seal_v2b_rev1_transaction.py',
+    'tests/test_v2b_external_transaction.py',
+}
+
 
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
@@ -2697,6 +2705,8 @@ def check_repository(root: Path, *, source_only: bool = False) -> bool:
         allowed_files |= V2B_CONTRACT_REV1_FILES
     if files & V2B_RUNTIME_LOCATOR_FILES:
         allowed_files |= V2B_RUNTIME_LOCATOR_FILES
+    if files & V2B_EXTERNAL_TRANSACTION_FILES:
+        allowed_files |= V2B_EXTERNAL_TRANSACTION_FILES
     allowed_files |= T7C_FILES
     t7d_files_present = files & T7D_FILES
     if t7d_files_present:
