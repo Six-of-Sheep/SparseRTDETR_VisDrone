@@ -174,10 +174,21 @@ def args_for_child(args: argparse.Namespace, root: Path) -> list[str]:
 
 def child_environment(args: argparse.Namespace, *, cpu: bool) -> dict[str, str]:
     env = dict(os.environ)
+    contract = read_json(Path(args.execution_contract))
+    startup = contract.get("startup_environment")
+    if not isinstance(startup, dict):
+        raise RuntimeError("execution contract startup environment is missing")
+    static = startup.get("static")
+    mode = startup.get("cpu_rehearsal" if cpu else "gpu")
+    if not isinstance(static, dict) or not isinstance(mode, dict):
+        raise RuntimeError("execution contract startup environment is invalid")
+    env.update({str(key): str(value) for key, value in static.items()})
+    env.update({str(key): str(value) for key, value in mode.items()})
+    expected_cuda = "" if cpu else str(args.gpu_uuid)
+    if env.get("CUDA_VISIBLE_DEVICES") != expected_cuda:
+        raise RuntimeError("execution contract CUDA binding does not match lifecycle mode")
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["PYTHONPATH"] = str(Path(args.repo) / "src")
-    if cpu:
-        env["CUDA_VISIBLE_DEVICES"] = ""
     return env
 
 

@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "run_v2b_rev1_gpu_smoke_lifecycle.py"
@@ -86,6 +87,33 @@ def test_parse_stdout_requires_one_json_object(tmp_path: Path) -> None:
     path = tmp_path / "stdout.log"
     path.write_text('{"status":"PASS"}', encoding="utf-8")
     assert _lifecycle.parse_stdout_json(path)["status"] == "PASS"
+
+
+def test_child_environment_applies_contract_startup_environment(tmp_path: Path) -> None:
+    contract = tmp_path / "execution-contract.json"
+    _lifecycle.write_json(contract, {
+        "startup_environment": {
+            "static": {
+                "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+                "MKL_NUM_THREADS": "2",
+                "MKL_THREADING_LAYER": "GNU",
+                "OMP_NUM_THREADS": "2",
+                "PYTHONHASHSEED": "0",
+                "PYTHONNOUSERSITE": "1",
+            },
+            "cpu_rehearsal": {"CUDA_VISIBLE_DEVICES": ""},
+            "gpu": {"CUDA_VISIBLE_DEVICES": "GPU-test"},
+        }
+    })
+    args = SimpleNamespace(
+        execution_contract=str(contract), gpu_uuid="GPU-test", repo=str(tmp_path)
+    )
+    env = _lifecycle.child_environment(args, cpu=True)
+    assert env["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
+    assert env["MKL_NUM_THREADS"] == "2"
+    assert env["PYTHONHASHSEED"] == "0"
+    assert env["CUDA_VISIBLE_DEVICES"] == ""
+    assert env["PYTHONPATH"] == str(tmp_path / "src")
 
 
 def _monitor_report(status: str = "PASS", *, worker_exited: bool = True) -> dict:
