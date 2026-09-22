@@ -380,7 +380,11 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'tools/verify_v2b_smoke_launcher_r24.py',
     'tools/verify_v2b_smoke_launcher_r25.py',
     'tools/verify_v2b_smoke_launcher_r26.py',
+    'contracts/v2b/rev001/execution_contract_r27.json',
+    'contracts/v2b/rev001/execution_source_r27.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r26.json',
 }
+
 
 V2A_FILES = {
     "configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
