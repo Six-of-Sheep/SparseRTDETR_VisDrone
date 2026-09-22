@@ -61,6 +61,22 @@ def test_invalid_python_is_reported_before_tmux(tmp_path):
     assert result["status"] == "INVALID_PYTHON_EXECUTABLE"
 
 
+def test_empty_sealed_evidence_root_is_accepted(tmp_path):
+    root = tmp_path / "sealed-evidence"
+    root.mkdir()
+    result = controller.launch(_plan(tmp_path, evidence_root=root))
+    assert result["status"] == "TMUX_CREATE_FAILED"
+    assert (root / "controller" / "launch-evidence.json").is_file()
+
+
+def test_nonempty_existing_evidence_root_is_rejected(tmp_path):
+    root = tmp_path / "nonempty-evidence"
+    root.mkdir()
+    (root / "marker").write_text("occupied", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        controller.launch(_plan(tmp_path, evidence_root=root))
+
+
 @pytest.mark.parametrize(
     "ready,exit_code,expected",
     [

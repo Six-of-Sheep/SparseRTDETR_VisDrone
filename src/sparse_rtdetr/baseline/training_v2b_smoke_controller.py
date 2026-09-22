@@ -536,9 +536,9 @@ def _status_from_files(root: Path, ready: dict[str, Any] | None, exit_data: dict
 def launch(plan: Mapping[str, Any]) -> dict[str, Any]:
     """Launch one wrapper and observe durable markers, never tmux alone."""
     root = Path(str(plan["evidence_root"]))
-    if root.exists():
+    if root.is_symlink() or (root.exists() and (not root.is_dir() or any(root.iterdir()))):
         raise FileExistsError(f"evidence root already exists: {root}")
-    root.mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
     layout = _layout(root)
     layout["controller"].mkdir(parents=False, exist_ok=False)
     layout["handshake"].mkdir(parents=False, exist_ok=False)
