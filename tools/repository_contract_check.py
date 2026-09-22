@@ -365,6 +365,21 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'contracts/v2b/rev001/gpu_smoke_authorization_r21.json',
     'tools/verify_v2b_smoke_launcher_r22.py',
     'tools/verify_v2b_frozen_launch_plan_r24.py',
+    'contracts/v2b/rev001/execution_contract_r24.json',
+    'contracts/v2b/rev001/execution_contract_r25.json',
+    'contracts/v2b/rev001/execution_contract_r26.json',
+    'contracts/v2b/rev001/execution_source_r24.json',
+    'contracts/v2b/rev001/execution_source_r25.json',
+    'contracts/v2b/rev001/execution_source_r26.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r23.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r24.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r25.json',
+    'tools/verify_v2b_frozen_launch_plan_r25.py',
+    'tools/verify_v2b_frozen_launch_plan_r26.py',
+    'tools/verify_v2b_frozen_launch_plan_r27.py',
+    'tools/verify_v2b_smoke_launcher_r24.py',
+    'tools/verify_v2b_smoke_launcher_r25.py',
+    'tools/verify_v2b_smoke_launcher_r26.py',
 }
 
 V2A_FILES = {

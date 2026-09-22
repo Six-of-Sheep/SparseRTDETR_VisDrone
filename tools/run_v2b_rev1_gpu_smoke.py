@@ -478,6 +478,68 @@ def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
             monitor.abort("roundtrip logical path did not reach verified monitor final")
 
 
+def _binding_reference_mismatches(binding: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return every stale file reference without weakening the strict validator."""
+    mismatches: list[dict[str, Any]] = []
+
+    def visit(value: Any, logical_field: str) -> None:
+        if isinstance(value, dict):
+            if {"path", "size_bytes", "sha256"} <= set(value) and isinstance(value.get("path"), str):
+                path = Path(value["path"])
+                row: dict[str, Any] = {
+                    "logical_field": logical_field,
+                    "path": str(path),
+                    "recorded_size": value.get("size_bytes"),
+                    "recorded_sha256": value.get("sha256"),
+                }
+                try:
+                    if path.is_symlink() or not path.is_file():
+                        raise FileNotFoundError(str(path))
+                    raw = path.read_bytes()
+                    actual_sha = hashlib.sha256(raw).hexdigest()
+                    row.update({
+                        "exists": True,
+                        "actual_size": len(raw),
+                        "actual_sha256": actual_sha,
+                        "size_match": len(raw) == value.get("size_bytes"),
+                        "sha_match": actual_sha == value.get("sha256"),
+                    })
+                except OSError as exc:
+                    row.update({"exists": False, "error": f"{type(exc).__name__}:{exc}"})
+                if not row.get("exists", True) or not row.get("size_match") or not row.get("sha_match"):
+                    mismatches.append(row)
+            for key, item in value.items():
+                visit(item, f"{logical_field}.{key}" if logical_field else str(key))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{logical_field}[{index}]")
+
+    visit(binding, "binding")
+    return mismatches
+
+
+def _validate_frozen_binding(binding: dict[str, Any]) -> dict[str, Any]:
+    """Validate the exact checkpoint binding before constructing a CPU binding."""
+    try:
+        validate_run_binding(binding, verify_files=True)
+    except Exception as exc:
+        mismatches = _binding_reference_mismatches(binding)
+        if mismatches:
+            fields = ",".join(row["logical_field"] for row in mismatches)
+            raise RuntimeLocatorError(
+                "RUN_BINDING_FILE_REFERENCE_DRIFT:" + fields
+            ) from exc
+        raise RuntimeLocatorError(
+            f"RUN_BINDING_VALIDATION_FAILED:{type(exc).__name__}:{exc}"
+        ) from exc
+    return {
+        "status": "PASS",
+        "historical_execution_files_verified": True,
+        "scientific_loader_references_verified": True,
+        "execution_source_verifier": "exact frozen binding verify_files=True",
+    }
+
+
 def cpu_rehearsal(root: Path) -> dict[str, Any]:
     """Run the full controller/runner initialization without CUDA or updates."""
     _configured()
@@ -498,6 +560,10 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
     binding = payload["binding"]
     if binding.get("binding_sha256") != BRIDGE_BINDING_SHA:
         raise RuntimeLocatorError("bridge binding SHA mismatch")
+    # Validate the historical binding before any current-source CPU binding is
+    # constructed. A stale checkpoint must fail closed, never be masked by a
+    # binding rebuilt from the current checkout.
+    binding_validation = _validate_frozen_binding(binding)
     config = make_config(binding)
     checkpoint_inspection = inspect_checkpoint(
         DERIVED, expected_sha256=DERIVED_SHA, expected_binding=binding,
@@ -521,16 +587,8 @@ def cpu_rehearsal(root: Path) -> dict[str, Any]:
     cpu_binding["provenance"] = copy.deepcopy(binding["provenance"])
     body = {key: value for key, value in cpu_binding.items() if key != "binding_sha256"}
     cpu_binding["binding_sha256"] = hashlib.sha256(canonical_json_bytes(body)).hexdigest()
-    # The checkpoint binding carries the historical execution-source closure.
-    # Scientific/loader references remain shape- and SHA-validated above; the
-    # current execution layer is independently sealed by the REV1 verifier.
-    validate_run_binding(binding, verify_files=False)
-    binding_validation = {
-        "status": "PASS",
-        "historical_execution_files_verified": False,
-        "scientific_loader_references_verified": True,
-        "execution_source_verifier": "REV1 independent execution-source identity",
-    }
+    # The current CPU binding is only for CPU construction; it cannot replace
+    # the exact historical binding validation performed above.
     session = V2BTrainingSession(components, loader, cpu_binding)
     # A CUDA-bound checkpoint cannot be live-restored into a CPU runtime without
     # changing its sealed binding.  The strict, weights-only checkpoint

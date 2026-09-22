@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 
+
 ENTRYPOINT = Path(__file__).resolve().parents[1] / "tools" / "run_v2b_rev1_smoke_entrypoint.py"
 GPU_SMOKE = Path(__file__).resolve().parents[1] / "tools" / "run_v2b_rev1_gpu_smoke.py"
 
@@ -126,3 +127,46 @@ def test_gpu_admission_evidence_does_not_serialize_live_capability(tmp_path):
         "policy_sha256": "policy",
         "status": "PASS",
     }
+
+def test_prelaunch_rejects_stale_historical_binding_references(tmp_path):
+    module = _load_gpu_smoke_module()
+    paths = {}
+    for name in (
+        "src/sparse_rtdetr/baseline/training_v2b_admission.py",
+        "src/sparse_rtdetr/baseline/training_v2b_smoke_controller.py",
+    ):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("original\n", encoding="utf-8")
+        paths[name] = path
+    binding = {
+        "code": {
+            name: {
+                "path": str(path),
+                "size_bytes": len(b"original\n"),
+                "sha256": "0" * 64,
+            }
+            for name, path in paths.items()
+        }
+    }
+    observed = {}
+
+    def fake_validate(value, *, verify_files):
+        observed["verify_files"] = verify_files
+        raise RuntimeError("file reference size/hash mismatch")
+
+    original_validate = module.validate_run_binding
+    module.validate_run_binding = fake_validate
+    try:
+        try:
+            module._validate_frozen_binding(binding)
+        except module.RuntimeLocatorError as error:
+            message = str(error)
+        else:
+            raise AssertionError("stale historical binding was accepted")
+    finally:
+        module.validate_run_binding = original_validate
+    assert observed["verify_files"] is True
+    assert "RUN_BINDING_FILE_REFERENCE_DRIFT" in message
+    assert "training_v2b_admission.py" in message
+    assert "training_v2b_smoke_controller.py" in message
