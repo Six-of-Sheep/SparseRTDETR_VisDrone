@@ -156,10 +156,14 @@ def run_hidden_probe(
     runner_argv: list[str],
     expected_environment: dict[str, str],
     formal_root: Path,
+    external_transaction_root: bool = False,
 ) -> dict:
     """Exercise the direct child with a controller-owned temporary root."""
     _hidden_probe_contract(contract)
-    if formal_root.exists() or formal_root.is_symlink():
+    if external_transaction_root:
+        if formal_root.is_symlink() or not formal_root.is_dir() or any(formal_root.iterdir()):
+            raise RuntimeError("EXTERNAL_EVIDENCE_ROOT_NOT_EMPTY")
+    elif formal_root.exists() or formal_root.is_symlink():
         raise RuntimeError("FORMAL_EVIDENCE_ROOT_PREEXISTS")
     direct_runner = (repo / "tools" / "run_v2b_rev1_gpu_smoke.py").resolve(strict=True)
     probe_argv = list(runner_argv)
@@ -207,7 +211,10 @@ def run_hidden_probe(
     result = run_owned_scratch_probe(
         command, cwd=repo, env=env, timeout=300.0, inspect=inspect,
     )
-    if formal_root.exists() or formal_root.is_symlink():
+    if external_transaction_root:
+        if formal_root.is_symlink() or not formal_root.is_dir() or any(formal_root.iterdir()):
+            raise RuntimeError("EXTERNAL_EVIDENCE_ROOT_MUTATED_DURING_HIDDEN_PROBE")
+    elif formal_root.exists() or formal_root.is_symlink():
         raise RuntimeError("FORMAL_EVIDENCE_ROOT_CREATED_DURING_HIDDEN_PROBE")
     result.update({
         "status": "PASS",
@@ -363,6 +370,7 @@ def main() -> int:
                     contract, gpu_uuid=args.gpu_uuid, cpu_rehearsal=True,
                 ),
                 formal_root=Path(args.root),
+                external_transaction_root=contract.get("authorization_mode") == "external_transaction",
             )
         except Exception as exc:
             print(json.dumps({
