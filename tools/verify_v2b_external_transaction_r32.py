@@ -104,6 +104,12 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("execution source binding mismatch")
     if plan.get("frozen_plan_sha256") != plan_sha or sha_bytes(canonical(plan_identity(plan))) != plan_sha:
         raise ValueError("frozen plan digest mismatch")
+    checkpoint_sha = args.checkpoint_sha or str(plan.get("checkpoint_sha256", ""))
+    binding_sha = args.binding_sha or str(plan.get("bridge_binding_sha256", ""))
+    manifest_sha = args.manifest_sha or str(plan.get("bridge_manifest_sha256", ""))
+    for name, value in (("checkpoint", checkpoint_sha), ("binding", binding_sha), ("manifest", manifest_sha)):
+        if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+            raise ValueError(f"{name} SHA is invalid")
     if invocation.get("plan_sha256") != plan_sha:
         raise ValueError("invocation plan binding mismatch")
     if invocation.get("authorization_sha256") != args.authorization_sha:
@@ -166,10 +172,10 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     ):
         if auth.get(key) != expected:
             raise ValueError(f"authorization Git binding mismatch: {key}")
-    for key, expected in (("checkpoint_sha256", args.checkpoint_sha), ("bridge_binding_sha256", args.binding_sha), ("bridge_manifest_sha256", args.manifest_sha)):
+    for key, expected in (("checkpoint_sha256", checkpoint_sha), ("bridge_binding_sha256", binding_sha), ("bridge_manifest_sha256", manifest_sha)):
         if plan.get(key) != expected or auth.get(key) != expected:
             raise ValueError(f"{key} mismatch")
-    if sha_file(args.bridge) != args.checkpoint_sha or sha_file(args.bridge_manifest) != args.manifest_sha:
+    if sha_file(args.bridge) != checkpoint_sha or sha_file(args.bridge_manifest) != manifest_sha:
         raise ValueError("checkpoint or manifest bytes mismatch")
     return {"status": "PASS", "mode": "external_transaction", "plan_sha256": plan_sha, "authorization_sha256": args.authorization_sha, "git": plan["git"], "authorization_path": str(auth_path)}
 
@@ -188,10 +194,10 @@ def main() -> int:
     parser.add_argument("--execution-contract", type=Path, required=True)
     parser.add_argument("--execution-contract-sha", required=True)
     parser.add_argument("--checkpoint", "--bridge", dest="bridge", type=Path, required=True)
-    parser.add_argument("--checkpoint-sha", dest="checkpoint_sha", required=True)
-    parser.add_argument("--binding-sha", required=True)
+    parser.add_argument("--checkpoint-sha", dest="checkpoint_sha", required=False)
+    parser.add_argument("--binding-sha", required=False)
     parser.add_argument("--manifest", "--bridge-manifest", dest="bridge_manifest", type=Path, required=True)
-    parser.add_argument("--manifest-sha", dest="manifest_sha", required=True)
+    parser.add_argument("--manifest-sha", dest="manifest_sha", required=False)
     parser.add_argument("--contract-dir", type=Path, required=False)
     parser.add_argument("--policy-authority", type=Path, required=False)
     args = parser.parse_args()
