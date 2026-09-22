@@ -384,6 +384,7 @@ V2B_RUNTIME_LOCATOR_FILES = {
     'contracts/v2b/rev001/execution_contract_r27.json',
     'contracts/v2b/rev001/execution_source_r27.json',
     'contracts/v2b/rev001/gpu_smoke_authorization_r26.json',
+    'contracts/v2b/rev001/gpu_smoke_authorization_r27.json',
 }
 
 
