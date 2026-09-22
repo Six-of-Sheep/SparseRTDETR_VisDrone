@@ -93,6 +93,42 @@ def parse_stdout_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _wait_for_monitored_finish(reference: dict[str, Any]) -> dict[str, Any]:
+    """Close a guardian only after its owner child has been reaped.
+
+    The lifecycle controller imports only the stdlib plus the admission
+    evidence verifier; it never imports torch or initializes CUDA.
+    """
+    source_root = Path(__file__).parents[1] / "src"
+    if str(source_root) not in sys.path:
+        sys.path.insert(0, str(source_root))
+    from sparse_rtdetr.baseline.training_v2b_admission import wait_for_monitored_finish
+    return wait_for_monitored_finish(reference)
+
+
+def finalize_child_report(path: Path, report: dict[str, Any], label: str,
+                          transaction_id: str) -> dict[str, Any]:
+    """Publish monitor-final evidence in the parent after child reaping."""
+    pending = {
+        "PASS_PENDING_MONITOR": "PASS",
+        "TRAINING_CHILD_PENDING_MONITOR": "TRAINING_CHILD_PASS",
+    }
+    status = report.get("status")
+    if status not in pending:
+        raise RuntimeError(f"{label} did not publish a deferred logical result: {status}")
+    reference = report.get("monitor_finish")
+    if not isinstance(reference, dict):
+        raise RuntimeError(f"{label} missing deferred monitor reference")
+    final = _wait_for_monitored_finish(reference)
+    finalized = dict(report)
+    finalized["monitor_final"] = final
+    finalized["status"] = pending[status]
+    finalized["monitor_final_pending"] = False
+    write_json(path, finalized)
+    require_monitor_final(finalized, label, transaction_id)
+    return finalized
+
+
 def require_monitor_final(report: dict[str, Any], label: str, transaction_id: str) -> dict[str, Any]:
     """A logical child PASS is insufficient until its independent monitor closes PASS."""
     final = report.get("monitor_final")
@@ -219,9 +255,11 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
         cwd=Path(args.repo), env=env, evidence_root=preflight_root,
     )
     preflight_report = read_json(preflight_root / "quiescence-report.json")
+    preflight_report = finalize_child_report(
+        preflight_root / "quiescence-report.json", preflight_report, "preflight", args.auth_id,
+    )
     if preflight_report.get("status") != "PASS" or preflight_report.get("cuda_initialized") is not False:
         raise RuntimeError("preflight child failed before READY")
-    require_monitor_final(preflight_report, "preflight", args.auth_id)
     write_ready_marker(args, root, mode="gpu_smoke")
     training = run_child(
         "TRAINING_CHILD",
@@ -229,9 +267,11 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
         cwd=Path(args.repo), env=env, evidence_root=training_root,
     )
     training_report = read_json(training_root / "training-report.json")
+    training_report = finalize_child_report(
+        training_root / "training-report.json", training_report, "training", args.auth_id,
+    )
     if training_report.get("status") != "TRAINING_CHILD_PASS":
         raise RuntimeError("training child did not publish TRAINING_CHILD_PASS")
-    require_monitor_final(training_report, "training", args.auth_id)
     checkpoint = Path(str(training_report["smoke_checkpoint_path"]))
     checkpoint_sha = str(training_report["smoke_checkpoint_sha256"])
     quiescence = run_child(
@@ -240,9 +280,11 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
         cwd=Path(args.repo), env=env, evidence_root=quiescence_root,
     )
     quiescence_report = read_json(quiescence_root / "quiescence-report.json")
+    quiescence_report = finalize_child_report(
+        quiescence_root / "quiescence-report.json", quiescence_report, "quiescence", args.auth_id,
+    )
     if quiescence_report.get("status") != "PASS" or quiescence_report.get("cuda_initialized") is not False:
         raise RuntimeError("quiescence child failed owner=None admission")
-    require_monitor_final(quiescence_report, "quiescence", args.auth_id)
     restore = run_child(
         "RESTORE_CHILD",
         args_for_child(args, restore_root) + [
@@ -251,9 +293,11 @@ def run_gpu_smoke(args: argparse.Namespace) -> dict[str, Any]:
         cwd=Path(args.repo), env=env, evidence_root=restore_root,
     )
     restore_report = parse_stdout_json(restore_root / "stdout.log")
+    restore_report = finalize_child_report(
+        restore_root / "restore-report.json", restore_report, "restore", args.auth_id,
+    )
     if restore_report.get("status") != "PASS" or restore_report.get("deterministic") is not True:
         raise RuntimeError("restore child did not pass deterministic preview")
-    require_monitor_final(restore_report, "restore", args.auth_id)
     report = {
         "status": "REV1_GPU_PREFORMAL_SMOKE_PASS",
         "preflight_child": preflight, "preflight_report": preflight_report,

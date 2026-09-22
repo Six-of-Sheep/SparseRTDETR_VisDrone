@@ -1547,12 +1547,37 @@ class MonitoredHardwareAdmission:
         raise MonitoredHardwareError("monitored admission cannot be serialized")
 
 
+def _checkpoint_provenance_run_id(binding: Mapping[str, Any]) -> str:
+    """Return the historical lineage id represented by a checkpoint binding.
+
+    A revision-aware continuation has two different identities: the current
+    smoke transaction and the historical checkpoint lineage. Monitor evidence
+    must bind the latter so that a new transaction cannot masquerade as the
+    provenance of its parent checkpoint.
+    """
+    provenance = binding.get("provenance")
+    if isinstance(provenance, Mapping):
+        bridge = provenance.get("revision_bridge")
+        if isinstance(bridge, Mapping):
+            parent = bridge.get("parent_campaign")
+            if type(parent) is str and parent:
+                return parent
+            parent_sha = bridge.get("parent_checkpoint_sha256")
+            if type(parent_sha) is str and parent_sha:
+                return parent_sha
+    run_id = binding.get("run_id")
+    if type(run_id) is not str or not run_id:
+        raise MonitoredHardwareError("checkpoint provenance is missing from binding")
+    return run_id
+
+
 class MonitoredHardwareSession:
     def __init__(self, binding: Mapping[str, Any], policy_bundle: Mapping[str, Any],
                  evidence_dir: str | os.PathLike[str], authorized_scope: str,
                  workload_deadline_seconds: int = 600, *,
                  monitor_phase: str = "training",
-                 transaction_id: str | None = None) -> None:
+                 transaction_id: str | None = None,
+                 checkpoint_provenance_run_id: str | None = None) -> None:
         self.monitor_phase = monitor_phase
         self.transaction_id = transaction_id
         evidence_authority = (type(policy_bundle) is dict
@@ -1578,6 +1603,11 @@ class MonitoredHardwareSession:
             raise MonitoredHardwareError("synthetic operator diagnostic requires a synthetic input binding")
         if self.binding["config"].get("cuda_gpu_uuid") != self.policy["gpu_uuid"]:
             raise MonitoredHardwareError("workload GPU identity differs from policy")
+        if checkpoint_provenance_run_id is None:
+            checkpoint_provenance_run_id = _checkpoint_provenance_run_id(self.binding)
+        if type(checkpoint_provenance_run_id) is not str or not checkpoint_provenance_run_id:
+            raise MonitoredHardwareError("checkpoint provenance run id is invalid")
+        self.checkpoint_provenance_run_id = checkpoint_provenance_run_id
         self.root = Path(evidence_dir).absolute()
         self._state = "new"
         self._channel: socket.socket | None = None
@@ -1643,7 +1673,7 @@ class MonitoredHardwareSession:
                     "pidfd_backend": _pidfd_backend(),
                     "nvidia_smi_path": post["commands"]["gpu_xml"]["executable"]["path"],
                     "edac": edac, "integrity_references": refs, "run_id": self.binding["run_id"],
-                    "checkpoint_provenance_run_id": self.binding["run_id"],
+                    "checkpoint_provenance_run_id": self.checkpoint_provenance_run_id,
                     "transaction_id": self.transaction_id,
                     "monitor_phase": self.monitor_phase,
                     "binding_sha256": self.binding["binding_sha256"], "nonce": self._nonce,
@@ -1686,7 +1716,7 @@ class MonitoredHardwareSession:
                 "health_max_gap_seconds": self.policy["health_max_gap_seconds"],
                 "collector_sources": self._source_refs, "monitor_spec_reference": spec_ref,
                 "run_id": self.binding["run_id"],
-                "checkpoint_provenance_run_id": self.binding["run_id"],
+                "checkpoint_provenance_run_id": self.checkpoint_provenance_run_id,
                 "transaction_id": self.transaction_id,
                 "monitor_phase": self.monitor_phase,
                 "run_binding_sha256": self.binding["binding_sha256"],
@@ -1767,7 +1797,7 @@ class MonitoredHardwareSession:
         self._state = "finishing"
         return {"monitor_final_report": str(self.root / "monitor-final.json"),
                 "monitor_pid": self._child.pid, "run_id": self.binding["run_id"],
-                "checkpoint_provenance_run_id": self.binding["run_id"],
+                "checkpoint_provenance_run_id": self.checkpoint_provenance_run_id,
                 "transaction_id": self.transaction_id,
                 "monitor_phase": self.monitor_phase,
                 "guardian_identity": self._guardian_identity, "gpu_uuid": self.policy["gpu_uuid"],

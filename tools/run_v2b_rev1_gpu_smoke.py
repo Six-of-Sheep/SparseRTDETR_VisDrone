@@ -292,6 +292,11 @@ def _finish_monitor(monitor: MonitoredHardwareSession) -> tuple[dict[str, Any], 
     return reference, final
 
 
+def _request_monitor_finish(monitor: MonitoredHardwareSession) -> dict[str, Any]:
+    """Declare logical completion; the parent closes the monitor after reaping us."""
+    return monitor.finish()
+
+
 def _restore_evidence(session: V2BTrainingSession, loader: Any, restored: dict[str, Any],
                       checkpoint: Path, checkpoint_sha: str, next_window: dict[str, Any]) -> dict[str, Any]:
     state = capture_control_state(session.components, loader, full=True)
@@ -409,7 +414,7 @@ def _quiescence_probe(root: Path) -> dict[str, Any]:
     try:
         monitor.start()
         report = {
-            "status": "PASS",
+            "status": "PASS_PENDING_MONITOR",
             "startup_environment": startup,
             "revision_verifier": verification,
             "bridge_checkpoint_sha256": DERIVED_SHA,
@@ -423,10 +428,10 @@ def _quiescence_probe(root: Path) -> dict[str, Any]:
         }
         if report["cuda_initialized"]:
             raise RuntimeError("quiescence probe initialized CUDA")
-        monitor_reference, monitor_final = _finish_monitor(monitor)
+        monitor_reference = _request_monitor_finish(monitor)
         monitor = None
         report["monitor_finish"] = monitor_reference
-        report["monitor_final"] = monitor_final
+        report["monitor_final_pending"] = True
         _write(root / "quiescence-report.json", report)
         return report
     finally:
@@ -463,14 +468,14 @@ def _roundtrip(checkpoint: Path, checkpoint_sha: str, root: Path) -> dict:
         second = next(loader.preview_batches(1)).evidence()
         if first != second:
             raise RuntimeError("epoch54/window2 deterministic preview differs")
-        monitor_reference, monitor_final = _finish_monitor(monitor)
+        monitor_reference = _request_monitor_finish(monitor)
         monitor = None
         restore_evidence = _restore_evidence(session, loader, restored, checkpoint, checkpoint_sha, first)
         return {
-            "status": "PASS", "restored": restored, "next_window_first": first,
+            "status": "PASS_PENDING_MONITOR", "restored": restored, "next_window_first": first,
             "next_window_second": second, "deterministic": True,
             "restore_evidence": restore_evidence,
-            "monitor_finish": monitor_reference, "monitor_final": monitor_final,
+            "monitor_finish": monitor_reference, "monitor_final_pending": True,
             "monitor_root": str(hw_root),
         }
     finally:
@@ -750,13 +755,17 @@ def run(root: Path) -> dict:
             "peak_reserved": int(torch.cuda.max_memory_reserved(0)),
         }
         ema_updates = int(components.ema.updates)
-        monitor_report, monitor_final = _finish_monitor(monitor)
+        if TRAINING_CHILD_MODE:
+            monitor_report = _request_monitor_finish(monitor)
+            monitor_final = None
+        else:
+            monitor_report, monitor_final = _finish_monitor(monitor)
         monitor = None
         del session, components, loader, runtime
         torch.cuda.empty_cache()
         if TRAINING_CHILD_MODE:
             report.update({
-                "status": "TRAINING_CHILD_PASS",
+                "status": "TRAINING_CHILD_PENDING_MONITOR",
                 "restore": restored,
                 "epoch54_window1": preview,
                 "ownership_before": input_before,
@@ -775,7 +784,7 @@ def run(root: Path) -> dict:
                 "smoke_checkpoint_path": str(smoke_checkpoint),
                 "smoke_checkpoint_sha256": smoke_sha,
                 "monitor_finish": monitor_report,
-                "monitor_final": monitor_final,
+                "monitor_final_pending": True,
                 "training_child_terminated": True,
                 "formal_authorization_consumed": False,
                 "formal_launch_permitted": False,

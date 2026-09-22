@@ -119,3 +119,42 @@ def test_require_monitor_final_rejects_missing_or_live_monitor() -> None:
             pass
         else:
             raise AssertionError("incomplete monitor final was accepted")
+
+
+def test_finalize_child_report_waits_for_reaped_owner_and_publishes_final(tmp_path, monkeypatch):
+    report_path = tmp_path / "quiescence-report.json"
+    pending = {
+        "status": "PASS_PENDING_MONITOR",
+        "monitor_finish": {"monitor_final_report": str(tmp_path / "monitor-final.json"),
+                           "transaction_id": "tx", "monitor_phase": "quiescence"},
+    }
+    observed = []
+    def fake_wait(reference):
+        observed.append(reference)
+        return {"status": "PASS", "worker_exited": True,
+                "transaction_id": "tx", "monitor_phase": "quiescence"}
+    monkeypatch.setattr(_lifecycle, "_wait_for_monitored_finish", fake_wait)
+    finalized = _lifecycle.finalize_child_report(report_path, pending, "preflight", "tx")
+    assert observed == [pending["monitor_finish"]]
+    assert finalized["status"] == "PASS"
+    assert finalized["monitor_final_pending"] is False
+    assert finalized["monitor_final"]["worker_exited"] is True
+    assert _lifecycle.read_json(report_path)["status"] == "PASS"
+
+
+def test_deferred_child_result_is_not_accepted_without_monitor_reference(tmp_path):
+    try:
+        _lifecycle.finalize_child_report(
+            tmp_path / "missing.json", {"status": "PASS_PENDING_MONITOR"},
+            "training", "tx",
+        )
+    except RuntimeError as exc:
+        assert "missing deferred monitor reference" in str(exc)
+    else:
+        raise AssertionError("missing monitor reference was accepted")
+
+
+def test_lifecycle_closes_monitor_only_after_child_reap():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert "finalize_child_report" in source
+    assert source.index("training = run_child") < source.index("finalize_child_report(", source.index("training = run_child"))

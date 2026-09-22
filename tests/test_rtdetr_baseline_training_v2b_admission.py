@@ -1556,3 +1556,15 @@ def test_finish_report_failure_is_not_admission(tmp_path):
 def test_current_boot_authority_and_native_receipt_v2_anchors_are_frozen():
     assert "2b53b925d0392e1e84b6e08b38440fde998cf2e0335e06cf3ebf9fd622984709" in ad._ANCHOR_MANIFEST_SHAS
     assert ad._EXTERNAL_CLOCK_RECEIPT_V2_SHA == "be59e1cc6bf143f0351b8f72d8f4ec57681aad9ca500afd4fcbd0e994c9ce3f5"
+
+
+def test_revision_bridge_monitor_uses_historical_checkpoint_provenance():
+    binding = {
+        "run_id": "smoke-v2b-rev1-s2-r896-bridge-030",
+        "provenance": {"revision_bridge": {
+            "parent_campaign": "v2bepoch60-r35-20260918t200000z-97a78f7",
+            "parent_checkpoint_sha256": "29bc58ebb5118a1bdd88da741783de3270876b8cce95e47683dedc2c37f01060",
+        }},
+    }
+    assert ad._checkpoint_provenance_run_id(binding) == "v2bepoch60-r35-20260918t200000z-97a78f7"
+    assert ad._checkpoint_provenance_run_id({"run_id": "legacy-run"}) == "legacy-run"
