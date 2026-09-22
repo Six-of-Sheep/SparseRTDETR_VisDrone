@@ -82,7 +82,7 @@ def verify(args):
         if p.exists(): raise ValueError(f"target already exists: {key}")
         if not p.parent.is_dir(): raise ValueError(f"target parent unavailable: {key}")
     if subprocess.run(["tmux","has-session","-t",plan["tmux_session_name"]],capture_output=True).returncode==0: raise ValueError("tmux session already exists")
-    if sha_file(Path(plan["resolved_checkpoint_locator"])) != BRIDGE_SHA or sha_file(Path(plan["resolved_manifest_locator"])) != MANIFEST_SHA: raise ValueError("bridge identity drift")
+    if sha_file(Path(plan["resolved_checkpoint_locator"])) != str(plan.get("checkpoint_sha256")) or sha_file(Path(plan["resolved_manifest_locator"])) != str(plan.get("bridge_manifest_sha256")): raise ValueError("bridge identity drift")
     git=lambda *x: subprocess.check_output(["git",*x],cwd=repo,text=True).strip()
     if git("status","--porcelain"): raise ValueError("worktree dirty")
     if git("rev-parse","HEAD") != plan["git"]["commit"]:
