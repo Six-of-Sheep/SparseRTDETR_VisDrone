@@ -42,6 +42,15 @@ def load(path: Path) -> dict[str, Any]:
     return value
 
 
+def load_manifest(path: Path) -> dict[str, Any]:
+    raw = path.read_bytes()
+    value = json.loads(raw.decode("utf-8"))
+    compact = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    if raw != compact or not isinstance(value, dict):
+        raise ValueError(f"non-canonical manifest object: {path}")
+    return value
+
+
 def without_runtime(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: without_runtime(v) for k, v in value.items() if k not in RUNTIME_KEYS}
@@ -160,7 +169,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     manifest = args.bridge_manifest.resolve(strict=True)
     actual_bridge_sha = sha_file(bridge)
     actual_manifest_sha = sha_file(manifest)
-    manifest_doc = load(manifest)
+    manifest_doc = load_manifest(manifest)
     actual_binding_sha = (manifest_doc.get("binding_transition") or {}).get("new_binding_sha256")
     if auth.get("checkpoint_sha256") != actual_bridge_sha or auth.get("bridge_binding_sha256") != actual_binding_sha or auth.get("bridge_manifest_sha256") != actual_manifest_sha:
         raise ValueError("bridge identity mismatch")
