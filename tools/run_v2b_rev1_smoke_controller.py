@@ -331,7 +331,7 @@ def main() -> int:
     plan_sha = str(invocation.get("plan_sha256", ""))
     if len(plan_sha) != 64 or any(ch not in "0123456789abcdef" for ch in plan_sha):
         raise RuntimeLocatorError("STRUCTURED_INVOCATION_PLAN_SHA_INVALID")
-    runner_argv += ["--structured-invocation", str(invocation_path), "--plan-sha", plan_sha]
+    runner_argv += ["--invocation", str(invocation_path), "--plan-sha", plan_sha]
     if args.cpu_rehearsal:
         runner_argv += ["--cpu-rehearsal"]
     environment = dict(expected_environment)
