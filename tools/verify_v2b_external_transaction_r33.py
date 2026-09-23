@@ -90,11 +90,12 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     if invocation.get("plan_sha256") != plan_sha:
         raise ValueError("invocation plan SHA mismatch")
     auth = load(args.authorization.resolve(strict=True))
-    if contract.get("execution_contract_id") != "v2b-execution-contract-033":
+    revision = contract.get("execution_contract_id", "").removeprefix("v2b-execution-contract-")
+    if revision not in {"033", "034"}:
         raise ValueError("execution contract revision mismatch")
     if contract.get("authorization_mode") != "external_transaction":
         raise ValueError("external authorization mode missing")
-    if source.get("execution_source_id") != "v2b-exec-033":
+    if source.get("execution_source_id") != f"v2b-exec-{revision}":
         raise ValueError("execution source revision mismatch")
     if source.get("execution_source_sha256") != args.execution_source_sha or source_digest(source) != args.execution_source_sha:
         raise ValueError("execution source digest mismatch")

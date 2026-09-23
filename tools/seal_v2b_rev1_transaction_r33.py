@@ -116,7 +116,9 @@ def main() -> int:
     if git(repo, "status", "--porcelain") or git(repo, "rev-parse", "HEAD") != git(repo, "rev-parse", "@{upstream}"):
         raise ValueError("Git must be clean and HEAD must equal upstream before freeze")
     contract_path = args.contract.resolve(strict=True)
-    if contract_path != repo / "contracts" / "v2b" / "rev001" / "execution_contract_r33.json":
+    allowed_revisions = {"033": "r33", "034": "r34"}
+    revision = args.contract_id.removeprefix("v2b-execution-contract-")
+    if revision not in allowed_revisions or contract_path != repo / "contracts" / "v2b" / "rev001" / f"execution_contract_{allowed_revisions[revision]}.json":
         raise ValueError("unexpected execution contract path")
     contract = json.loads(contract_path.read_text())
     if contract.get("authorization_mode") != "external_transaction":
@@ -131,7 +133,7 @@ def main() -> int:
     if TRANSACTION_ROOT_RE.fullmatch(root.name) is None:
         raise ValueError("invalid transaction root name")
     source = json.loads(args.source.read_text())
-    if source.get("execution_source_id") != "v2b-exec-033":
+    if source.get("execution_source_id") != f"v2b-exec-{revision}":
         raise ValueError("unexpected execution source identity")
     if source.get("execution_source_sha256") != args.source_sha or declared_source_digest(source) != args.source_sha:
         raise ValueError("execution source digest mismatch")
