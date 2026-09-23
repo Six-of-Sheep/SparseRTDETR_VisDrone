@@ -116,7 +116,7 @@ def main() -> int:
     if git(repo, "status", "--porcelain") or git(repo, "rev-parse", "HEAD") != git(repo, "rev-parse", "@{upstream}"):
         raise ValueError("Git must be clean and HEAD must equal upstream before freeze")
     contract_path = args.contract.resolve(strict=True)
-    allowed_revisions = {"033": "r33", "034": "r34"}
+    allowed_revisions = {"033": "r33", "034": "r34", "035": "r35"}
     revision = args.contract_id.removeprefix("v2b-execution-contract-")
     if revision not in allowed_revisions or contract_path != repo / "contracts" / "v2b" / "rev001" / f"execution_contract_{allowed_revisions[revision]}.json":
         raise ValueError("unexpected execution contract path")

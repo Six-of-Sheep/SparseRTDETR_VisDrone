@@ -91,7 +91,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("invocation plan SHA mismatch")
     auth = load(args.authorization.resolve(strict=True))
     revision = contract.get("execution_contract_id", "").removeprefix("v2b-execution-contract-")
-    if revision not in {"033", "034"}:
+    if revision not in {"033", "034", "035"}:
         raise ValueError("execution contract revision mismatch")
     if contract.get("authorization_mode") != "external_transaction":
         raise ValueError("external authorization mode missing")

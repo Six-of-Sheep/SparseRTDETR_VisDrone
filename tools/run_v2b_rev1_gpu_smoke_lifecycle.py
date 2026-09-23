@@ -348,7 +348,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-execution-contract-id", default="v2b-execution-contract-025")
     parser.add_argument("--execution-source")
     parser.add_argument("--revision-verifier")
-    parser.add_argument("--structured-invocation", required=True)
+    parser.add_argument("--structured-invocation", "--invocation", required=True)
     parser.add_argument("--plan-sha", required=True)
     parser.add_argument("--cpu-rehearsal", action="store_true")
     return parser

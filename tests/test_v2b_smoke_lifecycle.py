@@ -18,6 +18,16 @@ def _child(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
+def test_lifecycle_accepts_controller_invocation_flag() -> None:
+    parser = _lifecycle.build_parser()
+    argv = []
+    for action in parser._actions:
+        if action.required:
+            option = "--invocation" if action.dest == "structured_invocation" else action.option_strings[0]
+            argv.extend((option, "bound-value"))
+    assert parser.parse_args(argv).structured_invocation == "bound-value"
+
+
 def test_run_child_waits_reaps_and_captures_stdout(tmp_path: Path) -> None:
     evidence = tmp_path / "ok"
     result = _lifecycle.run_child(
