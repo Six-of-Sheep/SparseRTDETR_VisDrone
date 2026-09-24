@@ -6,6 +6,14 @@ path points into the worktree that produced the run, so the worker imports
 ``sparse_rtdetr`` from exactly that worktree and the binding verifies without
 any rebase or bridge. This file itself is not part of any run binding.
 
+Exception, ``train`` only: every bound worktree predates the 2026-09-17 reboot
+and its admission accepts only the pre-reboot hardware authority. As in the
+R35 epoch-60 worker, the current-boot admission (evidence, hardware, admission
+and device modules) loads from a pinned orchestration checkout under a private
+alias, and only its ``require_native_hardware_admission`` and the admitted
+device runtime cross into the bound package (``orchestration_imports``,
+``reseal_runtime``). Model, data, optimizer and checkpoint code stay bound.
+
 Two optional runtime changes are supported and recorded; neither changes the
 bound model, data order, augmentation or checkpoint semantics:
 
@@ -57,6 +65,16 @@ BASE_ENVIRONMENT = {
 }
 MONITOR_SCOPE = "train_core_30epoch"
 MONITOR_SCOPE_LIMIT_SECONDS = 43200
+# Current-boot hardware admission of the R35 epoch-60 worker: the commit and
+# file SHA-256 values equal ``orchestration_sources`` in its cell contracts.
+ORCHESTRATION_COMMIT = "97a78f70c2fd2112238976258075f725ed10cd81"
+ORCHESTRATION_MODULES = {
+    "training_v2b_evidence": "f54627021add76c4896def8f7a464fd26fdb4307a7c4d5339d28bc948f4eabbd",
+    "training_v2b_hardware": "a25c7c5668b431f9f644f6e31dec6402da651f2ca52941368e5beebbc8d7f98c",
+    "training_v2b_admission": "904a0f29ea8bf47aedeb9e9b07d6b7790cc1d872af714cfa53ee60d7e971a4e8",
+    "training_v2b_device": "514308f70a19314a05596a82f71eddea9652de8bde4316a1fae7d8bab9f42bf9",
+}
+ORCHESTRATION_ALIAS = "_p3_fork_orchestration_runtime"
 
 
 def canonical(value) -> bytes:
@@ -113,6 +131,98 @@ def launch(args: argparse.Namespace) -> None:
 def policy_bundle(path: Path) -> dict:
     document = json.loads(path.read_text())
     return document["policy_bundle"] if "policy_bundle" in document else document
+
+
+def orchestration_imports(root: Path, repo: Path) -> tuple[dict, dict]:
+    """Load the current-boot admission beside the bound training package.
+
+    Mirrors ``_source_imports`` and ``_bridge_hardware_admission`` of
+    tools/run_training_v2b_epoch60_continuation_worker.py at 97a78f7: the
+    pinned modules load under a private alias, ``sparse_rtdetr`` stays the
+    bound package, and the current ``require_native_hardware_admission`` is
+    bound into the bound hardware and runtime modules (the runtime imported
+    it by name, so its own global must be replaced as well).
+    """
+    import importlib
+    import importlib.util
+    import types
+    root = root.resolve(strict=True)
+    if git(root, "rev-parse", "HEAD") != ORCHESTRATION_COMMIT:
+        raise SystemExit(f"orchestration checkout is not at {ORCHESTRATION_COMMIT}: {root}")
+    if git(root, "status", "--porcelain", "--untracked-files=no"):
+        raise SystemExit(f"orchestration checkout has tracked modifications: {root}")
+    baseline = root / "src/sparse_rtdetr/baseline"
+    sources = {}
+    for name, expected in ORCHESTRATION_MODULES.items():
+        path = baseline / f"{name}.py"
+        if sha_file(path) != expected:
+            raise SystemExit(f"orchestration module identity mismatch: {name}")
+        sources[name] = {"path": str(path), "sha256": expected}
+    bound_baseline = (repo / "src/sparse_rtdetr/baseline").resolve(strict=True)
+    if sha_file(bound_baseline / "training_v2b_device.py") != ORCHESTRATION_MODULES["training_v2b_device"]:
+        raise SystemExit("bound and orchestration device sources differ")
+    if ORCHESTRATION_ALIAS in sys.modules:
+        raise SystemExit("orchestration alias already loaded")
+    sys.dont_write_bytecode = True
+    package = types.ModuleType(ORCHESTRATION_ALIAS)
+    package.__package__ = ORCHESTRATION_ALIAS
+    package.__path__ = [str(baseline)]
+    sys.modules[ORCHESTRATION_ALIAS] = package
+    current = {}
+    for name in ORCHESTRATION_MODULES:
+        spec = importlib.util.spec_from_file_location(f"{ORCHESTRATION_ALIAS}.{name}", baseline / f"{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        current[name] = module
+    bound = {name: importlib.import_module(f"sparse_rtdetr.baseline.{name}") for name in (
+        "training_v2b", "training_v2b_hardware", "training_v2b_device", "training_v2b_runtime")}
+    for name, module in bound.items():
+        if Path(module.__file__).resolve() != bound_baseline / f"{name}.py":
+            raise SystemExit(f"{name} did not load from the bound worktree")
+    hardware = current["training_v2b_hardware"]
+    validator = hardware.require_native_hardware_admission
+    if getattr(validator, "__module__", None) != hardware.__name__:
+        raise SystemExit("current hardware validator owner drift")
+    bound["training_v2b_hardware"].require_native_hardware_admission = validator
+    bound["training_v2b_runtime"].require_native_hardware_admission = validator
+    train_batch = bound["training_v2b_runtime"].V2BTrainingSession.train_batch
+    if train_batch.__globals__.get("require_native_hardware_admission") is not validator:
+        raise SystemExit("bound session validator bridge failed")
+    return current, {
+        "commit": ORCHESTRATION_COMMIT, "root": str(root), "modules": sources,
+        "bridged_validator": f"{validator.__module__}.{validator.__name__}",
+        "bound_package": str(bound_baseline.parents[1]),
+    }
+
+
+def reseal_runtime(runtime, producer, consumer) -> tuple[object, dict]:
+    """Re-seal the admitted device runtime for the bound device module.
+
+    Mirrors ``_bridge_prepared_runtime`` of the R35 worker: the byte-identical
+    device source executed under two module names has two private seals, so
+    validate with the producer, rebuild the frozen dataclass with the bound
+    module's seal and validate again.
+    """
+    import copy
+    producer_sha, consumer_sha = sha_file(Path(producer.__file__)), sha_file(Path(consumer.__file__))
+    if producer.__file__ == consumer.__file__ or producer_sha != consumer_sha:
+        raise RuntimeError("runtime bridge needs byte-identical device sources in two checkouts")
+    if type(runtime) is not producer.PreparedRuntime:
+        raise RuntimeError("runtime bridge producer type differs")
+    identity = producer.validate_prepared_runtime(runtime)
+    if runtime._identity_sha256 != producer._digest(identity):
+        raise RuntimeError("runtime bridge producer seal digest differs")
+    bridged = consumer.PreparedRuntime(
+        device=runtime.device, seed=runtime.seed,
+        admitted_binding_sha256=runtime.admitted_binding_sha256,
+        _identity=copy.deepcopy(identity), _identity_sha256=consumer._digest(identity),
+        _seal=consumer._SEAL)
+    if consumer.validate_prepared_runtime(bridged) != identity:
+        raise RuntimeError("runtime bridge identity differs")
+    return bridged, {"producer": producer.__name__, "consumer": consumer.__name__,
+                     "device_sha256": consumer_sha,
+                     "runtime_identity_sha256": consumer._digest(identity)}
 
 
 def build_loader(binding: dict, repo: Path, num_workers: int, prefetch_factor: int):
@@ -221,10 +331,6 @@ def run_check(args: argparse.Namespace) -> int:
 
 def run_train(args: argparse.Namespace) -> int:
     import torch
-    from sparse_rtdetr.baseline.training_v2b import build_v2b_components
-    from sparse_rtdetr.baseline.training_v2b_admission import MonitoredHardwareSession
-    from sparse_rtdetr.baseline.training_v2b_device import prepare_runtime
-    from sparse_rtdetr.baseline.training_v2b_runtime import V2BTrainingSession
 
     checkpoint = Path(args.checkpoint).resolve(strict=True)
     output = Path(args.output)
@@ -233,6 +339,13 @@ def run_train(args: argparse.Namespace) -> int:
     binding = read_binding(checkpoint)
     repo = bound_repo(binding)
     start = identity(args, checkpoint, checkpoint_sha, binding, repo)
+    current, orchestration = orchestration_imports(Path(args.orchestration_root), repo)
+    from sparse_rtdetr.baseline import training_v2b_device as bound_device
+    from sparse_rtdetr.baseline.training_v2b import build_v2b_components
+    from sparse_rtdetr.baseline.training_v2b_runtime import V2BTrainingSession
+    MonitoredHardwareSession = current["training_v2b_admission"].MonitoredHardwareSession
+    prepare_runtime = current["training_v2b_device"].prepare_runtime
+
     policy = policy_bundle(Path(args.policy_from))
     gpu_uuid = policy["gpu_uuid"]
     config = make_config(binding)
@@ -241,22 +354,32 @@ def run_train(args: argparse.Namespace) -> int:
                  num_workers=args.num_workers, prefetch_factor=args.prefetch_factor,
                  max_windows=args.max_windows, save_every=args.save_every,
                  policy_from=str(Path(args.policy_from).resolve()), gpu_uuid=gpu_uuid,
+                 orchestration=orchestration,
                  monitor_deadline_seconds=deadline, started_unix=time.time(), pid=os.getpid())
     publish(output / "fork-start.json", start)
 
-    monitor = MonitoredHardwareSession(binding, policy, output / "native-hardware", MONITOR_SCOPE, deadline)
+    def peak_memory() -> dict:
+        return {"peak_allocated_bytes": int(torch.cuda.max_memory_allocated(0)),
+                "peak_reserved_bytes": int(torch.cuda.max_memory_reserved(0))}
+
+    monitor = None
     windows_done = 0
     try:
+        monitor = MonitoredHardwareSession(binding, policy, output / "native-hardware", MONITOR_SCOPE, deadline)
         monitor.start()
-        runtime = prepare_runtime(device="cuda:0", seed=config.seed, binding=binding,
-                                  gpu_probe=monitor.admission(), expected_gpu_uuid=gpu_uuid)
+        admitted = prepare_runtime(device="cuda:0", seed=config.seed, binding=binding,
+                                   gpu_probe=monitor.admission(), expected_gpu_uuid=gpu_uuid)
+        runtime, runtime_bridge = reseal_runtime(admitted, current["training_v2b_device"], bound_device)
         pretrained = binding["config"]["pretrained"]
         components = build_v2b_components(config, repo_root=repo, runtime=runtime,
                                           pretrained_path=Path(pretrained["path"]),
                                           pretrained_sha256=pretrained["sha256"])
         loader = build_loader(binding, repo, args.num_workers, args.prefetch_factor)
         session = V2BTrainingSession(components, loader, binding)
+        monitor.check(stage="before_restore")
         session.restore(checkpoint, checkpoint_sha)
+        torch.cuda.synchronize(0)
+        monitor.check(stage="after_restore")
         engine = components.engine
         first_epoch = engine.epoch + 1
         if not first_epoch <= args.target_epoch:
@@ -276,7 +399,8 @@ def run_train(args: argparse.Namespace) -> int:
         publish(output / "ready.json", {
             "restored_epoch": engine.epoch, "optimizer_updates": engine.optimizer_updates,
             "microsteps": engine.microsteps, "ema_updates": int(components.ema.updates),
-            "learning_rates": learning_rates, "first_epoch": first_epoch, "pid": os.getpid()})
+            "learning_rates": learning_rates, "first_epoch": first_epoch,
+            "runtime_bridge": runtime_bridge, "pid": os.getpid()})
 
         for epoch in range(first_epoch, args.target_epoch + 1):
             session.begin_epoch(epoch)
@@ -288,6 +412,7 @@ def run_train(args: argparse.Namespace) -> int:
                     fetched = time.time()
                     monitor.check(stage="before_window")
                     record = session.train_batch(batch, hardware_probe=monitor.admission())
+                    torch.cuda.synchronize(0)
                     monitor.check(stage="after_window")
                     window = record["window"]
                     values = [float(window["loss"]), float(window["gradient_norm_before_clip"])]
@@ -304,7 +429,8 @@ def run_train(args: argparse.Namespace) -> int:
                         "learning_rates": [float(g["lr"]) for g in components.optimizer.param_groups],
                         "input": {key: value for key, value in record["input"].items() if key != "samples"},
                         "input_wait_seconds": round(fetched - ready, 4),
-                        "window_seconds": round(time.time() - fetched, 4), "time": time.time()}))
+                        "window_seconds": round(time.time() - fetched, 4), **peak_memory(),
+                        "time": time.time()}))
                     windows_done += 1
                     if args.max_windows and windows_done >= args.max_windows:
                         break
@@ -313,7 +439,7 @@ def run_train(args: argparse.Namespace) -> int:
                 reference = monitor.finish()
                 publish(output / "fork-result.json", {
                     "status": "SMOKE_PASS", "windows": windows_done, "epoch": epoch,
-                    "checkpoint_written": False, "monitor_reference": reference,
+                    "checkpoint_written": False, "monitor_reference": reference, **peak_memory(),
                     "elapsed_seconds": round(time.time() - start["started_unix"], 1)})
                 return 0
             completed = session.finish_epoch()
@@ -324,13 +450,13 @@ def run_train(args: argparse.Namespace) -> int:
                 "epoch": epoch, "record": completed, "checkpoint": saved,
                 "ema_updates": int(components.ema.updates), "learning_rates": learning_rates,
                 "epoch_seconds": round(time.time() - epoch_started, 1),
-                "input_wait_seconds": round(input_wait, 1)})
+                "input_wait_seconds": round(input_wait, 1), **peak_memory()})
             print(f"[fork] epoch {epoch} done in {time.time() - epoch_started:.0f}s "
                   f"(input wait {input_wait:.0f}s)", flush=True)
         reference = monitor.finish()
         publish(output / "fork-result.json", {
             "status": "TRAINING_COMPLETE", "last_epoch": args.target_epoch,
-            "monitor_reference": reference,
+            "monitor_reference": reference, **peak_memory(),
             "elapsed_seconds": round(time.time() - start["started_unix"], 1)})
         return 0
     except BaseException as exc:
@@ -357,6 +483,8 @@ def parser() -> argparse.ArgumentParser:
     train.add_argument("--output", required=True, help="new directory; must not exist")
     train.add_argument("--policy-from", required=True,
                        help="JSON with a reviewed policy_bundle (e.g. an R35 cell contract)")
+    train.add_argument("--orchestration-root", required=True,
+                       help=f"clean checkout at {ORCHESTRATION_COMMIT[:7]} (current-boot hardware admission)")
     train.add_argument("--max-windows", type=int, default=0, help="GPU smoke: stop after N windows")
     train.add_argument("--save-every", type=int, default=1)
     train.add_argument("--deadline-seconds", type=int, default=MONITOR_SCOPE_LIMIT_SECONDS)
