@@ -83,6 +83,11 @@ in the GPU worker process. It did not reproduce on CPU. Run a GPU smoke
 (`--max-windows 20`) before any long fork; if it recurs, use
 `--num-workers 0` and record it.
 
+Recorded 2026-09-24: the GPU smoke (s1_r896 e048, 2 workers, 20 windows)
+passed but one worker aborted with the same message at loader shutdown after
+the window-20 break. Formal forks therefore run with `--num-workers 0`
+(A2a s1_r896 e048->60: 690 s/epoch, of which ~384 s input wait).
+
 ## Commands
 
 Use the P3 interpreter `PY=/home/lyy/miniconda3/envs/sparse-rtdetrv2-p3-r2/bin/python`
@@ -109,7 +114,11 @@ $PY $T train --checkpoint $CK --lr-scale 0.1 --target-epoch 60 \
     --policy-from $POLICY --orchestration-root $ORCH \
     --output /media/lyy/Data/JupyterLab/fork-s1r896-e048-lrd01-e060
 
-# 4. Evaluate raw and EMA on CPU (same evaluator as the REV1 read-only evaluation)
+# 4. Evaluate raw and EMA on CPU (same evaluator as the REV1 read-only evaluation).
+#    Unlike train/check, the evaluator does not set its own environment: it imports
+#    sparse_rtdetr directly, so PYTHONPATH must point at this worktree's src
+#    (without it: ModuleNotFoundError: No module named 'sparse_rtdetr').
+PYTHONPATH=$PWD/src CUDA_VISIBLE_DEVICES= \
 $PY tools/evaluate_v2b_fork.py --checkpoint <fork>/checkpoint-epoch-060.pt \
     --checkpoint-id seed1-r896-e060-lrd48 --source-campaign fork-s1r896-e048-lrd01 \
     --output-dir /media/lyy/Data/JupyterLab/LiuZhiyang/P3_FORK_EVAL
