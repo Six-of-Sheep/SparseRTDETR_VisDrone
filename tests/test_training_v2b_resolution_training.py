@@ -142,7 +142,7 @@ def test_preserves_every_legacy_size_and_only_adds_896(size):
     assert TrainCoreDataConfig(input_size=size).input_size == size
 
 
-@pytest.mark.parametrize("size", [96, 129, 672, 800, 864, 928, 960, 1024, True, 896.0, "896"])
+@pytest.mark.parametrize("size", [96, 129, 672, 800, 864, 928, 960, 1056, 1152, True, 896.0, "896"])
 def test_other_resolutions_and_wrong_types_still_fail(size):
     with pytest.raises(V2BConfigurationError):
         V2BConfig(input_size=size)

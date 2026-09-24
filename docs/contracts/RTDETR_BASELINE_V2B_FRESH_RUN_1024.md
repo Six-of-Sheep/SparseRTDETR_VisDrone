@@ -1,0 +1,101 @@
+# V2B Fresh Run / A3a 1024² Runbook
+
+Status: 2026-09-25, branch `claude/p3-a3-r1024`.
+Tool: `tools/v2b_fresh_run.py` (companion of `tools/v2b_fork_continue.py`).
+
+## Scope
+
+A3a trains one new seed-0 cell at square 1024 for 30 epochs under the same
+recipe as the seed-0 896 cell (`v2b896-20260914t134105z-749f804e`, control-896).
+It is compared with the seed-0 640 (arm B) and 896 epoch-30 EMA endpoints
+evaluated by the REV1 development evaluator (registry record
+`A3-seed0-r640-r896-e030-baselines-20260925`). Non-square sizes, other seeds,
+test-dev access and data protocol changes are out of scope.
+
+## Code changes
+
+- `V2BConfig`, `TrainCoreDataConfig`, run-binding evidence
+  (`training_v2b_evidence.py`) and development evaluation
+  (`SUPPORTED_INPUT_SIZES`) accept 1024 in addition to 640/896. Every other
+  size stays rejected.
+- Admission: `_RESOLUTION_1024_AUTHORIZATION_SHA` is `None`, so no policy can
+  name a 1024 authority and no 1024 workload is admitted. Once the owner
+  writes the authorization file and its SHA-256 is reviewed into this
+  constant, it mirrors 896: `external_admin_acknowledged` only, scopes
+  `paired_smoke` 600 s / `train_core_30epoch` 43,200 s, and the bound binding
+  must be exactly `input_size=1024, physical_batch_size=8,
+  accumulation_steps=2, seed=0`. The evidence authority (R35) still rejects
+  1024; the 896 authority still requires 896.
+- Historical campaign, control, matched-640, capacity and cross-evaluation
+  machinery is unchanged and still accepts only its original sizes.
+
+## Why a separate tool
+
+`v2b_fork_continue.py` only restores schema-2 checkpoints. The existing
+epoch-0 entry points (control and replication workers) are bound to the
+matched-640, capacity and seed-replication contracts. `v2b_fresh_run.py`
+copies the full `V2BConfig`, the pretrained backbone and the train_core data
+from a reference checkpoint (`--like`) and replaces only `input_size`
+(optionally `seed`). It binds its own clean worktree, including its own
+admission, so no orchestration bridge is involved. The binding is built on
+CPU in the replication worker's order, and after admission the CUDA-built
+initialization must equal the bound CPU initialization.
+
+## CPU verification (2026-09-25, commit 1f26637)
+
+| check | result |
+|---|---|
+| `check --input-size 896` vs s0_r896 history | initial weights SHA `c5e1477e…` equal; `config` identical (0 differing keys, geometry and sampling included); epoch-1 window-1 `augmented_sha256` `ca76c65e…` equal. Loader binding and receipt SHA differ only through the source SHA-256 of the two edited files (`training_v2b.py`, `training_v2b_data.py`). |
+| `check --input-size 1024` | `CHECK_PASS`; only `input_size` changes against `--like`; anchors `[1, 21504, 4]` (128² + 64² + 32²); `pos_embed2` `[1, 1024, 256]`; first batch previewed. |
+| `check --input-size 1024 --policy-from <R35 evidence policy>` | rejected: `resolution evidence authorization requires input_size 640 or 896`. |
+| unit tests | full suite 252 failed + 295 errors on 693633f (pre-existing: repository contract file list, v2a/legacy fixtures). On this branch the same set, plus the intended update of `test_other_resolutions_and_wrong_types_still_fail` (1024 moved out, 1056/1152 added). `test_prefetch_cursor_recovery_uses_committed_window_only` failed once in the full run under concurrent CPU load and passed 3/3 in isolation. |
+| 640 regression (`seed2-r640-e060`, CPU) | raw 22.0468 / 21.3905 / 13.6717, EMA 23.0665 / 22.3266 / 14.4021 (primary / COCO / APS); A1 differs by at most 1e-4. |
+
+## Commands
+
+```bash
+PY=/home/lyy/miniconda3/envs/sparse-rtdetrv2-p3-r2/bin/python
+T=tools/v2b_fresh_run.py
+LIKE=/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone_v2b_896_20260914t110022z/artifacts/training/v2b896-20260914t134105z-749f804e/execution/control-896/checkpoint-epoch-030.pt
+
+# 1. CPU check (no GPU): config, binding, geometry, first batch
+$PY $T check --like $LIKE --input-size 1024 --gpu-uuid <GPU UUID> --num-workers 0 --output <new dir>
+
+# 2. CPU admission check once the 1024 authority is reviewed (monitor built, never started)
+$PY $T check --like $LIKE --input-size 1024 --policy-from <1024 policy bundle JSON> --num-workers 0
+
+# 3. GPU smoke: 20 windows, peak memory, no checkpoint
+$PY $T train --like $LIKE --input-size 1024 --target-epoch 30 --max-windows 20 \
+    --policy-from <1024 policy bundle JSON> --num-workers 2 --output <new dir>
+
+# 4. Formal run (in tmux), one checkpoint per epoch
+$PY $T train --like $LIKE --input-size 1024 --target-epoch 30 \
+    --policy-from <1024 policy bundle JSON> --num-workers <0|2> --output <new dir>
+
+# 5. Evaluate raw and EMA on CPU
+PYTHONPATH=$PWD/src CUDA_VISIBLE_DEVICES= \
+$PY tools/evaluate_v2b_fork.py --checkpoint <run>/checkpoint-epoch-030.pt \
+    --checkpoint-id seed0-r1024-e030 --source-campaign <run id> --output-dir <dir>
+```
+
+A fresh run writes `run-binding.json`, `fresh-start.json`, `ready.json`,
+`epoch-NNN-windows.jsonl`, `epoch-NNN-complete.json`,
+`checkpoint-epoch-NNN.pt`, `native-hardware/`, and `fresh-result.json` or
+`fresh-failure.json`.
+
+Resuming an interrupted 1024 run with `v2b_fork_continue.py` is **not** yet
+possible: that tool loads admission from the pinned 97a78f7 checkout, which
+has no 1024 authority. If a resume is needed, add a mode that uses the bound
+admission (the 1024 run's own worktree) instead of the pin.
+
+## Open items before GPU
+
+1. Owner-written 1024 authorization file; its SHA-256 goes into
+   `_RESOLUTION_1024_AUTHORIZATION_SHA` in a reviewed commit.
+2. A policy bundle for it: `build_policy_bundle(<current-boot anchor dir>,
+   setter_mode="external_admin_acknowledged", authorization_reference=<file
+   reference>, external_clock_receipt=<current receipt>)`.
+3. Loader workers: 2-worker SIGABRT at loader shutdown is unresolved on the
+   fork path, and this tool uses the same epoch loop. Decide 0 or 2 workers
+   after a smoke that completes one full epoch.
+4. Peak memory at 8 × 1024² is unmeasured (896 fork: 12.74 GB reserved).
