@@ -499,3 +499,10 @@ def test_invalid_category_types_fail_with_data_error(files, categories):
     files["annotation_sha256"] = write_json(files["annotation_file"], coco)
     with pytest.raises(TrainCoreDataError):
         build(files)
+
+
+def test_train_core_config_admits_square_1024_only_as_an_explicit_size():
+    assert TrainCoreDataConfig(input_size=1024).input_size == 1024
+    for size in (960, 1056):
+        with pytest.raises(TrainCoreDataError):
+            TrainCoreDataConfig(input_size=size)

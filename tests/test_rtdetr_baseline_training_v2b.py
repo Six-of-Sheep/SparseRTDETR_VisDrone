@@ -85,7 +85,7 @@ def bind(components, images, targets, run_id="real-r18-cpu"):
 
 @pytest.mark.parametrize("kwargs", [
     {"seed": True}, {"seed": -1}, {"seed": 2**32},
-    {"input_size": 96}, {"input_size": 129}, {"input_size": 960},
+    {"input_size": 96}, {"input_size": 129}, {"input_size": 960}, {"input_size": 1056}, {"input_size": 1152},
     {"physical_batch_size": 0}, {"accumulation_steps": True},
     {"amp_dtype": "float16"}, {"bn_statistics": "backbone_only"},
     {"learning_rate": float("nan")}, {"weight_decay": -1},
@@ -424,3 +424,10 @@ def test_actual_r18_checkpoint_replay_and_native_cpu_evidence(tmp_path, sampling
     assert restored.scheduler.state_dict() == expected_scheduler
     assert restored.warmup.state_dict() == expected_warmup
     assert not torch.cuda.is_initialized()
+
+
+def test_config_admits_square_1024_only_as_an_explicit_size():
+    assert V2BConfig(input_size=1024).input_size == 1024
+    for size in (992, 1056, 1344):
+        with pytest.raises(V2BConfigurationError):
+            V2BConfig(input_size=size)

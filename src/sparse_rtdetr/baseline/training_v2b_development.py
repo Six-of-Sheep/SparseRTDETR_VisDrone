@@ -54,7 +54,7 @@ class DevelopmentEvaluationError(ValueError):
 
 EVALUATION_EPOCHS = (10, 20, 30)
 INPUT_SIZE = 640
-SUPPORTED_INPUT_SIZES = (640, 896)
+SUPPORTED_INPUT_SIZES = (640, 896, 1024)
 BATCH_SIZE = 4
 PREVIEW_IMAGES = 4
 _BINDING_KEYS = {
@@ -226,7 +226,7 @@ def _validate_documents(coco: dict, manifest: dict):
 
 def _input_size(value: Any) -> int:
     if type(value) is not int or value not in SUPPORTED_INPUT_SIZES:
-        raise DevelopmentEvaluationError("development input_size must be 640 or 896")
+        raise DevelopmentEvaluationError("development input_size must be 640, 896 or 1024")
     return value
 
 

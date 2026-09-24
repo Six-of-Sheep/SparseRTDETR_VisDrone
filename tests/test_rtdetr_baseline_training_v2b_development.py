@@ -524,3 +524,13 @@ def test_unexpected_training_state_mutation_cannot_publish_metrics(files, compon
     assert_rng_equal(before_rng, rng_snapshot())
     assert mode_snapshot(components) == before_modes
     assert not list(directory.iterdir())
+
+
+def test_development_geometry_admits_1024_and_keeps_square_policy():
+    assert development._input_size(1024) == 1024
+    assert development._policy_input_size({'input_size': [1024, 1024]}) == 1024
+    for bad in (960, 1024.0, True):
+        with pytest.raises(development.DevelopmentEvaluationError):
+            development._input_size(bad)
+    with pytest.raises(development.DevelopmentEvaluationError, match='square'):
+        development._policy_input_size({'input_size': [768, 1344]})

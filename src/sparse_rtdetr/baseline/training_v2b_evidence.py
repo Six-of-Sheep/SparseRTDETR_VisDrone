@@ -372,7 +372,7 @@ def _validate_train_core_input(data: dict, code: dict, config: dict, *, verify_f
     _count(semantic["logical_batch_size"], "logical batch size", 1)
     _count(semantic["augmentation_stop_internal_epoch"], "augmentation stop")
     if (semantic["seed"] >= 2**32
-            or not (128 <= semantic["input_size"] <= 640 or semantic["input_size"] == 896)
+            or not (128 <= semantic["input_size"] <= 640 or semantic["input_size"] in (896, 1024))
             or semantic["input_size"] % 32):
         raise EvidenceError("train_core seed or input geometry is out of scope")
     if config.get("scope") != "train_core_runtime_engineering":
