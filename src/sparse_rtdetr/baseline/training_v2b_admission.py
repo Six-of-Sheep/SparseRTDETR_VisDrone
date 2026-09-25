@@ -47,10 +47,11 @@ _AUTHORIZATION_SHA = "e6b45aa30fe81f4df1138c5eba3033be8feaf2ea9ee96e55602fffd889
 _REPAIR_AUTHORIZATION_SHA = "c8b46cc3d91e941c32047806e41e518476b00ce8e1deb62cb58deb42e9869e75"
 _RESOLUTION_896_AUTHORIZATION_SHA = "ece816c4bfc93b62c403a00986a738f853b86e91a05953531ab93c0998538819"
 _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA = "0ea553eef36857f9686fa8bad3ad2b708af9f22a83f8f194b4405157a6a3b055"
-# A3a (seed 0, square 1024, physical 8 x accumulation 2). None until the
-# owner-written authorization file exists and its SHA-256 is reviewed here;
-# while None, no policy can name it and no 1024 workload is admitted.
-_RESOLUTION_1024_AUTHORIZATION_SHA: str | None = None
+# A3a (seed 0, square 1024, physical 8 x accumulation 2): user-1024-authorization.txt
+# (P3_A3_AUTHORIZATION_20260925, 1699 bytes), written 2026-09-25 by Claude
+# under the owner's explicit in-session delegation. Setting this back to None
+# makes every 1024 policy unnamed again.
+_RESOLUTION_1024_AUTHORIZATION_SHA: str | None = "986aebc057b207163cf654e63e8eab89f08d7af409df3a3f565b81aff5a040fc"
 _RESOLUTION_1024_DIMENSIONS = {"input_size": 1024, "physical_batch_size": 8, "accumulation_steps": 2, "seed": 0}
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"

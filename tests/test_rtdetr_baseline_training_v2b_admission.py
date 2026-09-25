@@ -690,10 +690,10 @@ def test_resolution_896_authority_rejects_other_bound_dimensions_before_native_a
     assert not output.exists()
 
 
-def test_resolution_1024_authority_is_unnamed_until_reviewed(policy_bundle, external_receipt, tmp_path):
-    assert ad._RESOLUTION_1024_AUTHORIZATION_SHA is None
+def test_resolution_1024_authority_names_only_its_reviewed_file(policy_bundle, external_receipt, tmp_path):
+    assert ad._RESOLUTION_1024_AUTHORIZATION_SHA == "986aebc057b207163cf654e63e8eab89f08d7af409df3a3f565b81aff5a040fc"
     auth = tmp_path / "resolution-1024-authorization.txt"
-    auth.write_text("CPU fixture: unreviewed 1024 request\n")
+    auth.write_text("CPU fixture: a different, unreviewed 1024 request\n")
     with pytest.raises(ad.MonitoredHardwareError, match="explicit execution authorization reference differs"):
         ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
                                authorization_reference=ev.file_reference(auth),
