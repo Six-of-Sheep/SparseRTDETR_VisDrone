@@ -14,6 +14,7 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 import pickle
+import re
 import select
 import socket
 import subprocess
@@ -756,6 +757,88 @@ def test_resolution_1024_authority_rejects_other_bound_dimensions_before_native_
     with pytest.raises(ad.MonitoredHardwareError, match="1024 authorization requires exact bound"):
         ad.MonitoredHardwareSession(bound, resolution_1024_policy_bundle, output, "paired_smoke", 600)
     assert not output.exists()
+
+
+def test_resolution_1024_seed1_authority_names_only_its_reviewed_file(policy_bundle, external_receipt, tmp_path):
+    assert ad._RESOLUTION_1024_SEED1_AUTHORIZATION_SHA == "6ebf8cf941399d97cc62a17644ffa91503bc57217accd7438a1d876d7786dfa3"
+    assert ad._RESOLUTION_1024_SEED1_DIMENSIONS == {
+        "input_size": 1024, "physical_batch_size": 8, "accumulation_steps": 2, "seed": 1}
+    assert ad._RESOLUTION_1024_DIMENSIONS == {
+        "input_size": 1024, "physical_batch_size": 8, "accumulation_steps": 2, "seed": 0}
+    auth = tmp_path / "resolution-1024-seed1-authorization.txt"
+    auth.write_text("CPU fixture: a different, unreviewed seed-1 1024 request\n")
+    with pytest.raises(ad.MonitoredHardwareError, match="explicit execution authorization reference differs"):
+        ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                               authorization_reference=ev.file_reference(auth),
+                               setter_mode=ad._EXTERNAL_ADMIN_MODE,
+                               external_clock_receipt=external_receipt["reference"])
+
+
+@pytest.fixture
+def resolution_1024_seed1_policy_bundle(tmp_path, monkeypatch, policy_bundle, external_receipt):
+    auth = tmp_path / "resolution-1024-seed1-authorization.txt"
+    auth.write_text("CPU fixture: exact seed-1 1024 train_core run; no GPU access\n")
+    auth_ref = ev.file_reference(auth)
+    monkeypatch.setattr(ad, "_RESOLUTION_1024_SEED1_AUTHORIZATION_SHA", auth_ref["sha256"])
+    return ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                                  authorization_reference=auth_ref,
+                                  setter_mode=ad._EXTERNAL_ADMIN_MODE,
+                                  external_clock_receipt=external_receipt["reference"])
+
+
+def test_resolution_1024_seed1_authority_keeps_hardware_scopes(resolution_1024_seed1_policy_bundle):
+    assert resolution_1024_seed1_policy_bundle["authorized_scope_limits_seconds"] == {
+        "paired_smoke": 600, "train_core_30epoch": 43200}
+    assert resolution_1024_seed1_policy_bundle["setter_mode"] == ad._EXTERNAL_ADMIN_MODE
+
+
+@pytest.mark.parametrize("mode", ["direct", "sudo_n"])
+def test_resolution_1024_seed1_authority_rejects_native_setter_policy(resolution_1024_seed1_policy_bundle, mode):
+    with pytest.raises(ad.MonitoredHardwareError, match="1024 authorization requires external_admin_acknowledged"):
+        ad.build_policy_bundle(Path(resolution_1024_seed1_policy_bundle["authority"]["path"]).parent,
+            authorization_reference=resolution_1024_seed1_policy_bundle["authorization_reference"], setter_mode=mode)
+
+
+@pytest.mark.parametrize("scope,deadline", [("paired_smoke", 600), ("train_core_30epoch", 43200)])
+def test_resolution_1024_seed1_authority_accepts_exact_bound_dimensions_without_native_access(
+        resolution_1024_seed1_policy_bundle, bound, tmp_path, scope, deadline):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=1024, physical_batch_size=8, accumulation_steps=2, seed=1, cuda_gpu_uuid=UUID)
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    output = tmp_path / "never-started"
+    session = ad.MonitoredHardwareSession(bound, resolution_1024_seed1_policy_bundle, output, scope, deadline)
+    assert session._state == "new"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("key,value", [
+    ("input_size", 896), ("input_size", 1056), ("input_size", 1024.0), ("input_size", True),
+    ("physical_batch_size", 16), ("accumulation_steps", 1), ("seed", 0), ("seed", 2), ("seed", True),
+    ("input_size", None), ("seed", None),
+])
+def test_resolution_1024_seed1_authority_rejects_other_bound_dimensions_before_native_access(
+        resolution_1024_seed1_policy_bundle, bound, tmp_path, key, value):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=1024, physical_batch_size=8, accumulation_steps=2, seed=1, cuda_gpu_uuid=UUID)
+    if value is None:
+        del bound["config"][key]
+    else:
+        bound["config"][key] = value
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    output = tmp_path / "never-started"
+    with pytest.raises(ad.MonitoredHardwareError, match=re.escape(
+            "1024 authorization requires exact bound input_size=1024, physical_batch_size=8, accumulation_steps=2, seed=1")):
+        ad.MonitoredHardwareSession(bound, resolution_1024_seed1_policy_bundle, output, "paired_smoke", 600)
+    assert not output.exists()
+
+
+def test_resolution_1024_seed0_authority_message_is_unchanged(resolution_1024_policy_bundle, bound, tmp_path):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(input_size=1024, physical_batch_size=8, accumulation_steps=2, seed=1, cuda_gpu_uuid=UUID)
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    with pytest.raises(ad.MonitoredHardwareError, match=re.escape(
+            "1024 authorization requires exact bound input_size=1024, physical_batch_size=8, accumulation_steps=2, seed=0")):
+        ad.MonitoredHardwareSession(bound, resolution_1024_policy_bundle, tmp_path / "never-started", "paired_smoke", 600)
 
 
 def test_resolution_896_authority_does_not_admit_1024(resolution_896_policy_bundle, bound, tmp_path):

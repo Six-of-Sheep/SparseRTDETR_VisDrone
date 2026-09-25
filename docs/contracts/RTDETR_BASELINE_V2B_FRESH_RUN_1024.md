@@ -99,3 +99,37 @@ admission (the 1024 run's own worktree) instead of the pin.
    fork path, and this tool uses the same epoch loop. Decide 0 or 2 workers
    after a smoke that completes one full epoch.
 4. Peak memory at 8 × 1024² is unmeasured (896 fork: 12.74 GB reserved).
+
+## Seed 1 (A3a seed replication, branch `claude/p3-a3-r1024-s1`)
+
+The seed-0 endpoint (EMA 1024−896: COCO AP +0.83, AP_small +0.77) fell in the
+"0 to +1" band of the plan's decision rule, which asks for a second seed
+before deciding. Seed 1 repeats A3a against the seed-1 896 cell
+(`v2bseeds-20260914t211244z-065fe7a4`, `s1_r896-control30`, checkpoint
+`747f5815…`); its binding differs from the seed-0 896 cell only in `seed`
+(the pretrained file is the same SHA at another path).
+
+- Authority: `_RESOLUTION_1024_SEED1_AUTHORIZATION_SHA` names
+  `P3_A3S1_AUTHORIZATION_20260925/user-1024-seed1-authorization.txt`
+  (2061 bytes, `6ebf8cf9…`), written by Claude under the owner's in-session
+  delegation. It mirrors the seed-0 authority (external admin mode, same
+  scopes) but binds `seed=1`; each 1024 authority admits only its own seed.
+- The seed-0 run keeps its own worktree at 1bd3bef; seed 1 runs from
+  `SparseRTDETR_VisDrone_v2b_a3r1024s1_20260925`.
+- Loader: 2 workers. If the run fails mid-way, resume from the last complete
+  epoch with `tools/v2b_fork_continue.py train --bound-admission
+  --num-workers 0` (the path that resumed seed 0 bit-exactly).
+
+```bash
+LIKE1=/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone_v2b_replication_20260914t184646z/artifacts/training/v2bseeds-20260914t211244z-065fe7a4/execution/s1_r896-control30/checkpoint-epoch-030.pt
+
+# CPU: at 896 the tool must reproduce the s1_r896 history (initial weights, config, first window)
+$PY $T check --like $LIKE1 --input-size 896 --gpu-uuid <GPU UUID> --num-workers 0
+# CPU: 1024 binding admitted by the seed-1 policy (monitor built, never started)
+$PY $T check --like $LIKE1 --input-size 1024 --policy-from <seed-1 policy bundle JSON> --num-workers 0
+# GPU smoke, then the formal run
+$PY $T train --like $LIKE1 --input-size 1024 --target-epoch 30 --max-windows 20 \
+    --policy-from <seed-1 policy bundle JSON> --num-workers 2 --output <new dir>
+$PY $T train --like $LIKE1 --input-size 1024 --target-epoch 30 \
+    --policy-from <seed-1 policy bundle JSON> --num-workers 2 --output <new dir>
+```
