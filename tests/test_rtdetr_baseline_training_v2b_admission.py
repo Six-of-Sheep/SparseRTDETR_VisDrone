@@ -1727,3 +1727,99 @@ def test_revision_bridge_monitor_uses_historical_checkpoint_provenance():
     }
     assert ad._checkpoint_provenance_run_id(binding) == "v2bepoch60-r35-20260918t200000z-97a78f7"
     assert ad._checkpoint_provenance_run_id({"run_id": "legacy-run"}) == "legacy-run"
+
+
+A3B_DIMENSIONS = {"input_size": [768, 1344], "physical_batch_size": 8, "accumulation_steps": 2, "seed": 0}
+A3B_MESSAGE = ("768x1344 authorization requires exact bound input_size=[768, 1344], "
+               "physical_batch_size=8, accumulation_steps=2, seed=0")
+
+
+def a3b_bound(bound, **changes):
+    bound = copy.deepcopy(bound)
+    bound["config"].update(**copy.deepcopy(A3B_DIMENSIONS), cuda_gpu_uuid=UUID)
+    for key, value in changes.items():
+        if value is None:
+            del bound["config"][key]
+        else:
+            bound["config"][key] = value
+    bound["binding_sha256"] = ev.canonical_sha256({k: v for k, v in bound.items() if k != "binding_sha256"})
+    return bound
+
+
+def test_resolution_768x1344_authority_is_unnamed_until_reviewed(policy_bundle, external_receipt, tmp_path):
+    assert ad._RESOLUTION_768X1344_AUTHORIZATION_SHA is None
+    assert ad._RESOLUTION_768X1344_DIMENSIONS == A3B_DIMENSIONS
+    auth = tmp_path / "resolution-768x1344-authorization.txt"
+    auth.write_text("CPU fixture: unreviewed 768x1344 request\n")
+    with pytest.raises(ad.MonitoredHardwareError, match="explicit execution authorization reference differs"):
+        ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                               authorization_reference=ev.file_reference(auth),
+                               setter_mode=ad._EXTERNAL_ADMIN_MODE,
+                               external_clock_receipt=external_receipt["reference"])
+
+
+@pytest.fixture
+def resolution_768x1344_policy_bundle(tmp_path, monkeypatch, policy_bundle, external_receipt):
+    auth = tmp_path / "resolution-768x1344-authorization.txt"
+    auth.write_text("CPU fixture: exact seed-0 768x1344 train_core run; no GPU access\n")
+    auth_ref = ev.file_reference(auth)
+    monkeypatch.setattr(ad, "_RESOLUTION_768X1344_AUTHORIZATION_SHA", auth_ref["sha256"])
+    return ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
+                                  authorization_reference=auth_ref,
+                                  setter_mode=ad._EXTERNAL_ADMIN_MODE,
+                                  external_clock_receipt=external_receipt["reference"])
+
+
+def test_resolution_768x1344_authority_keeps_hardware_scopes(resolution_768x1344_policy_bundle):
+    assert resolution_768x1344_policy_bundle["authorized_scope_limits_seconds"] == {
+        "paired_smoke": 600, "train_core_30epoch": 43200}
+    assert resolution_768x1344_policy_bundle["setter_mode"] == ad._EXTERNAL_ADMIN_MODE
+
+
+@pytest.mark.parametrize("mode", ["direct", "sudo_n"])
+def test_resolution_768x1344_authority_rejects_native_setter_policy(resolution_768x1344_policy_bundle, mode):
+    with pytest.raises(ad.MonitoredHardwareError, match="768x1344 authorization requires external_admin_acknowledged"):
+        ad.build_policy_bundle(Path(resolution_768x1344_policy_bundle["authority"]["path"]).parent,
+            authorization_reference=resolution_768x1344_policy_bundle["authorization_reference"], setter_mode=mode)
+
+
+@pytest.mark.parametrize("scope,deadline", [("paired_smoke", 600), ("train_core_30epoch", 43200)])
+def test_resolution_768x1344_authority_accepts_exact_bound_dimensions_without_native_access(
+        resolution_768x1344_policy_bundle, bound, tmp_path, scope, deadline):
+    output = tmp_path / "never-started"
+    session = ad.MonitoredHardwareSession(a3b_bound(bound), resolution_768x1344_policy_bundle, output, scope, deadline)
+    assert session._state == "new"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("key,value", [
+    ("input_size", [1344, 768]), ("input_size", [768, 768]), ("input_size", 1024), ("input_size", 896),
+    ("input_size", [768.0, 1344]), ("input_size", [768, 1344.0]), ("input_size", [768, 1344, 3]),
+    ("physical_batch_size", 16), ("accumulation_steps", 1), ("seed", 1), ("seed", True),
+    ("input_size", None), ("seed", None),
+])
+def test_resolution_768x1344_authority_rejects_other_bound_dimensions_before_native_access(
+        resolution_768x1344_policy_bundle, bound, tmp_path, key, value):
+    output = tmp_path / "never-started"
+    with pytest.raises(ad.MonitoredHardwareError, match=re.escape(A3B_MESSAGE)):
+        ad.MonitoredHardwareSession(a3b_bound(bound, **{key: value}), resolution_768x1344_policy_bundle,
+                                    output, "paired_smoke", 600)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("authority", ["original", "repair"])
+def test_prior_authorities_do_not_admit_a_non_square_canvas(policy_bundle, repair_policy_bundle, bound,
+                                                           tmp_path, authority):
+    bundle = policy_bundle if authority == "original" else repair_policy_bundle
+    with pytest.raises(ad.MonitoredHardwareError, match="non-square input_size is admitted only"):
+        ad.MonitoredHardwareSession(a3b_bound(bound), bundle, tmp_path / "never-started", "paired_smoke", 600)
+
+
+def test_resolution_896_and_1024_authorities_do_not_admit_a_non_square_canvas(
+        resolution_896_policy_bundle, resolution_1024_policy_bundle, bound, tmp_path):
+    with pytest.raises(ad.MonitoredHardwareError, match="896 authorization requires exact bound"):
+        ad.MonitoredHardwareSession(a3b_bound(bound), resolution_896_policy_bundle,
+                                    tmp_path / "never-started", "paired_smoke", 600)
+    with pytest.raises(ad.MonitoredHardwareError, match="1024 authorization requires exact bound"):
+        ad.MonitoredHardwareSession(a3b_bound(bound), resolution_1024_policy_bundle,
+                                    tmp_path / "never-started", "paired_smoke", 600)

@@ -29,7 +29,9 @@ from torch.utils.data import DataLoader, Dataset
 
 from .categories import map_target_labels_to_model
 from .config import _vendor_path, _vendor_root, load_isolated_vendor_config_dict
-from .training_v2b import _vendor_source_identities, logical_batch_indices, seed_worker
+from .training_v2b import (
+    NON_SQUARE_INPUT_SIZES, _vendor_source_identities, input_hw, logical_batch_indices, seed_worker,
+)
 from .training_v2b_engine import validate_engine_state_dict
 
 
@@ -107,7 +109,7 @@ def _logical_filename(value: Any) -> str:
 @dataclass(frozen=True)
 class TrainCoreDataConfig:
     seed: int = 0
-    input_size: int = 640
+    input_size: int | list[int] = 640
     logical_batch_size: int = 16
     num_workers: int = 4
     prefetch_factor: int = 2
@@ -121,9 +123,15 @@ class TrainCoreDataConfig:
         _integer(self.seed, "seed")
         if self.seed >= 2**32:
             raise TrainCoreDataError("seed exceeds the CPU seed range")
-        _integer(self.input_size, "input_size", 128)
-        if (self.input_size > 640 and self.input_size not in (896, 1024)) or self.input_size % 32:
-            raise TrainCoreDataError("runtime wiring supports sizes 128..640 divisible by 32, plus 896 and 1024")
+        if type(self.input_size) in (list, tuple):
+            if (any(type(value) is not int for value in self.input_size)
+                    or list(self.input_size) not in NON_SQUARE_INPUT_SIZES):
+                raise TrainCoreDataError("non-square input_size must be [H, W] = [768, 1344]")
+            object.__setattr__(self, "input_size", list(self.input_size))
+        else:
+            _integer(self.input_size, "input_size", 128)
+            if (self.input_size > 640 and self.input_size not in (896, 1024)) or self.input_size % 32:
+                raise TrainCoreDataError("runtime wiring supports sizes 128..640 divisible by 32, plus 896 and 1024")
         _integer(self.logical_batch_size, "logical_batch_size", 1)
         _integer(self.num_workers, "num_workers")
         _integer(self.prefetch_factor, "prefetch_factor", 1)
@@ -197,7 +205,7 @@ def _transform_config(root: Path, config: TrainCoreDataConfig) -> dict[str, Any]
         raise TrainCoreDataError("vendored training augmentation operation order changed")
     for op in result["ops"]:
         if op["type"] == "Resize":
-            op["size"] = [config.input_size, config.input_size]
+            op["size"] = input_hw(config.input_size)
     if result["policy"]["name"] != "stop_epoch":
         raise TrainCoreDataError("stateful sample-count augmentation is not supported")
     result["policy"]["epoch"] = config.augmentation_stop_internal_epoch
@@ -544,7 +552,7 @@ class TrainCoreLogicalLoader:
     def validate_engine_state(self, state: Any, engine_state: Any) -> dict[str, Any]:
         self.validate_state_dict(state)
         checked = validate_loader_state(state, engine_state)
-        if engine_state["config"]["expected_input_size"] != [self.config.input_size, self.config.input_size]:
+        if engine_state["config"]["expected_input_size"] != input_hw(self.config.input_size):
             raise TrainCoreDataError("engine and loader input geometry differ")
         return checked
 

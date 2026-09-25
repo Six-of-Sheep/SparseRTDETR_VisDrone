@@ -36,7 +36,7 @@ from .config import (
     load_isolated_vendor_config_dict,
 )
 from .postprocessor import VisDronePostProcessor
-from .training_v2b import _vendor_source_identities
+from .training_v2b import NON_SQUARE_INPUT_SIZES, _vendor_source_identities, input_hw
 from .training_v2b_device import (
     capture_cuda_rng, restore_cuda_rng, validate_component_placement,
     validate_prepared_runtime,
@@ -224,32 +224,37 @@ def _validate_documents(coco: dict, manifest: dict):
     return ordered, grouped, members, inventory
 
 
-def _input_size(value: Any) -> int:
+def _input_size(value: Any) -> int | list[int]:
+    """A supported square size, or the explicit non-square [H, W] canvas."""
+    if type(value) in (list, tuple):
+        if any(type(v) is not int for v in value) or list(value) not in NON_SQUARE_INPUT_SIZES:
+            raise DevelopmentEvaluationError("development non-square input_size must be [768, 1344]")
+        return list(value)
     if type(value) is not int or value not in SUPPORTED_INPUT_SIZES:
         raise DevelopmentEvaluationError("development input_size must be 640, 896 or 1024")
     return value
 
 
-def _policy_input_size(policy: Any) -> int:
+def _policy_input_size(policy: Any) -> int | list[int]:
     if type(policy) is not dict:
         raise DevelopmentEvaluationError("development policy must be an object")
     size = policy.get("input_size")
     if (type(size) is not list or len(size) != 2
-            or any(type(value) is not int for value in size) or size[0] != size[1]):
-        raise DevelopmentEvaluationError("development policy requires a square integer input_size")
-    return _input_size(size[0])
+            or any(type(value) is not int for value in size)):
+        raise DevelopmentEvaluationError("development policy requires an integer [H, W] input_size")
+    return _input_size(size[0] if size[0] == size[1] else size)
 
 
-def _policy(input_size: int = INPUT_SIZE) -> dict:
-    size = _input_size(input_size)
+def _policy(input_size: int | list[int] = INPUT_SIZE) -> dict:
+    size = input_hw(_input_size(input_size))
     return {
-        "input_size": [size, size], "batch_size": BATCH_SIZE,
+        "input_size": size, "batch_size": BATCH_SIZE,
         "num_workers": 0, "shuffle": False, "drop_last": False,
         "model_weights": "ema", "forward_dtype": "float32", "autocast": False,
         "evaluation_epochs": list(EVALUATION_EPOCHS),
         "preview_images": PREVIEW_IMAGES, "image_order": "ascending_coco_image_id",
         "transform": [
-            {"type": "Resize", "size": [size, size]},
+            {"type": "Resize", "size": list(size)},
             {"type": "ConvertPILImage", "dtype": "float32", "scale": True},
         ],
         "num_top_queries": 300, "focal_sigmoid": True, "nms": False,
@@ -268,8 +273,8 @@ def _policy(input_size: int = INPUT_SIZE) -> dict:
     }
 
 
-def _vendor_tools(root: Path, input_size: int = INPUT_SIZE):
-    size = _input_size(input_size)
+def _vendor_tools(root: Path, input_size: int | list[int] = INPUT_SIZE):
+    size = input_hw(_input_size(input_size))
     _vendor_source_identities(root)
     with _vendor_path(_vendor_root(root)):
         importlib.import_module("src.data")
@@ -286,7 +291,7 @@ def _vendor_tools(root: Path, input_size: int = INPUT_SIZE):
                 raise DevelopmentEvaluationError("vendored validation transform recipe changed")
             for operation in recipe["ops"]:
                 if operation["type"] == "Resize":
-                    operation["size"] = [size, size]
+                    operation["size"] = list(size)
             transforms = Compose(**{k: copy.deepcopy(v) for k, v in recipe.items()
                                     if k != "type"})
         finally:
@@ -360,7 +365,7 @@ def build_development_binding(*, repo_root: str | Path,
                               annotation_file: str | Path, annotation_sha256: str,
                               manifest_file: str | Path, manifest_sha256: str,
                               image_root: str | Path,
-                              input_size: int = INPUT_SIZE) -> dict:
+                              input_size: int | list[int] = INPUT_SIZE) -> dict:
     """Bind explicit metadata, evaluation size, and expected JPEG identities."""
     size = _input_size(input_size)
     root = Path(repo_root).resolve(strict=True)
@@ -463,7 +468,7 @@ class _DevelopmentDataset:
                                             spatial_size=pixels.size[::-1])
         target = map_target_labels_to_model(target)
         pixels, target, _ = self.transforms(pixels, target, self)
-        if (pixels.dtype != torch.float32 or list(pixels.shape) != [3, self.input_size, self.input_size]
+        if (pixels.dtype != torch.float32 or list(pixels.shape) != [3, *input_hw(self.input_size)]
                 or not bool(torch.isfinite(pixels).all())
                 or target["orig_size"].tolist() != [image["width"], image["height"]]):
             raise DevelopmentEvaluationError("development resize/width-height convention drift")
@@ -543,7 +548,7 @@ def _component(components, name):
         raise DevelopmentEvaluationError("missing runtime component: " + name) from exc
 
 
-def _geometry_snapshot(model, ema, input_size: int) -> dict:
+def _geometry_snapshot(model, ema, input_size: int | list[int]) -> dict:
     try:
         return {
             "raw": snapshot_model_geometry(model, expected_input_size=input_size),
@@ -579,7 +584,7 @@ def _auxiliary_clocks(engine) -> dict:
 
 @contextlib.contextmanager
 def _preserve_training_state(model, ema, postprocessor, engine, runtime, *,
-                             input_size: int, initial_geometry: dict):
+                             input_size: int | list[int], initial_geometry: dict):
     modules = {id(module): module for root in (model, ema.module, postprocessor)
                for module in root.modules()}
     modes = [(module, module.training) for module in modules.values()]
@@ -676,7 +681,7 @@ def _evaluate(components, *, data_binding, output_dir, logged_epoch, hardware_ga
     identity = validate_prepared_runtime(runtime)
     state = validate_engine_state_dict(engine.state_dict())
     if (engine.model is not model or engine.ema is not ema
-            or state["config"]["expected_input_size"] != [input_size, input_size]
+            or state["config"]["expected_input_size"] != input_hw(input_size)
             or engine.device != runtime.device):
         raise DevelopmentEvaluationError("evaluation runtime/model/bound input geometry mismatch")
     if not isinstance(getattr(ema, "module", None), torch.nn.Module):

@@ -506,3 +506,21 @@ def test_train_core_config_admits_square_1024_only_as_an_explicit_size():
     for size in (960, 1056):
         with pytest.raises(TrainCoreDataError):
             TrainCoreDataConfig(input_size=size)
+
+
+def test_train_core_a3b_canvas_is_an_explicit_height_width_list(files):
+    assert TrainCoreDataConfig(input_size=(768, 1344)).input_size == [768, 1344]
+    for size in ([1344, 768], [768, 768], [768.0, 1344], [True, 1344], [768, 1344, 3], [736, 1344]):
+        with pytest.raises(TrainCoreDataError):
+            TrainCoreDataConfig(input_size=size)
+    loader = build(files, input_size=[768, 1344])
+    assert loader.binding["config"]["input_size"] == [768, 1344]
+    assert next(op["size"] for op in loader.binding["transforms"]["ops"] if op["type"] == "Resize") == [768, 1344]
+    assert all(tuple(batch.images.shape) == (4, 3, 768, 1344) for batch in loader.preview_batches(2, epoch=1))
+    transposed = engine_state(loader)
+    transposed["config"]["expected_input_size"] = [1344, 768]
+    with pytest.raises(TrainCoreDataError, match="geometry"):
+        loader.begin_epoch(1, transposed)
+    state = engine_state(loader)
+    state["config"]["expected_input_size"] = [768, 1344]
+    loader.begin_epoch(1, state)

@@ -16,7 +16,7 @@ import pytest
 import torch
 
 from sparse_rtdetr.baseline.training_v2b import (
-    V2BConfig, V2BConfigurationError, build_v2b_components,
+    V2BConfig, V2BConfigurationError, build_v2b_components, input_hw,
     logical_batch_indices, seed_cpu_sources, seed_worker,
     validate_model_geometry, validate_model_sampling,
 )
@@ -431,3 +431,60 @@ def test_config_admits_square_1024_only_as_an_explicit_size():
     for size in (992, 1056, 1344):
         with pytest.raises(V2BConfigurationError):
             V2BConfig(input_size=size)
+
+
+def test_config_admits_the_a3b_canvas_only_as_an_explicit_height_width_list():
+    canvas = V2BConfig(input_size=(768, 1344))
+    assert canvas.input_size == [768, 1344]
+    assert canvas.binding_config()["input_size"] == [768, 1344]
+    assert input_hw(canvas.input_size) == [768, 1344] and input_hw(896) == [896, 896]
+    assert V2BConfig(input_size=896).binding_config()["input_size"] == 896
+    for size in ([1344, 768], [768, 768], [768.0, 1344], [True, 1344], [768, 1344, 3], [736, 1344], "768x1344"):
+        with pytest.raises(V2BConfigurationError):
+            V2BConfig(input_size=size)
+
+
+def _vendor_position_embedding(model, w, h):
+    return type(model.encoder).build_2d_sincos_position_embedding(
+        w, h, model.encoder.hidden_dim, model.encoder.pe_temperature)
+
+
+def test_a3b_canvas_geometry_is_height_then_width_with_row_major_positions():
+    c = build(input_size=[768, 1344])
+    assert c.geometry["input_size"] == [768, 1344]
+    assert c.geometry["anchors"] == [1, 96 * 168 + 48 * 84 + 24 * 42, 4]
+    assert c.geometry["position_caches"] == {"pos_embed2": [1, 24 * 42, 256]}
+    for component in (c.model.encoder, c.model.decoder, c.ema.module.encoder, c.ema.module.decoder):
+        assert list(component.eval_spatial_size) == [768, 1344]
+    for name in ("train_dataloader", "val_dataloader"):
+        ops = c.resolved_config[name]["dataset"]["transforms"]["ops"]
+        assert next(x["size"] for x in ops if x["type"] == "Resize") == [768, 1344]
+    assert c.engine.state_dict()["config"]["expected_input_size"] == [768, 1344]
+    # Cached eval anchors are laid out as the [H, W] feature maps generate them in training.
+    anchors, valid = c.model.decoder._generate_anchors([[96, 168], [48, 84], [24, 42]])
+    assert torch.equal(c.model.decoder.anchors, anchors) and torch.equal(c.model.decoder.valid_mask, valid)
+    # The vendor grid wraps every h tokens on a non-square canvas; the override follows token order.
+    rows = c.model.encoder.pos_embed2.view(24, 42, 256)
+    assert torch.equal(rows[0, 24, :128], rows[0, 0, :128])  # same row: first (row) half equal
+    assert not torch.equal(rows[0, 24, 128:], rows[0, 0, 128:])
+    assert torch.equal(rows[1, 0, 128:], rows[0, 0, 128:])  # same column: second (column) half equal
+    assert not torch.equal(c.model.encoder.pos_embed2, _vendor_position_embedding(c.model, 42, 24))
+    assert (c.ema.module.encoder.build_2d_sincos_position_embedding
+            is c.model.encoder.build_2d_sincos_position_embedding)
+    torch.testing.assert_close(c.ema.module.encoder.pos_embed2, c.model.encoder.pos_embed2, rtol=0, atol=0)
+    c.engine.begin_epoch(1)
+    with pytest.raises((ValueError, RuntimeError), match="size|shape"):
+        c.engine.train_window(torch.rand((2, 3, 1344, 768)), batch()[1])
+
+
+def test_row_major_position_override_is_the_vendor_embedding_on_squares():
+    from sparse_rtdetr.baseline.training_v2b import _row_major_position_embedding
+    square = build(input_size=640)
+    assert "build_2d_sincos_position_embedding" not in square.model.encoder.__dict__
+    for side in (20, 28, 32, 24):
+        assert torch.equal(_row_major_position_embedding(side, side), _vendor_position_embedding(square.model, side, side))
+    assert not torch.equal(_row_major_position_embedding(42, 24), _vendor_position_embedding(square.model, 42, 24))
+    canvas = build(input_size=[768, 1344])
+    del canvas.model.encoder.build_2d_sincos_position_embedding
+    with pytest.raises(V2BConfigurationError, match="row-major"):
+        validate_model_geometry(canvas.model, canvas.config)

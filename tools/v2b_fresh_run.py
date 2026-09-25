@@ -5,7 +5,8 @@ Companion of ``tools/v2b_fork_continue.py`` for runs that have no parent
 checkpoint (A3: a new input size). Every training hyperparameter, the
 pretrained backbone and the train_core data are copied from a reference
 schema-2 checkpoint binding (``--like``); only ``input_size`` (and optionally
-``seed``) are replaced. The run binds this tool's own clean worktree: model,
+``seed``) are replaced. ``--input-size`` is an integer square or ``HxW``
+(height first) for a non-square canvas, e.g. ``768x1344`` for A3b. The run binds this tool's own clean worktree: model,
 data, optimizer, checkpoint and hardware admission all import from it, so no
 orchestration bridge is involved.
 
@@ -103,7 +104,19 @@ def reference_binding(path: Path) -> dict:
     return payload["binding"]
 
 
-def make_config(like: dict, input_size: int, seed: int | None):
+def input_size_arg(text: str) -> int | list[int]:
+    """An integer square size, or HxW (height first) for a non-square canvas."""
+    if "x" in text:
+        height, width = text.split("x")
+        return [int(height), int(width)]
+    return int(text)
+
+
+def size_label(size: int | list[int]) -> str:
+    return str(size) if type(size) is int else "x".join(str(value) for value in size)
+
+
+def make_config(like: dict, input_size: int | list[int], seed: int | None):
     from sparse_rtdetr.baseline.training_v2b import V2BConfig
     source = like["config"]
     config = V2BConfig(**{field.name: source[field.name] for field in fields(V2BConfig)})
@@ -143,7 +156,7 @@ def prepare(args: argparse.Namespace, gpu_uuid: str) -> dict:
                  "pretrained_sha256": pretrained["sha256"]}
     loader = build_loader(like, config, args.num_workers, args.prefetch_factor)
     cpu = build_v2b_components(config, **arguments)
-    run_id = args.run_id or (f"v2bfresh-r{config.input_size}-s{config.seed}-"
+    run_id = args.run_id or (f"v2bfresh-r{size_label(config.input_size)}-s{config.seed}-"
                              + time.strftime("%Y%m%dt%H%M%Sz", time.gmtime()))
     binding = build_train_core_run_binding(
         cpu, loader, run_id=run_id, repo_root=REPO,
@@ -319,7 +332,8 @@ def parser() -> argparse.ArgumentParser:
         sub = commands.add_parser(name)
         sub.add_argument("--like", required=True,
                          help="schema-2 checkpoint whose config, pretrained and data are copied")
-        sub.add_argument("--input-size", type=int, required=True)
+        sub.add_argument("--input-size", type=input_size_arg, required=True,
+                         help="integer square, or HxW (height first), e.g. 768x1344")
         sub.add_argument("--seed", type=int, default=None, help="default: the --like seed")
         sub.add_argument("--run-id", default=None)
         sub.add_argument("--num-workers", type=int, default=2)

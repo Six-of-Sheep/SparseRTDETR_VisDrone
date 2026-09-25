@@ -366,14 +366,18 @@ def _validate_train_core_input(data: dict, code: dict, config: dict, *, verify_f
     if type(semantic) is not dict or semantic.get("role") != "train_core":
         raise EvidenceError("invalid train_core semantic configuration")
     for name in ("seed", "input_size", "logical_batch_size", "augmentation_stop_internal_epoch"):
-        if semantic.get(name) != config.get(name) or type(semantic.get(name)) is not int:
+        if semantic.get(name) != config.get(name) or type(semantic.get(name)) is not type(config.get(name)):
+            raise EvidenceError("train_core/model configuration mismatch: " + name)
+        if type(semantic[name]) is not int and not (name == "input_size" and type(semantic[name]) is list):
             raise EvidenceError("train_core/model configuration mismatch: " + name)
     _count(semantic["seed"], "train_core seed")
     _count(semantic["logical_batch_size"], "logical batch size", 1)
     _count(semantic["augmentation_stop_internal_epoch"], "augmentation stop")
+    size = semantic["input_size"]
+    # A non-square canvas is only the explicit [H, W] list of A3b (16:9 1344x768).
     if (semantic["seed"] >= 2**32
-            or not (128 <= semantic["input_size"] <= 640 or semantic["input_size"] in (896, 1024))
-            or semantic["input_size"] % 32):
+            or (type(size) is list and (size != [768, 1344] or any(type(v) is not int for v in size)))
+            or (type(size) is int and (not (128 <= size <= 640 or size in (896, 1024)) or size % 32))):
         raise EvidenceError("train_core seed or input geometry is out of scope")
     if config.get("scope") != "train_core_runtime_engineering":
         raise EvidenceError("train_core data requires an explicit runtime scope")

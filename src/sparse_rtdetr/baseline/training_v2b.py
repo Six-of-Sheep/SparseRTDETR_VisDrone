@@ -42,10 +42,42 @@ class V2BConfigurationError(ValueError):
     """An explicit engineering configuration or model identity is invalid."""
 
 
+# An integer input_size is a square canvas, so every earlier binding keeps its
+# bytes; a non-square canvas is an explicit [H, W] list (A3b: 16:9 1344x768).
+NON_SQUARE_INPUT_SIZES = ([768, 1344],)
+
+
+def input_hw(size: int | list[int]) -> list[int]:
+    """[H, W] of a validated input_size (integer square or [H, W] list)."""
+    return [size, size] if type(size) is int else list(size)
+
+
+def _row_major_position_embedding(w, h, embed_dim=256, temperature=10000.):
+    """Vendor 2-D sin-cos embedding with its grid laid out in token order.
+
+    The vendor flattens a (w, h) meshgrid, which matches the row-major [H, W]
+    token order of the encoder only when h == w; there the two constructions
+    are the same tensor, but on a non-square canvas the vendor grid wraps every
+    h tokens instead of every w. Same formula and slot order as the vendor on
+    squares (first half: row, second half: column).
+    """
+    grid_w = torch.arange(int(w), dtype=torch.float32)
+    grid_h = torch.arange(int(h), dtype=torch.float32)
+    grid_row, grid_col = torch.meshgrid(grid_h, grid_w, indexing="ij")
+    if embed_dim % 4:
+        raise V2BConfigurationError("position embedding dimension must be divisible by 4")
+    pos_dim = embed_dim // 4
+    omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
+    omega = 1. / (temperature ** omega)
+    out_row = grid_row.flatten()[..., None] @ omega[None]
+    out_col = grid_col.flatten()[..., None] @ omega[None]
+    return torch.concat([out_row.sin(), out_row.cos(), out_col.sin(), out_col.cos()], dim=1)[None, :, :]
+
+
 @dataclass(frozen=True)
 class V2BConfig:
     seed: int = 0
-    input_size: int = 640
+    input_size: int | list[int] = 640
     physical_batch_size: int = 16
     accumulation_steps: int = 1
     amp_dtype: str = "bfloat16"
@@ -61,12 +93,19 @@ class V2BConfig:
     sampling_backend: str = "native"
 
     def __post_init__(self) -> None:
-        for name in ("input_size", "physical_batch_size", "accumulation_steps",
-                     "warmup_steps", "ema_warmups"):
+        for name in ("physical_batch_size", "accumulation_steps", "warmup_steps", "ema_warmups"):
             value = getattr(self, name)
             if type(value) is not int or value <= 0:
                 raise V2BConfigurationError(f"{name} must be a positive integer")
-        if self.input_size % 32 or not (128 <= self.input_size <= 640 or self.input_size in (896, 1024)):
+        if type(self.input_size) in (list, tuple):
+            if (any(type(value) is not int for value in self.input_size)
+                    or list(self.input_size) not in NON_SQUARE_INPUT_SIZES):
+                raise V2BConfigurationError("non-square input_size must be [H, W] = [768, 1344]")
+            # JSON bindings carry lists; keep the live value comparable with them.
+            object.__setattr__(self, "input_size", list(self.input_size))
+        elif type(self.input_size) is not int or self.input_size <= 0:
+            raise V2BConfigurationError("input_size must be a positive integer or [H, W]")
+        elif self.input_size % 32 or not (128 <= self.input_size <= 640 or self.input_size in (896, 1024)):
             raise V2BConfigurationError("CPU foundation supports sizes 128..640 divisible by 32, plus 896 and 1024")
         if type(self.seed) is not int or not 0 <= self.seed < 2**32:
             raise V2BConfigurationError("seed must be an integer in [0, 2**32)")
@@ -241,7 +280,7 @@ def _resolved_vendor_config(repo_root: Path, config: V2BConfig) -> dict[str, Any
         resolved = copy.deepcopy(load_config(str(_vendor_config_path(repo_root)), cfg={}))
     resolved.update(
         num_classes=10, remap_mscoco_category=False,
-        eval_spatial_size=[config.input_size, config.input_size],
+        eval_spatial_size=input_hw(config.input_size),
         use_amp=config.amp_dtype == "bfloat16", device="cpu", epoches=120,
     )
     resolved["PResNet"].update(
@@ -263,7 +302,7 @@ def _resolved_vendor_config(repo_root: Path, config: V2BConfig) -> dict[str, Any
         transforms = loader["dataset"]["transforms"]
         for op in transforms["ops"]:
             if op["type"] == "Resize":
-                op["size"] = [config.input_size, config.input_size]
+                op["size"] = input_hw(config.input_size)
         if "policy" in transforms:
             transforms["policy"]["epoch"] = 117
         if "collate_fn" in loader:
@@ -301,6 +340,11 @@ def _build_vendor_objects(repo_root: Path, config: V2BConfig):
             merged = merge_config(resolved, registry, inplace=False, overwrite=False)
             seed_cpu_sources(config.seed)  # immediately before the first model
             model = create(merged["model"], merged).to(device="cpu")
+            if type(config.input_size) is not int:
+                # Instance override (vendor files unchanged); also used in training
+                # mode and inherited by the EMA copy. Consumes no RNG.
+                model.encoder.build_2d_sincos_position_embedding = _row_major_position_embedding
+                model.encoder._reset_parameters()
             criterion = create(merged["criterion"], merged).to(device="cpu")
             postprocessor = create(merged["postprocessor"], merged).to(device="cpu")
         finally:
@@ -349,11 +393,11 @@ def _optimizer(model, config: V2BConfig):
 
 def validate_model_geometry(model, config: V2BConfig) -> dict[str, Any]:
     """Check actual caches; invalid anchor +inf sentinels are intentional."""
-    size = config.input_size
+    height, width = input_hw(config.input_size)
     for component in (model.encoder, model.decoder):
-        if list(component.eval_spatial_size) != [size, size]:
+        if list(component.eval_spatial_size) != [height, width]:
             raise V2BConfigurationError("model eval_spatial_size mismatch")
-    count = sum((size // stride) ** 2 for stride in (8, 16, 32))
+    count = sum((height // stride) * (width // stride) for stride in (8, 16, 32))
     if tuple(model.decoder.anchors.shape) != (1, count, 4):
         raise V2BConfigurationError("decoder anchor cache shape mismatch")
     if tuple(model.decoder.valid_mask.shape) != (1, count, 1):
@@ -362,17 +406,22 @@ def validate_model_geometry(model, config: V2BConfig) -> dict[str, Any]:
     for index in model.encoder.use_encoder_idx:
         name = f"pos_embed{index}"
         shape = tuple(getattr(model.encoder, name).shape)
-        expected = (1, (size // model.encoder.feat_strides[index]) ** 2,
-                    model.encoder.hidden_dim)
+        stride = model.encoder.feat_strides[index]
+        expected = (1, (height // stride) * (width // stride), model.encoder.hidden_dim)
         if shape != expected:
             raise V2BConfigurationError("encoder positional cache shape mismatch")
+        if height != width and (
+                model.encoder.__dict__.get("build_2d_sincos_position_embedding") is not _row_major_position_embedding
+                or not torch.equal(getattr(model.encoder, name).cpu(), _row_major_position_embedding(
+                    width // stride, height // stride, model.encoder.hidden_dim, model.encoder.pe_temperature))):
+            raise V2BConfigurationError("non-square encoder must use the row-major position embedding")
         positions[name] = list(shape)
     from .training_v2b_evidence import initial_parameter_reference
     cache_tensors = {"decoder.anchors": model.decoder.anchors,
                      "decoder.valid_mask": model.decoder.valid_mask}
     cache_tensors.update({"encoder." + name: getattr(model.encoder, name)
                           for name in positions})
-    return {"input_size": [size, size], "anchors": list(model.decoder.anchors.shape),
+    return {"input_size": [height, width], "anchors": list(model.decoder.anchors.shape),
             "valid_mask": list(model.decoder.valid_mask.shape),
             "position_caches": positions,
             "cache_identity": initial_parameter_reference({
@@ -548,7 +597,7 @@ def build_v2b_components(config: V2BConfig, *, repo_root: str | Path | None = No
         accumulation_steps=config.accumulation_steps, device=runtime.device,
         amp_dtype=config.amp_dtype, clip_max_norm=config.clip_max_norm,
         ema=ema, warmup=warmup, scheduler=scheduler,
-        bn_statistics=config.bn_statistics, expected_input_size=config.input_size,
+        bn_statistics=config.bn_statistics, expected_input_size=tuple(input_hw(config.input_size)),
     )
     validate_component_placement(model=model, optimizer=optimizer, ema=ema,
                                  criterion=criterion, postprocessor=postprocessor,

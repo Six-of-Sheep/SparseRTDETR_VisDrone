@@ -532,5 +532,25 @@ def test_development_geometry_admits_1024_and_keeps_square_policy():
     for bad in (960, 1024.0, True):
         with pytest.raises(development.DevelopmentEvaluationError):
             development._input_size(bad)
-    with pytest.raises(development.DevelopmentEvaluationError, match='square'):
-        development._policy_input_size({'input_size': [768, 1344]})
+    with pytest.raises(development.DevelopmentEvaluationError, match='non-square'):
+        development._policy_input_size({'input_size': [1344, 768]})
+
+
+def test_development_a3b_canvas_is_height_then_width_and_squares_are_unchanged(files):
+    assert development._input_size((768, 1344)) == [768, 1344]
+    assert development._policy_input_size({'input_size': [768, 1344]}) == [768, 1344]
+    for bad in ([1344, 768], [768, 768], [768.0, 1344], [True, 1344], [768, 1344, 3]):
+        with pytest.raises(development.DevelopmentEvaluationError):
+            development._input_size(bad)
+    square = development._policy(896)
+    assert square["input_size"] == [896, 896] and square["transform"][0] == {"type": "Resize", "size": [896, 896]}
+    canvas = development._policy([768, 1344])
+    assert {k: v for k, v in canvas.items() if k not in ("input_size", "transform")} == {
+        k: v for k, v in square.items() if k not in ("input_size", "transform")}
+    assert canvas["input_size"] == [768, 1344] and canvas["transform"][0] == {"type": "Resize", "size": [768, 1344]}
+    binding = development.build_development_binding(**files, input_size=[768, 1344])
+    assert development.validate_development_binding(binding)["policy"] == canvas
+    dataset = development._DevelopmentDataset(binding)
+    pixels, target, _ = dataset.item(dataset.images[0])
+    assert list(pixels.shape) == [3, 768, 1344]
+    assert target["orig_size"].tolist() == [200, 100]
