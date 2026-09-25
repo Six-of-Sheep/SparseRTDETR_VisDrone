@@ -14,6 +14,12 @@ alias, and only its ``require_native_hardware_admission`` and the admitted
 device runtime cross into the bound package (``orchestration_imports``,
 ``reseal_runtime``). Model, data, optimizer and checkpoint code stay bound.
 
+``--bound-admission`` (instead of ``--orchestration-root``) is for runs whose
+own worktree already admits the current boot (the A3 1024 fresh run): the
+monitor, admission and device runtime import from the bound package itself,
+with no alias and no reseal, exactly as ``tools/v2b_fresh_run.py`` trained it.
+``check --policy-from`` validates that admission (monitor built, never started).
+
 Two optional runtime changes are supported and recorded; neither changes the
 bound model, data order, augmentation or checkpoint semantics:
 
@@ -325,6 +331,18 @@ def run_check(args: argparse.Namespace) -> int:
             report["preview"]["reference"] = "MATCH" if match else "MISMATCH"
             if not match:
                 report["status"] = "CHECK_FAIL"
+    if args.policy_from:
+        # Bound admission only: builds the monitor object, never starts it.
+        from sparse_rtdetr.baseline.training_v2b_admission import MonitoredHardwareSession
+        policy = policy_bundle(Path(args.policy_from))
+        evidence = Path("/tmp") / f"p3-fork-check-never-started-{os.getpid()}"
+        session = MonitoredHardwareSession(binding, policy, evidence, MONITOR_SCOPE,
+                                           MONITOR_SCOPE_LIMIT_SECONDS)
+        if session._state != "new" or evidence.exists():
+            raise SystemExit("admission check must not start the monitor")
+        report["admission"] = {"status": "ADMITTED_NOT_STARTED",
+                               "policy_sha256": session.policy["policy_sha256"],
+                               "authorization_sha256": policy["authorization_reference"]["sha256"]}
     print(json.dumps(report, indent=1, sort_keys=True))
     return 0 if report["status"] == "CHECK_PASS" else 1
 
@@ -339,12 +357,21 @@ def run_train(args: argparse.Namespace) -> int:
     binding = read_binding(checkpoint)
     repo = bound_repo(binding)
     start = identity(args, checkpoint, checkpoint_sha, binding, repo)
-    current, orchestration = orchestration_imports(Path(args.orchestration_root), repo)
     from sparse_rtdetr.baseline import training_v2b_device as bound_device
     from sparse_rtdetr.baseline.training_v2b import build_v2b_components
     from sparse_rtdetr.baseline.training_v2b_runtime import V2BTrainingSession
-    MonitoredHardwareSession = current["training_v2b_admission"].MonitoredHardwareSession
-    prepare_runtime = current["training_v2b_device"].prepare_runtime
+    if args.bound_admission:
+        from sparse_rtdetr.baseline import training_v2b_admission as bound_admission
+        current = None
+        orchestration = {"mode": "bound_admission",
+                         "admission": {"path": bound_admission.__file__,
+                                       "sha256": sha_file(Path(bound_admission.__file__))}}
+        MonitoredHardwareSession = bound_admission.MonitoredHardwareSession
+        prepare_runtime = bound_device.prepare_runtime
+    else:
+        current, orchestration = orchestration_imports(Path(args.orchestration_root), repo)
+        MonitoredHardwareSession = current["training_v2b_admission"].MonitoredHardwareSession
+        prepare_runtime = current["training_v2b_device"].prepare_runtime
 
     policy = policy_bundle(Path(args.policy_from))
     gpu_uuid = policy["gpu_uuid"]
@@ -369,7 +396,10 @@ def run_train(args: argparse.Namespace) -> int:
         monitor.start()
         admitted = prepare_runtime(device="cuda:0", seed=config.seed, binding=binding,
                                    gpu_probe=monitor.admission(), expected_gpu_uuid=gpu_uuid)
-        runtime, runtime_bridge = reseal_runtime(admitted, current["training_v2b_device"], bound_device)
+        if current is None:
+            runtime, runtime_bridge = admitted, None
+        else:
+            runtime, runtime_bridge = reseal_runtime(admitted, current["training_v2b_device"], bound_device)
         pretrained = binding["config"]["pretrained"]
         components = build_v2b_components(config, repo_root=repo, runtime=runtime,
                                           pretrained_path=Path(pretrained["path"]),
@@ -478,13 +508,17 @@ def parser() -> argparse.ArgumentParser:
         sub.add_argument("--lr-scale", type=float, default=1.0)
     check = commands.choices["check"]
     check.add_argument("--reference", help="campaign receipts/ dir or a fork/formal evidence dir")
+    check.add_argument("--policy-from", help="also validate the bound admission (monitor built, never started)")
     train = commands.choices["train"]
     train.add_argument("--target-epoch", type=int, required=True)
     train.add_argument("--output", required=True, help="new directory; must not exist")
     train.add_argument("--policy-from", required=True,
                        help="JSON with a reviewed policy_bundle (e.g. an R35 cell contract)")
-    train.add_argument("--orchestration-root", required=True,
-                       help=f"clean checkout at {ORCHESTRATION_COMMIT[:7]} (current-boot hardware admission)")
+    admission = train.add_mutually_exclusive_group(required=True)
+    admission.add_argument("--orchestration-root",
+                           help=f"clean checkout at {ORCHESTRATION_COMMIT[:7]} (current-boot hardware admission)")
+    admission.add_argument("--bound-admission", action="store_true",
+                           help="the bound worktree's own admission already admits the current boot")
     train.add_argument("--max-windows", type=int, default=0, help="GPU smoke: stop after N windows")
     train.add_argument("--save-every", type=int, default=1)
     train.add_argument("--deadline-seconds", type=int, default=MONITOR_SCOPE_LIMIT_SECONDS)
