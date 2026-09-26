@@ -133,3 +133,69 @@ $PY $T train --like $LIKE1 --input-size 1024 --target-epoch 30 --max-windows 20 
 $PY $T train --like $LIKE1 --input-size 1024 --target-epoch 30 \
     --policy-from <seed-1 policy bundle JSON> --num-workers 2 --output <new dir>
 ```
+
+## A3b: 16:9 canvas 1344×768 (branch `claude/p3-a3b-r768x1344`)
+
+A3b trains seed 0 on a non-square canvas of the same pixel budget as 1024²
+(1,032,192 vs 1,048,576 pixels) against the same seed-0 896 cell as A3a
+(`control-896`, checkpoint `104ed411…`).
+
+- Size convention: an integer `input_size` is a square, so every earlier
+  binding keeps its bytes. The only non-square size is the explicit list
+  `[H, W] = [768, 1344]`; `[1344, 768]` and other lists are rejected by the
+  config, loader, evidence, development evaluator and admission. On the
+  command line: `--input-size 768x1344` (height first); run ids use
+  `r768x1344`.
+- Vendor position embedding: `HybridEncoder.build_2d_sincos_position_embedding`
+  flattens a `(w, h)` meshgrid, which matches the encoder's row-major `[H, W]`
+  token order only when `h == w`. On 24×42 tokens (stride 32) it wraps every
+  24 tokens, e.g. token (row 0, column 24) gets the code of (1, 0). For a
+  non-square canvas only, `_build_vendor_objects` installs an instance override
+  (`_row_major_position_embedding`) that lays the grid out in token order; it is
+  bitwise the vendor embedding on squares (24², 28², 32² checked), vendor files
+  are unchanged, and `validate_model_geometry` checks the override and its cache.
+  Decoder anchors already use `(eval_h, eval_w)` correctly.
+- Authority: `_RESOLUTION_768X1344_AUTHORIZATION_SHA` names
+  `P3_A3B_AUTHORIZATION_20260926/user-768x1344-authorization.txt`
+  (2631 bytes, `1d707bd4…`), written by Claude under the owner's in-session
+  delegation; external admin mode, same scopes as 1024, exact
+  `input_size=[768, 1344]`, 8 × 2, seed 0. A list `input_size` is admitted by no
+  other authority.
+- Policy bundle: `P3_A3B_AUTHORIZATION_20260926/policy-bundle-768x1344.json`
+  (bundle `1a749476…`, policy `c90713f8…`); hardware fields equal to R35 and to
+  the seed-0 1024 bundle except the authorization.
+
+CPU verification (2026-09-26, commit 52ec2e0, worktree
+`SparseRTDETR_VisDrone_v2b_a3b_20260926`):
+
+- Tests: the four v2b test files give 456 passed, 1 skipped, 1 failed; the
+  failure (`test_engineering_checker_never_reads_runtime_artifact_contents`,
+  repository contract) also fails on afb65cb, which gives 429 passed with the
+  same skip. No test that passes on afb65cb fails here.
+- 896 reproduction: initial weights `c5e1477e…`, config 0 differences, epoch 1
+  window 1 `augmented_sha256` `ca76c65e…` equal to the s0_r896 history; the
+  loader binding differs only in the source SHAs of `training_v2b.py` and
+  `training_v2b_data.py`.
+- 768×1344 check: CHECK_PASS, `ADMITTED_NOT_STARTED` (policy `c90713f8…`),
+  anchors `[1, 21168, 4]`, `pos_embed2` `[1, 1008, 256]`, only `input_size`
+  changed against the reference.
+- Rejected as intended: a 768×1344 binding under the seed-0 1024 policy, a 1024
+  binding under the 768×1344 policy, and `--input-size 1344x768`.
+- Evaluator regression: seed0-r896-e030 EMA re-evaluated from this worktree has
+  the same `prediction_sha256` and metrics (COCO AP 22.9430, AP_small 15.4018) as
+  `P3_A3_BASELINE_EVAL`; the development binding differs only in `repo_root` and
+  the source SHA of `training_v2b_development.py`.
+- Pipeline acceptance (not a result): the 896 e030 weights with the two
+  size-determined decoder buffers replaced, evaluated on the 768×1344 canvas,
+  score 548 images (EMA COCO AP 19.23, AP_small 14.04).
+
+```bash
+LIKE0=/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone_v2b_896_20260914t110022z/artifacts/training/v2b896-20260914t134105z-749f804e/execution/control-896/checkpoint-epoch-030.pt
+P=/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B_AUTHORIZATION_20260926/policy-bundle-768x1344.json
+
+$PY $T check --like $LIKE0 --input-size 768x1344 --policy-from $P --num-workers 0
+$PY $T train --like $LIKE0 --input-size 768x1344 --target-epoch 30 --max-windows 20 \
+    --policy-from $P --num-workers 2 --output <new dir>
+$PY $T train --like $LIKE0 --input-size 768x1344 --target-epoch 30 \
+    --policy-from $P --num-workers 2 --output <new dir>
+```
