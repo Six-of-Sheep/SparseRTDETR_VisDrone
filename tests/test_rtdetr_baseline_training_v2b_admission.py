@@ -1746,11 +1746,11 @@ def a3b_bound(bound, **changes):
     return bound
 
 
-def test_resolution_768x1344_authority_is_unnamed_until_reviewed(policy_bundle, external_receipt, tmp_path):
-    assert ad._RESOLUTION_768X1344_AUTHORIZATION_SHA is None
+def test_resolution_768x1344_authority_names_only_its_reviewed_file(policy_bundle, external_receipt, tmp_path):
+    assert ad._RESOLUTION_768X1344_AUTHORIZATION_SHA == "1d707bd4f15c0905a9a594f475905c1a09dc426609b09c2c79cbe994703b0e10"
     assert ad._RESOLUTION_768X1344_DIMENSIONS == A3B_DIMENSIONS
     auth = tmp_path / "resolution-768x1344-authorization.txt"
-    auth.write_text("CPU fixture: unreviewed 768x1344 request\n")
+    auth.write_text("CPU fixture: a different, unreviewed 768x1344 request\n")
     with pytest.raises(ad.MonitoredHardwareError, match="explicit execution authorization reference differs"):
         ad.build_policy_bundle(Path(policy_bundle["authority"]["path"]).parent,
                                authorization_reference=ev.file_reference(auth),

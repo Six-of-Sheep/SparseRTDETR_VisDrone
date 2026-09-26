@@ -59,10 +59,11 @@ _RESOLUTION_1024_DIMENSIONS = {"input_size": 1024, "physical_batch_size": 8, "ac
 # Each 1024 authority admits only its own seed.
 _RESOLUTION_1024_SEED1_AUTHORIZATION_SHA: str | None = "6ebf8cf941399d97cc62a17644ffa91503bc57217accd7438a1d876d7786dfa3"
 _RESOLUTION_1024_SEED1_DIMENSIONS = {**_RESOLUTION_1024_DIMENSIONS, "seed": 1}
-# A3b (seed 0, 16:9 canvas [H, W] = [768, 1344], physical 8 x accumulation 2).
-# None until the authorization file exists and its SHA-256 is reviewed here;
-# while None, no policy can name it and no non-square workload is admitted.
-_RESOLUTION_768X1344_AUTHORIZATION_SHA: str | None = None
+# A3b (seed 0, 16:9 canvas [H, W] = [768, 1344], physical 8 x accumulation 2):
+# user-768x1344-authorization.txt (P3_A3B_AUTHORIZATION_20260926, 2631 bytes),
+# written 2026-09-26 by Claude under the owner's explicit in-session delegation.
+# Setting this back to None makes every non-square policy unnamed again.
+_RESOLUTION_768X1344_AUTHORIZATION_SHA: str | None = "1d707bd4f15c0905a9a594f475905c1a09dc426609b09c2c79cbe994703b0e10"
 _RESOLUTION_768X1344_DIMENSIONS = {"input_size": [768, 1344], "physical_batch_size": 8,
                                    "accumulation_steps": 2, "seed": 0}
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
