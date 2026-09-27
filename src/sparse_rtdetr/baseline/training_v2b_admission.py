@@ -66,6 +66,12 @@ _RESOLUTION_1024_SEED1_DIMENSIONS = {**_RESOLUTION_1024_DIMENSIONS, "seed": 1}
 _RESOLUTION_768X1344_AUTHORIZATION_SHA: str | None = "1d707bd4f15c0905a9a594f475905c1a09dc426609b09c2c79cbe994703b0e10"
 _RESOLUTION_768X1344_DIMENSIONS = {"input_size": [768, 1344], "physical_batch_size": 8,
                                    "accumulation_steps": 2, "seed": 0}
+# A3b seed replication (seed 1, otherwise the same dimensions):
+# user-768x1344-seed1-authorization.txt (P3_A3BS1_AUTHORIZATION_20260927, 2939 bytes),
+# written 2026-09-27 by Claude under the owner's explicit in-session decision.
+# Each 768x1344 authority admits only its own seed.
+_RESOLUTION_768X1344_SEED1_AUTHORIZATION_SHA: str | None = "c3bac97be90f4c94db84b7ffce45577b2298531e749eb798976d4e37660eae96"
+_RESOLUTION_768X1344_SEED1_DIMENSIONS = {**_RESOLUTION_768X1344_DIMENSIONS, "seed": 1}
 _EXTERNAL_ADMIN_ATTESTATION_SHA = "a286392394db454370c77ed738c1a5b0155ea63b89fca3cd941870cbfb0a8300"
 _EXTERNAL_CLOCK_RECEIPT_SHA = "aed11ff98f0b8e5478cc757e6f5929e22405972e535c97f1c586d9ec5c51847c"
 _EXTERNAL_CLOCK_RECEIPT_V2_SHA = "be59e1cc6bf143f0351b8f72d8f4ec57681aad9ca500afd4fcbd0e994c9ce3f5"
@@ -154,6 +160,15 @@ def _resolution_1024_dimensions(authorization_sha: Any) -> dict[str, int] | None
     return None
 
 
+def _resolution_768x1344_dimensions(authorization_sha: Any) -> dict[str, Any] | None:
+    """Exact bound dimensions of the reviewed 768x1344 authority named by this SHA, if any."""
+    for sha, dimensions in ((_RESOLUTION_768X1344_AUTHORIZATION_SHA, _RESOLUTION_768X1344_DIMENSIONS),
+                            (_RESOLUTION_768X1344_SEED1_AUTHORIZATION_SHA, _RESOLUTION_768X1344_SEED1_DIMENSIONS)):
+        if sha is not None and authorization_sha == sha:
+            return dimensions
+    return None
+
+
 def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: str = "direct",
                         authorization_reference: Mapping[str, Any],
                         external_clock_receipt: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -177,7 +192,7 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
         _RESOLUTION_EVIDENCE_AUTHORIZATION_SHA: {**_SCOPES, "development_cross_eval": 1800},
     }
     for sha in (_RESOLUTION_1024_AUTHORIZATION_SHA, _RESOLUTION_1024_SEED1_AUTHORIZATION_SHA,
-                _RESOLUTION_768X1344_AUTHORIZATION_SHA):
+                _RESOLUTION_768X1344_AUTHORIZATION_SHA, _RESOLUTION_768X1344_SEED1_AUTHORIZATION_SHA):
         if sha is not None:
             # Same hardware scopes as 896; the workload dimensions are bound at admission.
             authorizations[sha] = _SCOPES
@@ -195,8 +210,7 @@ def build_policy_bundle(reference_dir: str | os.PathLike[str], *, setter_mode: s
     if (_resolution_1024_dimensions(authorization_reference["sha256"]) is not None
             and setter_mode != _EXTERNAL_ADMIN_MODE):
         raise MonitoredHardwareError("1024 authorization requires external_admin_acknowledged; native clock setters are not authorized")
-    if (_RESOLUTION_768X1344_AUTHORIZATION_SHA is not None
-            and authorization_reference["sha256"] == _RESOLUTION_768X1344_AUTHORIZATION_SHA
+    if (_resolution_768x1344_dimensions(authorization_reference["sha256"]) is not None
             and setter_mode != _EXTERNAL_ADMIN_MODE):
         raise MonitoredHardwareError("768x1344 authorization requires external_admin_acknowledged; native clock setters are not authorized")
     root = Path(reference_dir).absolute()
@@ -1645,17 +1659,16 @@ class MonitoredHardwareSession:
                    or self.binding["config"][key] != value for key, value in dimensions.items()):
                 raise MonitoredHardwareError("1024 authorization requires exact bound "
                                              + ", ".join(f"{key}={value}" for key, value in dimensions.items()))
-        a3b_authority = (_RESOLUTION_768X1344_AUTHORIZATION_SHA is not None
-                         and self.policy["authorization_reference"]["sha256"] == _RESOLUTION_768X1344_AUTHORIZATION_SHA)
-        if type(self.binding["config"].get("input_size")) is list and not a3b_authority:
+        dimensions = _resolution_768x1344_dimensions(self.policy["authorization_reference"]["sha256"])
+        if type(self.binding["config"].get("input_size")) is list and dimensions is None:
             raise MonitoredHardwareError("a non-square input_size is admitted only by the reviewed 768x1344 authorization")
-        if a3b_authority:
+        if dimensions is not None:
             config = self.binding["config"]
             if any(type(config.get(key)) is not type(value) or config[key] != value
                    or (type(value) is list and any(type(v) is not int for v in config[key]))
-                   for key, value in _RESOLUTION_768X1344_DIMENSIONS.items()):
-                raise MonitoredHardwareError("768x1344 authorization requires exact bound input_size=[768, 1344], "
-                                             "physical_batch_size=8, accumulation_steps=2, seed=0")
+                   for key, value in dimensions.items()):
+                raise MonitoredHardwareError("768x1344 authorization requires exact bound "
+                                             + ", ".join(f"{key}={value}" for key, value in dimensions.items()))
         if authorized_scope == "synthetic_operator_diagnostic" and self.binding["data"]["kind"] != "synthetic":
             raise MonitoredHardwareError("synthetic operator diagnostic requires a synthetic input binding")
         if self.binding["config"].get("cuda_gpu_uuid") != self.policy["gpu_uuid"]:
