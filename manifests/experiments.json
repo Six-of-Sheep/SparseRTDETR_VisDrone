@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-16",
+  "repository": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone",
+  "report_root_relative_to_project": "workspace_management/delivery/experiments/localization-distribution",
+  "source_import": {
+    "commit": "a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7",
+    "manifest": "manifests/imports/r18-seed12-release-002.json",
+    "manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
+    "files": 317,
+    "kind": "retrospective_byte_exact_import"
+  },
+  "experiments": [
+    {
+      "id": "rtdetrv2-r18-common-protocol-seed0-e120-20261013-001",
+      "role": "primary_development_baseline",
+      "result_status": "seed0_e120_evaluated",
+      "source_commit": null,
+      "source_manifest_sha256": "ee1204a2c47f768baebfb6f93f2227cdc1ddb59c3173bbc8bfc37363a08175d4",
+      "report": "rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/REPORT_FINAL.md"
+    },
+    {
+      "id": "r18-sahi-fixed-20261016-001",
+      "role": "fixed_sliced_inference_control",
+      "result_status": "single_seed_development_screen_pass",
+      "source_commit": null,
+      "source_manifest_sha256": "2c9c37b6d9ed60c23401f4dd467dfcfa112a91b24d2df83be4fd937dc8d0ead4",
+      "report": "r18-sahi-fixed-20261016-001/REPORT.md"
+    },
+    {
+      "id": "r18-sahi-seed12-20261016-001",
+      "role": "paired_seed1_seed2_replication",
+      "result_status": "started_final_results_pending_at_snapshot",
+      "source_commit": "a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7",
+      "git_binding_kind": "retrospective_import_not_original_launch_binding",
+      "source_manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
+      "report": "r18-sahi-seed12-20261016-001/REPORT_RUNNING.md"
+    },
+    {
+      "id": "rtdetrv2-r18-mal-continue-20261015-001",
+      "role": "classification_loss_control",
+      "result_status": "e120_complete_overall_scientific_gate_fail",
+      "source_commit": null,
+      "source_manifest_sha256": null,
+      "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    }
+  ]
+}
