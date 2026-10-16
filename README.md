@@ -38,13 +38,15 @@ C−A为AP +1.975pp、APS +2.793pp；固定64图匹配端到端耗时4.67×。�
 
 ## 本地管理检查
 
-需要Git和Python 3.10+，以下检查无需PyTorch。模型环境另按原依赖绑定。
+管理工具只需要Git和Python 3.10+；切片测试另需NumPy。CI使用Python 3.10/3.12及environment/requirements-ci.txt，不要求PyTorch。模型环境另按原依赖绑定，不能将测试依赖安装命令用于覆盖训练环境。
 
 ```bash
 python -B tools/repo_manage.py status
 python -B tools/repo_manage.py check
 python -B tools/repo_manage.py verify-import
 python -B -m unittest discover -s tests -p test_repo_management.py
+# 在独立的Python 3.10/3.12 CPU测试环境中安装：
+python -m pip install -r environment/requirements-ci.txt
 python -B test_slice_core.py
 python -B test_seed_readout.py
 ```

@@ -1,0 +1,3 @@
+# CPU slice tests only; not the model/training environment.
+# NumPy 1.26.4 supports the CI Python 3.10/3.12 matrix.
+numpy==1.26.4
