@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "import_kind": "retrospective_byte_exact_not_a_new_experiment",
+  "experiment_id": "r18-sahi-seed12-20261016-001",
+  "release": "release-002",
+  "source_manifest": "manifests/imports/r18-seed12-release-002.json",
+  "source_manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
+  "source_files": 317,
+  "source_bytes": 4591139,
+  "original_run_was_not_bound_to_this_git_import": true,
+  "original_runtime_paths_and_contracts_unchanged": true,
+  "original_evidence": "r18-sahi-seed12-20261016-001/metadata-return-001-SOURCE_CHECK.json",
+  "state_at_import": "CPU and seed1 GPU acceptance passed; multi-seed scientific results pending",
+  "not_portable_without_external_data_environment_and_new_contract": true,
+  "upstream_license": "vendor/rtdetrv2_pytorch/LICENSE"
+}

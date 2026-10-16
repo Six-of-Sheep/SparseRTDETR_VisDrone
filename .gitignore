@@ -1,5 +1,5 @@
-data/
-datasets/
+/data/
+/datasets/
 runs/
 outputs/
 artifacts/
@@ -28,3 +28,14 @@ logs/
 *.swo
 .DS_Store
 Thumbs.db
+.claude/
+.codex/
+*.pem
+*.key
+.ssh/
+*.tar
+*.tar.gz
+*.zip
+/local/
+/tmp/
+/scratch/

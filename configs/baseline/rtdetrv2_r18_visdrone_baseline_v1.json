@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "baseline_contract": {
+    "baseline_id": "rtdetrv2_r18_visdrone_baseline_v1",
+    "upstream_implementation": "vendored RT-DETRv2 PyTorch",
+    "backbone": "PResNet-18",
+    "encoder": "HybridEncoder",
+    "decoder": "RTDETRTransformerv2",
+    "decoder_layers": 3,
+    "num_queries": 300,
+    "num_classes": 10,
+    "feature_strides": [8, 16, 32],
+    "hidden_dim": 256,
+    "num_feature_levels": 3,
+    "deformable_sampling_points": [4, 4, 4],
+    "engineering_input_size": [640, 640],
+    "pretrained": false,
+    "checkpoint": null,
+    "postprocess": "sigmoid_plus_global_top_k",
+    "num_top_queries": 300,
+    "nms": false,
+    "roles": {
+      "train": "train_core",
+      "development": "development",
+      "confirmatory": "sealed_and_forbidden",
+      "test": "forbidden"
+    },
+    "evaluators": {
+      "primary": "visdrone_official_style_v1",
+      "secondary": "coco_secondary_vendor_v1",
+      "secondary_equivalent_to_primary": false
+    },
+    "formal_training_configuration_frozen": false,
+    "model_selection_certified": false,
+    "speed_measurement_ready": false,
+    "upstream_default_num_classes": 80,
+    "upstream_default_parameter_count": 20184464,
+    "visdrone_num_classes": 10,
+    "visdrone_parameter_count": 20094584,
+    "class_dependent_parameter_delta": 89880,
+    "parameter_count_scope": "random_initialized_no_checkpoint",
+    "parameter_count_reconciliation_status": "UPSTREAM_80_CLASS_VS_VISDRONE_10_CLASS_SEPARATED"
+  },
+  "vendor": {
+    "implementation": "rtdetrv2_pytorch",
+    "upstream_commit": "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47",
+    "r18_config": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+    "r18_config_sha256": "93182eb778c58346e31b947dec4cb7e673373d3d93210d271a10cc1c6043a1e9",
+    "r18_include": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml",
+    "r18_include_sha256": "57b7fe0920b8c3046f66981f503045023ec68cff0148c88caf7b1e40c9b117c4"
+  },
+  "r3_binding": {
+    "artifact_root": "artifacts/data/visdrone_protocol_v2_conversion_r3",
+    "completion_sha256": "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817",
+    "artifact_inventory_sha256": "aaee01ce4e00749b9db8ac5e6e49cf35875a8b266e9c3efc237bdf0b8b109ae7",
+    "entry_canonical_inventory_sha256": "ddf32745302d6095e1c3dde89b1a85f05db53e6b4cc8ee85638e0d45bfa8d982",
+    "config_sha256": "58be8659d6d7ae6faace82b36d45523f80cd48bae1bbcc6da4586c53056ec0d0",
+    "category_contract_sha256": "b4b309f357cbe130a505a610dff340cc498dc74f766384c4559b2acd900728a0",
+    "source_identity_sha256": "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9"
+  },
+  "model": {
+    "type": "RTDETR",
+    "backbone": "PResNet",
+    "encoder": "HybridEncoder",
+    "decoder": "RTDETRTransformerv2",
+    "decoder_layers": 3,
+    "num_queries": 300,
+    "num_classes": 10,
+    "feature_strides": [8, 16, 32],
+    "hidden_dim": 256,
+    "num_feature_levels": 3,
+    "deformable_sampling_points": [4, 4, 4],
+    "engineering_input_size": [640, 640],
+    "PResNet": {
+      "depth": 18,
+      "pretrained": false
+    },
+    "postprocessor_type": "VisDronePostProcessor",
+    "dataset_type": "VisDroneCocoDetection",
+    "remap_mscoco_category": false
+  },
+  "roles": {
+    "train_core": {
+      "annotation": "train_core_coco.json",
+      "status": "allowed"
+    },
+    "development": {
+      "annotation": "development_coco.json",
+      "status": "allowed"
+    },
+    "confirmatory": {
+      "annotation": null,
+      "status": "sealed_and_forbidden"
+    },
+    "test": {
+      "annotation": null,
+      "status": "forbidden"
+    }
+  },
+  "evaluators": {
+    "primary": {
+      "id": "visdrone_official_style_v1",
+      "status": "not_implemented",
+      "nms": false
+    },
+    "secondary": {
+      "id": "coco_secondary_vendor_v1",
+      "status": "diagnostic_only",
+      "equivalent_to_primary": false,
+      "nms": false
+    }
+  },
+  "notes": [
+    "640x640 is the first engineering smoke candidate, not a final paper-optimal input size.",
+    "No formal schedule, batch size, optimizer, epoch count, or acceptance threshold is frozen.",
+    "This adapter is a dense baseline; top-k selection does not imply sparse computation.",
+    "Confirmatory remains sealed and test remains forbidden for this stage."
+  ]
+}

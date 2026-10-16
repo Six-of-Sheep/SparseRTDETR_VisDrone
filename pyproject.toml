@@ -9,6 +9,9 @@ description = "Research contracts and skeleton for real sparse VisDrone detectio
 requires-python = ">=3.10,<3.12"
 dependencies = []
 
+[project.scripts]
+visdrone-converter = "sparse_rtdetr.data_protocol.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

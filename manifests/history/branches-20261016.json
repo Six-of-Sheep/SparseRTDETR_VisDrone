@@ -1,0 +1,557 @@
+{
+  "as_of": "2026-10-16",
+  "inventory_after_fetch": true,
+  "note": "Old branch references preserved; no deletion or merge implied. Not a live branch list.",
+  "branches": [
+    {
+      "branch": "claude/p3-a3-r1024",
+      "commit": "1bd3bef08cb2b77c39dca2e17bc4dce44b476216",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "claude/p3-a3-r1024-s1",
+      "commit": "afb65cb6dbde6599508024eb6f42534876fc19d9",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "claude/p3-a3b-r768x1344",
+      "commit": "92365fdf3539d4e6dc9b1a843373e9a1fa022cea",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "claude/p3-a3b-r768x1344-s1",
+      "commit": "b133cd78127950439a0ab9a836447ff1099be686",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "claude/p3-v2b-fork-tool",
+      "commit": "3a63339f0cc24b8ed0db7aa62143d3de9d499810",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetr-baseline-adapter-r1",
+      "commit": "4c59c7bfcbbc00e2132d4c47bd5b98e51001c3b6",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-formal-training-contract-t1-r1",
+      "commit": "1f8ad2ac23488fbdb212ed5e09ba9a500a4624d8",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-prepared-trainer-adapter-t5c-r1",
+      "commit": "e5d1535af8e9eca6a9d093066b58846242630ccc",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-primary-evaluator-v1-authority-manifest-binding-r4-repair",
+      "commit": "036cca4d127ddd9e10e3cc7900c3eb759b55f59f",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-primary-evaluator-v1-integrity-r2-repair",
+      "commit": "46bffa77e452745c36dc1f61c772659e92086d28",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-primary-evaluator-v1-path-closure-r3-repair",
+      "commit": "5b2449add82b9853bc43f92642e243c3e66ba025",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-primary-evaluator-v1-t3-r1",
+      "commit": "669e853e8f63f2b4d7a3d28a6e5bf6fe7fbb013f",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r2-evidence-validator-r3-repair",
+      "commit": "ad917d51ffe6815dc9a676445151b80bf09fd6ad",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r2-outer-launch-evidence-r1",
+      "commit": "1c7db7bba66af576c63c7b4bc5893e6330a55699",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r2-outer-launch-evidence-r2-repair",
+      "commit": "7662a6973cc3aaad0986d38156f19d25d53f2dfc",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r2-pane-integrity-r4-repair",
+      "commit": "c4583810ce5f21afd71707523bed9174a4067225",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r2-pane-terminal-marker-r5-repair",
+      "commit": "0b0e0048e5389a0133986d8011e38ded76d9d10f",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r3-child-argv-repair-r1",
+      "commit": "baf96f719e4b1cb954fe7883ea1fc3da30d4adeb",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r3-entry-config-binding-r1",
+      "commit": "9f3eb28f996d39956c881feea32ed18bd1ad0acb",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-r3-versioned-runtime-path-r1",
+      "commit": "8d1e98f6b40f04400cc342c69ead57d2b76862c9",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-v4-contract-r1",
+      "commit": "6272a7755ab4d2725bda13bd13c888892b0f53d1",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-v5-contract-r1",
+      "commit": "5822e8549912522caaae23bcba628811e7da1725",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-v6-contract-r1",
+      "commit": "357b6d33b362d37c831e28c6349d8706d43cae4a",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-v7-dual-gate-contract-r1",
+      "commit": "8f8c0e6abe9acb748a68a073975f0410ba3066ac",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-smoke-v7-snapshot-integrity-r2-repair",
+      "commit": "44f864aad36f338e0b2bbb0754433376c557f05f",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-amp-parameters-t2-r1",
+      "commit": "24548b83d3b374767bdfa6d20d48b57566ad2596",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-closed-schema-r2-repair",
+      "commit": "0b37a604f090605225dcdeac857d4e3d2e3e3c56",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-conversion-r3-runtime-binding-r7-repair",
+      "commit": "639aa2b5fd55fc87cfec71a1103668d20dec231b",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-cross-field-semantics-r4-repair",
+      "commit": "f822b4209f6266ebf5ab256581525c1c00d4a602",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-numeric-semantics-r3-repair",
+      "commit": "1074ecd4e000159831cec5c1e90c937df05474c8",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-primary-evaluator-binding-t4-r1",
+      "commit": "affc9410913fd97a9c8b78b4b7ea8e651e0adc72",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-runtime-path-identity-r5-repair",
+      "commit": "f802a204892671d3e806df6c861b2d80abf931a3",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-contract-vendor-runtime-binding-r6-repair",
+      "commit": "d3fc3b73c046c6f4f681c562d14b722c5b30cc64",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-evidence-checkpoint-t5b-r1",
+      "commit": "5dc26bce3d64a5b4cb9dcb70c3cf12fc4988daea",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-process-launcher-t5d-r1",
+      "commit": "0bd5d982b4c5e5cc94af445bea05f4d125630a03",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-runtime-plan-t5a-r1",
+      "commit": "daefc2e4aa5c4cbd72c6691dabaeb8d8a5910df7",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6-authorization-contract-r1",
+      "commit": "fbdbc4651410b9c472e496fc187a9cb14679402a",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6-contract-binding-integrity-r10-repair",
+      "commit": "5450d0dd85eb9fdfa28979e4b0bb4d7f0ffac7e1",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-capability-integrity-r4-repair",
+      "commit": "5df64fc57c87e828213913bfaa15a499b6210b35",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-engine-claim-durability-r5-repair",
+      "commit": "6932ba10505cd0560645e50ea3afa456164929cc",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-engine-claim-identity-r6-repair",
+      "commit": "1ecf1ca301dd1f206907589002766433d563b201",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-production-boundary-r1",
+      "commit": "3fc12eff9d3e96b36d568cebdc201ba97a62791c",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-production-call-chain-r7-repair",
+      "commit": "910779f7feb9e7138240ce85e8727a9339ba7791",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-runtime-binding-r3-repair",
+      "commit": "b66f3992d702c7b2501faa6608700cfb569a9ab9",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-strict-scalar-r8-repair",
+      "commit": "433858885eaf14cb6589b832d69cdb231e5af56b",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-training-t6b-vendor-component-config-r10-fix",
+      "commit": "12e54cdd04b3e50285f9890a81840e2d527d2d8f",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-exactly-once-launcher-t7e-r1",
+      "commit": "aa22842e7a9ab1201722e598f9098c37826b9259",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-frozen-contract-t7b-r1",
+      "commit": "d23e02af44b41178282c90a04e189770ada66fe7",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-interruption-loss-evidence-r4-repair",
+      "commit": "c1efd152897bd478e97b1faf66413e959eb4139c",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-loss-repair-pilot-t7h-r1",
+      "commit": "30b176d8ba274a184ede356802688d8c36834fec",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-preweighted-loss-aggregation-t7g-r1",
+      "commit": "476e224cadebf8787a10c38dd9a0823808b56d48",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-production-boundary-t7d-r1",
+      "commit": "5b98d76324e346ac8e2fde015a74079d42bdad4d",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-real-runtime-t7f-r1",
+      "commit": "e1d123fe3162001f14f028a7912aa21e16cdda11",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-baseline-v2a-runtime-integration-t7c-r1",
+      "commit": "080d15f24c95d257134404dac3256472ef68ee38",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-env-r2",
+      "commit": "7da505cf8693039f833c28cd0d6fac5a383a04ef",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-r18-visdrone-baseline-smoke-harness-r1",
+      "commit": "21d3b007b34bea4c435c5952f0c432d7b9cac784",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-r18-visdrone-baseline-smoke-harness-r2-repair",
+      "commit": "999184204664868ba9748a16a2fbf1ef90915645",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-r18-visdrone-baseline-smoke-harness-r3-data-root-binding",
+      "commit": "c3628d8a7248f564fbf4d8961755512b8fc61489",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-child-argv-handoff-binding-repair-r1",
+      "commit": "2ab97b51b1444d8c4154e4f373564b2241b9b750",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-entry-canonical-helper-repair-r1",
+      "commit": "dc405c1354f64fa0a449840fba0a25e26e07bed0",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-entry-model-observation-binding-r3-repair",
+      "commit": "de24b677354cf36aa7e8fe67c4643ceaf25952c4",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-entry-model-state-finiteness-r4-repair",
+      "commit": "1a8fa7d0aed6964d2e3d2fff5722c1c1c8d2afd5",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-entry-scientific-evidence-schema-r1",
+      "commit": "74d29672d5c2a950b3f2ad2c061dfddf43e817d8",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-entry-scientific-evidence-schema-r2-repair",
+      "commit": "0f3a3dcc60a6a4de2975f87218cae4ba9d38b025",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-entry-test-artifact-independence-r1",
+      "commit": "e5459b499e7c39be6e81aeb131be80aff2feedbe",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-exclusive-durable-receipt-claim-r1",
+      "commit": "9a45f466593936be8e1ef811ab143012e4f16f70",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-frozen-real-state-helper-r5-repair",
+      "commit": "3b8bb44608ad0e61d1c45359aaa669411998137d",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-inner-contract-check-duplicate-config-rejection-r1",
+      "commit": "b885edf62c5828bd62a8c352680c7dfd9beac6b3",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-inner-contract-check-explicit-config-cli-r1",
+      "commit": "d0b9609c180ba00a20ff67048bba58f5e9eafec5",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-inner-contract-check-no-abbrev-r1",
+      "commit": "b2784e1f618dba89543e7ebfa2c98da1eb32c1a6",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-v4-cross-layer-nonce-binding-r1",
+      "commit": "22186f21474882f7952064544107a9fddf56e937",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-smoke-v4-schema-version-type-repair-r1",
+      "commit": "dc481572e538194d48c3d5a98e01f6de286b341f",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-training-checkpoint-authority-binding-t5b-r1-repair",
+      "commit": "3f20adcd59c368bc9fd8de122c68a2c749a12a60",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-vendor-r1",
+      "commit": "7653fca41a81787fd083781137c9ce56ffe9ebc2",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-visdrone-runtime-path-adapter-r1",
+      "commit": "06fc403005ddfe9fbcffe13264c7996145b2cfa2",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-rtdetrv2-visdrone-runtime-path-adapter-r2-symlink-repair",
+      "commit": "0f206e770d991529743af936e1a6a5526cef2c52",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-896-matched-20260914t110022z",
+      "commit": "bda8c42b15c14ec94063fd091ff0d6072a5a75ac",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-engineering-foundation",
+      "commit": "858cf2b25cad8fc5e2efed60925c0ee06050dcaa",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-capability-owner-r6",
+      "commit": "9247aa9888835072e121bb3b1d23fae1aa1d1a5c",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-capability-unified-r7",
+      "commit": "2efc93f842f61acfda921caa53ae6dd5ba8fcde3",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-continuation-t8a-engineering",
+      "commit": "19b9391e5406dae90ff61f0a64015fde50fdb0a9",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-continuation-t8b-execution-parent-r1",
+      "commit": "4f2ece0fb76734357de2b2db3ef2fd2fbe74a4ab",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-current-boot-authority-r4",
+      "commit": "f521ee6f6853d6ee4334e8f4656f0a28cf1daf51",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-loader-worker-r13-repair",
+      "commit": "87d4ce80c4fbaa8b76972f2f8ed317135d8ddab2",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-monitor-completion-closure-r3",
+      "commit": "23d951e094651a6a9f2d5b399ef2c5dbdae5b127",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-monitor-publication-race-r12-repair",
+      "commit": "855ad956fd95131782b680a4e8de044fea830ec5",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-orchestration-monitor-r5",
+      "commit": "7d93a8db171583c8da5f89b6807034d463f71435",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-r10-monitor-final-repair-r1",
+      "commit": "7987d16c6767d19e0e12c033410bd46169b1e234",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-runtime-bridge-r8-repair",
+      "commit": "2d35b1ae6b48d6f6fe584ede81c07d7cfb3f63be",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-epoch60-startup-environment-closure-r2",
+      "commit": "1fb4be10a61f772c85e78475e0c7d2b0bd32221e",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-eval-device-fix-20260914t185616z",
+      "commit": "200904df11e694c0ecb530a655b8a0afc087a20e",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-evidence-seeds-20260914t173831z",
+      "commit": "68fb393772871d30f275e80275b6eed1a5483c46",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-paired-seeds-20260914t184646z",
+      "commit": "747565458d41bd021de8fb42d44cf8ce197a945e",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-seed2-historical-control-20260915t225518z",
+      "commit": "6f0b89101c21facb1ae7ab66755ff9fb58c35a06",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-authority-manifest-r18-repair",
+      "commit": "8e25c789bb53cc2c2f2c78390a9c0683c78216a4",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-development-endpoint-r32-repair",
+      "commit": "eda97dd4b183ddb941b43c44e3154a04c16a84f0",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-development-policy-r34-repair",
+      "commit": "217da687a3e377ee0b2090c7be727469cb389e4b",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-external-clock-r20-repair",
+      "commit": "c9f54ffb9adcdf69da12ed7d5bdc6e508db6892a",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-hardware-alias-r22-repair",
+      "commit": "cfea6da3383381ae4a7ee0dd1426d431524bb6b8",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-hardware-dispatch-r25-repair",
+      "commit": "ba44c9d8fc8b5410cdddbf73b9baab8e3952819e",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-hardware-gate-bridge-r1",
+      "commit": "78529ff4fdd36433d8824d2e1a481512b17eaba8",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-replay-evidence-index-r31-repair",
+      "commit": "d98d93fcde452f289e64b6c341f0b2a349847e60",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-runtime-validator-bridge-r29-repair",
+      "commit": "d47ec6cf2dbf7f2d0aac76440dba33f127659dc6",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-smoke-midpoint-r30-repair",
+      "commit": "b5dcb4b0e9b9336f7d7d406b8e526b8441b7def3",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-v2b-t8b-worker-hardware-bridge-r27-repair",
+      "commit": "b74c64ecbdbf139782b1f9a4f3eb667ba5c16cc1",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-visdrone-converter-r1",
+      "commit": "90e8546f765855c83783bba48b9c2e280a5c5a31",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-visdrone-converter-r2-repair",
+      "commit": "da4d514c730f48cba287c953b0251968567b040c",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/p3-visdrone-data-protocol-r1",
+      "commit": "6db49acc23ca391a312b5dcdb28846b4d5e81309",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "codex/rtdetrv2-baseline-smoke-v6-contract-r1",
+      "commit": "357b6d33b362d37c831e28c6349d8706d43cae4a",
+      "classification": "historical_preserved_not_deleted"
+    },
+    {
+      "branch": "main",
+      "commit": "e6f07ef898989a4b5404221b2aedc2b07b307a6e",
+      "classification": "default_at_inventory"
+    }
+  ]
+}
