@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-10-16",
+  "as_of": "2026-10-17",
   "repository": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone",
   "report_root_relative_to_project": "workspace_management/delivery/experiments/localization-distribution",
   "source_import": {
@@ -31,11 +31,11 @@
     {
       "id": "r18-sahi-seed12-20261016-001",
       "role": "paired_seed1_seed2_replication",
-      "result_status": "started_final_results_pending_at_snapshot",
+      "result_status": "seed1_e120_and_A548_closed_accept_A_protocol_STOP_seed2_not_started",
       "source_commit": "a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7",
       "git_binding_kind": "retrospective_import_not_original_launch_binding",
       "source_manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
-      "report": "r18-sahi-seed12-20261016-001/REPORT_RUNNING.md"
+      "report": "r18-sahi-seed12-20261016-001/STATUS_20261017_0742.md"
     },
     {
       "id": "rtdetrv2-r18-mal-continue-20261015-001",
@@ -44,6 +44,19 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "r18-sahi-seed12-20261016-001/protocol-resume-20261017-001",
+      "role": "protocol_only_remaining_chain",
+      "result_status": "implementation_and_CPU_gate_preparation",
+      "parent": "r18-sahi-seed12-20261016-001",
+      "branch": "codex/sahi-seed12-protocol-resume",
+      "source_commit": "recorded_in_runtime_SOURCE_GIT_and_EXECUTION_after_commit",
+      "source_manifest_sha256": null,
+      "seed1_retrain": false,
+      "old_failed_accept_A_pass_retrofit": false,
+      "new_entry": "resume_chain.py",
+      "plan": "configs/sahi-protocol-resume.json"
     }
   ]
 }

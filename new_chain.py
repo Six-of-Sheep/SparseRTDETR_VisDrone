@@ -22,7 +22,8 @@ def verify(c,mode):
  elif mode=='formal':require(r['status']=='R18_COMMON_E120_EMA_LOCKED' and r['seed']==c['seed'] and r['updates']==r['actual_updates']==36480 and not r['used_acceptance_state'],'formal endpoint not exact')
  else:
   require(r['status']=='PASS','inference/evaluation engineering stage failed')
-  endpoint=read(root/'formal/endpoint-lock.json')
+  from resume_support import endpoint as get_endpoint
+  endpoint=get_endpoint(c)
   for k in ('task_id','seed','scope','source_sha256','contract_sha256'):require(r[k]==c[k],'inference/eval result identity differs: '+k)
   require(r['checkpoint_sha256']==endpoint['checkpoint']['sha256'] and r['detector_updates']==0,'inference/eval endpoint differs')
   if mode=='evaluation':require(r['new_score_budget_calls']==6 and r['forward_calls']==0,'endpoint score scope differs')

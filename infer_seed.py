@@ -151,6 +151,9 @@ def _identity(c):
 
 def _closed_result(c, phase):
     from sparse_rtdetr.localization.runio import read, reference, require
+    if phase == 'infer-A' and c.get('parent_reuse'):
+        from resume_support import original_A_contract
+        c = original_A_contract(c)
     out = Path(c["job_root"]) / phase
     closed = read(out / "CLOSED.json")
     require(closed["status"] == "PASS" and closed["seed"] == c["seed"]
@@ -170,13 +173,15 @@ def _load_own_raw(c, data):
     result = _closed_result(c, "infer-A")
     require(result["status"] == "PASS" and result["phase"] == "infer-A",
             "seed-specific original A phase is not closed PASS")
-    for key, value in _identity(c).items():
+    from resume_support import original_A_contract
+    cache_identity = _identity(original_A_contract(c))
+    for key, value in cache_identity.items():
         require(result[key] == value, "original A identity differs: " + key)
     ref = result["raw"]
     _reference(ref)
     raw = torch.load(ref["path"], map_location="cpu", weights_only=True)
     require(raw["schema"] == "r18-sahi-repeat-own-A-raw-v1", "own raw schema differs")
-    for key, value in _identity(c).items():
+    for key, value in cache_identity.items():
         require(raw[key] == value, "own raw identity differs: " + key)
     require(raw["image_ids"] == [r["stable_image_id"] for r in data.records]
             and raw["epoch"] == 120 and raw["EMA"] is True,
@@ -258,8 +263,9 @@ def gpu(c, out, phase, engine, binding, *, emit=None, admit=None):
     """Run one fixed phase on the caller's already fully restored e120 engine.
 
     emit(event_name, **fields) and admit() let the independent supervisor retain
-    its authenticated protocol and real resource channel. No terminal event is
-    emitted here: the caller authenticates RESULT before closing the phase.
+    its authenticated protocol and real resource channel. After immutable output
+    and state checks, SAHI phases emit their workload closure. The independent
+    worker subsequently authenticates RESULT and closes the process phase.
     """
     import torch
     from sparse_rtdetr.localization import worker as base
@@ -448,6 +454,10 @@ def gpu(c, out, phase, engine, binding, *, emit=None, admit=None):
              "pred_logits": torch.cat([r["pred_logits"] for r in raw_rows]),
              "pred_boxes": torch.cat([r["pred_boxes"] for r in raw_rows])})
     publish(out / "RESULT.json", result)
+    if phase != "infer-A":
+        emit("sahi_complete", seed=c["seed"], result=reference(out / "RESULT.json"),
+             detector_updates=0, backward_calls=0, state_unchanged=True,
+             forward_calls=calls)
     return result
 
 

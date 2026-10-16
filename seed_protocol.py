@@ -143,6 +143,18 @@ def _validate(p, b, stream):
         else:
             require(p.get("detector_updates") == p.get("backward_calls") == 0 and p.get("state_unchanged") is True
                     and p.get("forward_calls") == factor * (batches + 2), "paired SAHI fixed work/state differs")
+            if "result" in p:
+                ref = p["result"]
+                require(isinstance(ref, dict) and ref.get("path") == str(Path(b["output_root"]) / "RESULT.json")
+                        and reference(ref["path"]) == ref, "paired SAHI result missing/corrupt")
+                result = read(ref["path"])
+                require(result.get("status") == "PASS" and result.get("phase") == mode
+                        and result.get("model_batch_forwards") == factor * (batches + 2)
+                        and result.get("state_RNG_exact") is True and result.get("detector_updates") == 0
+                        and result.get("backward_calls") == 0, "paired SAHI result workload/state differs")
+                require(all(result.get(key) == b[key] for key in ("task_id", "seed", "source_sha256", "contract_sha256"))
+                        and result.get("checkpoint_sha256") == b["evaluation_authorization"]["checkpoint_sha256"],
+                        "paired SAHI result identity differs")
     elif kind == "evaluation_budget_complete":
         n = p.get("evaluation_budget_number", p.get("evaluation_number", p.get("check_number")))
         require(mode == "evaluation" and type(n) is int and 1 <= n <= 6
@@ -211,7 +223,9 @@ def _advance(reader, p):
                 and p["batch_number"] == clock.get("_paired_batches", 0) + 1, "paired SAHI batch skipped/regressed")
         clock["_paired_batches"] = p["batch_number"]
     elif kind == "sahi_complete":
-        require(clock.get("_paired_batches") == SAHI[mode][0], "paired SAHI incomplete")
+        require(clock.get("_paired_cuda") and clock.get("_paired_warmup")
+                and clock.get("_paired_batches") == SAHI[mode][0]
+                and not clock.get("_paired_sahi_done"), "paired SAHI incomplete/repeated closure")
         clock["_paired_sahi_done"] = True
     elif kind == "evaluation_budget_complete":
         n = p.get("evaluation_budget_number", p.get("evaluation_number", p.get("check_number")))
@@ -248,6 +262,10 @@ def install():
             paired = self.bound_identity.get("progress_protocol") == PROTOCOL and self.stream == "progress"
             if paired and self.clock.get("_paired_closed") and record.get("seq") not in self.seen:
                 raise RuntimeError("paired event after phase closure")
+            if (paired and self.clock.get("_paired_sahi_done")
+                    and record.get("seq") not in self.seen
+                    and record.get("payload", {}).get("event") == "sahi_complete"):
+                raise RuntimeError("paired repeated SAHI closure")
             useful = super()._accept(record)
             if useful and paired:
                 _advance(self, record["payload"])

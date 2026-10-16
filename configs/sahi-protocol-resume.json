@@ -1,0 +1,19 @@
+{
+  "kind": "remaining_seed12_protocol_repair",
+  "parent_task": "r18-sahi-seed12-20261016-001",
+  "attempt": "protocol-resume-20261017-001",
+  "parent_source_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
+  "parent_checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+  "parent_STOP_sha256": "44a1ba99cf5ffdaa5f4db42b84d05e0be760e311292ea9a643d2cae919aea649",
+  "allowed_changed_parent_files": ["infer_seed.py", "seed_protocol.py", "new_entry.py", "new_runtime.py", "new_chain.py", "slim_delivery.py"],
+  "seed1": ["accept-A", "accept-B", "accept-C", "full-C", "evaluation"],
+  "seed2": ["gpu-acceptance", "formal", "infer-A", "accept-A", "accept-B", "accept-C", "full-C", "evaluation"],
+  "scientific_rules": "Reuse original PLAN-v002 unchanged; seven gates and matched64 C/A<=6; all scientific FAILs complete fixed seeds, new engineering/numeric/integrity/resource FAIL STOP",
+  "seed1_training_updates": 0,
+  "seed2_formal_updates": 36480,
+  "original_launcher_replay": false,
+  "old_failed_acceptance_reuse": false,
+  "no_retry": true,
+  "holdout": false,
+  "local_max_bytes": 33554432
+}
