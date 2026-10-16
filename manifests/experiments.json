@@ -5,6 +5,7 @@
   "report_root_relative_to_project": "workspace_management/delivery/experiments/localization-distribution",
   "source_import": {
     "commit": "a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7",
+    "tag": "source/r18-seed12-release-002",
     "manifest": "manifests/imports/r18-seed12-release-002.json",
     "manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
     "files": 317,
