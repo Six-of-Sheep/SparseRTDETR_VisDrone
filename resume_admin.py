@@ -86,6 +86,10 @@ def certify(root,old,manifest,commit):
 def prepare(args):
     root=Path(args.attempt);old=root.parent;root.mkdir(exist_ok=True)
     manifest=SOURCE.parent/'source-manifest.json';require(manifest.is_file(),'source must be a manifest-bound frozen release')
+    for name in ('CPU_INTEGRATION.json','CPU_UNIT_GATE.json'):
+        gate=read(root/name)
+        require(gate['status']=='PASS' and gate['source_sha256']==sha(manifest) and gate['git_commit']==args.commit,
+                'CPU gate not bound to exact committed release: '+name)
     reuse=certify(root,old,manifest,args.commit)
     root_runtime=Path('/home/lyy/.cache')/old.name/root.name
     refs=[]
@@ -110,7 +114,9 @@ def freeze(args):
     from sparse_rtdetr.localization import guard
     from sparse_rtdetr.localization.storage import identity
     root=Path(args.attempt);prepared=read(root/'PREPARED.json');contracts=[]
-    require(read(root/'CPU_INTEGRATION.json')['status']=='PASS' and read(root/'CPU_UNIT_GATE.json')['status']=='PASS','CPU gates not passed')
+    for name in ('CPU_INTEGRATION.json','CPU_UNIT_GATE.json'):
+        gate=read(root/name)
+        require(gate['status']=='PASS' and gate['source_sha256']==prepared['source_sha256'] and gate['git_commit']==prepared['commit'], 'CPU gate release/commit changed')
     for ref in prepared['contracts']:
         refcheck(ref);c=rt.load(ref['path']);c.pop('contract_sha256');c.pop('CPU_preflight_only',None)
         # New immutable execution contract; never overwrite the CPU parent.
