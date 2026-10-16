@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "experiment_id": "example-not-authorized",
+  "mode": "proposal_not_authorized",
+  "execution_authorized": false,
+  "total_epochs": 60,
+  "endpoint_selector": "ema",
+  "output_rules": [
+    "top300",
+    "top600"
+  ],
+  "COCO_maxDets": 100,
+  "seeds": [
+    {
+      "seed": 0,
+      "attempt": "attempt-001",
+      "analysis": null,
+      "analysis_sha256": null
+    }
+  ],
+  "code": {
+    "repository": "Six-of-Sheep/SparseRTDETR_VisDrone",
+    "commit": null,
+    "source_manifest": null
+  },
+  "inputs": {
+    "checkpoint": null,
+    "binding": null,
+    "source_epoch": null
+  },
+  "protocol": null,
+  "authorization": null,
+  "resources": null,
+  "automatic_retry": false,
+  "note": "Layout/field-planning example only, using the A3b Q300 fixed e060 EMA top300/top600 contract. Current dry-run/summary are not generic experiment backends; this result-free proposal is not a summary input. No execution backend or experiment authorized."
+}

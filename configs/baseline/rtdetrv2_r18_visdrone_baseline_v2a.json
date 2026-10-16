@@ -1,0 +1,376 @@
+{
+  "schema_version": 1,
+  "contract_id": "rtdetrv2_r18_visdrone_baseline_training_v2a",
+  "baseline_id": "rtdetrv2_r18_visdrone_baseline_v2a",
+  "stage": "T7B_BASELINE_V2A_FROZEN_CONTRACT",
+  "parent_baseline_v1": {
+    "training_contract_id": "rtdetrv2_r18_visdrone_baseline_training_v1",
+    "baseline_id": "rtdetrv2_r18_visdrone_baseline_v1",
+    "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
+    "raw_size_bytes": 10907,
+    "raw_sha256": "0f9ddb2e6d8ec6d2b21e42f6c419511f5bd70df287457c2c2b6109eaf8a93297",
+    "canonical_size_bytes": 9117,
+    "canonical_sha256": "a20c71ef90cb4ccc091a717286a1c49be8a1ebffb178156942b77798d3d7f868",
+    "development_metric": "AP@[0.50:0.95,maxDets=500]",
+    "development_ap": 22.9469,
+    "development_ap_role": "comparison_only_not_acceptance_threshold"
+  },
+  "source_bindings": {
+    "pretrained_authority": {
+      "root_relative_path": "artifacts/pretrained_rtdetrv2_presnet18_imagenet_v1",
+      "root_type": "directory",
+      "root_mode": 448,
+      "artifact_id": "rtdetrv2_presnet18_imagenet_v1",
+      "classification": "OFFLINE_PRETRAINED_BACKBONE_AUTHORITY",
+      "local_path_required": true,
+      "network_download_forbidden": true,
+      "weight": {
+        "relative_path": "artifacts/pretrained_rtdetrv2_presnet18_imagenet_v1/ResNet18_vd_pretrained_from_paddle.pth",
+        "size_bytes": 44878642,
+        "sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720",
+        "mode": 384,
+        "nlink": 1,
+        "regular_file": true,
+        "symlink": false
+      },
+      "manifest": {
+        "relative_path": "artifacts/pretrained_rtdetrv2_presnet18_imagenet_v1/pretrained_authority.json",
+        "size_bytes": 1608,
+        "sha256": "f290281d7c9f1589e2f6da3aca2251e351df48dbad82317ee59e4381ecb01dd0",
+        "mode": 384,
+        "nlink": 1,
+        "regular_file": true,
+        "symlink": false
+      },
+      "load_validation": {
+        "architecture": "PResNet-18-vd",
+        "state_key_count": 115,
+        "tensor_numel": 11209824,
+        "state_inventory_sha256": "0dca09c370c8ae6ee4f82db357c3a3e1c4c2fdb398577e205dd5a318ac1ef6fc",
+        "missing_keys": [],
+        "unexpected_keys": [],
+        "strict_load_pass": true,
+        "cuda_initialized": false
+      },
+      "declared_url": "https://github.com/lyuwenyu/storage/releases/download/v0.1/ResNet18_vd_pretrained_from_paddle.pth",
+      "transfer": "owner-provided-byte-exact-upload"
+    },
+    "vendor_r18": {
+      "upstream_commit": "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47",
+      "recipe": {
+        "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+        "size_bytes": 643,
+        "sha256": "93182eb778c58346e31b947dec4cb7e673373d3d93210d271a10cc1c6043a1e9"
+      },
+      "presnet_source": {
+        "relative_path": "vendor/rtdetrv2_pytorch/src/nn/backbone/presnet.py",
+        "size_bytes": 7431,
+        "sha256": "7b07405d6c3e79ebb50b7940b4b235a8aacea71f1e38018f2d0ffd5b7a10afc8"
+      },
+      "optimizer_include": {
+        "relative_path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/optimizer.yml",
+        "size_bytes": 514,
+        "sha256": "30bc23da028bf8c451ad46f1800c40864e364403f6eb0ea95394d7cce465fc3a"
+      },
+      "effective_optimizer": {
+        "type": "AdamW",
+        "default_lr": 0.0001,
+        "betas": [0.9, 0.999],
+        "default_weight_decay": 0.0001,
+        "norm_bn_weight_decay": 0.0,
+        "explicit_selector": "norm|bn -> weight_decay=0",
+        "default_scope": "remaining_trainable",
+        "backbone_non_norm_lr_override": "forbidden"
+      }
+    },
+    "data_roles": {
+      "train_core": {
+        "role": "train_core",
+        "annotation": "train_core_coco.json",
+        "status": "allowed",
+        "identity_source": "parent_baseline_v1"
+      },
+      "development": {
+        "role": "development",
+        "annotation": "development_coco.json",
+        "status": "allowed",
+        "identity_source": "parent_baseline_v1"
+      },
+      "confirmatory": {
+        "role": "confirmatory",
+        "annotation": null,
+        "status": "sealed_and_forbidden",
+        "identity_read": "forbidden"
+      },
+      "test": {
+        "role": "test",
+        "annotation": null,
+        "status": "forbidden",
+        "identity_read": "forbidden"
+      }
+    }
+  },
+  "model": {
+    "type": "RTDETR",
+    "backbone": "PResNet-18",
+    "encoder": "HybridEncoder",
+    "decoder": "RTDETRTransformerv2",
+    "num_classes": 10,
+    "parameter_count": 20094584,
+    "input_size": [640, 640],
+    "num_queries": 300,
+    "decoder_layers": 3,
+    "nms": false
+  },
+  "data_roles": {
+    "train": "train_core",
+    "development": "development",
+    "confirmatory": "sealed_and_forbidden",
+    "test": "forbidden"
+  },
+  "initialization": {
+    "pretrained": true,
+    "checkpoint": null,
+    "initialization": "pretrained_authority",
+    "authority_required": true,
+    "random_initialization_forbidden": true,
+    "seed": 0,
+    "formal_run_count": 1,
+    "seed_selection_forbidden": true,
+    "network_download_forbidden": true,
+    "external_checkpoint_forbidden": true
+  },
+  "topology": {
+    "device_type": "cuda",
+    "visible_devices": "0",
+    "world_size": 1,
+    "distributed": false,
+    "sync_bn": false,
+    "train_micro_batch": 16,
+    "gradient_accumulation_steps": 1,
+    "effective_train_batch": 16,
+    "train_workers": 4,
+    "development_batch": 32,
+    "development_workers": 4,
+    "drop_last_train": true,
+    "drop_last_development": false,
+    "runtime_batch_adaptation_forbidden": true
+  },
+  "schedule": {
+    "epochs": 120,
+    "steps_per_epoch_source": "train_core_dataset_length_and_drop_last",
+    "checkpoint_frequency_epochs": 1,
+    "development_evaluation_frequency_epochs": 1,
+    "augmentation_stop_epoch": 117,
+    "multiscale_enabled": false
+  },
+  "optimizer": {
+    "type": "AdamW",
+    "parameter_name_match_mode": "case_sensitive_literal_substring",
+    "parameter_groups": [
+      {
+        "name": "norm_or_bn",
+        "parameter_scope": "all_trainable",
+        "include_substrings": ["norm", "bn"],
+        "exclude_substrings": [],
+        "learning_rate": 0.0001,
+        "weight_decay": 0.0
+      },
+      {
+        "name": "default",
+        "parameter_scope": "remaining_trainable",
+        "include_substrings": [],
+        "exclude_substrings": [],
+        "learning_rate": 0.0001,
+        "weight_decay": 0.0001
+      }
+    ],
+    "mutually_exclusive": true,
+    "cover_all_trainable_parameters": true,
+    "parameter_identity_audit_required": true,
+    "backbone_non_norm_lr_override_forbidden": true,
+    "betas": [0.9, 0.999],
+    "default_lr": 0.0001,
+    "default_weight_decay": 0.0001,
+    "norm_bn_weight_decay": 0.0,
+    "gradient_clip_max_norm": 0.1
+  },
+  "learning_rate": {
+    "warmup_type": "LinearWarmup",
+    "warmup_optimizer_steps": 2000,
+    "scheduler_type": "MultiStepLR",
+    "scheduler_step_unit": "epoch",
+    "milestones": [1000],
+    "gamma": 0.1,
+    "expected_decay_events_within_120_epochs": 0
+  },
+  "amp": {
+    "enabled": true,
+    "autocast_dtype": "bfloat16",
+    "scaler_policy": "disabled_absent",
+    "grad_scaler_enabled": false,
+    "nonfinite_loss_allowed": 0,
+    "nonfinite_gradient_allowed": 0,
+    "optimizer_skipped_steps_allowed": 0,
+    "overflow_events_allowed": 0
+  },
+  "ema": {
+    "enabled": true,
+    "decay": 0.9999,
+    "warmups": 2000,
+    "warmup_unit": "optimizer_updates",
+    "development_evaluation_weights": "ema",
+    "model_selection_weights": "ema",
+    "raw_weights_must_be_preserved": true,
+    "ema_weights_must_be_preserved": true
+  },
+  "augmentation": {
+    "transforms": [
+      {"type": "RandomPhotometricDistort", "p": 0.5},
+      {"type": "RandomZoomOut", "fill": 0},
+      {"type": "RandomIoUCrop", "p": 0.8},
+      {"type": "SanitizeBoundingBoxes", "min_size": 1},
+      {"type": "RandomHorizontalFlip"},
+      {"type": "Resize", "size": [640, 640]},
+      {"type": "SanitizeBoundingBoxes", "min_size": 1},
+      {"type": "ConvertPILImage", "dtype": "float32", "scale": true},
+      {"type": "ConvertBoxes", "fmt": "cxcywh", "normalize": true}
+    ],
+    "stop_epoch": 117,
+    "stopped_transforms": ["RandomPhotometricDistort", "RandomZoomOut", "RandomIoUCrop"],
+    "multiscale_enabled": false,
+    "runtime_transform_identity_and_rng_binding_required": true
+  },
+  "evaluation_and_selection": {
+    "primary_evaluator": "visdrone_official_primary_evaluator_v1",
+    "primary_protocol": "visdrone_official_style_v1",
+    "primary_evaluator_required_before_training": true,
+    "primary_evaluator_independently_certified": true,
+    "secondary_evaluator": "coco_secondary_vendor_v1",
+    "secondary_diagnostic_only": true,
+    "secondary_cannot_certify_or_select": true,
+    "development_only": true,
+    "evaluation_frequency_epochs": 1,
+    "selection_metric": "AP@[0.50:0.95,maxDets=500]",
+    "selection_direction": "maximize",
+    "tie_breakers": ["AP50", "AR500", "earlier_epoch"],
+    "metric_comparison_precision": "unrounded_float64",
+    "accuracy_threshold": null
+  },
+  "checkpoint_policy": {
+    "last_checkpoint": "every epoch",
+    "best_checkpoint": "on deterministic development selection improvement",
+    "periodic_checkpoint": "every 10 epochs",
+    "final_checkpoint": "epoch 120",
+    "resume": false,
+    "retry": false,
+    "overwrite": false,
+    "exactly_once_run_identity": true,
+    "interrupted_run_status": "PERMANENT_FAIL",
+    "required_state": [
+      "raw_model",
+      "ema",
+      "optimizer",
+      "scheduler",
+      "warmup",
+      "amp_state",
+      "epoch",
+      "global_optimizer_step",
+      "rng_states",
+      "config_identity",
+      "source_identity",
+      "environment_identity"
+    ],
+    "last_checkpoint_every_epoch": true,
+    "best_checkpoint_on_selection_improvement": true,
+    "periodic_checkpoint_frequency_epochs": 10,
+    "final_epoch_checkpoint": true,
+    "atomic_write_required": true,
+    "file_fsync_required": true,
+    "directory_fsync_required": true,
+    "readback_required": true,
+    "loadability_check_required": true,
+    "sha256_required": true,
+    "inventory_required": true
+  },
+  "acceptance": {
+    "separate_states": [
+      "training_runtime_integrity",
+      "training_evidence_integrity",
+      "checkpoint_integrity",
+      "development_accuracy_reported",
+      "model_selection_certified",
+      "confirmatory_access",
+      "test_access",
+      "speed_measurement"
+    ],
+    "required_epochs_complete": 120,
+    "expected_optimizer_steps_complete": true,
+    "loss_and_gradients_finite": true,
+    "amp_skip_or_overflow_allowed": false,
+    "required_exit_code": 0,
+    "completion_evidence_and_checkpoints_bound": true,
+    "checkpoints_loadable": true,
+    "development_accuracy_reporting_only": true,
+    "confirmatory_metrics_accessed": false,
+    "test_accessed": false,
+    "speed_measured": false
+  },
+  "environment_identity": {
+    "gpu_name": "NVIDIA GeForce RTX 4090 D",
+    "cuda_version": "12.4",
+    "graphics_clock_max_mhz": 1500,
+    "exclusive_host_observation": "required_before_training",
+    "other_training_load_observation": "required_zero_before_training",
+    "observation_source": "hardware_preflight",
+    "probe_executed_in_t7b": false
+  },
+  "hardware_launch_gate": {
+    "required": true,
+    "exclusive_host_required": true,
+    "no_other_training_load_required": true,
+    "gpu_name": "NVIDIA GeForce RTX 4090 D",
+    "cuda_version": "12.4",
+    "graphics_clock_upper_limit_mhz": 1500,
+    "probe_policy": "record_and_validate_contract_only",
+    "probe_executed_in_t7b": false
+  },
+  "runtime_closure": {
+    "process_stdout_terminal_json": {
+      "required": true,
+      "implemented": false,
+      "independently_certified": false
+    },
+    "preflight_training_parent_identity": {
+      "required": true,
+      "implemented": false,
+      "independently_certified": false
+    },
+    "owner_authorization_data_roots": {
+      "required": true,
+      "implemented": false,
+      "independently_certified": false
+    },
+    "environment_identity_binding": {
+      "required": true,
+      "implemented": false,
+      "independently_certified": false
+    },
+    "epoch_progress_evidence": {
+      "required": true,
+      "implemented": false,
+      "independently_certified": false
+    }
+  },
+  "readiness": {
+    "contract_implemented": true,
+    "pretrained_authority_binding_implemented": true,
+    "bf16_no_gradscaler_contract_implemented": true,
+    "vendor_r18_optimizer_contract_implemented": true,
+    "runtime_closure_requirements_recorded": true,
+    "training_implementation_ready": false,
+    "training_ready": false,
+    "model_selection_certified": false,
+    "independent_audit_pass": false
+  }
+}

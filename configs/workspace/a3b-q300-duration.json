@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "experiment_id": "a3b-q300-duration",
+  "mode": "historical_readonly",
+  "execution_authorized": false,
+  "total_epochs": 60,
+  "endpoint_selector": "ema",
+  "output_rules": [
+    "top300",
+    "top600"
+  ],
+  "COCO_maxDets": 100,
+  "seeds": [
+    {
+      "seed": 0,
+      "attempt": "completed-repair1",
+      "analysis": "/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B60_EXEC_20260929_REPAIR1/evaluation/analysis.json",
+      "analysis_sha256": "179536411207d47c0d2c6679e677e7c60e77dbdebbe590023a03e0071f548f8e",
+      "execution_freeze": "/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B60_EXEC_20260929_REPAIR1/execution-freeze.json",
+      "endpoint_lock": "/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B60_EXEC_20260929_REPAIR1/ema-lock.json"
+    },
+    {
+      "seed": 1,
+      "attempt": "completed-repair1",
+      "analysis": "/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B60_S1_EXEC_20260929_REPAIR1/evaluation/analysis.json",
+      "analysis_sha256": "5bfbbfbee7a0406cfffc6578615569a1ee7b26cba97f25a6b444359281b80dc5",
+      "execution_freeze": "/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B60_S1_EXEC_20260929_REPAIR1/execution-freeze.json",
+      "endpoint_lock": "/media/lyy/Data/JupyterLab/LiuZhiyang/P3_A3B60_S1_EXEC_20260929_REPAIR1/ema-lock.json"
+    }
+  ]
+}

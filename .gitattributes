@@ -11,3 +11,36 @@
 *.jpeg binary
 *.pt binary
 *.pth binary
+
+# Preserve certified import bytes; do not normalize these historical sources.
+/src/sparse_rtdetr/localization/criterion.py -text
+/src/sparse_rtdetr/localization/distribution.py -text
+/src/sparse_rtdetr/localization/guard.py -text
+/src/sparse_rtdetr/localization/ignore.py -text
+/src/sparse_rtdetr/localization/lab_consumer.py -text
+/src/sparse_rtdetr/localization/lab_geometry.py -text
+/src/sparse_rtdetr/localization/lab_run.py -text
+/src/sparse_rtdetr/localization/material_paths.py -text
+/src/sparse_rtdetr/localization/model.py -text
+/src/sparse_rtdetr/localization/numerics.py -text
+/src/sparse_rtdetr/localization/operators.py -text
+/src/sparse_rtdetr/localization/role_resume.py -text
+/src/sparse_rtdetr/localization/trace.py -text
+/src/sparse_rtdetr/localization/trace_contract.py -text
+/src/sparse_rtdetr/localization/worker.py -text
+/src/sparse_rtdetr/protocol_r18/checkpoint.py -text
+/src/sparse_rtdetr/protocol_r18/control.py -text
+/src/sparse_rtdetr/protocol_r18/engine.py -text
+/src/sparse_rtdetr/protocol_r18/lifecycle.py -text
+/src/sparse_rtdetr/protocol_r18/progress_v4.py -text
+/src/sparse_rtdetr/protocol_r18/protocol_cpu.py -text
+/src/sparse_rtdetr/protocol_r18/protocol_cpu_v4.py -text
+/src/sparse_rtdetr/protocol_r18/recovery.py -text
+/src/sparse_rtdetr/protocol_r18/recovery_e088.py -text
+/src/sparse_rtdetr/protocol_r18/transport.py -text
+/src/sparse_rtdetr/r0/__init__.py -text
+/src/sparse_rtdetr/r0/checkpoint.py -text
+/src/sparse_rtdetr/r0/criterion.py -text
+/src/sparse_rtdetr/r0/engine.py -text
+/src/sparse_rtdetr/r0/model.py -text
+/tools/localization/deploy.py -text

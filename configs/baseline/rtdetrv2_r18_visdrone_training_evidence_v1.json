@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "training_evidence_contract_id": "rtdetrv2_r18_visdrone_baseline_training_evidence_v1",
+  "training_contract": {
+    "id": "rtdetrv2_r18_visdrone_baseline_training_v1",
+    "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
+    "canonical_size_bytes": 9117,
+    "canonical_sha256": "a20c71ef90cb4ccc091a717286a1c49be8a1ebffb178156942b77798d3d7f868",
+    "module_relative_path": "src/sparse_rtdetr/baseline/training_contract.py",
+    "module_sha256": "21599fae8312a32ddf833bf2f53557ed5b4d4122f0be167f2071f7f82008deef",
+    "primary_evaluator": {
+      "evaluator_id": "visdrone_official_primary_evaluator_v1",
+      "protocol_id": "visdrone_official_style_v1",
+      "implementation_commit": "036cca4d127ddd9e10e3cc7900c3eb759b55f59f",
+      "implementation_tree": "fbe931976f6bac7d8e4b3bb319ff1905e99c5444",
+      "config_canonical_sha256": "355de90bdb6007ed42ed65b3f653a1b8ea57f2184ab4fd48a9561b692b993998",
+      "authority_manifest_canonical_sha256": "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3",
+      "authority_inventory_sha256": "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0"
+    }
+  },
+  "runtime_plan": {
+    "id": "rtdetrv2_r18_visdrone_baseline_training_runtime_v1",
+    "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_runtime_v1.json",
+    "raw_size_bytes": 12957,
+    "raw_sha256": "cb6af1abae9351b4a268681587db82ad059745f1d7e198d7d8c829b4cee41aef",
+    "canonical_size_bytes": 10888,
+    "canonical_sha256": "3812b04d957e1cd7c3990c8458a540651c95c6bd551c631fc51717f2f7b386ac",
+    "module_relative_path": "src/sparse_rtdetr/baseline/training_runtime.py",
+    "module_sha256": "735d75f612f59e6cec22dc53002980471c34c8b18601cd58704440f85741c7c9",
+    "vendor_runtime": {
+      "relative_path": "vendor/rtdetrv2_pytorch",
+      "file_count": 124,
+      "directory_count_excluding_root": 25,
+      "total_size_bytes": 373735,
+      "compact_inventory_sha256": "0fc6803665bc4b5720e983345b2cacb0147eceead9f882588880b6f8a0e68051",
+      "manifest_relative_path": "manifests/rtdetrv2_upstream.json",
+      "manifest_size_bytes": 33264,
+      "manifest_raw_sha256": "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae",
+      "manifest_inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
+    },
+    "conversion_r3": {
+      "relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3",
+      "file_count": 25,
+      "directory_count_excluding_root": 0,
+      "total_size_bytes": 304418794,
+      "completion_sha256": "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817",
+      "artifact_inventory_sha256": "aaee01ce4e00749b9db8ac5e6e49cf35875a8b266e9c3efc237bdf0b8b109ae7",
+      "entry_canonical_inventory_sha256": "ddf32745302d6095e1c3dde89b1a85f05db53e6b4cc8ee85638e0d45bfa8d982",
+      "config_sha256": "58be8659d6d7ae6faace82b36d45523f80cd48bae1bbcc6da4586c53056ec0d0",
+      "category_contract_sha256": "b4b309f357cbe130a505a610dff340cc498dc74f766384c4559b2acd900728a0",
+      "source_identity_sha256": "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9"
+    },
+    "primary_evaluator": {
+      "evaluator_id": "visdrone_official_primary_evaluator_v1",
+      "protocol_id": "visdrone_official_style_v1"
+    }
+  },
+  "execution_policy": {
+    "formal_run_count": 1,
+    "resume": false,
+    "retry": false,
+    "overwrite": false,
+    "interrupted_status": "PERMANENT_FAIL",
+    "synthetic_mode_allowed_for_t5b": true,
+    "synthetic_mode_can_certify_real_training": false,
+    "real_success_requires_epochs": 120,
+    "real_success_requires_exit_code": 0,
+    "model_selection_enabled": false,
+    "confirmatory_access": false,
+    "test_access": false,
+    "speed_measurement": false
+  },
+  "roots": {
+    "evidence_root": "artifacts/training/rtdetrv2_r18_visdrone_training_evidence_v1",
+    "checkpoint_root": "artifacts/training/rtdetrv2_r18_visdrone_training_evidence_v1/checkpoints",
+    "roots_are_future_targets": true,
+    "t5b_must_not_create_production_roots": true
+  },
+  "files": {
+    "prepared": "prepared.json",
+    "epoch_records": "epoch_records.jsonl",
+    "checkpoint_references": "checkpoint_references.jsonl",
+    "partial_inventory": "partial_inventory.json",
+    "artifact_inventory": "artifact_inventory.json",
+    "completion": "completion.json",
+    "failure": "failure.json",
+    "checkpoint_extension": ".ckpt",
+    "final_excluded_from_inventory": ["artifact_inventory.json", "completion.json"],
+    "partial_excluded_from_inventory": ["partial_inventory.json", "completion.json"]
+  },
+  "terminal_policy": {
+    "classifier_states": [
+      "ABSENT",
+      "IN_PROGRESS",
+      "SYNTHETIC_TERMINAL_COMPLETE",
+      "TERMINAL_COMPLETE",
+      "TERMINAL_FAILED",
+      "UNKNOWN"
+    ],
+    "terminal_statuses": ["SYNTHETIC_TERMINAL_COMPLETE", "TERMINAL_COMPLETE", "PERMANENT_FAIL"],
+    "success_mode": "real",
+    "synthetic_success_mode": "synthetic",
+    "permanent_failure_is_immutable": true,
+    "terminalization_exactly_once": true
+  },
+  "checkpoint_policy": {
+    "roles": ["last", "best", "periodic", "final"],
+    "required_state_order": [
+      "raw_model",
+      "ema",
+      "optimizer",
+      "scheduler",
+      "warmup",
+      "grad_scaler",
+      "epoch",
+      "global_optimizer_step",
+      "rng_states",
+      "config_identity",
+      "source_identity",
+      "environment_identity"
+    ],
+    "deterministic_name_pattern": "checkpoint-{role}-{epoch:04d}.ckpt",
+    "raw_model_and_ema_must_be_separate": true,
+    "atomicity": {
+      "exclusive_ownership": true,
+      "parent_must_exist": true,
+      "parent_creation_forbidden": true,
+      "same_device_temporary": true,
+      "complete_write_required": true,
+      "file_fsync_required": true,
+      "atomic_publication_required": true,
+      "directory_fsync_required": true,
+      "readback_required": true,
+      "size_sha256_required": true,
+      "loadability_probe_required": true,
+      "inventory_binding_required": true,
+      "partial_failure_evidence_required": true
+    }
+  },
+  "evidence_categories": [
+    "run_identity",
+    "runtime_plan_binding",
+    "data_identity",
+    "source_identity",
+    "environment_identity",
+    "epoch_and_step_counters",
+    "finite_loss_and_gradient_observations",
+    "amp_scale_skip_overflow_observations",
+    "ema_update_observations",
+    "development_evaluator_input_result_binding",
+    "checkpoint_binding",
+    "terminal_exit_and_completion",
+    "permanent_failure"
+  ],
+  "creation_order": [
+    "evidence_root",
+    "prepared.json",
+    "epoch_records.jsonl",
+    "checkpoint_references.jsonl",
+    "checkpoint-{role}-{epoch:04d}.ckpt",
+    "partial_inventory.json",
+    "artifact_inventory.json",
+    "completion.json",
+    "failure.json"
+  ],
+  "readiness": {
+    "runtime_observation_certified": false,
+    "training_implementation_ready": false,
+    "training_ready": false,
+    "model_selection_certified": false,
+    "confirmatory_metrics_accessed": false,
+    "test_access": false,
+    "speed_measurement": false,
+    "production_training_authorized": false
+  }
+}

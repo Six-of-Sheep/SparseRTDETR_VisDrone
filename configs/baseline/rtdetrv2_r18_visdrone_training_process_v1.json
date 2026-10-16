@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "process_contract_id": "rtdetrv2_r18_visdrone_baseline_training_process_v1",
+  "entry_id": "rtdetrv2_r18_visdrone_training_entry_t5d_v1",
+  "launcher_id": "rtdetrv2_r18_visdrone_training_process_launcher_t5d_v1",
+  "mode": "synthetic",
+  "source_bindings": {
+    "training_contract": {
+      "id": "rtdetrv2_r18_visdrone_baseline_training_v1",
+      "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
+      "canonical_sha256": "a20c71ef90cb4ccc091a717286a1c49be8a1ebffb178156942b77798d3d7f868",
+      "module_relative_path": "src/sparse_rtdetr/baseline/training_contract.py",
+      "module_sha256": "21599fae8312a32ddf833bf2f53557ed5b4d4122f0be167f2071f7f82008deef"
+    },
+    "runtime_plan": {
+      "id": "rtdetrv2_r18_visdrone_baseline_training_runtime_v1",
+      "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_runtime_v1.json",
+      "canonical_sha256": "3812b04d957e1cd7c3990c8458a540651c95c6bd551c631fc51717f2f7b386ac",
+      "module_relative_path": "src/sparse_rtdetr/baseline/training_runtime.py",
+      "module_sha256": "735d75f612f59e6cec22dc53002980471c34c8b18601cd58704440f85741c7c9"
+    },
+    "training_evidence": {
+      "id": "rtdetrv2_r18_visdrone_baseline_training_evidence_v1",
+      "relative_path": "configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
+      "canonical_sha256": "3184707c6cfa115477d007ac0be5eb142a054f78e6309a079ad1e9fab0db9bd6",
+      "module_relative_path": "src/sparse_rtdetr/baseline/training_evidence.py",
+      "module_sha256": "5efad5ea963f2b08e52cc7b7811ca64472dd36a5186cd5c476c7657adb5bc1b0"
+    },
+    "prepared_adapter": {
+      "id": "rtdetrv2_r18_visdrone_prepared_trainer_adapter_t5c_v1",
+      "module_relative_path": "src/sparse_rtdetr/baseline/training_adapter.py",
+      "module_sha256": "3dca63c67fc2263b9f3f3006b05c8667e4457a5d1344db41f08e720e85016fd3",
+      "public_api_sha256": "b4edbe155354efee0dfd59ff5c5c720c32098be3fb3e3d2ddcfc5caed87ddffd"
+    },
+    "primary_evaluator": {
+      "evaluator_id": "visdrone_official_primary_evaluator_v1",
+      "protocol_id": "visdrone_official_style_v1",
+      "implementation_commit": "036cca4d127ddd9e10e3cc7900c3eb759b55f59f",
+      "implementation_tree": "fbe931976f6bac7d8e4b3bb319ff1905e99c5444",
+      "config_canonical_sha256": "355de90bdb6007ed42ed65b3f653a1b8ea57f2184ab4fd48a9561b692b993998",
+      "authority_manifest_canonical_sha256": "5bad9faf7622fe4542aa3b46561d6d41fb2e4ee34f35551ecfd821c9577159e3",
+      "authority_inventory_sha256": "35a14a021509b82f1238912e5c77ebb3559f9ee6daa3cc6c92db810b5dce5da0"
+    },
+    "vendor_runtime": {
+      "relative_path": "vendor/rtdetrv2_pytorch",
+      "file_count": 124,
+      "directory_count_excluding_root": 25,
+      "total_size_bytes": 373735,
+      "compact_inventory_sha256": "0fc6803665bc4b5720e983345b2cacb0147eceead9f882588880b6f8a0e68051",
+      "manifest_relative_path": "manifests/rtdetrv2_upstream.json",
+      "manifest_size_bytes": 33264,
+      "manifest_raw_sha256": "f65a2d475365346a5dd5ce4f46b022a135b187e21421e922cc41eee4d28d20ae",
+      "manifest_inventory_sha256": "2312c80d5b0fba88d43ffc6807c3fc150ae74b77740f2ab65072f044e033d6d7"
+    },
+    "conversion_r3": {
+      "relative_path": "artifacts/data/visdrone_protocol_v2_conversion_r3",
+      "entry_canonical_inventory_sha256": "ddf32745302d6095e1c3dde89b1a85f05db53e6b4cc8ee85638e0d45bfa8d982",
+      "artifact_inventory_sha256": "aaee01ce4e00749b9db8ac5e6e49cf35875a8b266e9c3efc237bdf0b8b109ae7",
+      "completion_sha256": "46734010937168ac65bf27c3a6f4bf3f234554d5d4a99407903dec4b3ae9e817",
+      "config_sha256": "58be8659d6d7ae6faace82b36d45523f80cd48bae1bbcc6da4586c53056ec0d0",
+      "category_contract_sha256": "b4b309f357cbe130a505a610dff340cc498dc74f766384c4559b2acd900728a0",
+      "source_identity_sha256": "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9"
+    },
+    "repository_modules": [
+      {"role": "package", "relative_path": "src/sparse_rtdetr/__init__.py"},
+      {"role": "package", "relative_path": "src/sparse_rtdetr/baseline/__init__.py"},
+      {"role": "entry", "relative_path": "src/sparse_rtdetr/baseline/training_entry.py"},
+      {"role": "launcher", "relative_path": "src/sparse_rtdetr/baseline/training_process_launcher.py"},
+      {"role": "prepared_adapter", "relative_path": "src/sparse_rtdetr/baseline/training_adapter.py"},
+      {"role": "training_contract", "relative_path": "src/sparse_rtdetr/baseline/training_contract.py"},
+      {"role": "runtime_plan", "relative_path": "src/sparse_rtdetr/baseline/training_runtime.py"},
+      {"role": "training_evidence", "relative_path": "src/sparse_rtdetr/baseline/training_evidence.py"},
+      {"role": "primary_evaluator", "relative_path": "src/sparse_rtdetr/baseline/primary_evaluator.py"},
+      {"role": "package", "relative_path": "src/sparse_rtdetr/data_protocol/__init__.py"},
+      {"role": "evaluation_protocol", "relative_path": "src/sparse_rtdetr/data_protocol/evaluation.py"},
+      {"role": "protocol_schema", "relative_path": "src/sparse_rtdetr/data_protocol/schema.py"}
+    ]
+  },
+  "invocation_policy": {
+    "mode": "synthetic",
+    "formal_run_count": 1,
+    "repo_root_required": true,
+    "working_directory_must_equal_repo_root": true,
+    "python_executable_must_be_absolute": true,
+    "argv_is_sequence": true,
+    "argv_shell_evaluation": false,
+    "environment_is_closed": true,
+    "environment_keys": ["CUDA_VISIBLE_DEVICES", "PYTHONNOUSERSITE", "PYTHONDONTWRITEBYTECODE", "PYTHONPATH"],
+    "cuda_visible_devices": "",
+    "real_entry_execution_authorized": false,
+    "real_process_launch_authorized": false,
+    "production_training_authorized": false,
+    "external_effects_authorized": false,
+    "subprocess_authorized": false,
+    "tmux_authorized": false,
+    "network_authorized": false,
+    "resume_allowed": false,
+    "retry_allowed": false,
+    "overwrite_allowed": false,
+    "fallback_allowed": false
+  },
+  "entry_boundary": {
+    "entry_module_relative_path": "src/sparse_rtdetr/baseline/training_entry.py",
+    "entry_callable": "run_synthetic_entry",
+    "entry_public_api": ["TrainingEntryError", "build_synthetic_entry_descriptor", "validate_entry_descriptor", "run_synthetic_entry", "validate_entry_result"],
+    "required_descriptor_keys": ["schema_version", "process_contract_id", "entry_id", "mode", "run_id", "nonce", "repo_root", "working_directory", "python_executable", "module_identity", "argv", "environment", "authorities", "future_targets", "evidence_root", "receipt_path", "handoff", "source_bindings", "aggregate_sha256"],
+    "required_result_keys": ["schema_version", "entry_id", "mode", "run_id", "nonce", "invocation_descriptor_sha256", "prepared_aggregate_sha256", "result", "production_training_authorized", "evidence_root", "receipt_path", "evidence_root_identity", "receipt_size_bytes", "receipt_sha256", "aggregate_result_sha256"],
+    "synthetic_injected_ports_only": true,
+    "production_root_forbidden": true,
+    "real_model_forbidden": true,
+    "real_data_forbidden": true
+  },
+  "process_boundary": {
+    "launcher_module_relative_path": "src/sparse_rtdetr/baseline/training_process_launcher.py",
+    "launcher_callable": "run_synthetic_launch",
+    "launcher_public_api": ["TrainingProcessLauncherError", "build_synthetic_launch_descriptor", "validate_launch_descriptor", "run_synthetic_launch", "validate_launch_result", "classify_launch"],
+    "launch_descriptor_keys": ["schema_version", "process_contract_id", "launcher_id", "mode", "run_id", "nonce", "entry_descriptor", "entry_descriptor_sha256", "argv", "cwd", "environment", "config_identity", "source_bindings", "future_targets", "evidence_root", "receipt_path", "state_machine", "runner_contract", "aggregate_sha256"],
+    "launch_result_keys": ["schema_version", "process_contract_id", "launcher_id", "mode", "run_id", "nonce", "launch_descriptor_sha256", "entry_descriptor_sha256", "argv", "cwd", "environment", "config_identity", "source_bindings", "future_targets", "evidence_root", "receipt_path", "evidence_root_identity", "receipt_size_bytes", "receipt_sha256", "return_code", "stdout_size_bytes", "stdout_sha256", "stderr_size_bytes", "stderr_sha256", "stdout_anchor_relative_path", "stderr_anchor_relative_path", "entry_result", "entry_result_sha256", "status", "classification", "failure_class", "state_sequence", "state_transition_sha256", "production_training_authorized", "real_process_launch_authorized", "aggregate_result_sha256"],
+    "state_order": ["ABSENT", "PREPARED", "ACCEPTED", "SYNTHETIC_TERMINAL_COMPLETE", "TERMINAL_COMPLETE", "TERMINAL_FAILED", "UNKNOWN"],
+    "failure_classes": ["NONE", "RUNNER_NONZERO_RETURN_CODE", "RUNNER_EXCEPTION", "RUNNER_TIMEOUT", "RUNNER_ASYNC_OR_GENERATOR_RESULT", "RUNNER_SCHEMA_OR_ENTRY_FAILURE", "RUNNER_MUTATED_INVOCATION", "PERSISTENCE_FAILURE"],
+    "return_code_range": [0, 255],
+    "evidence_file_names": ["invocation.json", "result.json", "completion.json", "artifact_inventory.json", "stdout.bin", "stderr.bin"],
+    "binary_anchor_files": ["stdout.bin", "stderr.bin"],
+    "exactly_once": true,
+    "fake_runner_signature": ["argv", "cwd", "environment", "entry_descriptor"],
+    "runner_return_keys": ["return_code", "stdout", "stderr", "entry_result"],
+    "runner_must_be_synchronous": true,
+    "real_subprocess_forbidden": true,
+    "real_success_forbidden": true
+  },
+  "evidence_policy": {
+    "evidence_root": "artifacts/training/rtdetrv2_r18_visdrone_training_evidence_v1",
+    "process_evidence_root": "artifacts/process_evidence/rtdetrv2_r18_visdrone_training_process_v1",
+    "launch_evidence_root": "artifacts/outer_launch_evidence/rtdetrv2_r18_visdrone_training_process_v1",
+    "target_roots_are_future_only": true,
+    "records": ["invocation.json", "result.json", "completion.json", "artifact_inventory.json", "stdout.bin", "stderr.bin"],
+    "exclusive_creation": true,
+    "atomic_publication": true,
+    "file_fsync": true,
+    "directory_fsync": true,
+    "readback": true,
+    "inventory_sha256": true,
+    "production_targets_must_remain_absent": true
+  },
+  "readiness": {
+    "production_training_authorized": false,
+    "real_entry_execution_authorized": false,
+    "real_process_launch_authorized": false,
+    "training_implementation_ready": false,
+    "training_ready": false,
+    "model_selection_certified": false,
+    "confirmatory_access": false,
+    "test_access": false,
+    "speed_measurement": false
+  }
+}
