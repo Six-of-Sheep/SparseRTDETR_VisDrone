@@ -82,6 +82,10 @@ def assert_healthy(model, optimizer=None, ema=None, *, gradients=False):
 
 
 class Engine:
+    def next_learning_rate(self):
+        """Override only in an explicitly bound new schedule/engine identity."""
+        return learning_rate(self.completed_updates+1)
+
     def __init__(self, model, criterion, optimizer, ema, config):
         self.model, self.criterion, self.optimizer, self.ema = model, criterion, optimizer, ema
         self.config = config
@@ -141,7 +145,7 @@ class Engine:
         self.model.train(); self.criterion.train()
         if getattr(self.model.decoder, "trace_enabled", False):
             raise RuntimeError("training must not enable trace collection")
-        lr = learning_rate(self.completed_updates+1)
+        lr = self.next_learning_rate()
         for group in self.optimizer.param_groups: group["lr"] = lr
         self.optimizer.zero_grad(set_to_none=True)
         if self.device.type == "cuda": torch.cuda.synchronize(self.device)
