@@ -219,6 +219,8 @@ def closed(root, phase, contract):
                 'archive seed/phase differs')
         require(identity['progress_protocol'] == 'r18-sahi-paired-seed-progress-v1', 'repeat protocol differs')
         require(closure['seed'] == contract['seed'] and closure['mode'] == phase, 'closure seed/phase differs')
+        for key in ('fixed64','fixed_ids','arm','data_sha256','material_binding_sha256'):
+            require(identity[key] == contract[key], 'archive shared binding differs: '+key)
     else:
         require(identity['phase'] == phase and identity['mode'] == ('cpu' if phase == 'evaluation' else 'gpu'),
                 'legacy archive phase/mode differs')
@@ -305,9 +307,12 @@ def parent_metadata(c):
         require(identity['checkpoint_sha256'] == cp['sha256'], 'full-C checkpoint differs')
         if seed == 0:
             require(ev['schema'] == 'r18-sahi-fixed-evaluation-v1', 'unknown legacy evaluation schema')
-            for archive in (fi, ei):
-                require(archive['checkpoint_sha256'] == cp['sha256'] and archive['image_ids'] == ids,
-                        'legacy archive checkpoint/images differ')
+            require(fi['checkpoint_sha256'] == ei['checkpoint_sha256'] == cp['sha256'],
+                    'legacy archive checkpoint differs')
+            require(fi['image_ids'] == ids, 'legacy full-C members differ')
+            require(len(contract['fixed64']) == len(set(contract['fixed64'])) == 64
+                    and set(contract['fixed64']).issubset(ids), 'legacy fixed64 members invalid')
+            require(ei['image_ids'] == contract['fixed64'], 'legacy archive fixed64 differs')
             # Missing legacy fields come only from authenticated archive, never defaults.
             for key in ('task_id','checkpoint_sha256'):
                 if key in ev:
@@ -336,13 +341,78 @@ def parent_metadata(c):
         require(len(full['raw_view_refs']) == 137, 'pre-NMS raw-view batches incomplete')
         require(ev['predictions']['C'] == full['predictions'], 'C prediction refs differ')
         comparison = json.loads(exact(ev['comparison'], contents=True))
+        require(comparison['task_id'] == identity['task_id'], 'comparison task differs')
+        if seed:
+            require(all(comparison[k] == v for k,v in identity.items()), 'comparison identity differs')
         require(comparison['COCO_bridge_original_score_units'] == '0..1'
                 and comparison['difference_units'] == 'percentage points', 'original units differ')
         require(set(comparison['scores']) == {'A','B','C'}, 'original arms differ')
+        sources = authenticate_parent_sources(contract, seed)
+        metrics = parent_metric_metadata(ev, comparison, identity, seed)
         specs.append({'seed':seed,'identity':identity,'ids':ids,'full':full,'evaluation':ev,
-                      'comparison':comparison,'root':str(root)})
+                      'comparison':comparison,'root':str(root),'contract':contract,
+                      'metrics':metrics,'generating_sources':sources})
     require(all(s['ids']==specs[0]['ids'] for s in specs), 'cross-seed image identity/order differs')
     return specs, contracts
+
+
+def authenticate_parent_sources(contract, seed):
+    """Only the generating entry, data and evaluator code; never a model import."""
+    common = ['src/sparse_rtdetr/r0/evaluation.py', 'src/sparse_rtdetr/r0/evaluation_data.py',
+              'src/sparse_rtdetr/baseline/primary_evaluator.py', 'src/sparse_rtdetr/data_protocol/evaluation.py',
+              'src/sparse_rtdetr/data_protocol/schema.py', 'src/sparse_rtdetr/localization/material_paths.py']
+    refs = []
+    if seed == 0:
+        manifest = json.loads(exact(contract['source_manifest'], contents=True))
+        require(contract['source_manifest']['sha256'] == contract['source_sha256'], 'legacy source manifest differs')
+        require(manifest['files'] == contract['source_files'], 'legacy source list differs')
+        for name in ('deploy.py','evaluate_cached.py','chain.py'):
+            hits = [r for r in manifest['files'] if Path(r['path']).name == name]
+            require(len(hits) == 1, 'legacy generator missing/duplicate')
+            exact(hits[0]); refs.append(hits[0])
+        parent = json.loads(exact(contract['parent_contract'], contents=True))
+        root = Path(parent['source_root']); mp = Path(parent['source_manifest'])
+        require(sha(mp) == contract['parent_source_sha256'], 'legacy evaluation source differs')
+    else:
+        root = Path(contract['source_root']); mp = Path(contract['source_manifest'])
+        require(sha(mp) == contract['source_sha256'], 'repeat source manifest differs')
+        common += ['infer_seed.py', 'new_entry.py', 'new_runtime.py']
+    manifest = read(mp)
+    for name in common:
+        hits = [r for r in manifest['files'] if r['path'] == name]
+        require(len(hits) == 1, 'generating source missing/duplicate: '+name)
+        ref = {**hits[0], 'path':str(root/name)}
+        exact(ref); refs.append(ref)
+        if name.startswith('src/'):
+            require(sha(ROOT/name) == ref['sha256'], 'local canonical input implementation differs: '+name)
+    return refs
+
+
+def parent_metric_metadata(ev, comparison, identity, seed):
+    metrics = {}
+    require(set(ev['predictions']) == set(ev['metrics']) == {'A','B','C'}, 'parent arms differ')
+    for arm in ('A','B','C'):
+        metrics[arm] = {}
+        require(set(ev['predictions'][arm]) == set(ev['metrics'][arm]) == {'600','300'}, 'parent budgets differ')
+        for b in ('600','300'):
+            m = json.loads(exact(ev['metrics'][arm][b], contents=True))
+            require(m['COCO_bridge']['units'] == '0..1 AP, -1 means no GT in an area/class aggregation',
+                    'parent metric units differ')
+            require({k:m['COCO_bridge']['metrics'][k] for k in METRICS} == comparison['scores'][arm][b],
+                    'original comparison/metric scores differ')
+            official = m['official']
+            require(official['evaluated_image_count'] == 548
+                    and len(official['canonical_input_sha256']) == 64, 'missing canonical evaluation input proof')
+            if seed or arm != 'A':
+                binding = m['sahi_binding']
+                for key in ('task_id','source_sha256','contract_sha256'):
+                    require(binding[key] == identity[key], 'metric source identity differs: '+key)
+                if seed:
+                    require(all(binding[k] == v for k,v in identity.items()), 'metric seed/checkpoint differs')
+                require(binding['arm'] == arm and binding['budget'] == int(b)
+                        and binding['prediction'] == ev['predictions'][arm][b], 'metric prediction binding differs')
+            metrics[arm][b] = m
+    return metrics
 
 
 def context(c):
@@ -355,11 +425,55 @@ def context(c):
     rows = read(p)['records']
     require([r['stable_image_id'] for r in rows] == specs[0]['ids'] and all(r['split']=='val' for r in rows),
             'development membership differs')
+    for s in specs:
+        contract = s['contract']
+        data = (json.loads(exact(contract['parent_contract'], contents=True))['data']['development']
+                if s['seed'] == 0 else contract['data']['development'])
+        require(data == spec, 'parent evaluation data source differs')
+        require(contract['full_image_ids'] == s['ids'], 'full/development member order differs')
+        if s['seed']:
+            require(contract['development_ids'] == s['ids'], 'repeat evaluation membership differs')
     from sparse_rtdetr.r0.evaluation import POLICY
     for x in contracts:
         require(sha(x['evaluation_protocol']) == x['evaluation_protocol_sha256']
                 and read(x['evaluation_protocol']) == POLICY, 'evaluator policy differs')
     return specs, rows, spec
+
+
+def evaluation_input_proof(spec, rows, parsed, predictions, arm, budget):
+    """Recreate the saved evaluator INPUT hash; never evaluates detections."""
+    from sparse_rtdetr.r0.evaluation import primary_inputs
+    from sparse_rtdetr.baseline.primary_evaluator import _input_payload
+    from sparse_rtdetr.data_protocol.schema import canonical_json_bytes
+    ids = spec['ids']
+    require([r['stable_image_id'] for r in rows] == ids and len(set(ids)) == len(ids) == 548,
+            'evaluation input members missing/duplicate/reordered')
+    grouped = group(predictions, ids, budget)
+    require(list(dict.fromkeys(p['image_id'] for p in predictions)) == ids,
+            'prediction members missing/duplicate-block/reordered')
+    require(all(grouped[i] for i in ids), 'prediction member is absent')
+    payload = _input_payload(primary_inputs(rows, parsed, predictions))
+    actual = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+    official = spec['metrics'][arm][str(budget)]['official']
+    require(actual == official['canonical_input_sha256'], 'saved evaluation canonical input SHA differs')
+    require(len(payload['detections']) == official['evaluated_detection_count']
+            and len(payload['ground_truth']) == official['evaluated_ground_truth_count'],
+            'saved evaluation input counts differ')
+    return {'arm':arm,'budget':budget,'members':len(ids),'ordered_members_sha256':digest(ids),
+            'canonical_input_sha256':actual,'metric':spec['evaluation']['metrics'][arm][str(budget)],
+            'prediction':spec['evaluation']['predictions'][arm][str(budget)],'rescored':False}
+
+
+def prove_all_evaluation_inputs(specs, rows, parsed, progress):
+    proofs = []
+    for spec in specs:
+        for arm in ('A','B','C'):
+            for budget in (600,300):
+                predictions = json.loads(exact(spec['evaluation']['predictions'][arm][str(budget)], contents=True))
+                proofs.append({'seed':spec['seed'], **evaluation_input_proof(spec,rows,parsed,predictions,arm,budget)})
+                progress(seed=spec['seed'],stage='evaluation_input_SHA',arm=arm,budget=budget)
+    return {'status':'PASS','proofs':proofs,'score_budget_calls':0,
+            'legacy_archive_fixed64_is_not_evaluation_membership':True}
 
 
 def prediction(image, candidate, whole=False):
@@ -508,7 +622,7 @@ def aggregate(results):
 
 def export(out):
     names=['RESULT.json','STOP.json','CLOSED.json','CONSUMED.json','WAITING.json','ADMISSION.json',
-           'WORKER_EXIT.json','SUMMARY.csv','REPORT.md','RESOURCE_START.json']
+           'WORKER_EXIT.json','SUMMARY.csv','REPORT.md','RESOURCE_START.json','EVALUATION_INPUT_PROOF.json']
     paths=[out/n for n in names if (out/n).is_file()]
     for seed in range(3):
         paths += [p for p in (out/f'seed{seed}').glob('*metrics.json')]
@@ -565,12 +679,19 @@ def pipeline(c,out):
         resources(out,plan)
         # bounded progress heartbeat is separate from immutable lifecycle records.
         tmp=out/'heartbeat.tmp';tmp.write_bytes(encoded({'time':time.time(),**fields}));os.replace(tmp,out/'heartbeat.json')
-    process_inputs(out,specs,rows,digest(c),progress,lambda:parsed_gt(rows,data_spec))
+    parsed = parsed_gt(rows,data_spec)
+    publish(out/'EVALUATION_INPUT_PROOF.json',prove_all_evaluation_inputs(specs,rows,parsed,progress))
+    process_inputs(out,specs,rows,digest(c),progress,lambda:parsed)
 
 
 def load_contract(path):
     c=read(path)
     require(c['task_id']==TASK and c['plan_sha256']==sha(PLAN),'plan/task binding differs')
+    gate = json.loads(exact(c['parent_schema_cpu_gate'],contents=True))
+    require(gate['status']=='PASS' and gate['seeds']==[0,1,2]
+            and gate['plan_sha256']==sha(PLAN), 'real parent CPU gate incomplete')
+    for name, value in gate['source_files'].items():
+        require(sha(ROOT/name)==value,'parent CPU gate source differs: '+name)
     require(read(PLAN)['gates_pp']==LIMITS,'plan gate implementation differs')
     require(c['source_root']==str(ROOT),'frozen source root differs')
     for row in c['source_files']:
@@ -618,14 +739,15 @@ def supervise(c,contract_path,out):
 
 
 def main(argv=None):
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['run','worker','cpu-check','parent-check'])
-    p.add_argument('--contract');p.add_argument('--output');p.add_argument('--request')
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['run','worker','cpu-check','parent-check','parent-diagnose'])
+    p.add_argument('--contract');p.add_argument('--output');p.add_argument('--request');p.add_argument('--snapshot')
     a=p.parse_args(argv)
-    if a.mode=='parent-check':
-        require(a.request and a.output and not a.contract, 'parent check requires request/output only')
+    if a.mode in ('parent-check','parent-diagnose'):
+        require(a.request and a.output and a.snapshot and not a.contract,
+                'parent check requires request/output/snapshot only')
         from softnms_parent_check import run
-        return run(Path(a.request), Path(a.output))
-    require(not a.request, 'request is exclusive to parent-check')
+        return run(Path(a.request), Path(a.output),Path(a.snapshot),diagnostic=a.mode=='parent-diagnose')
+    require(not a.request and not a.snapshot, 'request/snapshot are exclusive to parent-check')
     if a.mode=='cpu-check':
         require(a.output and not a.contract,'CPU fixture needs independent output and no production contract')
         from softnms_cpu_fixture import run
