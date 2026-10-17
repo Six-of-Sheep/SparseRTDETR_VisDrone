@@ -194,57 +194,159 @@ def parent_ready(c):
     return True
 
 
-def closed(root, phase):
+def closed(root, phase, contract):
     d = Path(root) / phase
     closure = read(d / 'CLOSED.json')
     require(closure['status'] == 'PASS', 'parent phase not CLOSED PASS')
     require(closure['result'] == reference(d / 'RESULT.json'), 'closed result differs')
+    require(closure['runtime_index'] == reference(d / 'runtime-archive-index.json'),
+            'parent archive index path/binding differs')
     index = json.loads(exact(closure['runtime_index'], contents=True))
     archived = d / 'runtime-archive'
     for name in ('identity.json', 'worker-exit.json', 'supervisor-exit.json'):
         require(sha(archived/name) == index['files'][name], 'parent archive key damaged: '+name)
+    require(index['identity_sha256'] == index['files']['identity.json'], 'archive identity digest conflict')
+    identity = read(archived / 'identity.json')
+    require(identity['schema'] == 'f0-ssd-channel-v4', 'unknown archive identity schema')
+    for key in ('task_id', 'source_sha256', 'contract_sha256'):
+        require(identity[key] == contract[key], 'archive binding differs: ' + key)
+    require(identity['output_root'] == str(d)
+            and identity['runtime_root'] == str(Path(contract['runtime_root']) / phase),
+            'archive output/runtime root differs')
+    require(identity['plan_sha256'] == contract['plan']['sha256'], 'archive plan differs')
+    if 'seed' in contract:
+        require(identity['seed'] == contract['seed'] and identity['mode'] == phase,
+                'archive seed/phase differs')
+        require(identity['progress_protocol'] == 'r18-sahi-paired-seed-progress-v1', 'repeat protocol differs')
+        require(closure['seed'] == contract['seed'] and closure['mode'] == phase, 'closure seed/phase differs')
+    else:
+        require(identity['phase'] == phase and identity['mode'] == ('cpu' if phase == 'evaluation' else 'gpu'),
+                'legacy archive phase/mode differs')
+        require(identity['progress_protocol'] == 'sahi-fixed-progress-v1', 'legacy protocol differs')
+    require(read(archived / 'worker-exit.json')['success'] is True, 'parent worker did not succeed')
     ex = read(archived / 'supervisor-exit.json')
     require(ex['status'] == 'PASS' and ex['returncode'] == 0 and not ex['remaining_live']
             and not ex['unknown_pids'] and not ex['cleanup_errors'], 'parent exit not clean')
     result = read(d/'RESULT.json')
-    require(result['status'] == 'PASS', 'parent result not PASS')
-    return result
+    require(result['status'] == ('R18_COMMON_E120_EMA_LOCKED' if phase == 'formal' else 'PASS'),
+            'parent result not closed successfully')
+    return result, identity
 
 
-def context(c):
-    execution = read(c['parent_execution']['path'])
+def endpoint_checkpoint(contract, seed):
+    """Read e120 metadata only; never construct/load a detector or checkpoint."""
+    if seed == 0:
+        endpoint = json.loads(exact(contract['endpoint'], contents=True))
+        require(endpoint['checkpoint'] == contract['checkpoint'], 'legacy checkpoint/endpoint differs')
+        training = json.loads(exact(contract['parent_contract'], contents=True))
+        require(endpoint['source_sha256'] == contract['parent_source_sha256'] == training['source_sha256']
+                and endpoint['contract_sha256'] == contract['expected_parent_contract_digest']
+                == training['contract_sha256'], 'legacy training lineage differs')
+        require(endpoint['seed'] == 0 and endpoint['original_completed_updates'] == 26752
+                and endpoint['actual_updates'] == 9728, 'legacy resumed update accounting differs')
+    else:
+        training = contract
+        if seed == 1:
+            reuse = contract['parent_reuse']
+            require(reuse['kind'] == 'certified_closed_seed1_e120_and_A548', 'unknown reuse schema')
+            training = json.loads(exact(reuse['contract'], contents=True))
+            certification = json.loads(exact(reuse['certification'], contents=True))
+            require(certification['status'] == 'PASS'
+                    and certification['old_contract'] == reuse['contract']
+                    and certification['old_source_sha256'] == training['source_sha256']
+                    and certification['new_source_sha256'] == contract['source_sha256']
+                    and certification['protocol_only_source_delta'] is True, 'reuse certification differs')
+            for key, value in certification['reuse_references'].items():
+                require(reuse[key] == value, 'reuse reference conflict: ' + key)
+            exact(reuse['formal_closed'])
+            endpoint = json.loads(exact(reuse['endpoint'], contents=True))
+        else:
+            require(seed == 2 and 'parent_reuse' not in contract, 'unexpected seed/reuse branch')
+            endpoint = read(Path(contract['job_root']) / 'formal/endpoint-lock.json')
+        formal, _ = closed(training['job_root'], 'formal', training)
+        require(formal == endpoint, 'formal CLOSED result differs from endpoint')
+        require(training['seed'] == endpoint['seed'] == seed and training['scope'] == contract['scope'],
+                'training endpoint seed/scope differs')
+        for key in ('source_sha256', 'contract_sha256'):
+            require(endpoint[key] == training[key], 'endpoint training binding differs: ' + key)
+        require(endpoint['actual_updates'] == 36480, 'independent seed update accounting differs')
+        if seed == 1:
+            require(certification['checkpoint'] == endpoint['checkpoint'], 'reuse checkpoint differs')
+    require(endpoint['status'] == 'R18_COMMON_E120_EMA_LOCKED' and endpoint['epoch'] == 120
+            and endpoint['updates'] == 36480
+            and endpoint['used_acceptance_state'] is False, 'endpoint is not independent e120')
+    cp = endpoint['checkpoint']
+    require(cp['completed_updates'] == 36480 and cp['scope'] == f'formal_R18_seed{seed}_e120',
+            'checkpoint update/scope differs')
+    return cp
+
+
+def parent_metadata(c):
+    """Authenticate all three real schema variants before touching raw candidates."""
+    execution = json.loads(exact(c['parent_execution'], contents=True))
+    require(execution['execution_sha256'] == c['parent_execution_digest']
+            == digest({k:v for k,v in execution.items() if k != 'execution_sha256'}), 'execution digest differs')
     contracts = [json.loads(exact(r, contents=True)) for r in execution['contracts']]
-    specs = []
+    require([x['seed'] for x in contracts] == [1, 2], 'parent contract seeds differ')
     s0 = json.loads(exact(c['seed0_contract'], contents=True))
+    specs = []
     for seed, contract in [(0, s0), *[(x['seed'], x) for x in contracts]]:
         root = Path(contract['job_root'])
-        full, ev = closed(root, 'full-C'), closed(root, 'evaluation')
+        exact(contract['plan'])
+        full, fi = closed(root, 'full-C', contract)
+        ev, ei = closed(root, 'evaluation', contract)
+        cp = endpoint_checkpoint(contract, seed)
+        ids = contract['full_image_ids'] if seed == 0 else contract['development_ids']
+        require(len(ids) == len(set(ids)) == 548, 'development IDs invalid')
+        identity = {k:full[k] for k in ('task_id','source_sha256','contract_sha256','checkpoint_sha256')}
+        require(full['phase'] == 'full-C', 'full-C phase differs')
+        for key in ('task_id','source_sha256','contract_sha256'):
+            require(identity[key] == contract[key] == fi[key] == ei[key], 'parent identity conflict: ' + key)
+        require(identity['checkpoint_sha256'] == cp['sha256'], 'full-C checkpoint differs')
+        if seed == 0:
+            require(ev['schema'] == 'r18-sahi-fixed-evaluation-v1', 'unknown legacy evaluation schema')
+            for archive in (fi, ei):
+                require(archive['checkpoint_sha256'] == cp['sha256'] and archive['image_ids'] == ids,
+                        'legacy archive checkpoint/images differ')
+            # Missing legacy fields come only from authenticated archive, never defaults.
+            for key in ('task_id','checkpoint_sha256'):
+                if key in ev:
+                    require(ev[key] == ei[key], 'legacy optional result identity conflict: ' + key)
+            for key in ('source_sha256','contract_sha256','plan_sha256'):
+                require(ev[key] == ei[key] == full[key], 'legacy result binding differs: ' + key)
+            require(ev['full_C_result'] == reference(root/'full-C/RESULT.json'), 'legacy full-C association differs')
+            exact(ev['full_C_result'])
+        else:
+            require(full['schema'] == 'r18-sahi-repeat-inference-v1'
+                    and ev['schema'] == 'r18-sahi-repeat-evaluation-v1', 'unknown repeat schema')
+            identity.update(seed=seed, scope=contract['scope'])
+            require(contract['scope'] == f'formal_R18_seed{seed}_e120', 'contract scope differs')
+            for result in (full, ev):
+                require(all(result[k] == v for k,v in identity.items()), 'repeat result identity differs')
+            for archive in (fi, ei):
+                auth = archive['evaluation_authorization']
+                require(archive['starting_cursor'] == 36480 and auth['checkpoint_sha256'] == cp['sha256']
+                        and auth['image_ids'] == ids and auth['budgets'] == [600,300],
+                        'repeat archive endpoint/images/budgets differ')
+        require(ev['budgets'] == [600,300], 'evaluation budgets differ')
         require(full['images'] == ev['images'] == 548 and full['whole_output_exact'] == 548,
                 'parent does not cover full development')
         require(full['detector_updates'] == 0 and full['state_RNG_exact'] is True,
                 'parent inference mutated detector')
-        identity = {k:full[k] for k in ('task_id','source_sha256','contract_sha256','checkpoint_sha256')}
-        require(identity['contract_sha256'] == contract['contract_sha256']
-                and identity['source_sha256'] == contract['source_sha256'], 'parent binding mismatch')
-        cp = contract['checkpoint']
-        require(cp['completed_updates'] == 36480 and identity['checkpoint_sha256'] == cp['sha256'], 'not own e120 EMA')
-        for key in ('task_id','source_sha256','contract_sha256'):
-            require(ev[key] == identity[key], 'evaluation source binding differs')
+        require(len(full['raw_view_refs']) == 137, 'pre-NMS raw-view batches incomplete')
+        require(ev['predictions']['C'] == full['predictions'], 'C prediction refs differ')
         comparison = json.loads(exact(ev['comparison'], contents=True))
         require(comparison['COCO_bridge_original_score_units'] == '0..1'
                 and comparison['difference_units'] == 'percentage points', 'original units differ')
         require(set(comparison['scores']) == {'A','B','C'}, 'original arms differ')
-        ids = contract.get('development_ids', contract.get('full_image_ids'))
-        require(len(ids) == len(set(ids)) == 548, 'development IDs invalid')
-        if seed:
-            identity.update(seed=seed, scope=f'formal_R18_seed{seed}_e120')
-            require(all(full[k] == v for k,v in identity.items()), 'seed identity differs')
-        require(len(full['raw_view_refs']) == 137, 'pre-NMS raw-view batches incomplete')
-        require(ev['predictions']['C'] == full['predictions'], 'C prediction refs differ')
         specs.append({'seed':seed,'identity':identity,'ids':ids,'full':full,'evaluation':ev,
                       'comparison':comparison,'root':str(root)})
-    require([s['seed'] for s in specs] == [0,1,2], 'fixed three seeds required')
     require(all(s['ids']==specs[0]['ids'] for s in specs), 'cross-seed image identity/order differs')
+    return specs, contracts
+
+
+def context(c):
+    specs, contracts = parent_metadata(c)
     spec = contracts[0]['data']['development']
     require(all(x['data']['development'] == spec for x in contracts), 'GT/data roots differ')
     from sparse_rtdetr.localization.material_paths import MANIFESTS, metadata_path
@@ -516,9 +618,14 @@ def supervise(c,contract_path,out):
 
 
 def main(argv=None):
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['run','worker','cpu-check'])
-    p.add_argument('--contract');p.add_argument('--output')
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['run','worker','cpu-check','parent-check'])
+    p.add_argument('--contract');p.add_argument('--output');p.add_argument('--request')
     a=p.parse_args(argv)
+    if a.mode=='parent-check':
+        require(a.request and a.output and not a.contract, 'parent check requires request/output only')
+        from softnms_parent_check import run
+        return run(Path(a.request), Path(a.output))
+    require(not a.request, 'request is exclusive to parent-check')
     if a.mode=='cpu-check':
         require(a.output and not a.contract,'CPU fixture needs independent output and no production contract')
         from softnms_cpu_fixture import run
