@@ -440,11 +440,41 @@ def context(c):
     return specs, rows, spec
 
 
-def evaluation_input_proof(spec, rows, parsed, predictions, arm, budget):
-    """Recreate the saved evaluator INPUT hash; never evaluates detections."""
-    from sparse_rtdetr.r0.evaluation import primary_inputs
+def evaluation_count_proof(rows, parsed, predictions, metric):
+    """Authenticate the pre-filter input and reuse the frozen raster filter, no AP."""
+    from sparse_rtdetr.r0.evaluation import primary_inputs, bridge_inputs
     from sparse_rtdetr.baseline.primary_evaluator import _input_payload
     from sparse_rtdetr.data_protocol.schema import canonical_json_bytes
+    payload = _input_payload(primary_inputs(rows, parsed, predictions))
+    actual = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+    official = metric['official']
+    require(actual == official['canonical_input_sha256'], 'saved evaluation canonical input SHA differs')
+    dataset, filtered, counts = bridge_inputs(rows, parsed, predictions)
+    saved = metric['spatial_filter_counts']
+    require(all(type(official[k]) is int for k in
+                ('evaluated_image_count','evaluated_detection_count','evaluated_ground_truth_count')),
+            'saved evaluated counts are not native integers')
+    require(set(saved) == set(counts), 'saved spatial count fields differ')
+    require(all(type(saved[k]) is int and saved[k] == counts[k] for k in counts),
+            'saved spatial before/after counts differ')
+    require(counts['detections_before'] == len(payload['detections']) == len(predictions),
+            'before count is not the budget-truncated input')
+    require(counts['GT_before'] == sum(g['category_id'] in range(1,11) for g in payload['ground_truth']),
+            'before GT count includes excluded categories')
+    require(counts['detections_after'] == len(filtered) == official['evaluated_detection_count']
+            and counts['GT_after'] == len(dataset['annotations']) == official['evaluated_ground_truth_count']
+            and len(rows) == official['evaluated_image_count'], 'saved evaluated after counts differ')
+    return {'canonical_input_sha256':actual, 'counts':counts,
+            'raw_input_GT_including_regions_and_excluded_categories':len(payload['ground_truth']),
+            'official_evaluated_detection_count':official['evaluated_detection_count'],
+            'official_evaluated_ground_truth_count':official['evaluated_ground_truth_count'],
+            'filter_implementation':'sparse_rtdetr.r0.evaluation.bridge_inputs (frozen official raster primitive)',
+            'order':['original candidates','postprocess','budget truncation','raw-ignore','evaluation'],
+            'no_refill':True,'rescored':False}
+
+
+def evaluation_input_proof(spec, rows, parsed, predictions, arm, budget):
+    """Recreate the saved evaluator INPUT hash; never evaluates detections."""
     ids = spec['ids']
     require([r['stable_image_id'] for r in rows] == ids and len(set(ids)) == len(ids) == 548,
             'evaluation input members missing/duplicate/reordered')
@@ -452,15 +482,9 @@ def evaluation_input_proof(spec, rows, parsed, predictions, arm, budget):
     require(list(dict.fromkeys(p['image_id'] for p in predictions)) == ids,
             'prediction members missing/duplicate-block/reordered')
     require(all(grouped[i] for i in ids), 'prediction member is absent')
-    payload = _input_payload(primary_inputs(rows, parsed, predictions))
-    actual = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
-    official = spec['metrics'][arm][str(budget)]['official']
-    require(actual == official['canonical_input_sha256'], 'saved evaluation canonical input SHA differs')
-    require(len(payload['detections']) == official['evaluated_detection_count']
-            and len(payload['ground_truth']) == official['evaluated_ground_truth_count'],
-            'saved evaluation input counts differ')
+    counts = evaluation_count_proof(rows, parsed, predictions, spec['metrics'][arm][str(budget)])
     return {'arm':arm,'budget':budget,'members':len(ids),'ordered_members_sha256':digest(ids),
-            'canonical_input_sha256':actual,'metric':spec['evaluation']['metrics'][arm][str(budget)],
+            **counts,'metric':spec['evaluation']['metrics'][arm][str(budget)],
             'prediction':spec['evaluation']['predictions'][arm][str(budget)],'rescored':False}
 
 
@@ -473,6 +497,8 @@ def prove_all_evaluation_inputs(specs, rows, parsed, progress):
                 proofs.append({'seed':spec['seed'], **evaluation_input_proof(spec,rows,parsed,predictions,arm,budget)})
                 progress(seed=spec['seed'],stage='evaluation_input_SHA',arm=arm,budget=budget)
     return {'status':'PASS','proofs':proofs,'score_budget_calls':0,
+            'ordered_image_ids':[r['stable_image_id'] for r in rows],
+            'data_manifest_rows_sha256':digest(rows),
             'legacy_archive_fixed64_is_not_evaluation_membership':True}
 
 
@@ -550,7 +576,13 @@ def prepare_seed(spec, rows, out, progress):
                 for budget in (600,300):
                     actual=[prediction(image,p,whole=arm=='A') for p in values[f'top{budget}']]
                     require(actual==expected[arm][budget][image],f'seed{spec["seed"]} {arm}{budget} rebuild differs: '+image)
-            counts={'image_id':image}
+            counts={'image_id':image,'original_stages':{a:{
+                    'raw_query_class_scores':int(sum(v['pred_logits'][0].numel() for v in raw['views']
+                                                     if a=='C' or v['view_id']==0)),
+                    'selected_view_pool':len(pool) if a=='C' else len(whole),
+                    'after_postprocess_before_budget':values.get('kept_count',len(whole)),
+                    'before_raw_ignore':{str(b):len(values[f'top{b}']) for b in (600,300)}}
+                    for a,values in rebuilt.items()}}
             for arm,values in [('E',whole),('D',pool)]:
                 merged=gaussian_soft_nms(values);counts[arm]=merged['stats']
                 for budget in (600,300):
@@ -633,7 +665,7 @@ def export(out):
              'large_predictions_and_full_logs':'SERVER_ONLY','not_full_delivery':True})
 
 
-def process_inputs(out, specs, rows, binding, progress, parsed_factory):
+def process_inputs(out, specs, rows, binding, progress, parsed_factory, certified_prepared=None):
     import torch
     journal=Journal(out,binding)
     before=torch.get_rng_state().clone()
@@ -642,7 +674,9 @@ def process_inputs(out, specs, rows, binding, progress, parsed_factory):
     prepared=[]
     for spec in specs:
         dest=out/f'seed{spec["seed"]}';dest.mkdir(exist_ok=False)
-        p=prepare_seed(spec,rows,dest,progress);publish(dest/'PREPARED.json',p);prepared.append(p)
+        p=(prepare_seed(spec,rows,dest,progress) if certified_prepared is None
+           else certified_prepared[spec['seed']])
+        publish(dest/'PREPARED.json',p);prepared.append(p)
         journal.emit(f'cache_seed{spec["seed"]}',prepared=reference(dest/'PREPARED.json'))
     publish(out/'ADMISSION.json',{'status':'PASS','all_seeds':[0,1,2],'images_each':len(rows),
                                 'raw_SHA_identity_and_A_B_C_exact':True,'scored_before_gate':False})
@@ -679,9 +713,10 @@ def pipeline(c,out):
         resources(out,plan)
         # bounded progress heartbeat is separate from immutable lifecycle records.
         tmp=out/'heartbeat.tmp';tmp.write_bytes(encoded({'time':time.time(),**fields}));os.replace(tmp,out/'heartbeat.json')
-    parsed = parsed_gt(rows,data_spec)
-    publish(out/'EVALUATION_INPUT_PROOF.json',prove_all_evaluation_inputs(specs,rows,parsed,progress))
-    process_inputs(out,specs,rows,digest(c),progress,lambda:parsed)
+    from softnms_input_check import admitted_preparation
+    prepared = admitted_preparation(c, specs, rows)
+    publish(out/'EVALUATION_INPUT_PROOF.json',json.loads(exact(c['real_data_gate']['input_proof'],contents=True)))
+    process_inputs(out,specs,rows,digest(c),progress,lambda:parsed_gt(rows,data_spec),prepared)
 
 
 def load_contract(path):
@@ -700,6 +735,9 @@ def load_contract(path):
     require(c['python']==sys.executable,'CPU interpreter differs')
     require(sha(sys.executable)==c['python_sha256'],'CPU interpreter bytes differ')
     require(Path('/proc/sys/kernel/random/boot_id').read_text().strip()==c['boot_id'],'boot changed')
+    require('real_data_gate' in c,'production requires real input and cache gates before scoring')
+    from softnms_input_check import gate_identity
+    gate_identity(c)
     return c
 
 
@@ -739,9 +777,13 @@ def supervise(c,contract_path,out):
 
 
 def main(argv=None):
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['run','worker','cpu-check','parent-check','parent-diagnose'])
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['run','worker','cpu-check','parent-check','parent-diagnose','input-check','input-worker'])
     p.add_argument('--contract');p.add_argument('--output');p.add_argument('--request');p.add_argument('--snapshot')
     a=p.parse_args(argv)
+    if a.mode in ('input-check','input-worker'):
+        require(a.request and a.output and not a.contract and not a.snapshot,'input check requires request/output only')
+        from softnms_input_check import run, supervise
+        return (supervise if a.mode=='input-check' else run)(Path(a.request),Path(a.output))
     if a.mode in ('parent-check','parent-diagnose'):
         require(a.request and a.output and a.snapshot and not a.contract,
                 'parent check requires request/output/snapshot only')

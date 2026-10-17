@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from unittest.mock import patch
 
 
 def run(out):
@@ -101,6 +102,8 @@ def run(out):
     j.require(not filtered and counts['detections_before']==1 and counts['detections_after']==0,'ignore/no-refill fixture differs')
     j.require(any(x['iscrowd']==1 for x in dataset['annotations']),'class-ignore lost')
     j.require(not torch.cuda.is_initialized(),'fixture CUDA initialized')
+    from softnms_input_check import count_checks as check_count_flow
+    input_count_gate=check_count_flow()
     work=out/'actual-entry';work.mkdir()
     j.process_inputs(work,specs,rows,'cpu-fixture-not-production',lambda **kw:None,lambda:parsed)
     j.export(work)
@@ -153,6 +156,16 @@ def run(out):
     j.require(not (out/'unused').exists() and (work/'events.jsonl').read_bytes()==original,'rejected CLI changed evidence')
     require_result=j.read(work/'RESULT.json')
     j.require(require_result['new_score_budget_calls']==12 and j.read(work/'CLOSED.json')['status']=='PASS','entry did not complete12 evaluator calls')
+    # New scoring path consumes already admitted immutable preparation, never rebuilds.
+    certified=[j.read(work/f'seed{s}/PREPARED.json') for s in range(3)]
+    reused=out/'certified-entry';reused.mkdir()
+    def forbidden(*args,**kwargs):raise AssertionError('certified path rebuilt candidates')
+    with patch.object(j,'prepare_seed',forbidden):
+        j.process_inputs(reused,specs,rows,'cpu-certified-fixture',lambda **kw:None,lambda:parsed,certified)
+    j.export(reused)
+    j.require([r['scores'] for r in j.read(reused/'RESULT.json')['seed_results']]
+              ==[r['scores'] for r in require_result['seed_results']],
+              'certified preparation changed synthetic scores')
     j.publish(out/'CPU_RESULT.json',{'status':'PASS','actual_entry':'softnms_job.py cpu-check',
               'same_processing_functions':'prepare_seed/process_inputs/evaluate_seed/Journal/export',
               'synthetic_images':4,'synthetic_seeds':[0,1,2],'real_score_budget_calls':12,
@@ -161,5 +174,9 @@ def run(out):
               'slim_export_bytes_verified':exported['total_bytes'],'closed_events':j.Journal.validate(work/'events.jsonl','cpu-fixture-not-production',complete=True),
               'CUDA_initialized':torch.cuda.is_initialized(),'detector_constructed':False,'production_token_consumed':False,
               'actual_experiment_scoring':False,'elapsed_seconds':time.monotonic()-started})
+    j.publish(out/'REAL_FLOW_CPU_GATE.json',{'status':'PASS','count_checks':input_count_gate,
+              'synthetic_certified_path':True,'additional_synthetic_score_budget_calls':12,
+              'certified_closure':j.Journal.validate(reused/'events.jsonl','cpu-certified-fixture',complete=True),
+              'new_full_development_scoring':False,'GPU_calls':0})
     print(json.dumps({'status':'PASS','output':str(out),'synthetic_only':True,'real_evaluator_calls':12}))
     return 0

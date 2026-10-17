@@ -157,7 +157,7 @@ def run(request, out, snapshot=None, diagnostic=False):
                   'real_snapshot':j.reference(snapshot),'rejections':rejected,'rejection_count':len(rejected),
                   'positive':'complete parent_metadata/context plus generating source and metric bindings',
                   'semantic_faults':'after SHA authentication, immutable snapshot read injection',
-                  'evaluation_548_input_digest_proof':'REQUIRED_AT_PRODUCTION_ADMISSION_BEFORE_CANDIDATES',
+                  'evaluation_548_input_digest_proof':'REQUIRED_IN_REAL_DATA_GATE_BEFORE_SCORING_ATTEMPT',
                   'unaffected_algorithm_gate':'REUSED','raw_candidate_reads':0,'score_budget_calls':0,
                   'GPU_calls':0,'training_updates':0,'elapsed_seconds':time.monotonic()-start})
         print(json.dumps({'status':'PASS','rejections':len(rejected),'seconds':time.monotonic()-start}))
