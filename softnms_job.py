@@ -340,7 +340,7 @@ def prepare_seed(spec, rows, out, progress):
                 for budget in (600,300):
                     selected=merged[f'top{budget}']
                     outputs[arm][budget].extend(prediction(image,p) for p in selected)
-                    counts[arm][f'top{budget}_view_counts']={str(v):sum(p.view_id==v for p in selected) for v in range(5)}
+                    counts[arm][f'top{budget}_view_counts']={str(v):int(sum(p.view_id==v for p in selected)) for v in range(5)}
             stats.append(counts)
         progress(seed=spec['seed'],batch=k+1,stage='cache_rebuild')
     refs={}

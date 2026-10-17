@@ -1,15 +1,17 @@
 """Independent analytic examples; no detector, network, GT cache or GPU."""
 import dataclasses
+import json
 import math
 from pathlib import Path
 import random
 import sys
 import tempfile
 import unittest
+import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from slice_core import Candidate, box_iou64
 from softnms_core import gaussian_soft_nms, compare_scores, LIMITS, METRICS
-from softnms_job import Journal, digest, read, PLAN
+from softnms_job import Journal, digest, read, publish, exact, encoded, PLAN
 
 
 def c(q,score,box=(0.,0.,10.,10.),view=0,cat=1):
@@ -127,6 +129,48 @@ class FixedSoftNMS(unittest.TestCase):
             with self.assertRaises(ValueError):j.emit('started')
             with self.assertRaises(ValueError):Journal.validate(j.path,'fixture',complete=True)
             with self.assertRaises(ValueError):Journal.validate(j.path,'wrong')
+
+    def check_stats_roundtrip(self, items, counts):
+        result=gaussian_soft_nms(items)
+        stats=result['stats']
+        keys=('candidate_count','input_zero_scores','underflow_to_zero','output_zero_scores','subnormal_scores')
+        self.assertEqual(tuple(stats[k] for k in keys),counts)
+        self.assertTrue(all(type(stats[k]) is int for k in keys))
+        with tempfile.TemporaryDirectory() as directory:
+            ref=publish(Path(directory)/'COUNTS.json',{'E':stats,'D':stats})
+            loaded=json.loads(exact(ref,contents=True))
+            self.assertEqual(loaded,{'E':stats,'D':stats})
+            self.assertTrue(all(type(loaded[a][k]) is int for a in ('E','D') for k in keys))
+            self.assertEqual(loaded['E']['sigma'],.5)
+            self.assertIsNone(loaded['E']['score_cutoff'])
+
+    def test_json_empty_counts_roundtrip(self):
+        self.check_stats_roundtrip([], (0,0,0,0,0))
+
+    def test_json_zero_counts_roundtrip(self):
+        self.check_stats_roundtrip([c(0,0.),c(1,0.)], (2,2,0,2,0))
+
+    def test_json_subnormal_counts_roundtrip(self):
+        tiny=float.fromhex('0x0.0000000000001p-1022')
+        self.check_stats_roundtrip([c(0,tiny)], (1,0,0,0,1))
+
+    def test_json_underflow_counts_roundtrip(self):
+        tiny=float.fromhex('0x0.0000000000001p-1022')
+        self.check_stats_roundtrip([c(0,1.),c(1,tiny),c(2,0.)], (3,1,1,2,0))
+
+    def test_json_strict_encoder_rejects_unconverted_or_nonfinite(self):
+        for bad in (np.int64(1),np.bool_(True)):
+            with self.assertRaises(TypeError):encoded({'bad':bad})
+        for bad in (float('nan'),float('inf')):
+            with self.assertRaises(ValueError):encoded({'bad':bad})
+
+    def test_failed_json_write_preserves_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'COUNTS.json'
+            publish(path,{'count':2});before=path.read_bytes()
+            with self.assertRaises(TypeError):publish(path,{'count':np.int64(3)})
+            self.assertEqual(path.read_bytes(),before)
+            self.assertFalse(path.with_name(path.name+'.partial').exists())
 
 
 if __name__=='__main__':unittest.main()

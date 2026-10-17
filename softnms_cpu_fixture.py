@@ -7,6 +7,7 @@ import copy
 import json
 import math
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -90,6 +91,10 @@ def run(out):
         reject(f'seed{seed}-nonfinite-raw',lambda:j.decode_raw(bad,rows,identity,seed))
         ref={**rawref,'sha256':'f'*64}
         reject(f'seed{seed}-SHA-damage',lambda:j.exact(ref))
+        ref={**rawref,'path':str(base/'missing-raw.pth')}
+        reject(f'seed{seed}-missing-file',lambda:j.exact(ref))
+        ref={**rawref,'bytes':rawref['bytes']+1}
+        reject(f'seed{seed}-wrong-size',lambda:j.exact(ref))
     # Verify raw-ignore and zero-score no-refill using unchanged evaluator bridge.
     ignore_pred=[{'image_id':rows[0]['stable_image_id'],'category_id':1,'bbox_xyxy':[0.,650.,20.,670.],'score':0.}]
     dataset,filtered,counts=bridge_inputs(rows,parsed,ignore_pred)
@@ -99,17 +104,61 @@ def run(out):
     work=out/'actual-entry';work.mkdir()
     j.process_inputs(work,specs,rows,'cpu-fixture-not-production',lambda **kw:None,lambda:parsed)
     j.export(work)
+    count_checks=[]
+    for seed in range(3):
+        prepared=j.read(work/f'seed{seed}/PREPARED.json')
+        counts=json.loads(j.exact(prepared['counts'],contents=True))
+        j.require([v['image_id'] for v in counts]==[r['stable_image_id'] for r in rows],'counts image order differs')
+        for row in counts:
+            for arm,total in [('E',600),('D',3000)]:
+                values=row[arm]
+                for key in ('candidate_count','input_zero_scores','underflow_to_zero','output_zero_scores','subnormal_scores'):
+                    j.require(type(values[key]) is int and values[key]>=0,'JSON count not native nonnegative integer')
+                j.require(values['candidate_count']==total,'candidate count changed in JSON')
+                j.require(values['sigma']==.5 and values['score_cutoff'] is None,'scientific JSON values changed')
+                for budget in (600,300):
+                    vc=values[f'top{budget}_view_counts']
+                    j.require(set(vc)==set(map(str,range(5))) and all(type(v) is int and v>=0 for v in vc.values()),'view counts not native')
+                    j.require(sum(vc.values())==budget,'view counts do not equal output budget')
+        count_checks.append({'seed':seed,'images':len(counts),'native_counts_and_values':True})
+    exported=j.read(work/'SLIM_EXPORT.json')
+    j.require(exported['status']=='READY','export not ready')
+    j.require(exported['total_bytes']==sum(r['bytes'] for r in exported['files']),'export byte total differs')
+    for ref in exported['files']:
+        j.exact(ref)
+        j.require('predictions' not in Path(ref['path']).name and Path(ref['path']).suffix in ('.json','.md','.csv'),'export whitelist leaked large artifact')
+    metric_refs=[r for r in exported['files'] if r['path'].endswith('-metrics.json')]
+    j.require(len(metric_refs)==12,'export missing double-evaluator results')
+    for ref in metric_refs:
+        metric=json.loads(j.exact(ref,contents=True))
+        j.require('official' in metric and 'COCO_bridge' in metric and 'spatial_filter_counts' in metric,'double evaluator result missing')
+        j.require(metric['softnms_binding']['plan_sha256']==j.sha(j.PLAN),'metric plan binding differs')
     original=(work/'events.jsonl').read_bytes()
     lines=original.splitlines(keepends=True)
     for name,edited in [('missing',lines[:-1]),('duplicate',lines+[lines[-1]]),('reordered',lines[:2]+[lines[3],lines[2]]+lines[4:])]:
         path=out/(name+'.jsonl');path.write_bytes(b''.join(edited))
         reject('lifecycle-'+name,lambda p=path:j.Journal.validate(p,'cpu-fixture-not-production',complete=True))
+    reject('lifecycle-wrong-binding',lambda:j.Journal.validate(work/'events.jsonl','wrong',complete=True))
+    broken=json.loads(lines[0]);broken['fields']['contract_sha256']='damaged'
+    damage=out/'damaged.jsonl';damage.write_bytes(j.encoded(broken).replace(b'\n',b'')+b'\n'+b''.join(lines[1:]))
+    reject('lifecycle-corrupt-record',lambda:j.Journal.validate(damage,'cpu-fixture-not-production',complete=True))
+    before=(work/'CLOSED.json').read_bytes()
+    reject('immutable-closure',lambda:j.publish(work/'CLOSED.json',{'status':'replaced'}))
+    j.require((work/'CLOSED.json').read_bytes()==before,'rejected replacement changed closure')
+    # Negative cases enter the actual CLI, not a manually assembled event stream.
+    for name,args in [('used-output',['--output',str(out)]),('unexpected-production-contract',['--output',str(out/'unused'),'--contract','forbidden'])]:
+        p=subprocess.run([sys.executable,'-B',str(j.ROOT/'softnms_job.py'),'cpu-check',*args],capture_output=True,text=True)
+        j.require(p.returncode!=0 and 'ValueError' in p.stderr,'invalid actual CLI accepted')
+        checks.append('CLI-'+name)
+    j.require(not (out/'unused').exists() and (work/'events.jsonl').read_bytes()==original,'rejected CLI changed evidence')
     require_result=j.read(work/'RESULT.json')
     j.require(require_result['new_score_budget_calls']==12 and j.read(work/'CLOSED.json')['status']=='PASS','entry did not complete12 evaluator calls')
     j.publish(out/'CPU_RESULT.json',{'status':'PASS','actual_entry':'softnms_job.py cpu-check',
               'same_processing_functions':'prepare_seed/process_inputs/evaluate_seed/Journal/export',
               'synthetic_images':4,'synthetic_seeds':[0,1,2],'real_score_budget_calls':12,
               'real_evaluators':['COCO_bridge','official_style'],'negative_cases':checks,
+              'statistics_JSON_roundtrip':count_checks,'slim_export_refs_verified':len(exported['files']),
+              'slim_export_bytes_verified':exported['total_bytes'],'closed_events':j.Journal.validate(work/'events.jsonl','cpu-fixture-not-production',complete=True),
               'CUDA_initialized':torch.cuda.is_initialized(),'detector_constructed':False,'production_token_consumed':False,
               'actual_experiment_scoring':False,'elapsed_seconds':time.monotonic()-started})
     print(json.dumps({'status':'PASS','output':str(out),'synthetic_only':True,'real_evaluator_calls':12}))

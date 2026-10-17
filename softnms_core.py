@@ -57,9 +57,10 @@ def gaussian_soft_nms(candidates):
     output.sort(key=lambda c: c.sort_key)
     if len(output) != len(items):
         raise ValueError('Soft-NMS must retain all candidate identities')
-    stats = {'candidate_count': len(items), 'input_zero_scores': zero_input,
-             'underflow_to_zero': underflow, 'output_zero_scores': sum(c.score == 0 for c in output),
-             'subnormal_scores': sum(0 < c.score < np.finfo(np.float64).tiny for c in output),
+    # Counts cross the strict JSON boundary; NumPy comparisons can yield np.int64.
+    stats = {'candidate_count': int(len(items)), 'input_zero_scores': int(zero_input),
+             'underflow_to_zero': int(underflow), 'output_zero_scores': int(sum(c.score == 0 for c in output)),
+             'subnormal_scores': int(sum(0 < c.score < np.finfo(np.float64).tiny for c in output)),
              'sigma': SIGMA, 'version': VERSION, 'score_cutoff': None}
     return {'top600': output[:600], 'top300': output[:300], 'all': output, 'stats': stats}
 
