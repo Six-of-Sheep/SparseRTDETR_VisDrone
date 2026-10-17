@@ -209,6 +209,13 @@ print(json.dumps({'files':rows}))
 '''
 
 
+def ssh_process_options(platform=None):
+    """A detached Windows observer must not create a console for each SSH poll."""
+    if (os.name if platform is None else platform) == 'nt':
+        return {'creationflags': getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)}
+    return {}
+
+
 def remote(config, body, timeout=120):
     command = ('nice -n 19 ionice -c 3 env CUDA_VISIBLE_DEVICES= '
                'MKL_THREADING_LAYER=GNU OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 '
@@ -218,7 +225,7 @@ def remote(config, body, timeout=120):
         process = subprocess.run(['ssh.exe', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
                                   '-o', 'ServerAliveInterval=20', '-o', 'ServerAliveCountMax=3',
                                   'visdrone-gpu', command], input=code.encode('utf8'),
-                                 capture_output=True, timeout=timeout)
+                                 capture_output=True, timeout=timeout, **ssh_process_options())
     except (subprocess.TimeoutExpired, OSError) as exc:
         raise NetworkUnavailable(repr(exc)) from exc
     if process.returncode == 255:

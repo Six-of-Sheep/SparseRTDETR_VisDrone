@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 MODULE = Path(__file__).resolve().parents[1] / 'tools/sahi_observer.py'
 spec = importlib.util.spec_from_file_location('sahi_observer', MODULE)
@@ -25,6 +27,31 @@ def canonical(value):
 
 
 class ObserverTests(unittest.TestCase):
+    def test_windows_ssh_child_has_no_window_flag(self):
+        self.assertEqual(obs.ssh_process_options('nt'), {'creationflags': 0x08000000})
+
+    def test_non_windows_ssh_has_no_windows_options(self):
+        self.assertEqual(obs.ssh_process_options('posix'), {})
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows console API')
+    def test_windows_real_child_has_no_console_window(self):
+        code = 'import ctypes; print(int(ctypes.windll.kernel32.GetConsoleWindow() or 0))'
+        result = subprocess.run([sys.executable, '-B', '-c', code], capture_output=True,
+                                timeout=10, **obs.ssh_process_options())
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), b'0')
+
+    def test_real_remote_adapter_applies_flag_without_losing_capture_or_timeout(self):
+        with patch.object(obs, 'ssh_process_options', return_value={'creationflags': 0x08000000}), \
+             patch.object(obs.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout=b'{}', stderr=b'')) as launch:
+            self.assertEqual(obs.remote(self.config, obs.REMOTE_STATUS, timeout=17), {})
+        args, kwargs = launch.call_args
+        self.assertEqual(args[0][0], 'ssh.exe')
+        self.assertEqual(kwargs['creationflags'], 0x08000000)
+        self.assertTrue(kwargs['capture_output'])
+        self.assertEqual(kwargs['timeout'], 17)
+        self.assertIsInstance(kwargs['input'], bytes)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
