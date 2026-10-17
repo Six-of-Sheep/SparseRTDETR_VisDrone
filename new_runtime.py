@@ -117,11 +117,16 @@ def identity(c, mode):
         spec = c["CPU_protocol"]
         result.update(CPU_protocol_only=True, protocol_mode=spec["mode"], starting_cursor=spec["starting_cursor"])
     if mode in (*INFERENCE, *SAHI, "evaluation"):
-        lock = read(Path(c["job_root"]) / "formal/endpoint-lock.json")
+        from resume_support import endpoint
+        lock = endpoint(c)
+        parent = c
+        if c.get('parent_reuse'):
+            from resume_support import parent_contract
+            parent = parent_contract(c)
         require(lock["status"] == "R18_COMMON_E120_EMA_LOCKED" and lock.get("seed") == c["seed"]
                 and lock["epoch"] == 120 and lock["updates"] == 36480
-                and lock["source_sha256"] == c["source_sha256"] and lock["contract_sha256"] == c["contract_sha256"], "paired endpoint identity/seed differs")
-        require(reference(Path(c["job_root"]) / "formal/binding.json") == lock["binding"], "paired endpoint binding bytes changed")
+                and lock["source_sha256"] == parent["source_sha256"] and lock["contract_sha256"] == parent["contract_sha256"], "paired endpoint identity/seed differs")
+        require(reference(Path(parent["job_root"]) / "formal/binding.json") == lock["binding"], "paired endpoint binding bytes changed")
         result["evaluation_authorization"] = {"checkpoint_sha256": lock["checkpoint"]["sha256"],
                                                "image_ids": c.get("development_ids", c.get("full_image_ids")), "budgets": [600, 300]}
     return result

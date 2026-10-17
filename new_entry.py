@@ -11,6 +11,9 @@ def prerequisite(c,mode,*,preview=False):
   require(not c.get('GPU_execution_authorized') and not c.get('formal_training_authorized'),'CPU prerequisite fixture carries execution authority')
  else:require(c.get('GPU_execution_authorized') and c.get('formal_training_authorized'),'chain authority absent')
  gate=read(c['CPU_gate']['path']);require(reference(c['CPU_gate']['path'])==c['CPU_gate'] and gate['status']=='PASS' and gate['source_sha256']==c['source_sha256'] and gate['seed']==c['seed'],'CPU gate differs')
+ if c.get('parent_reuse'):
+  from resume_support import prerequisite as resumed_prerequisite
+  resumed_prerequisite(c,mode);return
  if mode!='gpu-acceptance':
   d=root/'gpu-acceptance';a=read(d/'RESULT.json');closed=read(d/'CLOSED.json');bound=read(d/'execution-binding.json')
   require(closed['status']=='PASS' and closed['seed']==c['seed'] and closed['mode']=='gpu-acceptance' and closed['result']==reference(d/'RESULT.json') and closed['runtime_index']==reference(d/'runtime-archive-index.json'),'acceptance archive/reference identity differs')
@@ -71,9 +74,10 @@ def infer(c,out,mode,holder):
  from sparse_rtdetr.protocol_r18.worker import make_engine
  from sparse_rtdetr.protocol_r18 import checkpoint
  import infer_seed
- endpoint=read(Path(c['job_root'])/'formal/endpoint-lock.json');binding=read(Path(c['job_root'])/'formal/binding.json')
- require(reference(Path(c['job_root'])/'formal/binding.json')==endpoint['binding'],'own binding changed')
- runtime=base.prepare_cuda(c,out);engine,b,_=make_engine(c,runtime,c['scope']);holder.update(engine=engine,binding=b)
+ from resume_support import endpoint as get_endpoint,restore_contract
+ endpoint=get_endpoint(c);parent=restore_contract(c);binding=read(Path(parent['job_root'])/'formal/binding.json')
+ require(reference(Path(parent['job_root'])/'formal/binding.json')==endpoint['binding'],'own binding changed')
+ runtime=base.prepare_cuda(c,out);engine,b,_=make_engine(parent,runtime,c['scope']);holder.update(engine=engine,binding=b)
  require(b==binding,'own endpoint construction changed')
  cp=endpoint['checkpoint'];restored=checkpoint.restore(engine,b,cp['path'],cp['sha256'])
  require(restored['full_state_exact'] and engine.completed_updates==engine.ema.updates==36480,'own e120 restore differs');publish(out/'RESTORE.json',restored)
@@ -117,7 +121,8 @@ def worker(c,mode):
   elif mode=='evaluation':
    from sparse_rtdetr.localization.runio import read
    import infer_seed
-   endpoint=read(Path(c['job_root'])/'formal/endpoint-lock.json')
+   from resume_support import endpoint as get_endpoint
+   endpoint=get_endpoint(c)
    infer_seed.evaluate({**c,'checkpoint':endpoint['checkpoint']},out)
   else:infer(c,out,mode,holder)
   result=read(out/'RESULT.json')
