@@ -166,6 +166,10 @@ def proc(pid):
 
 
 def parent_ready(c):
+    if c.get('synthetic_validation') is True:
+        from softnms_entry_fixture import validate_contract as validate_fixture_contract
+        validate_fixture_contract(c)
+        return True
     parent = Path(c['parent_root'])
     exact(c['parent_execution'])
     execution = read(c['parent_execution']['path'])
@@ -654,7 +658,7 @@ def aggregate(results):
 
 def export(out):
     names=['RESULT.json','STOP.json','CLOSED.json','CONSUMED.json','WAITING.json','ADMISSION.json',
-           'WORKER_EXIT.json','SUMMARY.csv','REPORT.md','RESOURCE_START.json','EVALUATION_INPUT_PROOF.json']
+           'WORKER_EXIT.json','WORKER_STARTED.json','SUMMARY.csv','REPORT.md','RESOURCE_START.json','EVALUATION_INPUT_PROOF.json']
     paths=[out/n for n in names if (out/n).is_file()]
     for seed in range(3):
         paths += [p for p in (out/f'seed{seed}').glob('*metrics.json')]
@@ -713,8 +717,12 @@ def pipeline(c,out):
         resources(out,plan)
         # bounded progress heartbeat is separate from immutable lifecycle records.
         tmp=out/'heartbeat.tmp';tmp.write_bytes(encoded({'time':time.time(),**fields}));os.replace(tmp,out/'heartbeat.json')
-    from softnms_input_check import admitted_preparation
-    prepared = admitted_preparation(c, specs, rows)
+    if 'reuse_certificate' in c:
+        from softnms_reuse import admitted_reuse
+        prepared = admitted_reuse(c, specs, rows)
+    else:
+        from softnms_input_check import admitted_preparation
+        prepared = admitted_preparation(c, specs, rows)
     publish(out/'EVALUATION_INPUT_PROOF.json',json.loads(exact(c['real_data_gate']['input_proof'],contents=True)))
     process_inputs(out,specs,rows,digest(c),progress,lambda:parsed_gt(rows,data_spec),prepared)
 
@@ -722,11 +730,6 @@ def pipeline(c,out):
 def load_contract(path):
     c=read(path)
     require(c['task_id']==TASK and c['plan_sha256']==sha(PLAN),'plan/task binding differs')
-    gate = json.loads(exact(c['parent_schema_cpu_gate'],contents=True))
-    require(gate['status']=='PASS' and gate['seeds']==[0,1,2]
-            and gate['plan_sha256']==sha(PLAN), 'real parent CPU gate incomplete')
-    for name, value in gate['source_files'].items():
-        require(sha(ROOT/name)==value,'parent CPU gate source differs: '+name)
     require(read(PLAN)['gates_pp']==LIMITS,'plan gate implementation differs')
     require(c['source_root']==str(ROOT),'frozen source root differs')
     for row in c['source_files']:
@@ -735,9 +738,21 @@ def load_contract(path):
     require(c['python']==sys.executable,'CPU interpreter differs')
     require(sha(sys.executable)==c['python_sha256'],'CPU interpreter bytes differ')
     require(Path('/proc/sys/kernel/random/boot_id').read_text().strip()==c['boot_id'],'boot changed')
-    require('real_data_gate' in c,'production requires real input and cache gates before scoring')
-    from softnms_input_check import gate_identity
-    gate_identity(c)
+    if c.get('synthetic_validation') is True:
+        from softnms_entry_fixture import validate_contract as validate_fixture_contract
+        validate_fixture_contract(c)
+    elif 'reuse_certificate' in c:
+        from softnms_reuse import validate_reuse
+        validate_reuse(c)
+    else:
+        gate = json.loads(exact(c['parent_schema_cpu_gate'],contents=True))
+        require(gate['status']=='PASS' and gate['seeds']==[0,1,2]
+                and gate['plan_sha256']==sha(PLAN), 'real parent CPU gate incomplete')
+        for name, value in gate['source_files'].items():
+            require(sha(ROOT/name)==value,'parent CPU gate source differs: '+name)
+        require('real_data_gate' in c,'production requires real input and cache gates before scoring')
+        from softnms_input_check import gate_identity
+        gate_identity(c)
     return c
 
 
@@ -782,18 +797,18 @@ def main(argv=None):
     a=p.parse_args(argv)
     if a.mode in ('input-check','input-worker'):
         require(a.request and a.output and not a.contract and not a.snapshot,'input check requires request/output only')
-        from softnms_input_check import run, supervise
-        return (supervise if a.mode=='input-check' else run)(Path(a.request),Path(a.output))
+        from softnms_input_check import run as run_input_check, supervise as supervise_input_check
+        return (supervise_input_check if a.mode=='input-check' else run_input_check)(Path(a.request),Path(a.output))
     if a.mode in ('parent-check','parent-diagnose'):
         require(a.request and a.output and a.snapshot and not a.contract,
                 'parent check requires request/output/snapshot only')
-        from softnms_parent_check import run
-        return run(Path(a.request), Path(a.output),Path(a.snapshot),diagnostic=a.mode=='parent-diagnose')
+        from softnms_parent_check import run as run_parent_check
+        return run_parent_check(Path(a.request), Path(a.output),Path(a.snapshot),diagnostic=a.mode=='parent-diagnose')
     require(not a.request and not a.snapshot, 'request/snapshot are exclusive to parent-check')
     if a.mode=='cpu-check':
         require(a.output and not a.contract,'CPU fixture needs independent output and no production contract')
-        from softnms_cpu_fixture import run
-        return run(Path(a.output))
+        from softnms_cpu_fixture import run as run_cpu_fixture
+        return run_cpu_fixture(Path(a.output))
     require(a.contract and not a.output,'production requires frozen contract only')
     c=load_contract(a.contract);out=Path(c['output_root'])
     if a.mode=='run':
@@ -805,7 +820,14 @@ def main(argv=None):
         require(not (out/'events.jsonl').exists() and not (out/'STOP.json').exists(),'worker already used')
     try:
         if a.mode=='run':supervise(c,Path(a.contract),out)
-        else:pipeline(c,out)
+        else:
+            publish(out/'WORKER_STARTED.json',{'pid':os.getpid(),'parent_pid':os.getppid(),
+                    'identity':proc(os.getpid()),'contract_sha256':digest(c),'time':time.time(),
+                    'synthetic_validation':c.get('synthetic_validation') is True})
+            if c.get('synthetic_validation') is True:
+                from softnms_entry_fixture import worker as run_fixture_worker
+                run_fixture_worker(c,out)
+            else:pipeline(c,out)
         if a.mode=='run':export(out)
         return 0
     except BaseException as e:

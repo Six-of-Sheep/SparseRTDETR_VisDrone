@@ -13,7 +13,7 @@ import time
 from unittest.mock import patch
 
 
-def run(out):
+def run(out, *, build_only=False):
     import softnms_job as j
     from slice_core import box_iou64, tile_windows
     j.require(not out.exists(),'CPU fixture output already exists')
@@ -96,6 +96,8 @@ def run(out):
         reject(f'seed{seed}-missing-file',lambda:j.exact(ref))
         ref={**rawref,'bytes':rawref['bytes']+1}
         reject(f'seed{seed}-wrong-size',lambda:j.exact(ref))
+    if build_only:
+        return j.publish(out/'FIXTURE_CONTEXT.json',{'synthetic_only':True,'rows':rows,'parsed':parsed,'specs':specs})
     # Verify raw-ignore and zero-score no-refill using unchanged evaluator bridge.
     ignore_pred=[{'image_id':rows[0]['stable_image_id'],'category_id':1,'bbox_xyxy':[0.,650.,20.,670.],'score':0.}]
     dataset,filtered,counts=bridge_inputs(rows,parsed,ignore_pred)
