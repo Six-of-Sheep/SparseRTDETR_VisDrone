@@ -20,7 +20,7 @@
 
 主top600。原主评价器、次top300、三seed绝对指标、所有增减、固定64成本与失败对照见[成果入口](docs/research/abc_results_20261019/README.md)、[冻结登记](manifests/frozen_abc_results_20261019.json)。C−B存在APL下降，C−A主预算AR-large三个seed均下降；不宣称所有指标改善。成本约4.3–4.8×只对应匹配development固定64，不是全量吞吐。补充集历史/数据关联未知、限定零GT输入扩展和未MATLAB限制保持。
 
-实验扩展到此结束。Soft-NMS、固定微调、框投票和第六中心视图均按原门槛关闭；flip仅控制不升级，不自动调参或新训练。工程审查仍有新增CI覆盖缺口，见[集成建议](docs/research/abc_results_20261019/PR9_REVIEW.md)，PR #9未自动合并。
+实验扩展到此结束。Soft-NMS、固定微调、框投票和第六中心视图均按原门槛关闭；flip仅控制不升级，不自动调参或新训练。[历史集成审查](docs/research/abc_results_20261019/PR9_REVIEW.md)提出的CI缺口已追加覆盖，见[CPU工程收尾](docs/research/PR9_CI_CLOSEOUT_20261019.md)；合并前核对最终head的CI，PR #9未自动合并。
 
 ## 代码地图
 
