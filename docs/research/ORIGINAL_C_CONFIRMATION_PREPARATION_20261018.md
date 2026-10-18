@@ -28,7 +28,7 @@ conversion completion的confirmatory_metrics_accessed=false只覆盖转换过程
 
 ## CPU接口及局限
 
-最终confirmation_prepare start→run→原guard.supervise→独立worker，使用真实三seed父元数据及允许的development。明确context第三返回值为data_spec；Development548.raw逐标注验SHA并解析后，才进入原primary_inputs/bridge_inputs。18组原A/B/C×预算输入canonical SHA及原before/after计数核对，不重算AP。接口允许零预测成员，以数据rows定义覆盖，不能因缺候选删图。
+最终confirmation_prepare start→run→原guard.supervise→独立worker，使用真实三seed父元数据及允许的development。明确context第三返回值为data_spec；认证parsed_gt(rows,data_spec)逐标注验SHA并解析后，才进入原primary_inputs/bridge_inputs。18组原A/B/C×预算输入canonical SHA及原before/after计数核对，不重算AP。接口允许零预测成员，以数据rows定义覆盖，不能因缺候选删图。
 
 不同数量用development有序前缀1/3/4/5/547/548检查真实标注与两输入；这只是工程输入，不是新科学子集。1602仅用整数索引检查401批/末批2，不接触封存成员内容。三seed身份、协议缺失/乱序/重复终态、worker异常、重复启动、闭合/归档、精简导出/退出分别检查。合成拒绝检查不替代真实18组接线。CPU准备不会认证未来GPU解码、末批forward或解封路径；正式授权前仍需冻结并验收受影响生产入口。
 

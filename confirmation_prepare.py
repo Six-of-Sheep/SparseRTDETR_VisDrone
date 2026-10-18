@@ -1,7 +1,7 @@
 """Preparation-only CLI: real development inputs, never AP or sealed content.
 
 The legacy verifier is an immutable, explicitly referenced dependency. Its
-context returns a data SPECIFICATION; only Development548.raw supplies parsed GT.
+context returns a data SPECIFICATION; only parsed_gt(rows, data_spec) parses GT.
 There is intentionally no inference, training, unsealing or score command.
 """
 import argparse
@@ -175,9 +175,9 @@ def worker(c,seed):
         emit('begin')
         if c.get('inject_worker_failure'):raise RuntimeError('EXPECTED_CPU_WORKER_EXCEPTION')
         old,specs,rows,data_spec=legacy(c);spec=specs[seed];members(rows,spec['ids']);emit('context')
-        from sparse_rtdetr.r0.evaluation_data import Development548
-        data=Development548(data_spec);require(data.records==rows, 'data config/member binding')
-        parsed=[data.raw(r) for r in rows];gt_sha=validate_parsed(rows,parsed);emit('parsed_gt');proofs=[];variable=[]
+        # Do not instantiate Development548: it also builds torchvision Module
+        # transforms, which are unnecessary for an annotation-only CPU gate.
+        parsed=old.parsed_gt(rows,data_spec);gt_sha=validate_parsed(rows,parsed);emit('parsed_gt');proofs=[];variable=[]
         for arm in 'ABC':
             for budget in (600,300):
                 predictions=exact(spec['evaluation']['predictions'][arm][str(budget)])
