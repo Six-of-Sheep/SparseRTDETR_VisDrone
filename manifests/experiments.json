@@ -54,7 +54,10 @@
       "plan": "configs/sahi_independent_confirmation.json",
       "report": "sahi-independent-confirmation-20261018-001/REPORT.md",
       "GPU_authorized": false,
-      "sealed_payload_access_authorized": false
+      "sealed_payload_access_authorized": false,
+      "access_history_verdict": "STILL_UNVERIFIABLE",
+      "access_history_report": "docs/research/ORIGINAL_C_CONFIRMATION_ACCESS_HISTORY_20261018.md",
+      "access_history_manifest": "manifests/confirmation_access_history_20261018.json"
     }
   ]
 }
