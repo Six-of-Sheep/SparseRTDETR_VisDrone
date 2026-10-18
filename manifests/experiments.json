@@ -97,6 +97,18 @@
         "seed1_seed2_started": false,
         "report": "sahi-sixth-view-20261018-001/execution-001/REPORT.md",
         "closure_note": "previous fields describe preserved preparation release; this nested record describes the authorized production attempt"
+      },
+      "resource_repair_execution": {
+        "attempt": "execution-002/production-001",
+        "runtime_commit": "c81d6d0485b0fbbc7f2f634dfaef2f1766fad2a5",
+        "status": "ENGINEERING_STOP_AT_EVALUATION_GT_INPUT",
+        "admission_CPU_cases": 28,
+        "seed0_forward_calls": 602,
+        "seed0_cost": "PASS",
+        "quality": "NOT_EVALUATED",
+        "scientific_score_groups_completed": 0,
+        "seed1_seed2_started": false,
+        "report": "sahi-sixth-view-20261018-001/execution-002/REPORT.md"
       }
     }
   ]
