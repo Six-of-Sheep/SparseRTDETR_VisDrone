@@ -66,7 +66,7 @@ def main():
     data, source_refs = fixture(parent['parents'][0], base)
     template = dict(task_id=rt.TASK, purpose=rt.PURPOSE, source_root=str(ROOT), source_reference=reference(a.manifest),
         source_sha256=reference(a.manifest)['sha256'], source_commit=read(a.manifest)['commit'],
-        plan=reference(ROOT / 'configs/sahi_supplemental_evaluation.json'), parents=parent['parents'], seeds=[0, 1, 2],
+        plan=reference(ROOT / 'configs/sahi_supplemental_evaluation.json'), parent_metadata=parent_ref, parents=parent['parents'], seeds=[0, 1, 2],
         synthetic=True, GPU_authorized=False, science_authorized=False, sealed_access_authorized=False,
         training_updates=0, forward_budget=6423, python=sys.executable, boot_id=sample['boot_id'],
         gpu_uuid=parent['gpu_uuid'], storage_identity=sid(sample['storage']), environment=parent['environment'], evaluation_data=data)

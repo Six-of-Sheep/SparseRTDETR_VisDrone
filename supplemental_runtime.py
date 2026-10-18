@@ -79,6 +79,8 @@ def load(path):
     plan = exact(c['plan'])
     require(plan['task_id'] == TASK and plan['purpose'] == PURPOSE and plan['independent_qualification'] == 'BLOCKED_PENDING_ACCESS_HISTORY', 'purpose/independent status')
     require(c['seeds'] == [0, 1, 2] and c['training_updates'] == 0 and c['forward_budget'] == 6423, 'fixed execution scope')
+    parent = exact(c['parent_metadata'])
+    require(parent['parents'] == c['parents'] and parent['environment'] == c['environment'], 'certified parent metadata/initialization differs')
     require([p['seed'] for p in c['parents']] == [0, 1, 2] and [p['checkpoint']['sha256'] for p in c['parents']] == plan['scientific_protocol']['checkpoint_sha256'], 'three own e120 seeds')
     require(c['synthetic'] in (True, False) and type(c['synthetic']) is bool, 'fixture flag')
     if c['synthetic']:
