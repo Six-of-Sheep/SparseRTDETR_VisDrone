@@ -135,6 +135,8 @@ def export(c):
         for name in ('RESULT.json','CLOSED.json','STOP.json','endpoint-lock.json','binding.json','COMPARISON.json','TABLE.csv'):
             if (q/name).is_file():paths.append(q/name)
         for q2 in sorted(q.glob('*.pth.complete.json')):paths.append(q2)
+        if phase=='evaluation':
+            for q2 in sorted(q.glob('*-metrics.json')):paths.append(q2)
         for name in ('supervisor-exit.json','worker-exit.json','supervisor-start.json'):
             q2=q/'runtime-archive'/name
             if q2.is_file():paths.append(q2)

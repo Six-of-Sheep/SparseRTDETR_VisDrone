@@ -35,11 +35,11 @@ def install():
         if kind=='evaluation_budget_complete':
             require(mode=='evaluation' and p['budget'] in (600,300) and p['arm_name'] in ('T-control','T-slice') and p['view'] in ('A','C') and p['images']==b['evaluation_images'],'FT evaluation scope')
         if kind=='inference_batch':
-            require(mode.startswith('infer-') and p['kind'] in ('profile','full'),'FT inference phase')
-            ids=b['fixed64'] if p['kind']=='profile' else b['development_ids']
+            require(mode.startswith('infer-') and p['batch_kind'] in ('profile','full'),'FT inference phase')
+            ids=b['fixed64'] if p['batch_kind']=='profile' else b['development_ids']
             require(p['ids']==ids[(p['batch']-1)*4:p['batch']*4],'FT image order differs')
         if kind=='phase_complete':require(reference(p['result']['path'])==p['result'],'FT terminal RESULT SHA differs')
-        return digest([kind,p.get('update'),p.get('role'),p.get('epoch'),p.get('name'),p.get('kind'),p.get('batch'),p.get('ordinal')])
+        return digest([kind,p.get('update'),p.get('role'),p.get('epoch'),p.get('name'),p.get('batch_kind'),p.get('batch'),p.get('ordinal')])
     class Reader(PreviousReader):
         def _accept(self,record):
             if self.bound_identity.get('progress_protocol')!=PROTOCOL or self.stream!='progress':return super()._accept(record)
@@ -70,7 +70,7 @@ def install():
                 require(mode.startswith('formal-') and p['epoch']==ep and n==ep*step and not self.clock.get('_ft_cp_open'),'FT epoch completion gap')
                 self.clock['_ft_epoch_closed']=ep
             elif k=='inference_batch':
-                key='_ft_'+p['kind'];i=self.clock.get(key,0)+1
+                key='_ft_'+p['batch_kind'];i=self.clock.get(key,0)+1
                 require(p['batch']==i,'FT inference batch gap');self.clock[key]=i
             elif k=='evaluation_budget_complete':
                 i=self.clock.get('_ft_eval',0)

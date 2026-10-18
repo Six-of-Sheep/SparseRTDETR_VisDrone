@@ -252,7 +252,7 @@ def inference(c,out,arm,view,holder):
                 else:
                     for b in (600,300):preds[b].extend(p[b])
                     if not sliced:rawrows.append(r)
-                event(out,'inference_batch',kind=kind,batch=i+1,ids=[z['stable_image_id'] for z in current],elapsed_seconds=elapsed,forward_calls=calls)
+                event(out,'inference_batch',batch_kind=kind,batch=i+1,ids=[z['stable_image_id'] for z in current],elapsed_seconds=elapsed,forward_calls=calls)
     require(native_state.exact_equal(before,ft.capture(e)) and all(p.grad is None for p in e.model.parameters()),'FT inference altered full state/RNG/gradients')
     refs={}
     for b in (600,300):
