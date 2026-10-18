@@ -58,6 +58,19 @@
       "access_history_verdict": "STILL_UNVERIFIABLE",
       "access_history_report": "docs/research/ORIGINAL_C_CONFIRMATION_ACCESS_HISTORY_20261018.md",
       "access_history_manifest": "manifests/confirmation_access_history_20261018.json"
+    },
+    {
+      "id": "sahi-original-c-supplemental-20261018-001",
+      "role": "original_C_supplemental_evaluation_history_unverified",
+      "result_status": "PLAN_ONLY_PENDING_USER_AUTHORIZATION",
+      "seed_count": 3,
+      "plan": "configs/sahi_supplemental_evaluation.json",
+      "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
+      "human_statements": "manifests/confirmation_human_statements_20261018.json",
+      "parent_independent_task": "sahi-independent-confirmation-20261018-001",
+      "independent_qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
+      "GPU_authorized": false,
+      "sealed_payload_access_authorized": false
     }
   ]
 }
