@@ -44,6 +44,17 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "r18-slice-finetune-20261018-001",
+      "role": "paired_conventional_finetuning_preparation",
+      "result_status": "CPU_PREPARATION_PASS_GPU_NOT_AUTHORIZED",
+      "source_commit": "b9175febfeccf3e7caab0cc4ad2a999918367f8b",
+      "plan": "configs/research/r18_slice_finetune_v1.json",
+      "report": "r18-slice-finetune-20261018-001/REPORT.md",
+      "parent": "seed0_common_R18_e120_EMA_only",
+      "closed_candidate": "fixed_SoftNMS_remains_closed",
+      "scientific_evaluation": "NOT_STARTED"
     }
   ]
 }
