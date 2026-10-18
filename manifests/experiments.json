@@ -62,7 +62,7 @@
     {
       "id": "sahi-original-c-supplemental-20261018-001",
       "role": "original_C_supplemental_evaluation_history_unverified",
-      "result_status": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
+      "result_status": "STOP_CPU_READER_UNSUPPORTED_NONPOSITIVE_GT",
       "seed_count": 3,
       "plan": "configs/sahi_supplemental_evaluation.json",
       "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
@@ -72,8 +72,8 @@
       "GPU_authorized": true,
       "sealed_payload_access_authorized": true,
       "preparation_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
-      "source_commit": "1fa3b3d8172cfc3c1611f625f08b64ca57f7f87e",
-      "source_manifest_sha256": "cc87a46ccd56eabbdb6b394e89ed107105576c46941411a8b5956d5e3343329d",
+      "source_commit": "93ea7561c80930c7d1e96cd56450b43419d5332e",
+      "source_manifest_sha256": "724f578f9bc4f5381a1fde2c231f9ba6d4e05ce5feadb0f6fc402717c6349386",
       "GPU_forward_calls": 0,
       "scientific_evaluation_groups": 0,
       "production_started": false,
@@ -82,7 +82,13 @@
       "material_location_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_MATERIAL_LOCATION_20261018.md",
       "material_location_manifest": "manifests/supplemental_material_location_20261018.json",
       "image_member_SHA_verified": 1602,
-      "annotation_member_SHA_verified": 0
+      "annotation_member_SHA_verified": 1602,
+      "annotation_bytes": 1941456,
+      "annotation_recovery_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_ANNOTATION_RECOVERY_20261019.md",
+      "prior_material_location_result": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
+      "current_release_status": "CPU_READER_STOP_NOT_PRODUCTION",
+      "current_CPU_gate": "NOT_PASSED",
+      "nonpositive_original_rows": 2
     }
   ]
 }
