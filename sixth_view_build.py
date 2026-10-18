@@ -11,7 +11,9 @@ def main():
     import os,torch,torchvision
     require(os.environ.get('CUDA_VISIBLE_DEVICES')=='' and not torch.cuda.is_initialized(),'contract construction CPU only')
     torch.set_num_threads(1);rt.install()
-    materials=Path(a.materials);parent=materials.parent/'sahi-softnms-fixed-20261017-001/revision-007/execution-contract.json'
+    materials=Path(a.materials)
+    plan_json=reference(materials/'closeout-001/PLAN.json');plan_md=reference(materials/'closeout-001/PLAN.md')
+    parent=materials.parent/'sahi-softnms-fixed-20261017-001/revision-007/execution-contract.json'
     require(reference(parent)['sha256']=='b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28','fixed parent contract SHA')
     input_ref=reference(materials/'INPUT_BINDINGS.json');require(input_ref['sha256']=='3f6be7afa4f0eb7c02fe1c2c9fd36c86edc562eab45fdb7cf6e3e2077690df6a','original input index differs')
     pc=read(parent);sys.path.insert(0,pc['source_root']);import softnms_job as old
@@ -47,7 +49,7 @@ def main():
     sample=guard.snapshot(job);guard.screen(sample,gpu=False,entry=True,disk_bytes=40*1024**3)
     c={'task_id':rt.TASK,'source_root':str(ROOT),'source_manifest':a.source_manifest,'source_reference':reference(a.source_manifest),
         'source_sha256':reference(a.source_manifest)['sha256'],'source_commit':read(a.source_manifest)['commit'],
-        'plan_json':reference(materials/'PLAN.json'),'plan_md':reference(materials/'PLAN.md'),'input_binding':input_ref,
+        'plan_json':plan_json,'plan_md':plan_md,'input_binding':input_ref,
         'parent_contract':reference(parent),'parents':parents,'seeds':[0,1,2],'synthetic':not bool(a.cpu_gate),
         'GPU_authorized':bool(a.cpu_gate),'science_authorized':bool(a.cpu_gate),'training_updates':0,'holdout':False,
         'job_root':str(job),'runtime_root':a.runtime,'python':sys.executable,'contract_path':a.output,
