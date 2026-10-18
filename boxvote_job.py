@@ -709,11 +709,11 @@ def process_inputs(out, specs, rows, binding, progress, parsed_factory, certifie
 
 
 def pipeline(c,out):
-    cpu_only();plan=read(PLAN)
-    publish(out/'RESOURCE_START.json',resources(out,plan))
     if c.get('synthetic_validation') is True:
         from boxvote_entry_fixture import worker as fixture_worker
         return fixture_worker(c,out)
+    cpu_only();plan=read(PLAN)
+    publish(out/'RESOURCE_START.json',resources(out,plan))
     gate=json.loads(exact(c['admission_gate'],contents=True))
     require(gate['status']=='PASS' and gate['plan_sha256']==sha(PLAN),'admission incomplete')
     parent=json.loads(exact(gate['parent_contract'],contents=True))
