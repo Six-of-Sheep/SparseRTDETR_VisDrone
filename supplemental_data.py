@@ -83,7 +83,8 @@ def dataset(c):
         require(type(r['width']) is int and type(r['height']) is int and min(r['width'], r['height']) > 0, 'member dimensions')
         raw = read_bytes(member_path(spec['annotations'], r, 'annotations'), r['annotation_sha256'], r['annotation_size_bytes'])
         value = parse_raw(raw, r['stable_image_id'], expected_rows=r['raw_annotation_rows'])
-        require(value['counts'].get('nonpositive_area', 0) == 0, 'unsupported nonpositive GT')
+        if 'evaluation_input_extension' not in c:
+            require(value['counts'].get('nonpositive_area', 0) == 0, 'unsupported nonpositive GT')
         parsed.append(value)
     # Immutable lineage is necessary only for physical-row/image binding. It is
     # not used to select members or to infer historical access or independence.
@@ -100,7 +101,7 @@ def dataset(c):
         require(obj['annotation_id'] == raw['id'] and obj['raw_line_sha256'] == raw['raw_line_sha256'] and obj['bbox_xyxy'] == raw['box'] and obj['raw_category_id'] == raw['category'], 'lineage/raw identity')
     require(seen == set(expected_lines), 'lineage physical rows incomplete')
     from confirmation_prepare import validate_parsed
-    validate_parsed(rows, parsed)
+    validate_parsed(rows, parsed, gt_extension=extension(c, rows, parsed))
     from torchvision.transforms import v2 as T
     data = SimpleNamespace(spec={'roots': {'images': spec['images']}}, records=rows,
                            by_id={r['stable_image_id']: r for r in rows}, transform=SimpleNamespace(resize=T.Resize([768, 1344])))
@@ -118,3 +119,10 @@ def verify_images(data, c, emit=None):
             'raw_ignore': 'original parse_raw; original evaluator; budget before ignore, no refill',
             'historical_use': 'unknown', 'near_duplicates': 'unknown', 'flight_site': 'unknown',
             'independent_qualification': 'BLOCKED_PENDING_ACCESS_HISTORY'}
+
+
+def extension(c, rows, parsed):
+    if 'evaluation_input_extension' not in c:
+        return None
+    from sparse_rtdetr.data_protocol.supplemental_zero_gt import SupplementalZeroGT
+    return SupplementalZeroGT.bind(rows, parsed, exact(c['evaluation_input_extension']))

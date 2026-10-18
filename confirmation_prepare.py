@@ -45,7 +45,10 @@ def members(rows, ids):
     require(len(set(ids)) == len(ids) and [r['stable_image_id'] for r in rows] == ids, 'missing/duplicate/reordered member')
 
 
-def validate_parsed(rows, parsed):
+def validate_parsed(rows, parsed, *, gt_extension=None):
+    if gt_extension is not None:
+        from sparse_rtdetr.data_protocol.supplemental_zero_gt import checked
+        require(checked(gt_extension).members == tuple(r["stable_image_id"] for r in rows), "extension member identity")
     require(type(parsed) is list and len(parsed) == len(rows), 'parsed GT list required, data spec is not GT')
     from sparse_rtdetr.data_protocol.schema import stable_annotation_id
     seen = set()
@@ -56,15 +59,20 @@ def validate_parsed(rows, parsed):
             require(o['id'] == stable_annotation_id(row['stable_image_id'], o['physical_line'], o['raw_line_sha256']), 'GT image/line identity')
             require(o['id'] not in seen, 'duplicate GT identity'); seen.add(o['id'])
             require(type(o['category']) is int and type(o['score']) is float and o['score'] in (0.,1.), 'GT category/score')
-            require(len(o['box']) == 4 and all(math.isfinite(v) for v in o['box']) and o['box'][2] > o['box'][0] and o['box'][3] > o['box'][1], 'GT geometry')
+            box = o['box']
+            require(len(box) == 4 and all(math.isfinite(v) for v in box), 'GT finite geometry')
+            if box[2] <= box[0] or box[3] <= box[1]:
+                require(gt_extension is not None, 'GT geometry')
+                from sparse_rtdetr.data_protocol.evaluation import PrimaryGroundTruth
+                gt_extension.validate_gt(PrimaryGroundTruth(o['id'], row['stable_image_id'], o['category'], tuple(box), o['raw_area'], o['category'] == 0, o['score'] == 0))
         for name, role in (('gt','valid_gt'),('spatial_ignore','spatial_ignore'),('class_ignore','class_ignore')):
             require(raw[name] == [o for o in raw['rows'] if o['role'] == role], 'raw-ignore partition')
     return digest(parsed)
 
 
-def evaluator_inputs(rows, parsed, predictions, budget):
+def evaluator_inputs(rows, parsed, predictions, budget, *, gt_extension=None):
     """Actual certified input constructors, without invoking either evaluator."""
-    members(rows, [r['stable_image_id'] for r in rows]); validate_parsed(rows, parsed)
+    members(rows, [r['stable_image_id'] for r in rows]); validate_parsed(rows, parsed, gt_extension=gt_extension)
     require(budget in (600,300), 'output budget')
     ids = [r['stable_image_id'] for r in rows]; counts = dict.fromkeys(ids, 0)
     for p in predictions:
@@ -78,7 +86,7 @@ def evaluator_inputs(rows, parsed, predictions, budget):
     from sparse_rtdetr.baseline.primary_evaluator import _input_payload
     from sparse_rtdetr.data_protocol.schema import canonical_json_bytes
     primary = primary_inputs(rows, parsed, predictions)
-    dataset, filtered, spatial = bridge_inputs(rows, parsed, predictions)
+    dataset, filtered, spatial = bridge_inputs(rows, parsed, predictions, gt_extension=gt_extension)
     require([i.image_id for i in primary.images] == ids and len(dataset['images']) == len(ids), 'dual input membership')
     require(len(primary.ground_truth) == sum(len(r['rows']) for r in parsed), 'raw GT lost')
     require(spatial['detections_before'] == len(predictions) and spatial['detections_after'] == len(filtered) and spatial['GT_after'] == len(dataset['annotations']), 'before/after stage counts')

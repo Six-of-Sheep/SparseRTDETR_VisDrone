@@ -12,7 +12,7 @@ import supplemental_runtime as rt
 from supplemental_runtime import ROOT, read, exact, require, reference, digest, publish
 
 
-def fixture(parent, base):
+def fixture(parent, base, real_context=None):
     from sparse_rtdetr.localization.data import parse_raw, read_bound
     from sparse_rtdetr.data_protocol.schema import stable_image_id
     spec = parent['construction']['data']['development']
@@ -21,11 +21,22 @@ def fixture(parent, base):
     root = base / 'synthetic'; root.mkdir()
     (root / 'images').mkdir(); (root / 'annotations').mkdir()
     rows, lineage, source_refs = [], [], []
-    for i, original in enumerate(manifest['records'][:6]):
+    selected = manifest['records'][:6]
+    if real_context is not None:
+        from supplemental_data import dataset
+        _, all_rows, _ = dataset(real_context)
+        from sparse_rtdetr.data_protocol.supplemental_zero_gt import ROWS
+        special = {r[1] for r in ROWS}
+        selected = [r for r in all_rows if r['stable_image_id'] not in special][:4] + [next(r for r in all_rows if r['stable_image_id'] == z[1]) for z in ROWS]
+        spec = {'roots': {'images': real_context['evaluation_data']['images'], 'annotations': real_context['evaluation_data']['annotations']}}
+    for i, original in enumerate(selected):
         row = copy.deepcopy(original)
         name = f'synthetic-{i}.jpg'; ann = f'synthetic-{i}.txt'
-        row.update(split='train', relative_path='train/images/' + name, annotation_relative_path='train/annotations/' + ann,
+        if real_context is None:
+            row.update(split='train', relative_path='train/images/' + name, annotation_relative_path='train/annotations/' + ann,
                    stable_image_id=stable_image_id('train', 'train/images/' + name), sequence_key='synthetic')
+        else:
+            name = Path(row['relative_path']).name; ann = Path(row['annotation_relative_path']).name
         for kind, field, sf, zf, name_ in (('images', 'relative_path', 'image_sha256', 'image_size_bytes', name),
                                          ('annotations', 'annotation_relative_path', 'annotation_sha256', 'annotation_size_bytes', ann)):
             p = Path(spec['roots'][kind]) / Path(original[field]).name
@@ -52,6 +63,7 @@ def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--manifest', required=True)
     parser.add_argument('--parent-contract', required=True); parser.add_argument('--parent-contract-sha256', required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--context', required=True); parser.add_argument('--context-sha256', required=True)
     a = parser.parse_args(); rt.install()
     import torch
     require(os.environ.get('CUDA_VISIBLE_DEVICES') == '' and not torch.cuda.is_initialized(), 'CPU check boundary')
@@ -63,13 +75,15 @@ def main():
     from sparse_rtdetr.localization import guard
     from sparse_rtdetr.localization.storage import identity as sid
     sample = guard.snapshot(base); guard.screen(sample, gpu=False, entry=True, disk_bytes=40 * 1024**3)
-    data, source_refs = fixture(parent['parents'][0], base)
+    context_ref = reference(a.context); require(context_ref['sha256'] == a.context_sha256, 'real context SHA')
+    real_context = exact(context_ref)
+    data, source_refs = fixture(parent['parents'][0], base, real_context)
     template = dict(task_id=rt.TASK, purpose=rt.PURPOSE, source_root=str(ROOT), source_reference=reference(a.manifest),
         source_sha256=reference(a.manifest)['sha256'], source_commit=read(a.manifest)['commit'],
         plan=reference(ROOT / 'configs/sahi_supplemental_evaluation.json'), parent_metadata=parent_ref, parents=parent['parents'], seeds=[0, 1, 2],
         synthetic=True, GPU_authorized=False, science_authorized=False, sealed_access_authorized=False,
         training_updates=0, forward_budget=6423, python=sys.executable, boot_id=sample['boot_id'],
-        gpu_uuid=parent['gpu_uuid'], storage_identity=sid(sample['storage']), environment=parent['environment'], evaluation_data=data)
+        gpu_uuid=parent['gpu_uuid'], storage_identity=sid(sample['storage']), environment=parent['environment'], evaluation_data=data, evaluation_input_extension=reference(ROOT/'configs/supplemental_zero_gt_extension_v1.json'))
     # Parent/source SHA is supplied from the actual metadata receipt, never a
     # guessed directory or an unbound fixture. The production build is separate.
     cases = []
@@ -207,14 +221,16 @@ def main():
     finally:
         channel.resource, torch.cuda.init = saved_resource, saved_init
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    from supplemental_zero_check import check_real_inputs
+    real_proof = check_real_inputs(template, real_context, base)
     require(not torch.cuda.is_initialized(), 'CPU check initialized CUDA')
     publish(base / 'CPU_GATE.json', dict(status='PASS', entry='supplemental_job.py', source_sha256=template['source_sha256'],
         actual_chain='supplemental_launch.sh -> start -> run -> real guard.supervise -> worker -> real purpose reader/pixels/decode -> dual evaluators -> RESULT/CLOSED -> export -> exit',
         cases=cases, synthetic_dual_evaluator_groups=18, real_development_source_refs=source_refs, actual_partial_batches=[4, 2],
         invalid_stream_refusals=list(invalid), reader_refusals=reader_refusals,
         real_restore_pre_CUDA_seed_paths=admitted_seeds, resource_refusals=resource_refusals,
-        sealed_content_access=False, CUDA_initialized=False, detector_updates=0,
-        production_sealed_reader_not_yet_opened=True, elapsed_seconds=time.monotonic() - start))
+        sealed_content_access=True, real_input_extension_proof=real_proof, CUDA_initialized=False, detector_updates=0,
+        production_sealed_reader_not_yet_opened=False, elapsed_seconds=time.monotonic() - start))
     print(json.dumps({'status': 'PASS', 'CPU_gate': reference(base / 'CPU_GATE.json')}))
 
 

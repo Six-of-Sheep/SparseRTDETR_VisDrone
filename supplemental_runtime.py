@@ -22,7 +22,7 @@ def exact(ref):
 
 
 def steps(c, mode):
-    if mode == 'data-admission':
+    if mode in ('data-admission', 'input-check'):
         return ['begin', 'data_checked', 'complete']
     if mode == 'evaluation':
         return ['begin'] + [f'score-{a}-{b}' for a in 'ABC' for b in (600, 300)] + ['complete']
@@ -83,7 +83,9 @@ def load(path):
     require(parent['parents'] == c['parents'] and parent['environment'] == c['environment'], 'certified parent metadata/initialization differs')
     require([p['seed'] for p in c['parents']] == [0, 1, 2] and [p['checkpoint']['sha256'] for p in c['parents']] == plan['scientific_protocol']['checkpoint_sha256'], 'three own e120 seeds')
     require(c['synthetic'] in (True, False) and type(c['synthetic']) is bool, 'fixture flag')
-    if c['synthetic']:
+    if c.get('CPU_input_only', False):
+        require(c['synthetic'] is False and c['GPU_authorized'] is False and c['science_authorized'] is False and c['sealed_access_authorized'] is True, 'real input CPU-only scope')
+    elif c['synthetic']:
         require(not any(c[k] for k in ('GPU_authorized', 'science_authorized', 'sealed_access_authorized')), 'fixture cannot authorize production')
     else:
         require(all(c[k] is True for k in ('GPU_authorized', 'science_authorized', 'sealed_access_authorized')), 'explicit execution authority absent')
@@ -92,6 +94,14 @@ def load(path):
         require(auth['independent_qualification'] == 'BLOCKED_PENDING_ACCESS_HISTORY' and auth['near_duplicate_or_flight_site_access'] is False, 'evidence limits')
         gate = exact(c['CPU_gate'])
         require(gate['status'] == 'PASS' and gate['source_sha256'] == c['source_sha256'] and gate['entry'] == 'supplemental_job.py', 'final entry CPU gate/source absent')
+    from sparse_rtdetr.data_protocol.supplemental_zero_gt import specification, VERSION
+    require(exact(c['evaluation_input_extension']) == specification(), 'explicit evaluation input extension binding')
+    if not c['synthetic']:
+        auth = exact(c['authorization'])
+        require(auth['task_id'] == TASK and auth['purpose'] == PURPOSE and auth['manifest_sha256'] == SEALED_SHA and
+                auth['evaluation_input_protocol'] == VERSION and auth['old_confirmation_not_released'] is True and
+                auth['authorized'] is True and auth['scope'] == 'fixed_three_seed_ABC_two_budgets_only' and
+                auth['independent_qualification'] == 'BLOCKED_PENDING_ACCESS_HISTORY' and auth['near_duplicate_or_flight_site_access'] is False, 'accepted GT protocol authority')
     require(Path(c['job_root']).is_absolute() and Path(c['runtime_root']).is_absolute() and c['job_root'] != c['runtime_root'], 'separate output/runtime')
     return c
 
@@ -99,6 +109,8 @@ def load(path):
 def identity(c, seed, mode):
     from sparse_rtdetr.localization import guard
     return dict(task_id=TASK, purpose=PURPOSE, seed=seed, mode=mode, progress_protocol=PROTOCOL,
+                evaluation_input_protocol='supplemental-zero-gt-input-extension-v1',
+                evaluation_input_extension_sha256=c['evaluation_input_extension']['sha256'],
                 source_sha256=c['source_sha256'], contract_sha256=c['contract_sha256'],
                 checkpoint_sha256=c['parents'][seed]['checkpoint']['sha256'],
                 output_root=str(Path(c['job_root']) / f'seed{seed}' / mode),

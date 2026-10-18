@@ -49,7 +49,7 @@ def supervise_phase(c, seed, mode):
     from sparse_rtdetr.localization import guard, channel
     out = Path(c['job_root']) / f'seed{seed}' / mode
     runtime = Path(c['runtime_root']) / f'seed{seed}' / mode
-    gpu = not c['synthetic'] and mode not in ('evaluation', 'data-admission')
+    gpu = not c['synthetic'] and mode not in ('evaluation', 'data-admission', 'input-check')
     require(read(out.parent / (mode + '-CONSUMED.json'))['contract_sha256'] == c['contract_sha256'], 'phase token binding')
     code = guard.supervise(command(c, 'worker', seed, mode), out, environment(c, gpu),
                            gpu_uuid=c['gpu_uuid'], boot_id=c['boot_id'], gpu=gpu, formal=False,
@@ -66,12 +66,14 @@ def supervise_phase(c, seed, mode):
 def phase(c, seed, mode):
     from sparse_rtdetr.localization import guard
     from sparse_rtdetr.localization.storage import identity as sid
+    if c.get('CPU_input_only'):
+        require(seed == 0 and mode == 'input-check', 'CPU input contract cannot execute any other phase')
     root = Path(c['job_root']) / f'seed{seed}'
     root.mkdir(exist_ok=True)
     require(not (root / mode).exists() and not (root / (mode + '-CONSUMED.json')).exists(), 'phase already consumed')
     sample = guard.snapshot(root)
     require(sample['boot_id'] == c['boot_id'] and sid(sample['storage']) == c['storage_identity'], 'fresh boot/storage differs')
-    gpu = not c['synthetic'] and mode not in ('evaluation', 'data-admission')
+    gpu = not c['synthetic'] and mode not in ('evaluation', 'data-admission', 'input-check')
     guard.screen(sample, gpu=gpu, gpu_uuid=c['gpu_uuid'], entry=True, disk_bytes=40 * 1024**3)
     publish(root / (mode + '-ADMISSION.json'), sample)
     publish(root / (mode + '-CONSUMED.json'), {'contract_sha256': c['contract_sha256'], 'seed': seed, 'mode': mode, 'no_retry': True})
@@ -124,10 +126,11 @@ def synthesize(c, seed, mode, out, emit):
 
 
 def evaluation(c, seed, out, emit):
-    from supplemental_data import dataset
+    from supplemental_data import dataset, extension
     from confirmation_prepare import evaluator_inputs
     from sparse_rtdetr.r0.evaluation import score_budget
     _, rows, parsed = dataset(c)
+    gt_extension = extension(c, rows, parsed)
     infer = verify_phase(c, seed, 'full-C')
     metrics, refs = {}, []
     for arm in 'ABC':
@@ -135,13 +138,13 @@ def evaluation(c, seed, out, emit):
         for budget in ('600', '300'):
             rt.live(c, out, False)
             preds = exact(infer['predictions'][arm][budget])
-            proof = evaluator_inputs(rows, parsed, preds, int(budget))
-            value = score_budget(rows, parsed, preds, ROOT)
+            proof = evaluator_inputs(rows, parsed, preds, int(budget), gt_extension=gt_extension)
+            value = score_budget(rows, parsed, preds, ROOT, gt_extension=gt_extension)
             require(value['official']['canonical_input_sha256'] == proof['canonical_input_sha256'] and value['spatial_filter_counts'] == proof['counts'], 'scored input/ignore stage differs')
             require(value['official']['evaluated_detection_count'] == proof['counts']['detections_after'], 'evaluated detection count')
             value['supplemental_binding'] = {'task_id': rt.TASK, 'purpose': rt.PURPOSE, 'seed': seed, 'arm': arm, 'budget': int(budget),
                 'checkpoint_sha256': c['parents'][seed]['checkpoint']['sha256'], 'source_sha256': c['source_sha256'], 'contract_sha256': c['contract_sha256'],
-                'synthetic': c['synthetic'], 'independent_qualification': 'BLOCKED_PENDING_ACCESS_HISTORY'}
+                'evaluation_input_extension': c['evaluation_input_extension'], 'synthetic': c['synthetic'], 'independent_qualification': 'BLOCKED_PENDING_ACCESS_HISTORY'}
             path = out / f'{arm}-top{budget}-metrics.json'; publish(path, value)
             summary = {'COCO_bridge': value['COCO_bridge']['metrics'],
                        'official_pp': {k: value['official'][k] for k in ('AP', 'AP50', 'AP75')},
@@ -190,13 +193,26 @@ def worker(c, seed, mode):
             require(b[key] == value, 'worker identity: ' + key)
     publish(out / 'execution-binding.json', b); emit = rt.Emitter(c, seed, mode, out)
     try:
-        rt.live(c, out, not c['synthetic'] and mode not in ('data-admission', 'evaluation')); emit.emit('begin')
+        rt.live(c, out, not c['synthetic'] and mode not in ('data-admission', 'evaluation', 'input-check')); emit.emit('begin')
         if c['synthetic']:
             require(os.environ.get('CUDA_VISIBLE_DEVICES') == '' and not torch.cuda.is_initialized(), 'CPU fixture visibility')
             torch.set_num_threads(1)
             if c.get('inject_worker_failure'):
                 raise RuntimeError('EXPECTED_CPU_WORKER_EXCEPTION')
-        if mode == 'data-admission':
+        if mode == 'input-check':
+            require(c.get('CPU_input_only') is True and not torch.cuda.is_initialized(), 'real input CPU check only')
+            from supplemental_data import dataset, extension
+            from confirmation_prepare import evaluator_inputs
+            data, rows, parsed = dataset(c)
+            policy = extension(c, rows, parsed)
+            preds = [dict(image_id=r['stable_image_id'], category_id=4, score=.9, bbox_xyxy=[1.,1.,2.,2.]) for r in rows]
+            proofs = {str(b): evaluator_inputs(rows, parsed, preds, b, gt_extension=policy) for b in (600,300)}
+            result = dict(status='PASS', members=len(rows), physical_rows=sum(len(p['rows']) for p in parsed),
+                admitted_zero_rows=len(policy.admitted), proofs=proofs, evaluation_input_extension=c['evaluation_input_extension'],
+                model_predictions=False, AP_scored=False, forward_calls=0, detector_updates=0)
+            publish(out/'REAL_INPUTS.json', result); emit.emit('data_checked', proof=reference(out/'REAL_INPUTS.json'))
+            publish(out/'RESULT.json', result); emit.emit('complete', result=reference(out/'RESULT.json'))
+        elif mode == 'data-admission':
             from supplemental_data import dataset, verify_images
             data, rows, parsed = dataset(c)
             result = verify_images(data, c); result.update(seed=seed, synthetic=c['synthetic'], detector_updates=0, forward_calls=0)
@@ -220,7 +236,7 @@ def worker(c, seed, mode):
 
 def export(c):
     root = Path(c['job_root']); files = []
-    names = {'RESULT.json', 'CLOSED.json', 'STOP.json', 'COMPARISON.json', 'COST.json', 'RESTORE.json', 'DATA_ADMISSION.json', 'execution-binding.json', 'SUMMARY.json'}
+    names = {'RESULT.json', 'CLOSED.json', 'STOP.json', 'COMPARISON.json', 'REAL_INPUTS.json', 'COST.json', 'RESTORE.json', 'DATA_ADMISSION.json', 'execution-binding.json', 'SUMMARY.json'}
     for path in sorted(root.rglob('*.json')):
         if path.name in names and 'runtime-archive' not in path.parts:
             files.append(reference(path))
@@ -235,6 +251,11 @@ def run(c):
     publish(root / 'CONSUMED.json', {'contract_sha256': c['contract_sha256'], 'token': c['launch_token'], 'no_retry': True})
     started = time.monotonic(); completed = []
     try:
+        if c.get('CPU_input_only'):
+            result = phase(c, 0, 'input-check')
+            publish(root/'RESULT.json', dict(status='CPU_INPUTS_COMPLETE', result=result, elapsed_seconds=time.monotonic()-started))
+            publish(root/'CLOSED.json', dict(status='PASS', result=reference(root/'RESULT.json'))); export(c)
+            return 0
         phase(c, 0, 'data-admission')
         # Cost admission for all seeds precedes the fixed full-set scientific chain.
         for seed in c['seeds']:
@@ -261,7 +282,7 @@ def run(c):
                         'sample_sd_pp': statistics.stdev(values) if None not in values else None, 'worst_pp': min(values) if None not in values else None}
         forward_calls = sum(verify_phase(c, s, m)['forward_calls'] for s in c['seeds'] for m in rt.PHASES[:4])
         require(forward_calls == (0 if c['synthetic'] else 6423), 'total fixed forward budget')
-        summary = {'status': 'COMPLETE', 'task_id': rt.TASK, 'purpose': rt.PURPOSE, 'seeds': completed, 'paired_statistics': stats,
+        summary = {'status': 'COMPLETE', 'task_id': rt.TASK, 'purpose': rt.PURPOSE, 'evaluation_input_extension': c['evaluation_input_extension'], 'seeds': completed, 'paired_statistics': stats,
                    'quality_passed': all(x['quality']['quality_passed'] for x in completed), 'cost_passed': all(x['cost']['passed'] for x in completed),
                    'forward_calls': forward_calls, 'detector_updates': 0, 'synthetic': c['synthetic'], 'dual_evaluator_groups': 18,
                    'independent_qualification': 'BLOCKED_PENDING_ACCESS_HISTORY', 'historical_use': 'unknown', 'near_duplicates': 'unknown', 'flight_site': 'unknown'}
@@ -278,8 +299,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=('start', 'run', 'supervise', 'worker'))
     parser.add_argument('--contract', required=True); parser.add_argument('--seed', type=int, choices=(0, 1, 2))
-    parser.add_argument('--mode', choices=('data-admission', *rt.PHASES))
+    parser.add_argument('--mode', choices=('data-admission', 'input-check', *rt.PHASES))
     a = parser.parse_args(); c = rt.load(a.contract)
+    if c.get('CPU_input_only') and a.action in ('worker','supervise'):
+        require(a.seed == 0 and a.mode == 'input-check', 'CPU input-only dispatch')
     if a.action == 'worker':
         return worker(c, a.seed, a.mode)
     if a.action == 'supervise':

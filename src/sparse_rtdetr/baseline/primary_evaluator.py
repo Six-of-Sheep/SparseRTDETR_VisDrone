@@ -798,7 +798,7 @@ def _box_xywh(box: tuple[float, float, float, float], path: str) -> tuple[float,
     return x1, y1, x2 - x1, y2 - y1
 
 
-def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
+def _validate_input(value: object, *, gt_extension=None) -> PrimaryEvaluatorInputV2:
     if type(value) is not PrimaryEvaluatorInputV2:
         _fail("primary evaluator requires PrimaryEvaluatorInputV2")
     if type(value.images) is not tuple or type(value.detections) is not tuple or type(value.ground_truth) is not tuple:
@@ -815,6 +815,12 @@ def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
         _fail("input ignored-region threshold drift")
     if type(value.standard_overlap) is not str or type(value.ignored_overlap) is not str or value.standard_overlap != "intersection_over_union" or value.ignored_overlap != "intersection_over_detection_area":
         _fail("input overlap rule drift")
+
+    if gt_extension is not None:
+        from ..data_protocol.supplemental_zero_gt import checked
+        checked(gt_extension)
+        if tuple(i.image_id for i in value.images) != gt_extension.members:
+            _fail('GT extension member identity/order')
 
     image_ids: set[str] = set()
     for index, image in enumerate(value.images):
@@ -855,9 +861,11 @@ def _validate_input(value: object) -> PrimaryEvaluatorInputV2:
             _fail("ground-truth ignore flags must be builtin booleans")
         if ground_truth.ignore_region is not (ground_truth.category_id == 0):
             _fail("ignore_region must be true exactly for category 0")
-        x, y, width, height = _box_xywh(ground_truth.bbox_xyxy, f"ground_truth/{index}/bbox_xyxy")
+        x, y, width, height = _gt_xywh(ground_truth.bbox_xyxy, gt_extension)
+        if width == 0 or height == 0:
+            gt_extension.validate_gt(ground_truth)
         area = _real(ground_truth.area, f"ground_truth/{index}/area")
-        if area <= 0 or area != width * height:
+        if area < 0 or (area == 0 and gt_extension is None) or area != width * height:
             _fail("ground-truth stored area does not match its xyxy extent")
         _ = (x, y)
     return value
@@ -889,20 +897,29 @@ def _matlab_round(value: float) -> int:
     return math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)
 
 
+def _gt_xywh(box, gt_extension=None):
+    # Positive predictions always use the original strict _box_xywh path.
+    if gt_extension is not None and type(box) is tuple and len(box) == 4:
+        values = tuple(_real(v, 'GT coordinate') for v in box)
+        if values[2] == values[0] or values[3] == values[1]:
+            return gt_extension.zero_xywh(values)
+    return _box_xywh(box, 'GT box')
+
+
 def _official_xywh(box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     x, y, width, height = _box_xywh(box, "box")
     return x, y, width, height
 
 
-def _rounded_positive_xywh(box: tuple[float, float, float, float]) -> tuple[int, int, int, int]:
-    x, y, width, height = _official_xywh(box)
+def _rounded_positive_xywh(box: tuple[float, float, float, float], *, gt_extension=None) -> tuple[int, int, int, int]:
+    x, y, width, height = _gt_xywh(box, gt_extension)
     return max(1, _matlab_round(x)), max(1, _matlab_round(y)), max(1, _matlab_round(width)), max(1, _matlab_round(height))
 
 
-def _build_integral(image: PrimaryImageV2, regions: list[PrimaryGroundTruth]) -> np.ndarray:
+def _build_integral(image: PrimaryImageV2, regions: list[PrimaryGroundTruth], *, gt_extension=None) -> np.ndarray:
     canvas = np.zeros((image.height, image.width), dtype=np.float64)
     for region in regions:
-        x, y, width, height = _rounded_positive_xywh(region.bbox_xyxy)
+        x, y, width, height = _rounded_positive_xywh(region.bbox_xyxy, gt_extension=gt_extension)
         x = max(1, min(image.width, x))
         y = max(1, min(image.height, y))
         x_end = min(image.width, x + width)
@@ -915,8 +932,8 @@ def _integral_value(integral: np.ndarray, y: int, x: int) -> float:
     return float(integral[y - 1, x - 1])
 
 
-def _ignored_fraction(integral: np.ndarray, image: PrimaryImageV2, box: tuple[float, float, float, float]) -> float:
-    x, y, width, height = _rounded_positive_xywh(box)
+def _ignored_fraction(integral: np.ndarray, image: PrimaryImageV2, box: tuple[float, float, float, float], *, gt_extension=None) -> float:
+    x, y, width, height = _rounded_positive_xywh(box, gt_extension=gt_extension)
     x = max(1, min(image.width, x))
     y = max(1, min(image.height, y))
     x_end = max(1, min(image.width, x + width))
@@ -1037,24 +1054,24 @@ def _binding_identity(contract: object) -> tuple[dict[str, Any], str, str, str, 
     )
 
 
-def evaluate_primary_v1(input_v2: PrimaryEvaluatorInputV2, contract: object) -> PrimaryEvaluatorResultV2:
+def evaluate_primary_v1(input_v2: PrimaryEvaluatorInputV2, contract: object, *, gt_extension=None) -> PrimaryEvaluatorResultV2:
     """Evaluate one immutable V2 input using the frozen official semantics."""
 
     config, config_raw_sha, config_canonical_sha, manifest_raw_sha, manifest_canonical_sha = _binding_identity(contract)
-    value = _validate_input(input_v2)
+    value = _validate_input(input_v2, gt_extension=gt_extension)
     _ = config
     image_by_id = {image.image_id: image for image in value.images}
     spatial_by_image: dict[str, list[PrimaryGroundTruth]] = {image.image_id: [] for image in value.images}
     for ground_truth in value.ground_truth:
         if ground_truth.category_id == 0 or ground_truth.ignore_region:
             spatial_by_image[ground_truth.image_id].append(ground_truth)
-    integral_by_image = {image_id: _build_integral(image_by_id[image_id], regions) for image_id, regions in spatial_by_image.items()}
+    integral_by_image = {image_id: _build_integral(image_by_id[image_id], regions, gt_extension=gt_extension) for image_id, regions in spatial_by_image.items()}
     filtered_gt: dict[str, list[PrimaryGroundTruth]] = {image.image_id: [] for image in value.images}
     for ground_truth in value.ground_truth:
         if ground_truth.ignore_region or ground_truth.category_id in (0, 11) or ground_truth.category_id is None:
             continue
         image = image_by_id[ground_truth.image_id]
-        fraction = _ignored_fraction(integral_by_image[ground_truth.image_id], image, ground_truth.bbox_xyxy)
+        fraction = _ignored_fraction(integral_by_image[ground_truth.image_id], image, ground_truth.bbox_xyxy, gt_extension=gt_extension)
         if fraction < value.ignore_threshold:
             filtered_gt[ground_truth.image_id].append(ground_truth)
     filtered_det: dict[str, list[Detection]] = {image.image_id: [] for image in value.images}
@@ -1083,7 +1100,7 @@ def evaluate_primary_v1(input_v2: PrimaryEvaluatorInputV2, contract: object) -> 
                     gt_items = [item for item in filtered_gt[image_id] if item.category_id == category_id]
                     det_items = [item for item in filtered_det[image_id]][:max_dets]
                     det_items = [item for item in det_items if item.category_id == category_id]
-                    gt_boxes = [(_official_xywh(item.bbox_xyxy), item.ignored) for item in gt_items]
+                    gt_boxes = [(_gt_xywh(item.bbox_xyxy, gt_extension), item.ignored) for item in gt_items]
                     det_boxes = [(item.score, _official_xywh(item.bbox_xyxy)) for item in det_items]
                     gt_states, det_states = _match(det_boxes, gt_boxes, threshold)
                     gt_match_all.extend(gt_states)
@@ -1278,11 +1295,11 @@ def _validate_result_schema(result: object) -> PrimaryEvaluatorResultV2:
     return result
 
 
-def validate_primary_evaluator_result(result: object, input_v2: PrimaryEvaluatorInputV2, contract: object) -> None:
+def validate_primary_evaluator_result(result: object, input_v2: PrimaryEvaluatorInputV2, contract: object, *, gt_extension=None) -> None:
     """Recompute every detached field and reject repacked or stale evidence."""
 
     _validate_result_schema(result)
-    expected = evaluate_primary_v1(input_v2, contract)
+    expected = evaluate_primary_v1(input_v2, contract, gt_extension=gt_extension)
     if result != expected:
         _fail("primary evaluator result evidence does not recompute")
     payload = _result_payload(result)
