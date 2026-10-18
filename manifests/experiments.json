@@ -13,6 +13,17 @@
   },
   "experiments": [
     {
+      "id": "sahi-c-stage-audit-20261018-001",
+      "as_of": "2026-10-18",
+      "role": "original_C_geometry_availability_diagnostic",
+      "result_status": "complete_cpu_three_seed_548_images_no_new_AP",
+      "source_commit": "58e08388659535767d9c18895326828ca65b863d",
+      "parent_contract_sha256": "b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28",
+      "report": "sahi-c-stage-audit-20261018-001/REPORT.md",
+      "result_doc": "docs/research/C_STAGE_RESULT_20261018.md",
+      "next_control": "box_voting_proposal_only_not_executed"
+    },
+    {
       "id": "rtdetrv2-r18-common-protocol-seed0-e120-20261013-001",
       "role": "primary_development_baseline",
       "result_status": "seed0_e120_evaluated",
