@@ -37,3 +37,5 @@ center−flip主600 **AP与APS都严格>0pp**，才称同视图数下中心位�
 CPU验收覆盖奇偶/小尺寸、半开窗口、翻转连续往返及越界、FP32解码、原5视图像素精确、原C关闭精确、同分view5次序/预算前缀、原ignore后预算禁止补位、输入拒绝、实际准备CLI子进程退出与重复启动拒绝。本CLI不暴露GPU或科学run；后续仍需完整production supervisor/资源/恢复/评分/导出接线和受影响CPU验收，不能把准备PASS称整条GPU链就绪。
 
 D只留主表、方案、配置、CPU证据、版本/SHA索引；图像、checkpoint、全raw、预测/审计只服务器。历史记录只引用不改写，main不合并。
+
+生产接口注意：旧infer_seed._scope/gpu仅接受seed1/2，旧评价候选反序列化也只接受view0..4，不能直接套用于本方案或伪造seed。后续独立生产入口须认证真实seed0父状态并用SixthCandidate解析view5，最终仍调用原双评价器；当前准备CLI不暴露生产分派。原四角/解码/NMS在origin/main的认证导入字节上未修改，完整依赖main cd3b8b788df3852070695db10edd199b1d412eda及导入a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7。既有raw认证工具外部依赖c4a8f124d655fa6c4d5a20506b0fb191f49f2c18，只读绑定原合同SHA b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28；不调用旧launcher。

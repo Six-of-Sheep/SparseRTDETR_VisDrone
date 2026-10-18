@@ -72,12 +72,17 @@
     },
     {
       "id": "sahi-sixth-view-20261018-001",
-      "result_status": "PREPARATION_CPU_PENDING",
+      "result_status": "PREPARATION_CPU_PASS",
       "science_status": "NOT_EXECUTED",
       "config": "configs/sahi_sixth_view.json",
       "plan": "docs/research/SIXTH_VIEW_PLAN_20261018.md",
       "entry": "sixth_view_prepare.py",
-      "GPU_authorized": false
+      "GPU_authorized": false,
+      "source_commit": "9778b3506f43a3e7dba24ba8f9f317fbd1b4ead7",
+      "CPU_pixel_entry_commit": "72d65eab6592e5368df05eaccfafa8b167a75f1c",
+      "report": "sahi-sixth-view-20261018-001/REPORT.md",
+      "future_forwards_per_seed": 602,
+      "future_forwards_all_three_max": 1806
     }
   ]
 }
