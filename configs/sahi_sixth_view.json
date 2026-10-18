@@ -1,0 +1,113 @@
+{
+  "schema": "fixed-sixth-view-preparation-v1",
+  "task_id": "sahi-sixth-view-20261018-001",
+  "authorization_this_round": "PREPARATION_CPU_ONLY",
+  "GPU_authorized": false,
+  "scientific_scoring_authorized": false,
+  "training_updates": 0,
+  "variants": [
+    "C-center",
+    "C-flip"
+  ],
+  "primary": "C-center",
+  "seeds_planned": [
+    0,
+    1,
+    2
+  ],
+  "seed_order": "seed0 acceptance and full comparison; only if main14 plus strict center-v-flip plus cost pass, seed1 then seed2 under identical rules",
+  "parent": "each own original common-protocol R18 e120 EMA; no finetuned states",
+  "canvas": [
+    768,
+    1344
+  ],
+  "dtype": "FP32",
+  "batch_original_images": 4,
+  "Q": 300,
+  "classes": 10,
+  "view_ids": {
+    "0": "whole",
+    "1": "TL",
+    "2": "TR",
+    "3": "BL",
+    "4": "BR",
+    "5": "one variant-specific extra; never center and flip together"
+  },
+  "center": "h=(5H+8)//9; w=(5W+8)//9; x0=(W-w)//2; y0=(H-h)//2; half-open",
+  "flip": "original RGB PIL horizontal transpose before original resize; x1=W-x2prime,x2=W-x1prime; no clipping",
+  "pool": "original pre-NMS per-view cross-class top600 from FP32 sigmoid; six views=3600",
+  "sorting": "descending original score then view/query/category ascending; retain zeros; no cutoff",
+  "NMS": "original classwise hard NMS suppress iff continuous FP64 IoU > 0.5; no fusion",
+  "budgets": [
+    600,
+    300
+  ],
+  "ignore": "original raw-ignore only after final budget; no refill",
+  "gates_pp": {
+    "center-C": {
+      "600": {
+        "AP": 0.2,
+        "APS": 0.3,
+        "AP75_small": 0.0,
+        "APM": -0.2,
+        "APL": -0.2
+      },
+      "300": {
+        "AP": -0.2,
+        "APS": -0.2
+      }
+    },
+    "center-A": {
+      "600": {
+        "AP": 0.3,
+        "APS": 0.5,
+        "AP75_small": -0.2,
+        "APM": -0.5,
+        "APL": -0.5
+      },
+      "300": {
+        "AP": -0.2,
+        "APS": -0.2
+      }
+    }
+  },
+  "same_view_control": "strictly positive main600 center-flip AP AND APS, unrounded; no claim of extra center value otherwise; no flip promotion",
+  "cost_limit_each_variant_over_A": 6.0,
+  "benchmark": {
+    "images": 64,
+    "batch": 4,
+    "warmup_original_batches": 2,
+    "arms": [
+      "A",
+      "C",
+      "C-center",
+      "C-flip"
+    ],
+    "forward_counts_including_warmup": {
+      "A": 18,
+      "C": 90,
+      "C-center": 108,
+      "C-flip": 108
+    },
+    "views_forward_serially": true,
+    "full_original_image_decode_preprocess_map_NMS_included": true,
+    "AP_on_64_forbidden": true
+  },
+  "full_stage": {
+    "images": 548,
+    "batches": 137,
+    "warmup_per_new_view": 2,
+    "extra_only_forward_calls_each_variant": 139,
+    "total_new_forward_calls_per_seed": 602,
+    "old_five_views": "reuse authenticated original full-C pre-NMS raw; reproduce C exactly first",
+    "64_raw_not_reused_into_548": "batch membership/order differ; no assumption of per-image bitwise equivalence",
+    "new_dual_score_groups_per_seed": 4
+  },
+  "cross_seed": "every executed seed separately passes main14+center-flip+cost; report all pairs mean/sampleSD/min; no mean compensation",
+  "engineering_error": "STOP and preserve; no automatic GPU/scientific retry",
+  "scientific_quality_failure": "seed0 failure: no new seeds; once seed0 passes, complete both seed1 and seed2 regardless of intermediate scientific failure; new execution exceptions STOP",
+  "holdout": false,
+  "local_polling": false,
+  "parameter_scan": false,
+  "merge_main": false
+}
