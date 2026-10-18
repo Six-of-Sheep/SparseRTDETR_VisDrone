@@ -88,7 +88,21 @@
       "prior_material_location_result": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
       "current_release_status": "CPU_READER_STOP_NOT_PRODUCTION",
       "current_CPU_gate": "NOT_PASSED",
-      "nonpositive_original_rows": 2
+      "nonpositive_original_rows": 2,
+      "zero_area_review": {
+        "status": "REVIEW_CPU_PASS_PRODUCTION_REMAINS_STOP",
+        "classification": "VERSIONED_EVALUATION_INPUT_PROTOCOL_EXTENSION_REQUIRED",
+        "production_enabled": false,
+        "report": "docs/research/ORIGINAL_C_ZERO_AREA_GT_REVIEW_20261019.md",
+        "review_commit": "38e92ffce23d2aab7ba6271efa8b64510f8c5049",
+        "review_manifest_sha256": "52f9673d35a91706ee2fa6ad0f99250562900c7db61119296763c8db569c1e51",
+        "interface_check_commit": "a9c8b3069939d360bb1649111e266827f8f09879",
+        "cases": 12,
+        "refusals": 6,
+        "development_raw_members": 548,
+        "scientific_groups": 0,
+        "GPU_forward_calls": 0
+      }
     }
   ]
 }
