@@ -44,6 +44,17 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "sahi-independent-confirmation-20261018-001",
+      "role": "original_C_independent_confirmation_preparation",
+      "result_status": "QUALIFICATION_BLOCKED_PENDING_ACCESS_HISTORY",
+      "seed_count": 3,
+      "source_commit": null,
+      "plan": "configs/sahi_independent_confirmation.json",
+      "report": "sahi-independent-confirmation-20261018-001/REPORT.md",
+      "GPU_authorized": false,
+      "sealed_payload_access_authorized": false
     }
   ]
 }
