@@ -42,8 +42,9 @@ class PreparationTests(unittest.TestCase):
 
 class ScientificStackTests(unittest.TestCase):
     def setUp(self):
-        try:import torch
-        except ImportError:self.skipTest('remote certified scientific CPU stack required')
+        # This is a required CI dependency: absence must fail, never skip.
+        import torch
+        self.assertFalse(torch.cuda.is_initialized())
 
     def test_raw_ignore_and_budget_inputs(self):
         from sparse_rtdetr.localization.data import parse_raw
