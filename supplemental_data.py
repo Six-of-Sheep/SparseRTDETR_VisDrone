@@ -27,6 +27,25 @@ def read_bytes(path, sha, size):
     return read_bound(regular(path), sha, size)
 
 
+def current_paths(c, rows):
+    """New explicit location binding; never rewrite a historical source root."""
+    if c['synthetic']:
+        return
+    spec = c['evaluation_data']
+    binding = exact(spec['path_binding'])
+    require(binding['task_id'] == TASK and binding['manifest'] == spec['manifest'], 'current path task/manifest')
+    require(binding['images'] == spec['images'] and binding['annotations'] == spec['annotations'], 'current root differs from certified mapping')
+    images, annotations = exact(binding['image_map']), exact(binding['annotation_map'])
+    ids = [r['stable_image_id'] for r in rows]
+    require([r['image_id'] for r in images] == [r['image_id'] for r in annotations] == ids, 'current mapping member order/identity')
+    for row, image, annotation in zip(rows, images, annotations):
+        ip = Path(spec['images']) / Path(row['relative_path']).name
+        ap = Path(spec['annotations']) / Path(row['annotation_relative_path']).name
+        require(image['current_path'] == str(ip) and image['bytes'] == row['image_size_bytes'] and image['sha256'] == row['image_sha256'], 'image mapping conflict')
+        require(annotation['historical_relative_path'] == row['annotation_relative_path'] and annotation['restored'] == dict(path=str(ap), bytes=row['annotation_size_bytes'], sha256=row['annotation_sha256']), 'annotation mapping conflict')
+        require(annotation['source_lineage'] == spec['lineage'], 'annotation recovery lineage conflict')
+
+
 def dataset(c):
     """Called only after CPU/source freeze and new fresh resource admission."""
     require(c['task_id'] == TASK and c['purpose'] == PURPOSE, 'reader purpose')
@@ -46,6 +65,7 @@ def dataset(c):
     rows = manifest['records']
     expected = 6 if c['synthetic'] else 1602
     require(len(rows) == expected and len({r['stable_image_id'] for r in rows}) == expected, 'manifest count/duplicate')
+    current_paths(c, rows)
     from sparse_rtdetr.data_protocol.schema import stable_image_id
     train = exact(spec['train_manifest'])['records']
     require(len(train) == (1 if c['synthetic'] else 4869), 'actual training member count')
