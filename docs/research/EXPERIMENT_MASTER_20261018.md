@@ -39,3 +39,5 @@ A是参考而非新增方法PASS；B未按C的七项政策独立通过，不追�
 - Soft-NMS: sahi-softnms-fixed-20261017-001/revision-007/REPORT.md
 - FT: r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md
 - Vote: sahi-box-vote-fixed-20261018-001/REPORT.md
+
+来源口径：ABC的source字段指本次引用的认证推理缓存/64图测速release，不冒充旧seed0 A最初点值评分的源码commit；旧A点值由原比较记录与原报告绑定复用。具体原评价器/输入身份须沿原报告追溯，不能把新汇总器commit当成实验运行commit。

@@ -53,7 +53,7 @@ def build(project,out):
             add('FT',0,arm+'/'+view,values,'CONTROL_ONLY' if arm=='T-control' else 'FAIL_CLOSED',
                 {'measured':True,'protocol_cost_passed':ft['cost_passed'],'arm_cost':ft['cost'][arm]},
                 {'runtime_commit':'57ae4d1990ef059818825e6d8813435b04046505'},'seed0 only; two paired 12-pass arms, not multi-seed')
-    result={'status':'EXISTING_RESULTS_COMPILED','no_new_AP':True,'no_new_bootstrap':True,'rows':rows,'input_refs':inputs,
+    result={'status':'EXISTING_RESULTS_COMPILED','no_new_AP':True,'no_new_bootstrap':True,'source_field_scope':'ABC source identifies certified inference/cache and timing release, not the first scoring producer of legacy seed0 A; original point-value bindings remain in original comparison and reports','rows':rows,'input_refs':inputs,
             'limits':'repeated development; original scientific decisions unchanged; A/B controls not promoted; FT only seed0'}
     out.mkdir(parents=True,exist_ok=False)
     (out/'MASTER.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
