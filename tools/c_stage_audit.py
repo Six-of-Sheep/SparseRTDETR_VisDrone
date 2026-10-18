@@ -47,7 +47,7 @@ def geometry(raw, part, j, torch):
     return maps
 
 
-def run(parent, out):
+def run(parent, out, prepare_only=False):
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
     os.environ['OMP_NUM_THREADS'] = '1'
     os.environ['MKL_NUM_THREADS'] = '1'
@@ -64,20 +64,23 @@ def run(parent, out):
     import softnms_job as j
     torch = j.cpu_only()
     c = j.load_contract(parent)
-    specs, rows, roots = j.context(c)
+    specs, rows, data_spec = j.context(c)
     from slice_core import classwise_nms
     from sparse_rtdetr.r0 import evaluation as ev
     from sparse_rtdetr.baseline import primary_evaluator as primary
     from sparse_rtdetr.data_protocol.evaluation import PrimaryImageV2
     def forbidden(*a, **kw): raise RuntimeError('stage audit forbids scoring')
     ev.score_budget = ev.bridge_metrics = primary.evaluate_primary_v1 = forbidden
-    parsed = j.parsed_gt(rows, {'roots': roots})
+    parsed = j.parsed_gt(rows, data_spec)
     j.resources(out, j.read(j.PLAN))
     publish(out / 'ADMISSION.json', {'parent_contract_sha256': PARENT_SHA,
         'external_source': str(source), 'source_files_verified': len(c['source_files']),
         'images': len(rows), 'seeds': [s['seed'] for s in specs],
         'own_source': {n: sha(Path(__file__).parent / n) for n in ('c_stage_audit.py','c_stage_core.py')},
         'GPU': 0, 'model_constructions': 0, 'AP_calls': 0})
+    if prepare_only:
+        return {'status':'ADMISSION_PASS','images':len(rows),'parsed_annotations':len(parsed),
+                'cache_batches_processed':0,'model_calls':0,'AP_calls':0}
     proofs, summaries = [], []
     for spec in specs:
         seed = spec['seed']; expected = {}
@@ -160,14 +163,14 @@ def run(parent, out):
 
 def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument('mode', choices=('run','fixture'))
+    p.add_argument('mode', choices=('run','admit','fixture'))
     p.add_argument('--parent',type=Path)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--inject-failure',action='store_true')
     args = p.parse_args(argv)
-    if args.mode == 'run' and (args.parent is None or args.inject_failure): p.error('invalid production options')
+    if args.mode != 'fixture' and (args.parent is None or args.inject_failure): p.error('invalid production options')
     out = args.output.resolve()
-    if args.mode == 'run' and TASK not in out.parts: p.error('production output is outside task directory')
+    if args.mode != 'fixture' and TASK not in out.parts: p.error('production output is outside task directory')
     out.mkdir(parents=True,exist_ok=False)
     start = time.monotonic()
     publish(out/'START.json',{'task':TASK,'mode':args.mode,'pid':os.getpid(),'started_unix':time.time()})
@@ -176,7 +179,7 @@ def main(argv=None):
             if args.inject_failure: raise RuntimeError('expected fixture failure')
             fixture = availability([0,0,10,10],{s:[[0,0,10,10]] for s in STAGES})
             result = {'status':'COMPLETE','synthetic':True,'result':fixture}
-        else: result = run(args.parent,out)
+        else: result = run(args.parent,out,prepare_only=args.mode == 'admit')
         result['elapsed_seconds'] = time.monotonic() - start
         ref = publish(out/'RESULT.json',result)
         publish(out/'CLOSED.json',{'result':ref,'returncode':0})
