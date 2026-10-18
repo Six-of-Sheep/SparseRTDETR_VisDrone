@@ -1,5 +1,9 @@
 # 实验导航
 
+2026-10-18补充：[原C三seed阶段诊断完成](research/C_STAGE_RESULT_20261018.md)，
+原C逐框重建通过，无新AP/GPU/训练；[固定框投票下一步方案](research/BOX_VOTING_PROPOSAL_20261018.md)
+仅设计未执行。下表保留2026-10-16历史快照，不代表最新seed1/2进度；三seed固定C现已交付。
+
 [机器可读登记](../manifests/experiments.json)记录截至2026-10-16的状态快照，不是实时监控。
 
 | 实验 | 角色 | 状态 |
