@@ -35,7 +35,9 @@ def restore(c,seed,out):
     require(b['config']==Config(seed=seed).binding() and b['scope']==f'formal_R18_seed{seed}_e120','real seed model recipe differs')
     # Build only the unchanged native model, then strict original full restore.
     # Original binding is preserved; new execution lineage is a separate receipt.
-    cfg={**c,**p['construction'],'seed':seed,'runtime_root':c['runtime_root']}
+    from sixth_view_admission import adapt_resources
+    require(p['construction']['environment']==c['environment'],'parent/resource environment conflict')
+    cfg=adapt_resources({**c,**p['construction'],'seed':seed,'runtime_root':c['runtime_root']})
     runtime=base.prepare_cuda(cfg,out)
     engine,constructed,_=make_engine(cfg,runtime,f'formal_R18_seed{seed}_e120')
     require(constructed['config']==b['config'] and constructed['model']==b['model'],'model construction differs from certified endpoint')
