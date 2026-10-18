@@ -62,10 +62,10 @@
     {
       "id": "sahi-original-c-supplemental-20261018-001",
       "role": "original_C_supplemental_evaluation_history_unverified",
-      "result_status": "RUNNING_NEW_GT_EXTENSION_ATTEMPT",
+      "result_status": "SUPPLEMENTAL_COMPLETE_QUALITY_AND_COST_PASS",
       "seed_count": 3,
       "plan": "configs/sahi_supplemental_evaluation.json",
-      "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
+      "report": "docs/research/ORIGINAL_C_GT_EXTENSION_EXECUTION_20261019.md",
       "human_statements": "manifests/confirmation_human_statements_20261018.json",
       "parent_independent_task": "sahi-independent-confirmation-20261018-001",
       "independent_qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
@@ -74,8 +74,8 @@
       "preparation_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
       "source_commit": "97c40e6610d8a75bf635c1801dc42e79767d029c",
       "source_manifest_sha256": "ddfd3260697388e42a8b9fa5b30b983e90055f6a538deca5ba1be24f55c14733",
-      "GPU_forward_calls": 0,
-      "scientific_evaluation_groups": 0,
+      "GPU_forward_calls": 6423,
+      "scientific_evaluation_groups": 18,
       "production_started": true,
       "authorization_scope": "supplemental-only; independent qualification remains BLOCKED",
       "prior_material_path_result": "STOP_BEFORE_LAUNCH_MATERIAL_PATH",
@@ -86,7 +86,7 @@
       "annotation_bytes": 1941456,
       "annotation_recovery_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_ANNOTATION_RECOVERY_20261019.md",
       "prior_material_location_result": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
-      "current_release_status": "GT_EXTENSION_V1_PRODUCTION_STARTED",
+      "current_release_status": "GT_EXTENSION_V1_COMPLETE_CLOSED_EXITED",
       "current_CPU_gate": "PASS",
       "nonpositive_original_rows": 2,
       "zero_area_review": {
@@ -117,11 +117,32 @@
         "CPU_gate_sha256": "2cc69aa874647cc0ace4d0385d7b8dd4ea6a3128ca80c751d6de7f9182ae1f11",
         "contract_sha256": "367cdd4e00923957c3397c2587ca79db85e09040b6b1f5f26c0917c9eaf4ddcd",
         "attempt": "protocol-extension-001/production-001",
-        "status": "RUNNING_RESULTS_PENDING",
+        "status": "COMPLETE_QUALITY_AND_COST_PASS",
         "reviewed_zero_GT_only": true,
         "original_annotations_unchanged": true,
-        "MATLAB_runtime_executed": false
-      }
+        "MATLAB_runtime_executed": false,
+        "old_STOP_preserved": true
+      },
+      "prior_execution_stop_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
+      "training_updates": 0,
+      "engineering_status": "COMPLETE_AUDITED",
+      "quality_passed": true,
+      "cost_passed": true,
+      "quality_conditions_passed": 21,
+      "cost_conditions_passed": 3,
+      "completed_phases": 16,
+      "owned_process_identity_exit_checks": 32,
+      "full_last_batch": 2,
+      "production_elapsed_seconds": 16268.644356313976,
+      "cumulative_measured_lower_bound_seconds": 16611.107041255975,
+      "terminal_summary_sha256": "ca71948ea748b86dd004a0a2d624658a56f0f8da160a6ff3f6f0d4e5b19df59b",
+      "slim_delivery_report": "sahi-original-c-supplemental-20261018-001/protocol-extension-001/REPORT.md",
+      "scientific_originals": "REMOTE_ONLY; index is not backup",
+      "C_minus_B_APL_delta_pp": [
+        -0.22284335174494463,
+        -0.0019060879541954456,
+        -0.11774518943879486
+      ]
     }
   ]
 }
