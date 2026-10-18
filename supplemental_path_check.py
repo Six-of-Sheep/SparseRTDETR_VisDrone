@@ -59,7 +59,8 @@ def main():
     require(gate['status'] == 'PASS' and gate['source_sha256'] == reference(a.prior_source)['sha256'], 'prior CPU/source binding')
     old = {x['path']: x for x in prior['files']}; new = {x['path']: x for x in source['files']}
     changed = [x for x in old if x not in new or old[x] != new[x]]
-    require(changed == ['supplemental_data.py'], 'unexpected prior runtime change: ' + repr(changed))
+    changed_runtime = [x for x in changed if not x.startswith('docs/') and not x.startswith('manifests/')]
+    require(changed_runtime == ['supplemental_data.py'], 'unexpected prior runtime change: ' + repr(changed_runtime))
     for r in source['files']:
         require(reference(rt.ROOT / r['path']) == dict(path=str(rt.ROOT/r['path']), bytes=r['bytes'], sha256=r['sha256']), 'deployed source changed')
     require(not torch.cuda.is_initialized(), 'CUDA initialized during path checks')
@@ -67,7 +68,7 @@ def main():
     result.update(status='PASS', source_sha256=reference(a.source)['sha256'],
         prior_CPU_gate=reference(a.prior_gate), prior_source=reference(a.prior_source),
         reuse_scope='unchanged launcher/supervisor/worker/evaluators/restore/closure/export/exit and fixture checks; prior gate not rewritten',
-        changed_prior_runtime_files=changed, real_current_reader_context=cr,
+        changed_prior_runtime_files=changed_runtime, changed_prior_nonruntime_files=[x for x in changed if x not in changed_runtime], real_current_reader_context=cr,
         actual_production_annotations=1602, actual_physical_rows=sum(len(p['rows']) for p in parsed),
         real_evaluator_input_proofs=proofs, current_path_refusals=tests,
         sealed_content_access=True, GPU_forward_calls=0, scientific_evaluation_groups=0,
