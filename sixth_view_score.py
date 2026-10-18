@@ -42,7 +42,9 @@ def build(a):
 
 def run(c):
     from sixth_view_job import phase,export
-    root=Path(c['job_root']);publish(root/'CONSUMED.json',{'contract_sha256':c['contract_sha256'],'pid':os.getpid(),'epoch':time.time(),'no_retry':True})
+    root=Path(c['job_root'])
+    require(not any((root/n).exists() for n in ('CONSUMED.json','STOP.json','CLOSED.json')),'continuation run already consumed')
+    publish(root/'CONSUMED.json',{'contract_sha256':c['contract_sha256'],'pid':os.getpid(),'epoch':time.time(),'no_retry':True})
     start=time.monotonic();completed=[]
     try:
         gate=read(c['CPU_gate']['path']);require(reference(c['CPU_gate']['path'])==c['CPU_gate'] and gate['status']=='PASS' and gate['source_manifest']==c['source_reference'],'CPU entry gate binding')
