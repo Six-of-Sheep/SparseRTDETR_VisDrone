@@ -44,6 +44,23 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "sahi-box-vote-fixed-20261018-001",
+      "role": "fixed_coordinate_vote_conventional_control",
+      "result_status": "QUALITY_FAIL_CLOSED",
+      "dependency_commit": "039bdcc89f3f1a6c23339bc0040a718986e06000",
+      "plan": "configs/sahi_boxvote_fixed.json",
+      "entry": "boxvote_score_launch.py",
+      "scientific_predecessors_unchanged": true,
+      "source_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810",
+      "source_manifest_sha256": "975dcc489081589a6950a6316b90b31f05020bfcc0c2d2058da9ffe6dd71b108",
+      "engineering_gate": "PASS",
+      "quality_failed_conditions": 21,
+      "quality_total_conditions": 42,
+      "gpu_cost_status": "NOT_EXECUTED_QUALITY_GATE_FAILED",
+      "new_training_updates": 0,
+      "new_gpu_calls": 0
     }
   ]
 }
