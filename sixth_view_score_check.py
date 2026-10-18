@@ -33,7 +33,7 @@ def main():
     from sixth_view_job import environment,verify_phase
     for fail in (False,True):
         name='worker-error' if fail else 'success';d=copy.deepcopy(c);root=out/name;root.mkdir()
-        d.update(job_root=str(root),runtime_root=str(Path(c['runtime_root']).parent/'score-entry-CPU'/name),inject_worker_failure=fail,
+        d.update(job_root=str(root),runtime_root=str(Path(c['runtime_root']).parent/out.name/name),inject_worker_failure=fail,
             contract_path=str(out/(name+'-contract.json')))
         d['contract_sha256']=digest({k:v for k,v in d.items() if k!='contract_sha256'});publish(d['contract_path'],d)
         argv=[d['python'],'-B',str(ROOT/'sixth_view_score.py'),'start','--contract',d['contract_path']]
