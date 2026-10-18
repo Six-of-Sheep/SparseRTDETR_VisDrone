@@ -44,6 +44,21 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "r18-slice-finetune-20261018-001",
+      "role": "paired_conventional_finetuning_preparation",
+      "result_status": "FORMAL_RUNNING_AFTER_BOTH_GPU_ACCEPTANCE_PASS",
+      "source_commit": "57ae4d1990ef059818825e6d8813435b04046505",
+      "plan": "configs/research/r18_slice_finetune_v1.json",
+      "report": "r18-slice-finetune-20261018-001/execution-001/REPORT.md",
+      "parent": "seed0_common_R18_e120_EMA_only",
+      "closed_candidate": "fixed_SoftNMS_remains_closed",
+      "scientific_evaluation": "PENDING",
+      "source_manifest_sha256": "b989e9f45e50b26a30c36f34132d960b60932c93da8cad7fccaea961d81d4090",
+      "slim_return_helper_commit": "df3b3704f395555336fb56f2a815e16f3d3800ab",
+      "observed_epoch": 1792297806.5983908,
+      "observed_T_control_update": 239
     }
   ]
 }
