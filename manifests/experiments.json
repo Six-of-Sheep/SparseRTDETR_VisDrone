@@ -82,7 +82,22 @@
       "CPU_pixel_entry_commit": "72d65eab6592e5368df05eaccfafa8b167a75f1c",
       "report": "sahi-sixth-view-20261018-001/REPORT.md",
       "future_forwards_per_seed": 602,
-      "future_forwards_all_three_max": 1806
+      "future_forwards_all_three_max": 1806,
+      "production_execution": {
+        "attempt": "execution-001/production-001",
+        "status": "ENGINEERING_STOP_BEFORE_CUDA",
+        "runtime_commit": "d1b4bcbfe21e758ae810e59e25131a21e18814be",
+        "source_manifest_sha256": "b48a8cbbc3f83c2c15ee7d898516644be0dd5c56916e425f748e5cbb385ac47e",
+        "contract_file_sha256": "586cb24ad50128bb72dbedddddebb6c22677357c2fd7f5b86212df401ee7ee47",
+        "error": "KeyError('storage')",
+        "entry_CPU_gate": "PASS_SYNTHETIC_SCOPE_ONLY",
+        "quality": "NOT_EVALUATED",
+        "cost": "NOT_EVALUATED",
+        "forwards": 0,
+        "seed1_seed2_started": false,
+        "report": "sahi-sixth-view-20261018-001/execution-001/REPORT.md",
+        "closure_note": "previous fields describe preserved preparation release; this nested record describes the authorized production attempt"
+      }
     }
   ]
 }
