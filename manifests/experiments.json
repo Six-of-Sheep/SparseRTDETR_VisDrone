@@ -62,15 +62,22 @@
     {
       "id": "sahi-original-c-supplemental-20261018-001",
       "role": "original_C_supplemental_evaluation_history_unverified",
-      "result_status": "PLAN_ONLY_PENDING_USER_AUTHORIZATION",
+      "result_status": "STOP_BEFORE_LAUNCH_MATERIAL_PATH",
       "seed_count": 3,
       "plan": "configs/sahi_supplemental_evaluation.json",
-      "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
+      "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
       "human_statements": "manifests/confirmation_human_statements_20261018.json",
       "parent_independent_task": "sahi-independent-confirmation-20261018-001",
       "independent_qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
-      "GPU_authorized": false,
-      "sealed_payload_access_authorized": false
+      "GPU_authorized": true,
+      "sealed_payload_access_authorized": true,
+      "preparation_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
+      "source_commit": "1fa3b3d8172cfc3c1611f625f08b64ca57f7f87e",
+      "source_manifest_sha256": "cc87a46ccd56eabbdb6b394e89ed107105576c46941411a8b5956d5e3343329d",
+      "GPU_forward_calls": 0,
+      "scientific_evaluation_groups": 0,
+      "production_started": false,
+      "authorization_scope": "supplemental-only; independent qualification remains BLOCKED"
     }
   ]
 }
