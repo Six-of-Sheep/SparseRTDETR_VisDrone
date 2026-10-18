@@ -192,7 +192,7 @@ def coco_counts(dataset, predictions):
     for v in ev.evalImgs:
         if v is None:
             continue
-        records.append(dict(image_id=v['image_id'], category_id=v['category_id'], area=labels[tuple(v['aRng'])],
+        records.append(dict(image_id=int(v['image_id']), category_id=int(v['category_id']), area=labels[tuple(v['aRng'])],
             GT_ids=[int(x) for x in v['gtIds']], GT_ignore=[int(x) for x in v['gtIgnore']],
             matching_denominator=int(sum(x == 0 for x in v['gtIgnore'])),
             detection_count=len(v['dtIds']), TP_IoU50=int(sum((v['dtMatches'][0] > 0) & ~v['dtIgnore'][0])),
@@ -283,7 +283,9 @@ def main():
     cocoeval.COCOeval.accumulate = forbidden; cocoeval.COCOeval.summarize = forbidden
     out = Path(a.output); out.mkdir(exist_ok=False); start = time.monotonic()
     def save(name, obj):
-        with (out/name).open('x') as f: json.dump(obj, f, indent=2, allow_nan=False)
+        encoded=json.dumps(obj, indent=2, allow_nan=False)
+        require(json.loads(encoded)==obj, 'JSON round trip value/type mismatch: '+name)
+        with (out/name).open('x') as f: f.write(encoded)
     sources=[]
     manifest=json.loads((ROOT/'manifests/visdrone_det_toolkit_005445.json').read_bytes())
     for row in manifest['inventory']['rows']:
