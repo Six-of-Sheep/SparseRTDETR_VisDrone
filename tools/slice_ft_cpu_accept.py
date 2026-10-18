@@ -24,7 +24,7 @@ def main():
         c={'task_id':execution.TASK+'-CPU-'+name,'scope':'CPU_FIXTURE','contract_path':str(path),
            'source_root':str(source),'source_manifest':source_ref['path'],'source_sha256':source_ref['sha256'],'source_commit':manifest['commit'],
            'plan':str(source/'configs/research/r18_slice_finetune_v1.json'),'plan_sha256':execution.PLAN_SHA,
-           'job_root':str(d/'job'),'runtime_root':str(Path('/home/lyy/.cache')/(execution.TASK+'-CPU-'+name+'-'+root.name)),
+           'job_root':str(d/'job'),'runtime_root':str(Path('/home/lyy/.cache')/(execution.TASK+'-CPU-'+name+'-'+hashlib.sha256(str(root).encode()).hexdigest()[:16])),
            'epochs':2,'updates_per_epoch':1,'total_updates':2,'development_ids':ids,'fixed64':ids,
            'GPU_authorized':False,'formal_authorized':False,'python':sys.executable,
            'gpu_uuid':snap['snapshot']['gpu']['devices'][0]['uuid']['value'],'boot_id':snap['boot_id'],
