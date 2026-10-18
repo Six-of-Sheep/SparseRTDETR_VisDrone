@@ -30,7 +30,7 @@ def validate_annotations(rows,parsed,ids):
         for obj in raw['rows']:
             require(obj['id']==stable_annotation_id(row['stable_image_id'],obj['physical_line'],obj['raw_line_sha256']),'GT/image identity mismatch')
             require(obj['id'] not in seen,'duplicate GT identity');seen.add(obj['id'])
-            require(type(obj['category']) is int and type(obj['score']) is int and obj['score'] in (0,1),'GT category/score type')
+            require(type(obj['category']) is int and type(obj['score']) is float and math.isfinite(obj['score']) and obj['score'] in (0.,1.),'certified parser GT category/score type')
             box=obj['box'];require(len(box)==4 and all(math.isfinite(x) for x in box) and box[2]>box[0] and box[3]>box[1],'GT geometry')
         require(dict(Counter(o['role'] for o in raw['rows']))==raw['counts'],'raw role counts')
         for key,role in (('gt','valid_gt'),('spatial_ignore','spatial_ignore'),('class_ignore','class_ignore')):
