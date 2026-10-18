@@ -92,13 +92,18 @@ def parent_context(c):
     for r in parent['source_files']:
         require(reference(source/r['path'])=={'path':str(source/r['path']),'bytes':r['bytes'],'sha256':r['sha256']},'parent verifier source changed')
     sys.path.insert(0,str(source));import softnms_job as old
-    bound=old.load_contract(p['path']);specs,rows,parsed=old.context(bound)
+    bound=old.load_contract(p['path']);specs,rows,data_spec=old.context(bound)
     from softnms_reuse import validate_reuse
     cert=validate_reuse(bound)
     require(old.digest(specs)==cert['context_sha256'] and old.digest(rows)==cert['rows_sha256'],'parent authenticated context/rebuild evidence changed')
     sys.path.insert(0,str(ROOT))
     for s in specs:
         require(s['seed'] in (0,1,2) and s['identity']==c['parents'][s['seed']]['identity'],'parent identity conflicts')
+    # context returns a role-bound data configuration, NOT parsed annotations.
+    # Use the certified SHA-checking parser; never pass the configuration to GT.
+    parsed=old.parsed_gt(rows,data_spec)
+    from sixth_view_score_reuse import validate_annotations
+    validate_annotations(rows,parsed,[r['stable_image_id'] for r in rows])
     return old,specs,rows,parsed
 
 

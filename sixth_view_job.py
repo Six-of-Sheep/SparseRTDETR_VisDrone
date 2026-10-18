@@ -64,6 +64,7 @@ def supervise_phase(c,seed,mode):
 def phase(c,seed,mode):
     from sparse_rtdetr.localization import guard
     from sparse_rtdetr.localization.storage import identity as sid
+    require(not c.get('seed0_evaluation_reuse') or seed!=0 or mode=='evaluation','seed0 reuse forbids GPU replay')
     root=Path(c['job_root'])/f'seed{seed}';root.mkdir(exist_ok=True)
     require(not (root/mode).exists(),'phase already used; cannot replay')
     sample=guard.snapshot(root);gpu=not c['synthetic'] and mode!='evaluation'
@@ -110,6 +111,14 @@ def evaluate(c,seed,out,emit):
     if c['synthetic']:
         rows,parsed,preds=synthetic_predictions();prepared={v:preds for v in ('C-center','C-flip')}
         old_scores=None
+    elif c.get('seed0_evaluation_reuse') and seed==0:
+        from sixth_view_score_reuse import admitted_predictions
+        from sixth_view_score import cpu_only
+        cpu_only()
+        old,specs,rows,parsed=rt.parent_context(c)
+        prepared=admitted_predictions(c,rows,parsed)
+        spec=specs[seed]
+        old_scores={a:{b:spec['metrics'][a][b]['COCO_bridge']['metrics'] for b in ('600','300')} for a in ('A','C')}
     else:
         import torch
         from sixth_view_core import SixthCandidate,merge_six
@@ -153,6 +162,10 @@ def evaluate(c,seed,out,emit):
             value=score(rows,parsed,prepared[variant][budget],out/f'{variant}-top{budget}-metrics.json',
                 {'task_id':rt.TASK,'seed':seed,'source_sha256':c['source_sha256'],'contract_sha256':c['contract_sha256'],
                  'checkpoint_sha256':c['parents'][seed]['checkpoint']['sha256'],'variant':variant,'budget':int(budget),'synthetic':c['synthetic']})
+            if c.get('seed0_evaluation_reuse') and seed==0 and not c['synthetic']:
+                from sixth_view_score_reuse import exact
+                cert=exact(c['seed0_evaluation_reuse']);proof=exact(cert['real_inputs'])['proofs'][variant][budget]
+                require(value['official']['canonical_input_sha256']==proof['canonical_input_sha256'] and value['spatial_filter_counts']==proof['counts'],'scored input differs from real CPU gate')
             scores[variant][budget]=value['COCO_bridge']['metrics'];refs.append(reference(out/f'{variant}-top{budget}-metrics.json'))
             emit.emit(f'score-{variant}-{budget}',metrics=refs[-1])
     if c['synthetic']:
