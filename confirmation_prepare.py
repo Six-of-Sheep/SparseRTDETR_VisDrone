@@ -29,6 +29,12 @@ def exact(ref):
     return read(ref['path'])
 
 
+def validate_parents(parents,expected):
+    require([p['seed'] for p in parents]==[0,1,2], 'three real seeds in frozen order')
+    require([p['checkpoint_sha256'] for p in parents]==expected and len(set(expected))==3, 'plan checkpoint/seed differs')
+    require(all(p['identity']['checkpoint_sha256']==p['checkpoint_sha256'] for p in parents), 'identity checkpoint conflict')
+
+
 def batches(rows, size=4):
     require(type(size) is int and size > 0, 'invalid batch size')
     return [rows[k:k + size] for k in range(0, len(rows), size)]
@@ -130,7 +136,7 @@ def load(path):
         p=ROOT/r['path'];require(p.resolve().is_relative_to(ROOT.resolve()) and not p.is_symlink(), 'source path')
         require(reference(p)==dict(path=str(p),bytes=r['bytes'],sha256=r['sha256']), 'source bytes differ: '+r['path'])
     plan=exact(c['plan']);exact(c['legacy_contract'])
-    require([p['checkpoint_sha256'] for p in c['parents']]==plan['checkpoint_sha256'], 'plan checkpoint/seed differs')
+    validate_parents(c['parents'],plan['checkpoint_sha256'])
     return c
 
 

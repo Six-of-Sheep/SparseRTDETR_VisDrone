@@ -31,6 +31,14 @@ class PreparationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'parsed GT list'):
             p.validate_parsed([{'stable_image_id':'a'}],{'roots':{}})
 
+    def test_seed_and_checkpoint_binding(self):
+        parents=[dict(seed=s,checkpoint_sha256=str(s)*64,identity={'checkpoint_sha256':str(s)*64}) for s in (0,1,2)]
+        expected=[s['checkpoint_sha256'] for s in parents];p.validate_parents(parents,expected)
+        for bad in (parents[:2], [parents[1],parents[0],parents[2]], [parents[0],parents[0],parents[2]]):
+            with self.assertRaises(RuntimeError):p.validate_parents(bad,expected)
+        bad=copy.deepcopy(parents);bad[1]['identity']['checkpoint_sha256']=expected[2]
+        with self.assertRaises(RuntimeError):p.validate_parents(bad,expected)
+
 
 class ScientificStackTests(unittest.TestCase):
     def setUp(self):
