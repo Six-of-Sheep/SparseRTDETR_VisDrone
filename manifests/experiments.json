@@ -62,7 +62,7 @@
     {
       "id": "sahi-original-c-supplemental-20261018-001",
       "role": "original_C_supplemental_evaluation_history_unverified",
-      "result_status": "STOP_BEFORE_LAUNCH_MATERIAL_PATH",
+      "result_status": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
       "seed_count": 3,
       "plan": "configs/sahi_supplemental_evaluation.json",
       "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
@@ -77,7 +77,12 @@
       "GPU_forward_calls": 0,
       "scientific_evaluation_groups": 0,
       "production_started": false,
-      "authorization_scope": "supplemental-only; independent qualification remains BLOCKED"
+      "authorization_scope": "supplemental-only; independent qualification remains BLOCKED",
+      "prior_material_path_result": "STOP_BEFORE_LAUNCH_MATERIAL_PATH",
+      "material_location_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_MATERIAL_LOCATION_20261018.md",
+      "material_location_manifest": "manifests/supplemental_material_location_20261018.json",
+      "image_member_SHA_verified": 1602,
+      "annotation_member_SHA_verified": 0
     }
   ]
 }

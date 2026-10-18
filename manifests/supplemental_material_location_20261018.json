@@ -1,0 +1,46 @@
+{
+  "schema": "supplemental-material-location-evidence-v1",
+  "task_id": "sahi-original-c-supplemental-20261018-001",
+  "purpose": "location_evidence_only_not_runtime_config",
+  "status": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
+  "original_manifest": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone/artifacts/data/visdrone_protocol_v2_conversion_r3/confirmatory_sealed_manifest.json",
+    "bytes": 972181,
+    "sha256": "1af7eb4248be3097122d2168e18519c8db3ac11e17faff46aca8e3d78e5cfef4"
+  },
+  "images": {
+    "historical_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/yolo/datasets/VisDrone/VisDrone2019-DET-train/images",
+    "current_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/p3_data_roots/train_core/VisDrone2019-DET-train/images",
+    "members_SHA_pass": 1602,
+    "bytes": 418043432,
+    "per_member_evidence": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/material-location-001/IMAGE_CONTENT_MAP.json",
+      "bytes": 845726,
+      "sha256": "858816774e26946d250346ecfa17c859b2908f31ee8907b69b05bba2af9ea3c4"
+    },
+    "content_identity": "PROVEN",
+    "migration_process": "INCOMPLETE_HISTORY"
+  },
+  "annotations": {
+    "historical_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/yolo/datasets/VisDrone/VisDrone2019-DET-train/annotations",
+    "current_root": null,
+    "member_files_SHA_verified": 0,
+    "unresolved_member_references": 1602,
+    "per_member_gaps": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/material-location-001/ANNOTATION_LOCATION_GAPS.json",
+      "bytes": 700758,
+      "sha256": "f5520e265c4f697c75b67f8623526df8c3b822f2f23fbf95d84006cfa6e8fc9e"
+    },
+    "lineage_preserved": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone/artifacts/data/visdrone_protocol_v2_conversion_r3/confirmatory_lineage.jsonl",
+      "bytes": 50212648,
+      "sha256": "998f7063cbb1fba5cd6380e5f98ebdf34c8bdad6b8236e18faf6a360cfce7cf5"
+    },
+    "reconstruction_performed": false
+  },
+  "qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
+  "GPU_forward_calls": 0,
+  "scientific_groups": 0,
+  "runtime_config_or_token_created": false,
+  "conclusion": "limited checked roots/indexes; cannot claim original annotation files globally lost"
+}
