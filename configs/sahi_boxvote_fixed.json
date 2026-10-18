@@ -1,0 +1,81 @@
+{
+  "schema": "sahi-boxvote-fixed-plan-v1",
+  "task_id": "sahi-box-vote-fixed-20261018-001",
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "images": 548,
+  "arms": [
+    "V-whole",
+    "V-five"
+  ],
+  "budgets": [
+    600,
+    300
+  ],
+  "candidate_pool": "original FP32 sigmoid, each of whole/TL/TR/BL/BR top600; Q300x10",
+  "nonfinite": "STOP; no nan_to_num or score repair",
+  "output": "global descending decayed score, view/query/category; top300 same prefix of top600",
+  "ignore": "original raw-ignore after budget truncation; no refill; GT never enters postprocess",
+  "gates_pp": {
+    "V-five-C": {
+      "600": {
+        "AP": 0.2,
+        "APS": 0.3,
+        "AP75_small": 0.0,
+        "APM": -0.2,
+        "APL": -0.2
+      },
+      "300": {
+        "AP": -0.2,
+        "APS": -0.2
+      }
+    },
+    "V-five-A": {
+      "600": {
+        "AP": 0.3,
+        "APS": 0.5,
+        "AP75_small": -0.2,
+        "APM": -0.5,
+        "APL": -0.5
+      },
+      "300": {
+        "AP": -0.2,
+        "APS": -0.2
+      }
+    }
+  },
+  "cross_seed": "all 14 gates separately in all seeds; no mean compensation",
+  "new_score_budget_calls": 12,
+  "quality_pass_state": "QUALITY_PASS_COST_PENDING",
+  "quality_fail_state": "QUALITY_FAIL_CLOSED",
+  "original_results": "reuse A/B/C points without rescoring; original decisions unchanged",
+  "cache_admission": "all seeds and all raw-views SHA/identity/geometry verified; exact A/B/C rebuild before any new scoring",
+  "wait": "parents already closed; no waiting observer",
+  "cpu_threads": 1,
+  "wait_interval_seconds": 300,
+  "progress_timeout_seconds": 1800,
+  "minimum_available_RAM_GiB": 4,
+  "minimum_free_disk_GiB": 4,
+  "max_CPU_temperature_C": 85,
+  "total_wallclock_cap": null,
+  "GPU_calls": "ONLY after all 42 quality conditions pass",
+  "model_construction": false,
+  "training_updates": 0,
+  "bootstrap_calls": 0,
+  "holdout": false,
+  "automatic_retry": false,
+  "backup_candidate": "DISABLED",
+  "return_policy": "explicit small whitelist only; raw caches/predictions/logs remain server-side",
+  "rule": "hard NMS .5 original pool; one-shot same-class IoU64 > .5 original-neighborhood score-weighted FP64 coordinates",
+  "accumulation": "identity order view/query/category; sequential FP64; nonfinite STOP",
+  "zero_weight": "keep original box; count",
+  "preserved": "original score/category/identity/rank; no clip/cutoff/second NMS/iteration",
+  "cost_gate": {
+    "V-five/A": 6.0,
+    "V-five/C": 1.1
+  },
+  "prerequisite_commit": "039bdcc"
+}

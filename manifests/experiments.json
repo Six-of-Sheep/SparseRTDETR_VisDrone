@@ -44,6 +44,15 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "sahi-box-vote-fixed-20261018-001",
+      "role": "fixed_coordinate_vote_conventional_control",
+      "result_status": "preparation_not_scored",
+      "dependency_commit": "039bdcc89f3f1a6c23339bc0040a718986e06000",
+      "plan": "configs/sahi_boxvote_fixed.json",
+      "entry": "boxvote_score_launch.py",
+      "scientific_predecessors_unchanged": true
     }
   ]
 }
