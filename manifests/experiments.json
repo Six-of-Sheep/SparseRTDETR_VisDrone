@@ -31,11 +31,13 @@
     {
       "id": "r18-sahi-seed12-20261016-001",
       "role": "paired_seed1_seed2_replication",
-      "result_status": "started_final_results_pending_at_snapshot",
+      "result_status": "three_seed_development_quality_and_cost_pass",
       "source_commit": "a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7",
       "git_binding_kind": "retrospective_import_not_original_launch_binding",
       "source_manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
-      "report": "r18-sahi-seed12-20261016-001/REPORT_RUNNING.md"
+      "report": "r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/terminal-review-20261018-001/summary/REPORT.md",
+      "prior_report": "r18-sahi-seed12-20261016-001/REPORT_RUNNING.md",
+      "source_binding_note": "existing retrospective import entry retained; actual inference runtime identities are separately frozen in the consolidated registry"
     },
     {
       "id": "rtdetrv2-r18-mal-continue-20261015-001",
@@ -144,5 +146,6 @@
         -0.11774518943879486
       ]
     }
-  ]
+  ],
+  "consolidated_results": "manifests/frozen_abc_results_20261019.json"
 }
