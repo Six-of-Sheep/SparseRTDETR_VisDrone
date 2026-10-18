@@ -22,6 +22,9 @@ def main():
     out=Path(a.output)
     if not out.is_absolute() or out.exists():raise ValueError('new absolute CPU output required')
     if os.environ.get('CUDA_VISIBLE_DEVICES')!='':raise RuntimeError('CUDA must be hidden for CPU preparation')
+    # Match the certified lab launcher before importing torch/vendor or spawn.
+    # Children inherit this; setting it after torch imports is too late.
+    os.environ['MKL_THREADING_LAYER']='GNU'
     out.mkdir(parents=True,exist_ok=False)
     sys.path.insert(0,str(Path(__file__).resolve().parent/'src'))
     started=time.monotonic()
