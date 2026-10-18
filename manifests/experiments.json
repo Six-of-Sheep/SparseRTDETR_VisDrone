@@ -72,8 +72,8 @@
     },
     {
       "id": "sahi-sixth-view-20261018-001",
-      "result_status": "PREPARATION_CPU_PASS",
-      "science_status": "NOT_EXECUTED",
+      "result_status": "ENGINEERING_PASS_QUALITY_FAIL_CLOSED",
+      "science_status": "SEED0_COMPLETE_NO_SEED12",
       "config": "configs/sahi_sixth_view.json",
       "plan": "docs/research/SIXTH_VIEW_PLAN_20261018.md",
       "entry": "sixth_view_prepare.py",
@@ -109,6 +109,26 @@
         "scientific_score_groups_completed": 0,
         "seed1_seed2_started": false,
         "report": "sahi-sixth-view-20261018-001/execution-002/REPORT.md"
+      },
+      "evaluation_repair_execution": {
+        "attempt": "execution-003/scoring-001",
+        "entry": "sixth_view_score.py",
+        "runtime_commit": "efba2491097fc63c0fb01d7204757e383afe6361",
+        "source_manifest_sha256": "1004cd52da2a56c61bf15e5e3c9387eee0d72809d0618faffde0b3e545e1034b",
+        "contract_file_sha256": "3e494a8e5171eda5b6d2d8dba3f3893cb5dbcd8e81816e2d5e2118a70a38e793",
+        "status": "COMPLETE_QUALITY_FAIL_CLOSED",
+        "real_inputs": "PASS_548",
+        "old_raw_reused": 274,
+        "new_dual_evaluator_groups": 4,
+        "seed0_new_forwards": 0,
+        "quality_conditions": {
+          "passed": 11,
+          "failed": 3
+        },
+        "same_view_control": "FAIL",
+        "cost": "PASS_REUSED_EXECUTION002",
+        "seed1_seed2_started": false,
+        "report": "sahi-sixth-view-20261018-001/execution-003/REPORT.md"
       }
     }
   ]
