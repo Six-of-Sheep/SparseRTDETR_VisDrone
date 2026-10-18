@@ -218,6 +218,7 @@ def capture(engine):
     assert_healthy(engine.model,engine.optimizer,engine.ema)
     behavior=native_state.behavior_identity(engine)
     value={'format':VERSION,'engine':engine.state_dict(),'behavior':behavior,
+           'execution_binding':getattr(engine,'execution_binding',None),
            'torch_version':str(torch.__version__),'device':str(engine.device),
            'model':engine.model.state_dict(),'model_layout':layout._model_layout(engine.model),
            'model_training':{n:m.training for n,m in engine.model.named_modules()},
@@ -247,7 +248,7 @@ def restore(engine,reference):
             raise ValueError('fine-tune checkpoint SHA/bytes mismatch')
         p=torch.load(io.BytesIO(raw),map_location='cpu',weights_only=True)
         current=capture(engine)
-        if set(p)!=set(current) or any(p[k]!=current[k] for k in ('format','torch_version','device','behavior','model_layout','optimizer_layout','ema_layout')):
+        if set(p)!=set(current) or any(p[k]!=current[k] for k in ('format','torch_version','device','behavior','model_layout','optimizer_layout','ema_layout','execution_binding')):
             raise ValueError('fine-tune runtime/behavior/layout mismatch')
         engine.validate_state_dict(p['engine'])
         for k,m in [('model',engine.model),('ema',engine.ema.module)]:
