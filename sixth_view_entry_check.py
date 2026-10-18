@@ -29,9 +29,17 @@ def main():
         result=checked(argv,d);require(result.returncode==0,'actual start entry failed: '+result.stdout.decode())
         launch=read(Path(d['job_root'])/'LAUNCH_RECEIPT.json')
         # pidfd kernel wait, no periodic state polling.
-        import select
+        import select,ctypes
         try:
-            fd=os.pidfd_open(launch['pid']);wait=select.poll();wait.register(fd,select.POLLIN);wait.poll();os.close(fd)
+            if hasattr(os,'pidfd_open'):fd=os.pidfd_open(launch['pid'])
+            else:
+                require(os.uname().machine=='x86_64','pidfd fallback architecture')
+                libc=ctypes.CDLL(None,use_errno=True);fd=libc.syscall(434,launch['pid'],0)
+                if fd<0:
+                    code=ctypes.get_errno()
+                    if code==3:raise ProcessLookupError(code,os.strerror(code))
+                    raise OSError(code,os.strerror(code))
+            wait=select.poll();wait.register(fd,select.POLLIN);wait.poll();os.close(fd)
         except ProcessLookupError:pass
         root=Path(d['job_root'])
         require((root/('STOP.json' if failure else 'CLOSED.json')).is_file(),'CPU actual terminal absent')
@@ -59,11 +67,32 @@ def main():
         try:channel.Reader(dest,b,'progress').poll()
         except RuntimeError:pass
         else:raise RuntimeError('bad stream was admitted: '+name)
+    # Targeted resource refusal cases use the real observed shape/channel.
+    from sparse_rtdetr.localization import guard
+    sample=guard.snapshot(out);resource_rejections=[]
+    for name in ('missing_RAM','low_RAM','wrong_GPU','low_GPU_memory','CPU_overheat','stale','wrong_boot','wrong_storage'):
+        bad=copy.deepcopy(sample);contract=copy.deepcopy(c)
+        if name=='missing_RAM':del bad['snapshot']['resources']['ram_available']
+        elif name=='low_RAM':bad['snapshot']['resources']['ram_available']=0
+        elif name=='wrong_GPU':contract['gpu_uuid']='GPU-wrong'
+        elif name=='low_GPU_memory':bad['snapshot']['gpu']['devices'][0]['memory.free']['value']=0
+        elif name=='CPU_overheat':bad['snapshot']['cpu_temperature_max']=100
+        elif name=='stale':bad['monotonic']=time.monotonic()-26
+        elif name=='wrong_boot':bad['boot_id']='wrong'
+        elif name=='wrong_storage':bad['storage']['st_dev']=-1
+        previous=channel.resource;channel.resource=lambda:bad
+        try:
+            try:
+                from sixth_view_runtime import live
+                live(contract,out,name in ('wrong_GPU','low_GPU_memory'))
+            except (RuntimeError,KeyError):resource_rejections.append(name)
+            else:raise RuntimeError('resource refusal failed: '+name)
+        finally:channel.resource=previous
     # All modes have been driven through main, not direct pipeline/supervisor.
     publish(out/'CPU_GATE.json',{'status':'PASS','source_sha256':c['source_sha256'],'records':records,
         'real_entry_chain':'start -> run -> guard.supervise -> worker -> actual dual evaluators -> RESULT/CLOSED -> SLIM_EXPORT -> exit',
         'seven_phase_process_chain':True,'dual_evaluator_calls':4,'synthetic_only':True,
-        'bad_streams_rejected':list(cases),'CUDA_initialized':False,'detector_updates':0,
+        'bad_streams_rejected':list(cases),'resource_refusals':resource_rejections,'CUDA_initialized':False,'detector_updates':0,
         'elapsed_seconds':time.monotonic()-start})
 
 
