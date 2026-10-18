@@ -31,11 +31,11 @@
     {
       "id": "r18-sahi-seed12-20261016-001",
       "role": "paired_seed1_seed2_replication",
-      "result_status": "started_final_results_pending_at_snapshot",
-      "source_commit": "a4cdcb1bbaec967c2b62200d0b0eca51fb2a3fa7",
-      "git_binding_kind": "retrospective_import_not_original_launch_binding",
-      "source_manifest_sha256": "39f9e06730a52d1c354d550fe3169e4a9fb1913ebe742f94d4c4f216d748391e",
-      "report": "r18-sahi-seed12-20261016-001/REPORT_RUNNING.md"
+      "result_status": "THREE_SEED_C_PASS_A_REFERENCE_B_CONTROL",
+      "source_commit": "bcbda80b3f3af7250d2b47bea014f85b76a3f86c",
+      "git_binding_kind": "actual_protocol_resume_release",
+      "source_manifest_sha256": "eee776f2a8ac601f0134e6dc2f9d243280845e1279668369c7e755971cc506b8",
+      "report": "r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/terminal-review-20261018-001/summary/REPORT.md"
     },
     {
       "id": "rtdetrv2-r18-mal-continue-20261015-001",
@@ -44,6 +44,92 @@
       "source_commit": null,
       "source_manifest_sha256": null,
       "report": "rtdetrv2-r18-mal-continue-20261015-001/REPORT.md"
+    },
+    {
+      "id": "sahi-softnms-fixed-20261017-001",
+      "source_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18",
+      "result_status": "QUALITY_FAIL_CLOSED",
+      "seed_count": 3,
+      "cost": "NOT_MEASURED",
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md"
+    },
+    {
+      "id": "r18-slice-finetune-20261018-001",
+      "source_commit": "57ae4d1990ef059818825e6d8813435b04046505",
+      "result_status": "COMPLETE_QUALITY_FAIL",
+      "seed_count": 1,
+      "arms": 2,
+      "cost": "PASS_MEASURED",
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md"
+    },
+    {
+      "id": "sahi-box-vote-fixed-20261018-001",
+      "source_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810",
+      "result_status": "QUALITY_FAIL_CLOSED",
+      "seed_count": 3,
+      "cost": "NOT_EXECUTED_QUALITY_GATE_FAILED",
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md"
+    },
+    {
+      "id": "sahi-sixth-view-20261018-001",
+      "result_status": "ENGINEERING_PASS_QUALITY_FAIL_CLOSED",
+      "science_status": "SEED0_COMPLETE_NO_SEED12",
+      "config": "configs/sahi_sixth_view.json",
+      "plan": "docs/research/SIXTH_VIEW_PLAN_20261018.md",
+      "entry": "sixth_view_prepare.py",
+      "GPU_authorized": false,
+      "source_commit": "9778b3506f43a3e7dba24ba8f9f317fbd1b4ead7",
+      "CPU_pixel_entry_commit": "72d65eab6592e5368df05eaccfafa8b167a75f1c",
+      "report": "sahi-sixth-view-20261018-001/REPORT.md",
+      "future_forwards_per_seed": 602,
+      "future_forwards_all_three_max": 1806,
+      "production_execution": {
+        "attempt": "execution-001/production-001",
+        "status": "ENGINEERING_STOP_BEFORE_CUDA",
+        "runtime_commit": "d1b4bcbfe21e758ae810e59e25131a21e18814be",
+        "source_manifest_sha256": "b48a8cbbc3f83c2c15ee7d898516644be0dd5c56916e425f748e5cbb385ac47e",
+        "contract_file_sha256": "586cb24ad50128bb72dbedddddebb6c22677357c2fd7f5b86212df401ee7ee47",
+        "error": "KeyError('storage')",
+        "entry_CPU_gate": "PASS_SYNTHETIC_SCOPE_ONLY",
+        "quality": "NOT_EVALUATED",
+        "cost": "NOT_EVALUATED",
+        "forwards": 0,
+        "seed1_seed2_started": false,
+        "report": "sahi-sixth-view-20261018-001/execution-001/REPORT.md",
+        "closure_note": "previous fields describe preserved preparation release; this nested record describes the authorized production attempt"
+      },
+      "resource_repair_execution": {
+        "attempt": "execution-002/production-001",
+        "runtime_commit": "c81d6d0485b0fbbc7f2f634dfaef2f1766fad2a5",
+        "status": "ENGINEERING_STOP_AT_EVALUATION_GT_INPUT",
+        "admission_CPU_cases": 28,
+        "seed0_forward_calls": 602,
+        "seed0_cost": "PASS",
+        "quality": "NOT_EVALUATED",
+        "scientific_score_groups_completed": 0,
+        "seed1_seed2_started": false,
+        "report": "sahi-sixth-view-20261018-001/execution-002/REPORT.md"
+      },
+      "evaluation_repair_execution": {
+        "attempt": "execution-003/scoring-001",
+        "entry": "sixth_view_score.py",
+        "runtime_commit": "efba2491097fc63c0fb01d7204757e383afe6361",
+        "source_manifest_sha256": "1004cd52da2a56c61bf15e5e3c9387eee0d72809d0618faffde0b3e545e1034b",
+        "contract_file_sha256": "3e494a8e5171eda5b6d2d8dba3f3893cb5dbcd8e81816e2d5e2118a70a38e793",
+        "status": "COMPLETE_QUALITY_FAIL_CLOSED",
+        "real_inputs": "PASS_548",
+        "old_raw_reused": 274,
+        "new_dual_evaluator_groups": 4,
+        "seed0_new_forwards": 0,
+        "quality_conditions": {
+          "passed": 11,
+          "failed": 3
+        },
+        "same_view_control": "FAIL",
+        "cost": "PASS_REUSED_EXECUTION002",
+        "seed1_seed2_started": false,
+        "report": "sahi-sixth-view-20261018-001/execution-003/REPORT.md"
+      }
     }
   ]
 }
