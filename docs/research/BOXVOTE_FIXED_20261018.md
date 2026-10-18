@@ -11,3 +11,5 @@ GT-free坐标投票位于boxvote_core.py。原P先classwise_nms(.5)；原同类�
 最终入口boxvote_score_launch.py → boxvote_job.py run →真实supervisor→worker→原双评价器→RESULT/CLOSED→SLIM_EXPORT→退出。合成success/worker failure/duplicate及坏终态验收，真实材料准入单列。准备原18组输入证明通过原严格验证器和新旧context绑定复用，411批逐SHA解码原A/B/C精确重建后冻结新评分attempt。参数不按结果调整。
 
 D只保必要报告/配置/指标/SHA，完整预测与逐图坐标统计仅服务器。条件GPU成本门槛V-five/A≤6、V-five/C≤1.10，包含全5视图forward，不能以缓存CPU用时代替。旧报告/运行目录不改；PR不自动合并。
+
+准备版release001的合成raw-ignore边界测试错误使用0起点；原评价器round/max(1,x)使原框与移动框同一像素起点，不能作为预期过滤变化例。原实现没有变更；测试平移到(10,10)以跨越实际离散边界。旧CPU日志/源码保留，定向重验完整最终入口。未读真实缓存、未评分。
