@@ -62,7 +62,7 @@
     {
       "id": "sahi-original-c-supplemental-20261018-001",
       "role": "original_C_supplemental_evaluation_history_unverified",
-      "result_status": "STOP_CPU_READER_UNSUPPORTED_NONPOSITIVE_GT",
+      "result_status": "RUNNING_NEW_GT_EXTENSION_ATTEMPT",
       "seed_count": 3,
       "plan": "configs/sahi_supplemental_evaluation.json",
       "report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
@@ -72,11 +72,11 @@
       "GPU_authorized": true,
       "sealed_payload_access_authorized": true,
       "preparation_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
-      "source_commit": "93ea7561c80930c7d1e96cd56450b43419d5332e",
-      "source_manifest_sha256": "724f578f9bc4f5381a1fde2c231f9ba6d4e05ce5feadb0f6fc402717c6349386",
+      "source_commit": "97c40e6610d8a75bf635c1801dc42e79767d029c",
+      "source_manifest_sha256": "ddfd3260697388e42a8b9fa5b30b983e90055f6a538deca5ba1be24f55c14733",
       "GPU_forward_calls": 0,
       "scientific_evaluation_groups": 0,
-      "production_started": false,
+      "production_started": true,
       "authorization_scope": "supplemental-only; independent qualification remains BLOCKED",
       "prior_material_path_result": "STOP_BEFORE_LAUNCH_MATERIAL_PATH",
       "material_location_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_MATERIAL_LOCATION_20261018.md",
@@ -86,8 +86,8 @@
       "annotation_bytes": 1941456,
       "annotation_recovery_report": "docs/research/ORIGINAL_C_SUPPLEMENTAL_ANNOTATION_RECOVERY_20261019.md",
       "prior_material_location_result": "STOP_ANNOTATION_LOCATION_UNRESOLVED",
-      "current_release_status": "CPU_READER_STOP_NOT_PRODUCTION",
-      "current_CPU_gate": "NOT_PASSED",
+      "current_release_status": "GT_EXTENSION_V1_PRODUCTION_STARTED",
+      "current_CPU_gate": "PASS",
       "nonpositive_original_rows": 2,
       "zero_area_review": {
         "status": "REVIEW_CPU_PASS_PRODUCTION_REMAINS_STOP",
@@ -102,6 +102,25 @@
         "development_raw_members": 548,
         "scientific_groups": 0,
         "GPU_forward_calls": 0
+      },
+      "prior_production_stop_status": "STOP_CPU_READER_UNSUPPORTED_NONPOSITIVE_GT",
+      "prior_reader_release": {
+        "source_commit": "93ea7561c80930c7d1e96cd56450b43419d5332e",
+        "source_manifest_sha256": "724f578f9bc4f5381a1fde2c231f9ba6d4e05ce5feadb0f6fc402717c6349386",
+        "CPU_gate": "NOT_PASSED",
+        "status": "CPU_READER_STOP_NOT_PRODUCTION"
+      },
+      "evaluation_input_extension": {
+        "protocol": "supplemental-zero-gt-input-extension-v1",
+        "config": "configs/supplemental_zero_gt_extension_v1.json",
+        "report": "docs/research/ORIGINAL_C_GT_EXTENSION_EXECUTION_20261019.md",
+        "CPU_gate_sha256": "2cc69aa874647cc0ace4d0385d7b8dd4ea6a3128ca80c751d6de7f9182ae1f11",
+        "contract_sha256": "367cdd4e00923957c3397c2587ca79db85e09040b6b1f5f26c0917c9eaf4ddcd",
+        "attempt": "protocol-extension-001/production-001",
+        "status": "RUNNING_RESULTS_PENDING",
+        "reviewed_zero_GT_only": true,
+        "original_annotations_unchanged": true,
+        "MATLAB_runtime_executed": false
       }
     }
   ]
