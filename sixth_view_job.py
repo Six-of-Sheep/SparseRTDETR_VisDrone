@@ -27,6 +27,7 @@ def environment(c,gpu=False):
 
 
 def verify_phase(c,seed,mode):
+    rt.install()  # Fresh archive readers must install the same protocol first.
     from sparse_rtdetr.localization import channel
     out=Path(c['job_root'])/f'seed{seed}'/mode;runtime=Path(c['runtime_root'])/f'seed{seed}'/mode
     closure=read(out/'CLOSED.json');b=read(runtime/'identity.json')
