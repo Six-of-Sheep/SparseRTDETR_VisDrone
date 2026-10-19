@@ -22,6 +22,8 @@
 
 实验扩展到此结束。Soft-NMS、固定微调、框投票和第六中心视图均按原门槛关闭；flip仅控制不升级，不自动调参或新训练。[历史集成审查](docs/research/abc_results_20261019/PR9_REVIEW.md)提出的CI缺口已追加覆盖，见[CPU工程收尾](docs/research/PR9_CI_CLOSEOUT_20261019.md)；合并前核对最终head的CI，PR #9未自动合并。
 
+[固定预算视图选择研究决策](docs/research/VIEW_BUDGET_DECISION_20261019.md)：P12跨seed保护失败，实验线结束；原C保留。已读先例和现有信号未支持有实质增量的整图引导二选四候选，本次关闭该研究方向，不自动实施或评分。P12结果及成本仍在未合并PR #12，见决策内固定提交链接。
+
 ## 代码地图
 
 | 位置 | 责任 |
