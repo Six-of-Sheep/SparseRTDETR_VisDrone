@@ -145,6 +145,15 @@
         -0.0019060879541954456,
         -0.11774518943879486
       ]
+    },
+    {
+      "id": "sahi-two-of-four-20261019-001",
+      "role": "fixed_six_pair_development_feasibility_screen",
+      "result_status": "PREPARED_NOT_SCORED",
+      "plan": "configs/sahi_two_of_four.json",
+      "seed_count": 1,
+      "GPU_authorized": false,
+      "forward_authorized": false
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"
