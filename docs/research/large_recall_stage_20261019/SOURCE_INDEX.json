@@ -1,0 +1,81 @@
+{
+  "task_id": "large-recall-stage-20261019-001",
+  "execution_commit": "aa4398c1f77e58fb01bd963f9c9cdfbe08d48fa4",
+  "run_manifest_sha256": "d244033a6ed3ade60f3d88a6470e662da3ff6ef082bb8b002e1196a470361d6e",
+  "contract_sha256": "b857223ebebd8146328aa0ef7d3174467d6156058f441cfc8b1cbf86a4c5ab58",
+  "remote_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001",
+  "authenticated_summaries": {
+    "SUMMARY.json": {
+      "bytes": 125481,
+      "sha256": "8710a407ffc0b26e8a1044027c16b237b93b24311cea0d480e587807dad009be"
+    },
+    "CASES.json": {
+      "bytes": 24195,
+      "sha256": "6b18bc99e7da15d22ef0f33f67849cdb2dc9ba579ec264bf1869364c8be9404b"
+    },
+    "INPUT_PROOFS.json": {
+      "bytes": 4544,
+      "sha256": "f4524a669d1a4f4f9a5171fc76dffd9e8c1053dd04f5cd1391397219ec620feb"
+    },
+    "RESULT.json": {
+      "bytes": 2981,
+      "sha256": "987508b1878c992b206daba6b7347458d35cc2acebfdb2119bb28e14b0c6d8db"
+    },
+    "CLOSED.json": {
+      "bytes": 311,
+      "sha256": "157bd980655bc4ead82f256868a308896f8ddcfb827601cac0a0ea4928a91d70"
+    },
+    "ADMISSION.json": {
+      "bytes": 40793,
+      "sha256": "b21ac2a51119b97810fd2d14d6dc957819222759422c11ba48739da68f107dce"
+    }
+  },
+  "server_only": [
+    {
+      "bytes": 22440,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/RESOURCE.json",
+      "sha256": "e4683f497a87d1053ddee89967644edb904c4ae8e569815eaae41a72dda25506"
+    },
+    {
+      "bytes": 40793,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/ADMISSION.json",
+      "sha256": "b21ac2a51119b97810fd2d14d6dc957819222759422c11ba48739da68f107dce"
+    },
+    {
+      "bytes": 488128,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/COUNTS.json",
+      "sha256": "6e14a607b9772285fe6fbedcbde69c9a6d9d19f327cb344d76df72bea2ff0b7f"
+    },
+    {
+      "bytes": 24195,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/CASES.json",
+      "sha256": "6b18bc99e7da15d22ef0f33f67849cdb2dc9ba579ec264bf1869364c8be9404b"
+    },
+    {
+      "bytes": 68,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/START.json",
+      "sha256": "bdc9041a79be4d59676a019817df8e96abdbc25750a359a0397b948330a08dbb"
+    },
+    {
+      "bytes": 939356129,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/GT_DETAILS.jsonl",
+      "sha256": "cad0e26a0f67894fc8829ce3a7cfea80028f3cad5504384247ca73188c6016f3"
+    },
+    {
+      "bytes": 3361302,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/BY_GROUP.json",
+      "sha256": "deb3c43d9cb837c6879b95fd9c33a8a2b9f7683ee4f634ba92dfc0b6bcfca3f0"
+    },
+    {
+      "bytes": 4544,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/INPUT_PROOFS.json",
+      "sha256": "f4524a669d1a4f4f9a5171fc76dffd9e8c1053dd04f5cd1391397219ec620feb"
+    },
+    {
+      "bytes": 125481,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/large-recall-stage-20261019-001/attempt-001/SUMMARY.json",
+      "sha256": "8710a407ffc0b26e8a1044027c16b237b93b24311cea0d480e587807dad009be"
+    }
+  ],
+  "note": "source index is not independent backup; GT_DETAILS and full factorial group audit remain server-side"
+}

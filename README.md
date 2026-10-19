@@ -24,6 +24,8 @@
 
 ## 代码地图
 
+[seed0大目标召回阶段缓存诊断](docs/research/large_recall_stage_20261019/REPORT.md)：高IoU失配集中于NMS后，但移除NMS与预算竞争相互作用，固定反事实未支持原预算下跨两IoU一致的直接修复；不立项、不重开旧候选，旧A/B/C门槛与结论保持。
+
 | 位置 | 责任 |
 |---|---|
 | src/sparse_rtdetr/protocol_r18/ | 当前共同协议R18模型、数据、状态与训练适配 |

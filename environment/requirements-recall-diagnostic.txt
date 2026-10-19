@@ -1,0 +1,3 @@
+# CPU matching parity only, not a replacement detector environment.
+numpy==1.26.4
+pycocotools==2.0.11
