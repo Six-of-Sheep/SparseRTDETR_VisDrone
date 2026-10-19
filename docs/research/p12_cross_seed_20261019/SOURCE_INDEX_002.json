@@ -1,0 +1,77 @@
+{
+  "SHA_receipt": {
+    "bytes": 152908,
+    "files": 22,
+    "large_materials": "SERVER_ONLY",
+    "not_backup": true,
+    "status": "SLIM_SHA_PASS"
+  },
+  "builder": {
+    "bytes": 14692,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\revision-002\\build_final_documents.py",
+    "sha256": "ffd9ee9f735921124be9823c85fe5a37c312d7a99c0f107ceb009438ee69be51"
+  },
+  "complete_dual_metric_sources": {
+    "1": {
+      "bytes": 92072,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/attempt-001/seed1-P12-metrics.json",
+      "sha256": "8a8cce6060c413eb9090eb591167f1099a4b4edf5e7f10f0960278a9a152f883"
+    },
+    "2": {
+      "bytes": 92054,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/attempt-001/seed2-P12-metrics.json",
+      "sha256": "50636f1db33cd4f0fefc2eb7ab5ac3310a9353048b49f75619e43acb96059af2"
+    }
+  },
+  "execution": {
+    "commit": "74178606574ff0d8abf0e2ab461ad9cdbd690ff9",
+    "contract_sha256": "fce0029efd3fb7ad4f2e0a76b83aa909b8dfc8bc36e34f0cf38a63a64db35fda",
+    "plan_sha256": "b637147c759fc91546c0293fe5891acc39f5c73de6c7428e9c554430c311f8e1",
+    "run_source_sha256": "18eda07179c53479357feb025cfa95039956050458e17d913684a5f49eab0550"
+  },
+  "gate": {
+    "bytes": 2390,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\revision-002\\returned\\CPU_GATE_002.json",
+    "sha256": "b1fded0602e8e3eb0d5cc6d1a4bd1c0c99fd420cf55c05875261e955870038a7"
+  },
+  "old_STOP": {
+    "bytes": 675,
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-001/STOP.json",
+    "sha256": "71e0c7a9ea34447328b25cd43ab82d93ccf091b2b4bbe0dfdc81f3e5b894a9c5"
+  },
+  "parent_sha256": "b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28",
+  "predictions_server_only": {
+    "1": {
+      "bytes": 111123515,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-002/seed1-P12-predictions.json",
+      "sha256": "ce009a1f5949a5d65ead538947ada02eb0c7c30b2098f0583c20105db73915b4"
+    },
+    "2": {
+      "bytes": 110705758,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-002/seed2-P12-predictions.json",
+      "sha256": "f4bb445026bded3675a370215ae54396f034e82bc76238b42aaf599aba746ca5"
+    }
+  },
+  "primary_gate_units": "COCO bridge 0..1 -> pp; official evaluator already percent, reported separately",
+  "scalar_reduction": {
+    "bytes": 15297,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\revision-002\\returned\\terminal-002\\SCALARS.json",
+    "sha256": "06a62fef3610590de9c50271aa2835eb47c59aae7788d2d2d45a35a20572ccf9"
+  },
+  "seed0_result_summary": {
+    "bytes": 735482,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-two-of-four-20261019-001\\returned\\attempt-001\\SUMMARY.json",
+    "sha256": "17a8ff1726c3e3d2c48dcfe257a23b9c571de31d5a0351c0963035d622fdd6af"
+  },
+  "source_manifest": {
+    "bytes": 90932,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\revision-002\\RUN_SOURCE.json",
+    "sha256": "18eda07179c53479357feb025cfa95039956050458e17d913684a5f49eab0550"
+  },
+  "source_revision": "entry/import and validation order only; P12 merge, plan and thresholds unchanged",
+  "terminal_return_index": {
+    "bytes": 10956,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\revision-002\\TERMINAL_RETURN_INDEX.json",
+    "sha256": "1e1367f0cf262a5efe7ac973ee5df15b518b4c88538103ebef62712c9d846c8d"
+  }
+}

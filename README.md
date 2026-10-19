@@ -22,6 +22,10 @@
 
 实验扩展到此结束。Soft-NMS、固定微调、框投票和第六中心视图均按原门槛关闭；flip仅控制不升级，不自动调参或新训练。[历史集成审查](docs/research/abc_results_20261019/PR9_REVIEW.md)提出的CI缺口已追加覆盖，见[CPU工程收尾](docs/research/PR9_CI_CLOSEOUT_20261019.md)；合并前核对最终head的CI，PR #9未自动合并。
 
+[固定二选四可行性筛选](docs/research/two_of_four_20261019/REPORT.md)：seed0完整六组合中，仅整图＋左上/右上通过新80%增益保留及尺度保护标准；仍有中目标和大目标召回代价，实际速度未测。属于development配置选择，未启动跨seed或GPU后续。旧A/B/C与失败配方保持。
+
+[P12跨seed复验完成](docs/research/p12_cross_seed_20261019/FINAL_002.md)：入口修复并通过真实prepare；seed1/2全部固定CPU评分完成，但各自尺度保护失败，关闭本固定配方，按计划未执行GPU测速。AP/APS增益保留均≥80%不能抵消保护失败；seed0仍为development配置选择，旧STOP与全部结果保留。新增P12/C≤.75成本目标未检验。
+
 ## 代码地图
 
 | 位置 | 责任 |

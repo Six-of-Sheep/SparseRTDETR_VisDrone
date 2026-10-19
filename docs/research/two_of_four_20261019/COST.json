@@ -1,0 +1,14 @@
+{
+  "CPU_gate_seconds": 3.413,
+  "accounting_scope": "timed server gates/admission/formal subtotal; local core tests separately; development, deployment, CI and uninstrumented checks excluded; not project grand total",
+  "admission_seconds": 1.6507132989354432,
+  "formal_entry_seconds": 657.8498146060156,
+  "local_11_core_checks_seconds": 0.032,
+  "new_GPU_calls": 0,
+  "new_evaluator_calls": 12,
+  "new_forward_calls": 0,
+  "new_score_groups": 6,
+  "new_training_updates": 0,
+  "previous_tasks_costs": "preserved separately; not reset and no invented project grand total",
+  "task_measured_wall_seconds": 662.913527904951
+}

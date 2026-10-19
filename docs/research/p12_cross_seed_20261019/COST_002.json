@@ -1,0 +1,43 @@
+{
+  "GPU_timing_executed": false,
+  "accounting_scope": "sum of recorded disjoint CPU stages; development/deployment/transfer/CI excluded; not project grand total",
+  "cost_target_P12_over_C": 0.75,
+  "cost_target_result": "NOT_TESTED_QUALITY_PREREQUISITE_FAILED",
+  "earlier_cost_records_preserved": true,
+  "evaluator_calls": 4,
+  "failed_entry_check_runner_seconds": 2.776,
+  "new_forward_calls": 0,
+  "new_recorded_seconds": 294.34594847604075,
+  "passed_entry_gate_seconds": 2.807164966943674,
+  "prior_stage_subtotal_seconds": 665.8776011638688,
+  "real_materials_prepare_seconds": 127.04202666308265,
+  "resources": {
+    "preparation": {
+      "max_CPU_temperature": 65.0,
+      "minimum_available_RAM": 50684977152,
+      "minimum_free_disk": 1398232141824,
+      "samples": 275,
+      "source": {
+        "bytes": 45028,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-002/RESOURCE.json",
+        "sha256": "0985cdef4a6c17ccb9b8ef7e4d70429afaa85fefc39544ca2e23c54784b2fad1"
+      }
+    },
+    "science": {
+      "max_CPU_temperature": 57.0,
+      "minimum_available_RAM": 50035027968,
+      "minimum_free_disk": 1398121123840,
+      "samples": 3,
+      "source": {
+        "bytes": 494,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/attempt-001/RESOURCE.json",
+        "sha256": "f68c7a7801bcf77e8a882cda0a3b63d3268da6a9d2be4048e8a31dc5f7805bed"
+      }
+    }
+  },
+  "scientific_entry_seconds": 161.7207568460144,
+  "scientific_score_groups": 2,
+  "scope_cumulative_seconds": 960.2235496399096,
+  "timing_basis": "one failed unit-runner time plus passing gate wrapper and actual prepare/scientific entry clocks; no overlap",
+  "training_updates": 0
+}

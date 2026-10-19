@@ -1,0 +1,228 @@
+{
+  "execution": {
+    "commit": "7898d3202d690708fd28a9b377cf6634de984da6",
+    "contract_sha256": "1ddfc32e5d789f7a79228074c1600d085cbf8344f2458fb6b60716fec451d131",
+    "plan_sha256": "7002a455b7d0ca342503fbb001311f11a43b6d0fdbe8b6001c732d3bd22a3cd7",
+    "run_source_sha256": "f82c6a96b6757bfa99b754938b3113b4f6b2baaeab5b2478f9680e9bcffc984e"
+  },
+  "latest_large_NMS_direction": "closed; PR11 aa4398c1/88dff81 retained",
+  "literature": "PR10 PDF_REVIEW_006 / DIRECT_PRECEDENT_DECISION_008; prior SAHI_NEXT_DECISION_20261017",
+  "original_scalar_index_sha256": "8fb15f6d0580b0351ff36c6fb1e269ba4a3884f596f5d7426542dad0611d1f5c",
+  "parent_sha256": "b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28",
+  "return_index_sha256": "88e82f29bd67528c0b2fe3e841ed0164aa0d9afcfebca9c99284f4fcc7582002",
+  "returned_files": [
+    {
+      "bytes": 2729,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/RESULT.json",
+      "sha256": "7bf3eb1b2e5a74a9b91853e615e1f25f63d57cd7ecd20eba6c0f7024ca258340"
+    },
+    {
+      "bytes": 309,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/CLOSED.json",
+      "sha256": "52301faa6cead680d4569a4279047c2cac91dfda9b68ea3e7d18b86ebc0800d7"
+    },
+    {
+      "bytes": 4544,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/INPUT_PROOFS.json",
+      "sha256": "f4524a669d1a4f4f9a5171fc76dffd9e8c1053dd04f5cd1391397219ec620feb"
+    },
+    {
+      "bytes": 42332,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/REBUILD.json",
+      "sha256": "ec7b3f4fb31a0b9309e876f6b3cdf1706ef150cad4104b146f914aa2a8043fc1"
+    },
+    {
+      "bytes": 735482,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SUMMARY.json",
+      "sha256": "17a8ff1726c3e3d2c48dcfe257a23b9c571de31d5a0351c0963035d622fdd6af"
+    },
+    {
+      "bytes": 995183,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SEQUENCES.json",
+      "sha256": "5ad99d2c948c9dadceaacd60ffd1fcc1e515d87766a5458a8571d0e960eec32b"
+    },
+    {
+      "bytes": 23576,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/RESOURCE.json",
+      "sha256": "16dcf4d0058a775a3db13e6f64748d36a6d787c911578faccb7070ecfc5402ff"
+    },
+    {
+      "bytes": 306,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/COST.json",
+      "sha256": "b77ddda496c3325ef0baca9f8bb6e347b4183c75c58149e3b030d0c7c393a4e4"
+    },
+    {
+      "bytes": 2972,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SLIM_EXPORT.json",
+      "sha256": "c86490973833467f509bbd85aadef6cd60a24dd28becc2b1d130bf85792f0ced"
+    },
+    {
+      "bytes": 641,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/ADMISSION.json",
+      "sha256": "d7db97586af7fc577515400d7fbcdcd7790c5789ee2bdbbb041e66ace3c7cfca"
+    },
+    {
+      "bytes": 673,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/CPU_GATE.json",
+      "sha256": "23758ba36fc20c47f7a231cd9d34a3d15b95588c388f416b32672850bb218480"
+    },
+    {
+      "bytes": 1000,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/CPU_GATE.log",
+      "sha256": "665b49202f45cf918abb1cac3bba7ac821448193db53e3e367118f2eb1f17fed"
+    },
+    {
+      "bytes": 494,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/admission-001/RESULT.json",
+      "sha256": "060cfc7e3aa2b40d090861a2d52ea72917f279eaa166f84f56d4c586f5e66d5d"
+    },
+    {
+      "bytes": 87287,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/execution-contract-001.json",
+      "sha256": "1ddfc32e5d789f7a79228074c1600d085cbf8344f2458fb6b60716fec451d131"
+    },
+    {
+      "bytes": 1162,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/LAUNCH_INTENT.json",
+      "sha256": "8f59a1294ca15becf5647777a3ed3ad830a44f071219cad010acb98683365e5d"
+    },
+    {
+      "bytes": 266,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/token-001.json.consumed",
+      "sha256": "4991b1947b7c3728ac8406e5c29a266eb85a8b57d6bef84ce9f9f2dcfab105a2"
+    }
+  ],
+  "server_inventory": [
+    {
+      "bytes": 111174370,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P12-predictions.json",
+      "sha256": "df64235a2869fe551d7d234304254b35877c84ffb7ac9d9f16c200d970bfb723"
+    },
+    {
+      "bytes": 23576,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/RESOURCE.json",
+      "sha256": "16dcf4d0058a775a3db13e6f64748d36a6d787c911578faccb7070ecfc5402ff"
+    },
+    {
+      "bytes": 2729,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/RESULT.json",
+      "sha256": "7bf3eb1b2e5a74a9b91853e615e1f25f63d57cd7ecd20eba6c0f7024ca258340"
+    },
+    {
+      "bytes": 641,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/ADMISSION.json",
+      "sha256": "d7db97586af7fc577515400d7fbcdcd7790c5789ee2bdbbb041e66ace3c7cfca"
+    },
+    {
+      "bytes": 98,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/WORKER_STARTED.json",
+      "sha256": "7062c1a9c7ef676f4f48e5adbf96f1f385ff287d0a8bc6f2ad6683eef7bab037"
+    },
+    {
+      "bytes": 111152561,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P13-predictions.json",
+      "sha256": "1d85f5fa2d5c872405592c426e2ae20df9858e2224e5891cbe1473ad2d0b7742"
+    },
+    {
+      "bytes": 92105,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P34-metrics.json",
+      "sha256": "cdd88b76405b93e856fcd249948667edf541c10f4ef60e407ec5369935dc9532"
+    },
+    {
+      "bytes": 309,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/CLOSED.json",
+      "sha256": "52301faa6cead680d4569a4279047c2cac91dfda9b68ea3e7d18b86ebc0800d7"
+    },
+    {
+      "bytes": 92104,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P23-metrics.json",
+      "sha256": "7dcacfb0c2348b8e4c38f597ab0769673f54abcc39076aeac6c8d1c02e504074"
+    },
+    {
+      "bytes": 111785235,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P24-predictions.json",
+      "sha256": "b63fd80c91664cf36f0d627235bdb574151af4b174fd5bd144d70f5586cf7720"
+    },
+    {
+      "bytes": 111769257,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P14-predictions.json",
+      "sha256": "617179753f47efe9ef3cd63b0acd0669cfafd04255005642f82c2939835f7f76"
+    },
+    {
+      "bytes": 995183,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SEQUENCES.json",
+      "sha256": "5ad99d2c948c9dadceaacd60ffd1fcc1e515d87766a5458a8571d0e960eec32b"
+    },
+    {
+      "bytes": 92082,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P24-metrics.json",
+      "sha256": "8438362458f7b0054e12fdfd0462b2633a03d58783bcc3b211a368b20d331b04"
+    },
+    {
+      "bytes": 92013,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P14-metrics.json",
+      "sha256": "01196a9be5cd167ce94cbb9f77a219dcd94e6e9a8404d602f686d2e9b395b353"
+    },
+    {
+      "bytes": 91996,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P12-metrics.json",
+      "sha256": "5b0cc2e6804bd49e96d67d5a7f3cadf3604c146b21ce035b72be43e03f8a482c"
+    },
+    {
+      "bytes": 68,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/START.json",
+      "sha256": "5bccfe4767d47cff3b4ab6f147ecefba94bab8c30b8306ad8e5d7104cb96c46a"
+    },
+    {
+      "bytes": 42332,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/REBUILD.json",
+      "sha256": "ec7b3f4fb31a0b9309e876f6b3cdf1706ef150cad4104b146f914aa2a8043fc1"
+    },
+    {
+      "bytes": 2972,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SLIM_EXPORT.json",
+      "sha256": "c86490973833467f509bbd85aadef6cd60a24dd28becc2b1d130bf85792f0ced"
+    },
+    {
+      "bytes": 43652948,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SEQUENCE_DETAILS.json",
+      "sha256": "e0f31ab491831655c1e9a60b1c91e034d4cfae6f2e01e2dcab7ca60ab1c93c5a"
+    },
+    {
+      "bytes": 306,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/COST.json",
+      "sha256": "b77ddda496c3325ef0baca9f8bb6e347b4183c75c58149e3b030d0c7c393a4e4"
+    },
+    {
+      "bytes": 111468178,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P34-predictions.json",
+      "sha256": "4dd4efb4b419d15acfcea6fbbe42a399779b9cf44930a699cfc9c6841afef509"
+    },
+    {
+      "bytes": 92034,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P13-metrics.json",
+      "sha256": "dca6db7625e6d720a0f67db6fb14f60d16fb2df4ad67aff9963905796c9f7135"
+    },
+    {
+      "bytes": 111361235,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/P23-predictions.json",
+      "sha256": "954c972dce26fef67423e80594132ab0f7a0ee748e99224981002283b032b18a"
+    },
+    {
+      "bytes": 4544,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/INPUT_PROOFS.json",
+      "sha256": "f4524a669d1a4f4f9a5171fc76dffd9e8c1053dd04f5cd1391397219ec620feb"
+    },
+    {
+      "bytes": 735482,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/attempt-001/SUMMARY.json",
+      "sha256": "17a8ff1726c3e3d2c48dcfe257a23b9c571de31d5a0351c0963035d622fdd6af"
+    },
+    {
+      "bytes": 17250,
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-two-of-four-20261019-001/console-001.log",
+      "sha256": "7fd939e0fbc9ba70ea4d8e0da0f077dcab9d2650a58b00231241ef5a39ec2f08"
+    }
+  ],
+  "summary_sha256": "17a8ff1726c3e3d2c48dcfe257a23b9c571de31d5a0351c0963035d622fdd6af"
+}

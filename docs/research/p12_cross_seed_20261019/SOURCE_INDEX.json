@@ -1,0 +1,97 @@
+{
+  "SHA_receipt": {
+    "bytes": 5518,
+    "files": 7,
+    "full_data_backup": false,
+    "status": "SLIM_SHA_PASS",
+    "worker_exited": true
+  },
+  "cost_status": "NOT_MEASURED",
+  "execution_commit": "b0fc276782428dded4f538a67a16d757d244794c",
+  "plan": {
+    "bytes": 995,
+    "path": "D:\\Lzy_CV\\development\\worktrees\\sahi-two-of-four\\configs\\p12_cross_seed.json",
+    "sha256": "b637147c759fc91546c0293fe5891acc39f5c73de6c7428e9c554430c311f8e1"
+  },
+  "production_contract_generated": false,
+  "production_token_generated": false,
+  "returned_receipts": {
+    "audit": {
+      "STOP": {
+        "bytes": 675,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-001/STOP.json",
+        "sha256": "71e0c7a9ea34447328b25cd43ab82d93ccf091b2b4bbe0dfdc81f3e5b894a9c5"
+      },
+      "automatic_retry": false,
+      "fault": "production preparation import slice_core precedes setting repository import path",
+      "fix_applied": false,
+      "identity_conflict_observed": false,
+      "materials_not_yet_admitted": true,
+      "new_model_forward_calls": 0,
+      "new_training_updates": 0,
+      "production_contract_exists": false,
+      "production_token_exists": false,
+      "scientific_attempt_exists": false,
+      "scientific_evaluator_calls": 0,
+      "scientific_score_groups": 0,
+      "status": "STOP_PREPARATION_ENGINEERING_NO_RETRY",
+      "time": 1792415801.2449465,
+      "worker_processes": []
+    },
+    "files": [
+      {
+        "bytes": 910,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/CPU_GATE.json",
+        "relative": "CPU_GATE.json",
+        "sha256": "ba56c8397d7a8043a85d034e59fe126ec1ec24765d8940d0321d9245cba574d4"
+      },
+      {
+        "bytes": 951,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/CPU_GATE.log",
+        "relative": "CPU_GATE.log",
+        "sha256": "ec540a44e04e96fd211f19988a8ba9756660dac61353b4cc0cdaaed3c170cac4"
+      },
+      {
+        "bytes": 1473,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/CPU_REUSE_BINDING.json",
+        "relative": "CPU_REUSE_BINDING.json",
+        "sha256": "cb9d5c6d55bacb24933b77b569a3b7b88730e95a9fedddec435dfcd99f861d0d"
+      },
+      {
+        "bytes": 572,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/PREPARE.log",
+        "relative": "PREPARE.log",
+        "sha256": "6c267e4f3c58142b2de6e1035c13b908e6c8f2fc0308fde95d9195b8082adb95"
+      },
+      {
+        "bytes": 72,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-001/WORKER_STARTED.json",
+        "relative": "preparation-001/WORKER_STARTED.json",
+        "sha256": "1b95fe60a630023ce2454f6b77b3ba594eb9aa426d29a2dbe4a6e9014842d113"
+      },
+      {
+        "bytes": 675,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/preparation-001/STOP.json",
+        "relative": "preparation-001/STOP.json",
+        "sha256": "71e0c7a9ea34447328b25cd43ab82d93ccf091b2b4bbe0dfdc81f3e5b894a9c5"
+      },
+      {
+        "bytes": 865,
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001/TERMINAL_AUDIT.json",
+        "relative": "TERMINAL_AUDIT.json",
+        "sha256": "b84112d5148e82942385219a7173f2c503d4c194c60bd60a2a1d0920bbecd47b"
+      }
+    ],
+    "total_bytes": 5518
+  },
+  "science_status": "NOT_EVALUATED",
+  "scientific_attempt_launched": false,
+  "server_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-p12-cross-seed-20261019-001",
+  "source_manifest": {
+    "bytes": 90090,
+    "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\RUN_SOURCE.json",
+    "sha256": "09c989cf1cd1d0837a4ec64396faf652d5a2751a1593dfcaf6c0f1592b7839ae"
+  },
+  "source_manifest_sha256": "09c989cf1cd1d0837a4ec64396faf652d5a2751a1593dfcaf6c0f1592b7839ae",
+  "status": "STOP_PREPARATION_ENGINEERING_NO_RETRY"
+}
