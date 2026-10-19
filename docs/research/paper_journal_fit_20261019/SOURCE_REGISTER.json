@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "as_of": "2026-10-19",
-  "status": "DRAFT_COMPLETE_VENUE_DECISION_PENDING_PUBLIC_SOURCES",
+  "status": "DRAFT_COMPLETE_CONTRIBUTION_AND_JOURNAL_FIT_UNCONFIRMED",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -15,7 +15,9 @@
     "user_settings_screenshot": "Default browsing shown as always allow; third request still denied",
     "cause_of_UI_runtime_disagreement": "UNKNOWN",
     "revision002_new_attempts": 0,
-    "later_history": "Official OpenAI settings page previously accessible, Bing-only tests still refused; not evidence of journal access. No retry this revision."
+    "later_history": "Official OpenAI settings page previously accessible, Bing-only tests still refused; not evidence of journal access. No retry this revision.",
+    "revision003_new_attempts": 0,
+    "revision003_new_channel_or_service_workaround": false
   },
   "journal_review": [
     {
@@ -166,9 +168,10 @@
     "GPU_calls": 0,
     "training_updates": 0,
     "server_connections": 0,
-    "sealed_payload_reads": 0
+    "sealed_payload_reads": 0,
+    "new_scientific_scoring_calls": 0
   },
-  "revision": "002",
+  "revision": "003",
   "user_confirmed_submission_conditions": {
     "source": "用户确认（2026-10-19本轮指令）",
     "school_original_document_verified": false,
@@ -183,7 +186,7 @@
   "formal_selection": {
     "primary": null,
     "backup": null,
-    "reason": "awaiting official scope and recent-paper evidence, not awaiting repeated confirmation of known school requirements",
+    "reason": "contribution and journal fit unconfirmed; requires supplied core papers and official recent articles/scope, not merely metadata",
     "basis": "docs/research/paper_journal_fit_20261019/VENUE_DECISION.md"
   },
   "manual_public_source_checklist": "docs/research/paper_journal_fit_20261019/PUBLIC_GAPS.md",
@@ -212,6 +215,147 @@
     "tables": "docs/research/paper_journal_fit_20261019/DRAFT_TABLES.md",
     "scientific_numbers": "frozen tables copied and formatted only",
     "reference_status": "explicit placeholders, not publication-ready references",
-    "reference_pages_requested": "each journal at most 2 most relevant articles plus SAHI/RT-DETRv2 and closest aerial slicing paper"
-  }
+    "reference_pages_requested": "each journal at most 2 most relevant articles plus SAHI/RT-DETRv2 and closest aerial slicing paper",
+    "editorial_status": "full manuscript ready for advisor; contribution and journal fit not established; citations pending",
+    "operations_moved_to_appendix": true,
+    "environment_completed_fields": [
+      "GPU model",
+      "device total MiB",
+      "logical CPU count",
+      "torch",
+      "torchvision",
+      "CUDA build",
+      "cuDNN"
+    ],
+    "environment_unknowns_kept": true
+  },
+  "substantive_review": {
+    "path": "docs/research/paper_journal_fit_20261019/SUBSTANTIVE_REVIEW.md",
+    "manuscript_complete": true,
+    "ready_for_advisor_now": true,
+    "contribution_confirmed": false,
+    "journal_fit_confirmed": false,
+    "only_literature_missing_claim": false,
+    "may_need_experiment": true,
+    "need_cannot_be_determined_from_missing_literature_alone": true,
+    "one_priority_proposal": "matched-five-view author GreedyNMM/IoS CPU merger control versus C; not authorized to execute",
+    "proposal_groups": 6,
+    "proposal_dual_evaluator_calls": 12,
+    "proposal_forward_if_authenticated_cache_reusable": 0,
+    "proposal_CPU_budget": "NOT_FROZEN",
+    "proposal_does_not_guarantee_novelty_or_acceptance": true
+  },
+  "advisor_summary": "docs/research/paper_journal_fit_20261019/ADVISOR_BRIEF.md",
+  "reproducibility_appendix": "docs/research/paper_journal_fit_20261019/REPRODUCIBILITY_APPENDIX.md",
+  "supplied_public_materials_this_revision": [],
+  "journal_article_review_slots": [
+    {
+      "slot": "J1.1",
+      "journal": "计算机工程与应用",
+      "title": null,
+      "year": null,
+      "official_article_URL": null,
+      "fulltext_available": false,
+      "problem_solved": null,
+      "extra_evidence": null,
+      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "counts_as_reviewed": false
+    },
+    {
+      "slot": "J1.2",
+      "journal": "计算机工程与应用",
+      "title": null,
+      "year": null,
+      "official_article_URL": null,
+      "fulltext_available": false,
+      "problem_solved": null,
+      "extra_evidence": null,
+      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "counts_as_reviewed": false
+    },
+    {
+      "slot": "J2.1",
+      "journal": "计算机工程",
+      "title": null,
+      "year": null,
+      "official_article_URL": null,
+      "fulltext_available": false,
+      "problem_solved": null,
+      "extra_evidence": null,
+      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "counts_as_reviewed": false
+    },
+    {
+      "slot": "J2.2",
+      "journal": "计算机工程",
+      "title": null,
+      "year": null,
+      "official_article_URL": null,
+      "fulltext_available": false,
+      "problem_solved": null,
+      "extra_evidence": null,
+      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "counts_as_reviewed": false
+    },
+    {
+      "slot": "J3.1",
+      "journal": "计算机系统应用",
+      "title": null,
+      "year": null,
+      "official_article_URL": null,
+      "fulltext_available": false,
+      "problem_solved": null,
+      "extra_evidence": null,
+      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "counts_as_reviewed": false
+    },
+    {
+      "slot": "J3.2",
+      "journal": "计算机系统应用",
+      "title": null,
+      "year": null,
+      "official_article_URL": null,
+      "fulltext_available": false,
+      "problem_solved": null,
+      "extra_evidence": null,
+      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "counts_as_reviewed": false
+    }
+  ],
+  "local_reference_review": {
+    "bound_sources": 26,
+    "matching_prior_byte_SHA": 17,
+    "evidence_receipt": "workspace_management/delivery/publication/paper-journal-fit-20261019-001/revision-003/SOURCE_REVIEW_RECEIPT.json",
+    "SAHI": "existing author entry/merge snapshots read; no paper body newly available; backend dependencies incomplete",
+    "RTDETRv2": "existing author README/config/optimizer snapshots authenticated; no report body newly available",
+    "VisDrone": "8 official .m files matched fixed source inventory and read; no MATLAB/Octave or new AP",
+    "AutoFocus": "existing extracted body section4 and chip/config read; early prior not nearest aerial claim",
+    "journal_articles_fulltext": 0,
+    "nearest_aerial_prior": "NOT_ESTABLISHED"
+  },
+  "existing_environment_receipt": {
+    "values": {
+      "GPU": "NVIDIA GeForce RTX 4090 D",
+      "GPU_memory_total_MiB": 24564.0,
+      "logical_CPU_count": 24,
+      "torch": "2.4.1",
+      "torchvision": "0.19.1",
+      "cuda_build": "12.4",
+      "cudnn": 90100
+    },
+    "scope": "original-C supplemental execution; historical development expected environment agrees in BASE_BINDINGS",
+    "unknowns": {
+      "python_runtime_version": "NOT_FOUND_IN_SELECTED_BOUND_RECEIPTS",
+      "CPU_model": "NOT_FOUND_IN_SELECTED_BOUND_RECEIPTS",
+      "OS_distribution_kernel": "NOT_FOUND_IN_SELECTED_BOUND_RECEIPTS",
+      "NVIDIA_driver": "NOT_FOUND_IN_SELECTED_BOUND_RECEIPTS",
+      "RAM_installed": "NOT_FOUND_IN_SELECTED_BOUND_RECEIPTS",
+      "all_training_stages_same_environment": "NOT_ESTABLISHED_BY_SUPPLEMENTAL_RECEIPT_ALONE"
+    },
+    "new_runtime_probe": false,
+    "all_training_versions_audited": false
+  },
+  "advisor_summary_PDF": "docs/research/paper_journal_fit_20261019/output/pdf/ADVISOR_BRIEF.pdf",
+  "advisor_summary_PDF_pages": 1,
+  "advisor_summary_PDF_visual_review": "PASS_single_A4_no_overlap_or_glyph_errors"
 }
