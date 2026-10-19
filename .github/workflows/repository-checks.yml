@@ -27,6 +27,9 @@ jobs:
       - run: python -m pip install -r environment/requirements-ci.txt
       - run: python -B test_slice_core.py
       - run: python -B test_seed_readout.py
+      - run: python -m pip install -r environment/requirements-recall-diagnostic.txt
+      - name: Fixed-threshold recall diagnostic CPU regression
+        run: python -B -m unittest discover -s tests -p test_recall_stage.py -v
       - run: python -m pip install -r environment/requirements-confirmation-ci.txt
       - name: Required confirmation and supplemental CPU regression (no skips)
         env:
