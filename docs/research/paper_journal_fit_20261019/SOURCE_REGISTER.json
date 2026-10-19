@@ -1,7 +1,7 @@
 {
-  "schema_version": 8,
-  "as_of": "2026-10-19",
-  "status": "DIRECT_AERIAL_PRECEDENT_REVIEWED_CURRENT_RESEARCH_FRAMING_INSUFFICIENT_RECOMMEND_REFRAME",
+  "schema_version": 9,
+  "as_of": "2026-10-20T00:24:03.971796+08:00",
+  "status": "JOURNAL_REVIEW_PARTIAL_CURRENT_FRAMING_INSUFFICIENT_NO_NEW_CANDIDATE",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -54,21 +54,26 @@
     },
     {
       "name": "计算机工程",
-      "scope": "UNVERIFIED",
+      "scope": "VERIFIED_OFFICIAL_20261020_CV_AND_ENGINEERING",
       "ranking": "CCF中文T2",
       "ranking_edition": "2025",
       "fees": "UNKNOWN",
       "review_time": "UNKNOWN",
       "publication_time": "UNKNOWN",
       "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
-      "verified_related_articles": 0,
+      "verified_related_articles": 2,
       "zero_count_means": "not searched successfully, not absence of papers",
       "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
       "official_directory_entry": "https://www.ccf.org.cn/",
       "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
       "official_directory_page_or_snapshot_located": false,
-      "current_round_official_access": false,
-      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION"
+      "current_round_official_access": true,
+      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION",
+      "scope_url": "https://www.ecice06.com/CN/column/column35.shtml",
+      "article_ids": [
+        "ECICE_MA_2026",
+        "ECICE_SR_2024"
+      ]
     },
     {
       "name": "计算机系统应用",
@@ -537,5 +542,22 @@
     "new_scientific_calls": 0,
     "new_public_requests": 0,
     "draft_change_scope": "minimum direct citation and contribution-status correction; experimental sections unchanged"
+  },
+  "revision009": {
+    "source_index": "JOURNAL_REVIEW_SOURCES_009.json",
+    "review": "JOURNAL_TOPIC_FIT_REVIEW_009.md",
+    "verified_papers": 2,
+    "fulltext_journals": 1,
+    "all_three_complete": false,
+    "candidate_count": 0,
+    "public_access": {
+      "official_fulltexts_read": 2,
+      "journal_scope_read": 1,
+      "cea_certificate_error": true,
+      "csa_search_captcha": true,
+      "bypass_used": false,
+      "Bing_retried": false,
+      "old_public_access_counters_are_historical": true
+    }
   }
 }
