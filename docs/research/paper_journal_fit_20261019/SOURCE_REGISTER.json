@@ -1,7 +1,7 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "as_of": "2026-10-19",
-  "status": "CORE_USER_PDF_BODIES_REVIEWED_REFRAME_QUESTION_JOURNAL_FIT_UNCONFIRMED",
+  "status": "MANUSCRIPT_SCOPE_REVISED_TARGET_JOURNAL_ARTICLE_REVIEW_BLOCKED_NO_FINAL_SUBMISSION_VERDICT",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -22,7 +22,16 @@
     "revision004_alternative_channel_used": false,
     "revision005_new_attempts": 0,
     "revision005_alternative_channel_used": false,
-    "revision006_new_attempts": 0
+    "revision006_new_attempts": 0,
+    "revision007": {
+      "official_home_attempts": 1,
+      "official_home_error": "CEA net::ERR_CERT_COMMON_NAME_INVALID",
+      "Bing_attempts": 1,
+      "Bing_error": "saved user permission setting blocks action",
+      "after_denial_new_public_requests": 0,
+      "alternative_channel_used": false,
+      "certificate_bypass_used": false
+    }
   },
   "journal_review": [
     {
@@ -472,5 +481,38 @@
     "PDFs_committed": false,
     "public_attempts": 0,
     "manuscript_edit_scope": "source-dependent paragraphs and references only; methods/settings/results section hash unchanged"
+  },
+  "revision007": {
+    "document": "NARROWED_CLAIMS_007.md",
+    "abstract_introduction_contribution_table_revised": true,
+    "SAHI_already_answers": "slicing/full-image joint inference, small-object gain, large-object and computation tradeoff",
+    "additional_evidence_scope": "same-weight A/B/C net changes, fixed repetition and budget checks, observed tradeoffs and failed extensions; not standalone algorithm novelty",
+    "ROI_Gated_role": "non-aerial inference-cost background only; not a baseline or aerial-gap replacement",
+    "journal_articles_reviewed_this_round": {
+      "计算机工程与应用": 0,
+      "计算机工程": 0,
+      "计算机系统应用": 0
+    },
+    "journal_official_scope_pages_read_this_round": 0,
+    "aerial_lead": {
+      "title_as_printed": "Enhancing UAV aerial image analysis: Integrating advanced SAHI techniques with real-time detection models on the VisDrone dataset",
+      "authors_as_printed": [
+        "M. Muzammul",
+        "A. Algarni",
+        "Y. Y. Ghadi",
+        "M. Assam"
+      ],
+      "venue_as_printed": "IEEE Access 12, 21621–21633, 2024",
+      "source": "user supplied 2608.23923v1 PDF p12 reference24",
+      "status": "secondary bibliographic lead, not official title or body verification",
+      "official_article_ID_DOI": null,
+      "URL_type": "constructed IEEE Xplore title-search locator, not verified article-detail URL"
+    },
+    "interim_advice": "Do not submit as established contribution; complete specified literature coverage before final three-way verdict; no default scientific control",
+    "final_three_way_submission_verdict": "NOT_YET_POSSIBLE_SPECIFIED_SOURCES_MISSING",
+    "scientific_calls": 0,
+    "draft_methods_settings_results_unchanged": true,
+    "abstract_numeric_tokens_unchanged": true,
+    "new_journal_titles_invented": false
   }
 }
