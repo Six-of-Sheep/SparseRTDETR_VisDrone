@@ -24,7 +24,7 @@
 
 ## 代码地图
 
-[中文期刊投稿适配审查草稿](docs/research/paper_journal_fit_20261019/REPORT.md)与[修订提纲](docs/research/paper_journal_fit_20261019/REVISION_OUTLINE.md)：本地证据已审查，公开期刊／近作核查因浏览器权限阻断尚未完成；未正式推荐主投／备选，学校毕业资格待确认。不改变冻结实验与科学裁决。
+[中文论文完整初稿](docs/research/paper_journal_fit_20261019/CHINESE_DRAFT.md)、[投稿审查](docs/research/paper_journal_fit_20261019/REPORT.md)、[定刊依据](docs/research/paper_journal_fit_20261019/VENUE_DECISION.md)与[最小公开资料清单](docs/research/paper_journal_fit_20261019/PUBLIC_GAPS.md)：采用用户确认的CCF2025／北大2023年第10版、正式录用与署名条件；三刊中文T2按此前信息承接，不冒称本轮官网访问。费用／范围／近作待补后定一个主投一个备选。初稿引用待核，不改变冻结实验与科学裁决。
 
 | 位置 | 责任 |
 |---|---|

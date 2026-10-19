@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "as_of": "2026-10-19",
-  "status": "LOCAL_REVIEW_COMPLETE_PUBLIC_REVIEW_BLOCKED",
+  "status": "DRAFT_COMPLETE_VENUE_DECISION_PENDING_PUBLIC_SOURCES",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -13,44 +13,64 @@
     "new_public_pages_read": 0,
     "third": "A saved user permission setting blocks this action",
     "user_settings_screenshot": "Default browsing shown as always allow; third request still denied",
-    "cause_of_UI_runtime_disagreement": "UNKNOWN"
+    "cause_of_UI_runtime_disagreement": "UNKNOWN",
+    "revision002_new_attempts": 0,
+    "later_history": "Official OpenAI settings page previously accessible, Bing-only tests still refused; not evidence of journal access. No retry this revision."
   },
   "journal_review": [
     {
       "name": "计算机工程与应用",
       "scope": "UNVERIFIED",
-      "ranking": "UNVERIFIED",
-      "ranking_edition": "UNVERIFIED",
+      "ranking": "CCF中文T2",
+      "ranking_edition": "2025",
       "fees": "UNKNOWN",
       "review_time": "UNKNOWN",
       "publication_time": "UNKNOWN",
-      "school_qualification": "PENDING_SCHOOL_CONFIRMATION",
+      "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
       "verified_related_articles": 0,
-      "zero_count_means": "not searched successfully, not absence of papers"
+      "zero_count_means": "not searched successfully, not absence of papers",
+      "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
+      "official_directory_entry": "https://www.ccf.org.cn/",
+      "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
+      "official_directory_page_or_snapshot_located": false,
+      "current_round_official_access": false,
+      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION"
     },
     {
       "name": "计算机工程",
       "scope": "UNVERIFIED",
-      "ranking": "UNVERIFIED",
-      "ranking_edition": "UNVERIFIED",
+      "ranking": "CCF中文T2",
+      "ranking_edition": "2025",
       "fees": "UNKNOWN",
       "review_time": "UNKNOWN",
       "publication_time": "UNKNOWN",
-      "school_qualification": "PENDING_SCHOOL_CONFIRMATION",
+      "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
       "verified_related_articles": 0,
-      "zero_count_means": "not searched successfully, not absence of papers"
+      "zero_count_means": "not searched successfully, not absence of papers",
+      "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
+      "official_directory_entry": "https://www.ccf.org.cn/",
+      "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
+      "official_directory_page_or_snapshot_located": false,
+      "current_round_official_access": false,
+      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION"
     },
     {
       "name": "计算机系统应用",
       "scope": "UNVERIFIED",
-      "ranking": "UNVERIFIED",
-      "ranking_edition": "UNVERIFIED",
+      "ranking": "CCF中文T2",
+      "ranking_edition": "2025",
       "fees": "UNKNOWN",
       "review_time": "UNKNOWN",
       "publication_time": "UNKNOWN",
-      "school_qualification": "PENDING_SCHOOL_CONFIRMATION",
+      "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
       "verified_related_articles": 0,
-      "zero_count_means": "not searched successfully, not absence of papers"
+      "zero_count_means": "not searched successfully, not absence of papers",
+      "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
+      "official_directory_entry": "https://www.ccf.org.cn/",
+      "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
+      "official_directory_page_or_snapshot_located": false,
+      "current_round_official_access": false,
+      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION"
     }
   ],
   "related_article_window": {
@@ -147,5 +167,51 @@
     "training_updates": 0,
     "server_connections": 0,
     "sealed_payload_reads": 0
+  },
+  "revision": "002",
+  "user_confirmed_submission_conditions": {
+    "source": "用户确认（2026-10-19本轮指令）",
+    "school_original_document_verified": false,
+    "pku_core_edition": "2023年第10版",
+    "CCF_edition": "2025",
+    "accepted_stage": "正式录用即可",
+    "authorship": "导师第一，学生第二",
+    "graduation": "2028-06",
+    "preference": "尽早投稿",
+    "raw_document_request_blocks_drafting": false
+  },
+  "formal_selection": {
+    "primary": null,
+    "backup": null,
+    "reason": "awaiting official scope and recent-paper evidence, not awaiting repeated confirmation of known school requirements",
+    "basis": "docs/research/paper_journal_fit_20261019/VENUE_DECISION.md"
+  },
+  "manual_public_source_checklist": "docs/research/paper_journal_fit_20261019/PUBLIC_GAPS.md",
+  "official_journal_entry_links": [
+    {
+      "name": "计算机工程与应用",
+      "url": "https://cea.ceaj.org/",
+      "current_round_accessed": false,
+      "entry_only_not_leaf_page_evidence": true
+    },
+    {
+      "name": "计算机工程",
+      "url": "https://www.ecice06.com/",
+      "current_round_accessed": false,
+      "entry_only_not_leaf_page_evidence": true
+    },
+    {
+      "name": "计算机系统应用",
+      "url": "https://www.c-s-a.org.cn/",
+      "current_round_accessed": false,
+      "entry_only_not_leaf_page_evidence": true
+    }
+  ],
+  "draft": {
+    "path": "docs/research/paper_journal_fit_20261019/CHINESE_DRAFT.md",
+    "tables": "docs/research/paper_journal_fit_20261019/DRAFT_TABLES.md",
+    "scientific_numbers": "frozen tables copied and formatted only",
+    "reference_status": "explicit placeholders, not publication-ready references",
+    "reference_pages_requested": "each journal at most 2 most relevant articles plus SAHI/RT-DETRv2 and closest aerial slicing paper"
   }
 }
