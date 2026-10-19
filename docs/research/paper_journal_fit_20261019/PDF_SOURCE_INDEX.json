@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-19T12:21:46.277615+08:00",
+  "files": [
+    {
+      "file": "01_SAHI_2202.06934.pdf",
+      "project_relative_path": "workspace_management/references/paper-journal-fit/incoming/01_SAHI_2202.06934.pdf",
+      "bytes": 2183784,
+      "sha256": "66c9c5df29fa4c3ea3b410283bcb7aabd82255f096e551508ed929edda41dc49",
+      "pages": 5,
+      "title": "Slicing Aided Hyper Inference and Fine-tuning for Small Object Detection",
+      "authors": [
+        "Fatih Cagatay Akyon",
+        "Sinan Onur Altinuc",
+        "Alptekin Temizel"
+      ],
+      "arxiv": "2202.06934",
+      "version": 5,
+      "date": "2022-10-24",
+      "status": "arXiv manuscript v5; ICIP2022 identity retained from prior record, not a new venue-page audit",
+      "methods": [
+        2,
+        3
+      ],
+      "experiments": [
+        3,
+        4
+      ],
+      "conclusion": [
+        4
+      ],
+      "visual": [
+        1,
+        3,
+        4
+      ],
+      "source": "user supplied local PDF, received 2026-10-19; original download receipt not provided",
+      "URL_locator": "https://arxiv.org/abs/2202.06934v5",
+      "URL_accessed_this_round": false,
+      "identity_evidence": "printed title/authors and first-page arXiv watermark; third also has matching PDF arXivID/DOI",
+      "structure": "strict pypdf all pages and pdfinfo pass; header/EOF present; no observed truncation",
+      "externally_byte_authenticated": false,
+      "PDF_in_Git": false,
+      "body_reviewed": true
+    },
+    {
+      "file": "02_RTDETRv2_2407.17140.pdf",
+      "project_relative_path": "workspace_management/references/paper-journal-fit/incoming/02_RTDETRv2_2407.17140.pdf",
+      "bytes": 88744,
+      "sha256": "3b712f4d8255e75da33c57fafd7c1380f5fbb0ec6127d80e1598b5c625485dcd",
+      "pages": 4,
+      "title": "RT-DETRv2: Improved Baseline with Bag-of-Freebies for Real-Time Detection Transformer",
+      "authors": [
+        "Wenyu Lv",
+        "Yian Zhao",
+        "Qinyao Chang",
+        "Kui Huang",
+        "Guanzhong Wang",
+        "Yi Liu"
+      ],
+      "arxiv": "2407.17140",
+      "version": 1,
+      "date": "2024-07-24",
+      "status": "Technical Report, as printed on title page; no later publication verified",
+      "methods": [
+        2
+      ],
+      "experiments": [
+        2,
+        3
+      ],
+      "conclusion": [
+        3
+      ],
+      "visual": [
+        1,
+        2,
+        3
+      ],
+      "source": "user supplied local PDF, received 2026-10-19; original download receipt not provided",
+      "URL_locator": "https://arxiv.org/abs/2407.17140v1",
+      "URL_accessed_this_round": false,
+      "identity_evidence": "printed title/authors and first-page arXiv watermark; third also has matching PDF arXivID/DOI",
+      "structure": "strict pypdf all pages and pdfinfo pass; header/EOF present; no observed truncation",
+      "externally_byte_authenticated": false,
+      "PDF_in_Git": false,
+      "body_reviewed": true
+    },
+    {
+      "file": "03_Candidate_2608.23923.pdf",
+      "project_relative_path": "workspace_management/references/paper-journal-fit/incoming/03_Candidate_2608.23923.pdf",
+      "bytes": 20718660,
+      "sha256": "52fff0eb7a552b1531dacb0337aee2f7f1a12af46d82f8938d8bace851da5023",
+      "pages": 12,
+      "title": "ROI-Gated SAHI: Content-Adaptive Slicing-Based Inference for Efficient Object Detection",
+      "authors": [
+        "Rashid Riyadh",
+        "Abd Ullah Khan",
+        "Imad Gohar",
+        "Muzammil Behzad"
+      ],
+      "arxiv": "2608.23923",
+      "version": 1,
+      "date": "2026-08-25",
+      "status": "user-provided internally consistent arXiv-v1-labelled preprint; no external byte/publisher authentication",
+      "methods": [
+        3,
+        4,
+        5,
+        6
+      ],
+      "experiments": [
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "conclusion": [
+        11
+      ],
+      "visual": [
+        1,
+        5,
+        6,
+        8
+      ],
+      "source": "user supplied local PDF, received 2026-10-19; original download receipt not provided",
+      "URL_locator": "https://arxiv.org/abs/2608.23923v1",
+      "URL_accessed_this_round": false,
+      "identity_evidence": "printed title/authors and first-page arXiv watermark; third also has matching PDF arXivID/DOI",
+      "structure": "strict pypdf all pages and pdfinfo pass; header/EOF present; no observed truncation",
+      "externally_byte_authenticated": false,
+      "PDF_in_Git": false,
+      "body_reviewed": true
+    }
+  ],
+  "integrity_limit": "Structural/printed-identity consistency, not official server byte equivalence or peer-review authentication",
+  "external_access_attempts": 0,
+  "scientific_calls": 0,
+  "review": "PDF_REVIEW_006.md"
+}

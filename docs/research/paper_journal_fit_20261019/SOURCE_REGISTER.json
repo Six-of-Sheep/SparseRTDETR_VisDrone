@@ -1,7 +1,7 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "as_of": "2026-10-19",
-  "status": "BOUNDED_REVIEW_INCOMPLETE_SPECIFIC_BODY_AND_SCOPE_GAPS_NO_ADVISOR_PREREQUISITE",
+  "status": "CORE_USER_PDF_BODIES_REVIEWED_REFRAME_QUESTION_JOURNAL_FIT_UNCONFIRMED",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -21,7 +21,8 @@
     "revision004_new_attempts": 0,
     "revision004_alternative_channel_used": false,
     "revision005_new_attempts": 0,
-    "revision005_alternative_channel_used": false
+    "revision005_alternative_channel_used": false,
+    "revision006_new_attempts": 0
   },
   "journal_review": [
     {
@@ -218,7 +219,7 @@
     "path": "docs/research/paper_journal_fit_20261019/CHINESE_DRAFT.md",
     "tables": "docs/research/paper_journal_fit_20261019/DRAFT_TABLES.md",
     "scientific_numbers": "frozen tables copied and formatted only",
-    "reference_status": "explicit placeholders, not publication-ready references",
+    "reference_status": "R1/R2/R8 versioned user-PDF body and bibliography checked; remaining items explicitly pending",
     "reference_pages_requested": "each journal at most 2 most relevant articles plus SAHI/RT-DETRv2 and closest aerial slicing paper",
     "editorial_status": "full manuscript ready for advisor; contribution and journal fit not established; citations pending",
     "operations_moved_to_appendix": true,
@@ -397,10 +398,14 @@
     "PDF_currentness": "Historical revision004 only; current Markdown revision005 supersedes"
   },
   "decision_evidence_update": {
-    "new_legal_originals": [],
+    "new_legal_originals": [
+      "2202.06934v5",
+      "2407.17140v1",
+      "2608.23923v1"
+    ],
     "new_specific_advisor_feedback": [],
     "difference_verdict_changed_by_new_evidence": false,
-    "current_recommendation": "PENDING",
+    "current_recommendation": "REFRAME_BROAD_QUESTION_NO_DEFAULT_MERGER_SCORING_JOURNAL_FIT_PENDING",
     "possible_recommendations": [
       "directly improve manuscript for submission",
       "first perform optional limited control under separate approved protocol",
@@ -409,7 +414,7 @@
     "insufficient_evidence_means": "remain pending; no cosmetic rewrite to hide gap",
     "advisor_feedback_required": false,
     "comparability_finding_changed": true,
-    "contribution_verdict_changed": false
+    "contribution_verdict_changed": true
   },
   "revision005": {
     "advisor_feedback_required": false,
@@ -446,5 +451,26 @@
       "status": "HISTORICAL_LEAD_NOT_CURRENT_BODY_OR_BIBLIOGRAPHY_VERIFICATION",
       "required": "version first page, III methods, IV experiments, limitations"
     }
+  },
+  "revision006": {
+    "source_index": "PDF_SOURCE_INDEX.json",
+    "review": "PDF_REVIEW_006.md",
+    "PDF_provenance": "user supplied, internal printed identity and structural readability checked; not remote byte authenticated",
+    "paper_bodies_reviewed": [
+      "2202.06934v5",
+      "2407.17140v1",
+      "2608.23923v1"
+    ],
+    "related_preprints_reviewed": 1,
+    "newly_reviewed_aerial_specialist_papers": 0,
+    "recommendation": "REFRAME_OVERLAPPING_BROAD_QUESTION_BEFORE_OPTIONAL_MERGER_SCORING",
+    "scope_of_recommendation": "SAHI already covers slicing/small-object gain/large-object and computation tradeoff; narrower R18 reproducibility and risk evidence remains, journal sufficiency unconfirmed",
+    "journal_review_still_missing": true,
+    "advisor_prerequisite": false,
+    "fees_cycles_prerequisite": false,
+    "new_science_calls": 0,
+    "PDFs_committed": false,
+    "public_attempts": 0,
+    "manuscript_edit_scope": "source-dependent paragraphs and references only; methods/settings/results section hash unchanged"
   }
 }
