@@ -1,7 +1,7 @@
 {
   "review_id": "public-data-topic-review-20261019-001",
   "review_date": "2026-10-19",
-  "timestamp": "2026-10-19T22:51:47.557947+08:00",
+  "timestamp": "2026-10-19T23:46:32.929000+08:00",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "decision": "NO_QUALIFIED_METHOD_CANDIDATE_NO_EXPERIMENT",
   "retained_candidates": [],
@@ -76,12 +76,26 @@
     {
       "id": "NWD-expanded",
       "url": "https://www.sciencedirect.com/science/article/pii/S0924271622001599?dgcid=author",
-      "read": "CAPTCHA blocked; identity from author repo and DQ references, body not read",
-      "version": "ISPRS JPRS190 79-93 2022"
+      "read": "Publisher CAPTCHA remains; journal body read from user-provided local15-page PDF, not from publisher; identity also consistent with author project page",
+      "version": "ISPRS JPRS190 79-93 2022",
+      "doi": "10.1016/j.isprsjprs.2022.06.002",
+      "arxiv_version_in_pdf": null
+    },
+    {
+      "id": "NWD-expanded-project",
+      "url": "https://chasel-tsui.github.io/AI-TOD-v2/",
+      "read": "Author page read after initial navigation timeout via same loaded tab; publication identity, data/code and v2 annotation links; no standalone supplement link observed",
+      "version": null
+    },
+    {
+      "id": "NWD-expanded-implementation",
+      "url": "https://github.com/Chasel-Tsui/mmdet-aitod",
+      "read": "Linked by author project; ERR_CONNECTION_CLOSED; no implementation body or supplement inspected; no alternate transport",
+      "version": null
     }
   ],
   "online_content_sha256": null,
-  "online_sha_note": "Browser reads only; no saved PDFs or complete source bytes. URLs and observed revisions are not fabricated content hashes.",
+  "online_sha_note": "Browser reads only; no online content bytes certified. User-provided PDF SHA is separately recorded under local_sources, not asserted publisher hash.",
   "local_sources": [
     {
       "project_relative_path": "development/worktrees/public-data-topic-review/docs/research/abc_results_20261019/MASTER.md",
@@ -128,12 +142,49 @@
       "role": "prior adaptive view direction closed; PR13 unmerged",
       "git_blob_sha256": "579c86751da8a92d476b86dabafc6d2ad85dad604ee58f4a1bb2b85f49d0dd8d",
       "worktree_matches_git_after_CRLF_normalization": true
+    },
+    {
+      "project_relative_path": "workspace_management/references/paper-journal-fit/incoming/05_NWD_AI_TOD_v2_ISPRS_2022.pdf",
+      "bytes": 13864053,
+      "sha256": "458fd9ebe481f7bbdcf42c8cee9ec820640488585909c6fa83de1b0032999e74",
+      "repository_path": null,
+      "repository_commit": null,
+      "role": "user-provided journal primary PDF;15 physical pages; methods dataset experiments and references read; no separate supplement received",
+      "title": "Detecting tiny objects in aerial images: A normalized Wasserstein distance and a new benchmark",
+      "authors": [
+        "Chang Xu",
+        "Jinwang Wang",
+        "Wen Yang",
+        "Huai Yu",
+        "Lei Yu",
+        "Gui-Song Xia"
+      ],
+      "doi": "10.1016/j.isprsjprs.2022.06.002",
+      "version": "ISPRS JPRS190(2022)79-93",
+      "arxiv_version_in_pdf": null,
+      "pdf_warning": "pypdf non-zero-start xref repair warning; all15 pages parsed and independent pdfinfo/render successful; publisher byte identity not certified"
     }
   ],
   "access_limits": {
     "bing": "saved origin permission denied; no retry/alternate search",
     "uavdt": "network timeout",
     "publisher": "CAPTCHA; not solved",
-    "github_raw": "network timeout; no alternate transport"
+    "github_raw": "network timeout; no alternate transport",
+    "expanded_implementation": "ERR_CONNECTION_CLOSED; no retry/alternate transport"
+  },
+  "initial_review_timestamp": "2026-10-19T22:51:47.557947+08:00",
+  "revision": "002",
+  "initial_review_commit": "acb6d8487d664fa02588af0a6097e0159b195630",
+  "addendum": "docs/research/NWD_EXPANDED_REVIEW_20261019.md",
+  "supplementary_status": "No standalone local supplement or explicit appendix in provided15-page PDF; author project read, no separate supplement link observed; linked implementation body inaccessible. Standalone supplementary material not reviewed; nonexistence not asserted.",
+  "dataset_corrections": {
+    "v2_same_images_as_v1": "confirmed by primary journal section3.1",
+    "source_datasets_include_VisDrone": true,
+    "actual_overlap_with_project_train": "NOT_CHECKED_NOT_ASSERTED",
+    "annotation_assistance": "paper reports models separately trained on trainval and test for relabeling hints",
+    "instance_counts_conflict": "section3.2:752745; introduction/Table1 totals:752754; not resolved by inventing a manifest",
+    "image_split_counts": "11214/2804/14018 remains DQ-DETR secondary report, not newly confirmed by primary journal",
+    "strict_maximum_64px_claim": "WITHDRAWN_AS_DATASET_GUARANTEE; Figure6 includes large",
+    "postprocess_and_evaluator_budgets": "paper top3000 and AR1500 distinguished; fixed full evaluator/config not certified"
   }
 }
