@@ -1,0 +1,175 @@
+{
+  "review_id": "whole-guided-view-budget-review-20261019-001",
+  "date": "2026-10-19",
+  "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "decision": "CLOSE_CURRENT_WHOLE_GUIDED_TWO_OF_FOUR_RESEARCH_DIRECTION",
+  "retained_candidate": null,
+  "retained_practical_recipe": "original_C",
+  "prior_p12_pr": 12,
+  "scientific_calls_this_round": 0,
+  "remote_experiment_connections_this_round": 0,
+  "new_public_literature_accesses": 0,
+  "files": [
+    {
+      "path": "D:/Lzy_CV/development/worktrees/view-budget-review/docs/research/abc_results_20261019/MASTER.md",
+      "repository_path": "docs/research/abc_results_20261019/MASTER.md",
+      "repository_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "bytes": 15513,
+      "sha256": "1c0f9a9ffc925d39d1f45ea97c43ea984617d5ecabab652201fc895254479afe",
+      "git_blob_sha256": "1c0f9a9ffc925d39d1f45ea97c43ea984617d5ecabab652201fc895254479afe",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/458d645f70839cda3d1ff35d67bf3ff812e68bd1/docs/research/abc_results_20261019/MASTER.md",
+      "role": "original certified scalar summary; no recalculation"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/view-budget-review/docs/research/abc_results_20261019/COST_FIXED64.csv",
+      "repository_path": "docs/research/abc_results_20261019/COST_FIXED64.csv",
+      "repository_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "bytes": 2239,
+      "sha256": "330e378f1a7b594256ef2f10c795e014118ce48060e6fbb7266a14bebbcf6893",
+      "git_blob_sha256": "330e378f1a7b594256ef2f10c795e014118ce48060e6fbb7266a14bebbcf6893",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/458d645f70839cda3d1ff35d67bf3ff812e68bd1/docs/research/abc_results_20261019/COST_FIXED64.csv",
+      "role": "matched development64 costs; no new timing"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/view-budget-review/docs/research/abc_results_20261019/CLOSED_CANDIDATES.csv",
+      "repository_path": "docs/research/abc_results_20261019/CLOSED_CANDIDATES.csv",
+      "repository_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "bytes": 6914,
+      "sha256": "b6fa6d6e1680b09882579e309551e3e803031e41a3527aabc1a5e06db8fd1b22",
+      "git_blob_sha256": "b6fa6d6e1680b09882579e309551e3e803031e41a3527aabc1a5e06db8fd1b22",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/458d645f70839cda3d1ff35d67bf3ff812e68bd1/docs/research/abc_results_20261019/CLOSED_CANDIDATES.csv",
+      "role": "old closed recipes and controls"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/view-budget-review/docs/research/abc_results_20261019/GAPS.md",
+      "repository_path": "docs/research/abc_results_20261019/GAPS.md",
+      "repository_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "bytes": 3017,
+      "sha256": "6febb4b561a959b69ed34cc8379d883ef9f83df67861bffc1fa210673f10c0b8",
+      "git_blob_sha256": "6febb4b561a959b69ed34cc8379d883ef9f83df67861bffc1fa210673f10c0b8",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/458d645f70839cda3d1ff35d67bf3ff812e68bd1/docs/research/abc_results_20261019/GAPS.md",
+      "role": "data qualification and limitations"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/sahi-two-of-four/docs/research/p12_cross_seed_20261019/FINAL_002.md",
+      "repository_path": "docs/research/p12_cross_seed_20261019/FINAL_002.md",
+      "repository_commit": "29f9001a9e497a6cb4e78dd57987f431d265936b",
+      "bytes": 6350,
+      "sha256": "e2e078d6adb7e63dd2de65fb53d91f507092cccc56d9c89a2ebae3205f5fa18a",
+      "git_blob_sha256": "e959aa0fb4c3d17e965e1a87f4ed278361df026a74455b7502b50b769ba815a8",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/29f9001a9e497a6cb4e78dd57987f431d265936b/docs/research/p12_cross_seed_20261019/FINAL_002.md",
+      "role": "P12 final result, gates, closure and cost"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/sahi-two-of-four/docs/research/two_of_four_20261019/REPORT.md",
+      "repository_path": "docs/research/two_of_four_20261019/REPORT.md",
+      "repository_commit": "29f9001a9e497a6cb4e78dd57987f431d265936b",
+      "bytes": 5722,
+      "sha256": "3567f3fc1df517c581ea99655e0c5e99e789e20829e66a690dde94c9b8d61604",
+      "git_blob_sha256": "595feacccbff6337cd8ea4eb84bc8ce6ce7ef3521b693cfa8a5bbc80e279e582",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/29f9001a9e497a6cb4e78dd57987f431d265936b/docs/research/two_of_four_20261019/REPORT.md",
+      "role": "six fixed pairs and descriptive sequence evidence only"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/sahi-two-of-four/docs/research/two_of_four_20261019/LITERATURE_HISTORY.json",
+      "repository_path": "docs/research/two_of_four_20261019/LITERATURE_HISTORY.json",
+      "repository_commit": "29f9001a9e497a6cb4e78dd57987f431d265936b",
+      "bytes": 2611,
+      "sha256": "dfb38d9e18b3b489ba194e055cc9c3db1a2185535a583d912a1f13661e5c162f",
+      "git_blob_sha256": "31300bd28a4799d6afb78fd7444af5996435ea72b15f131186a8c44ef55c1e06",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/29f9001a9e497a6cb4e78dd57987f431d265936b/docs/research/two_of_four_20261019/LITERATURE_HISTORY.json",
+      "role": "previous bounded literature/source review"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/large-recall-stage/docs/research/large_recall_stage_20261019/REPORT.md",
+      "repository_path": "docs/research/large_recall_stage_20261019/REPORT.md",
+      "repository_commit": "88dff81aa7f19dc7c09b10a60aa274eb0dc42657",
+      "bytes": 9059,
+      "sha256": "1d4d26209618bda0eac06248771d1177f49b634049453dd5a5c95c0a3ca8b1bd",
+      "git_blob_sha256": "1d4d26209618bda0eac06248771d1177f49b634049453dd5a5c95c0a3ca8b1bd",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/88dff81aa7f19dc7c09b10a60aa274eb0dc42657/docs/research/large_recall_stage_20261019/REPORT.md",
+      "role": "NMS counterfactual direction closed"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md",
+      "repository_path": "docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md",
+      "repository_commit": "d144af12fb84dedbe3ecf4a14479c22695f4eee4",
+      "bytes": 13602,
+      "sha256": "84977a0025bccb2517862cd7da000697bece7f329148b44dd7933cb5aa2653b2",
+      "git_blob_sha256": "0194d06cacae90612f9895b7ee5a7079d80774af6043aa75d441b4876a444e89",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/d144af12fb84dedbe3ecf4a14479c22695f4eee4/docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md",
+      "role": "reuse previous SAHI/ROI-Gated/RT-DETRv2 full-body review"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md",
+      "repository_path": "docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md",
+      "repository_commit": "d144af12fb84dedbe3ecf4a14479c22695f4eee4",
+      "bytes": 13889,
+      "sha256": "7ff919ff541a48c5a9ade8dee1eb86c08acf7e152f6b638611e83b96bcf536ab",
+      "git_blob_sha256": "7ff919ff541a48c5a9ade8dee1eb86c08acf7e152f6b638611e83b96bcf536ab",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/d144af12fb84dedbe3ecf4a14479c22695f4eee4/docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md",
+      "role": "reuse directly read aerial precedent and contribution assessment"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/PDF_SOURCE_INDEX.json",
+      "repository_path": "docs/research/paper_journal_fit_20261019/PDF_SOURCE_INDEX.json",
+      "repository_commit": "d144af12fb84dedbe3ecf4a14479c22695f4eee4",
+      "bytes": 7450,
+      "sha256": "25b81f73bf1584f9b9691fe4bfd47a93c5e141c75e3fa16aa93f74cf9055c467",
+      "git_blob_sha256": "ea7a00ec23a54f7cd9edbb5b9069f7e909e2c0038ff2d2672f9b55f449b6fa6e",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/d144af12fb84dedbe3ecf4a14479c22695f4eee4/docs/research/paper_journal_fit_20261019/PDF_SOURCE_INDEX.json",
+      "role": "previous local PDF identity; PDFs not re-downloaded or committed"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/sahi-next-direction-review/docs/research/SAHI_RELATED_WORK_20261017.md",
+      "repository_path": "docs/research/SAHI_RELATED_WORK_20261017.md",
+      "repository_commit": "84005348eac8154ca148800fdb8b1f7a54fd8d46",
+      "bytes": 6490,
+      "sha256": "8b7dbe04e3c118f1c60a550ce4e156439d0d1a0711fbc2d535f3e479f9329613",
+      "git_blob_sha256": "8b7dbe04e3c118f1c60a550ce4e156439d0d1a0711fbc2d535f3e479f9329613",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/84005348eac8154ca148800fdb8b1f7a54fd8d46/docs/research/SAHI_RELATED_WORK_20261017.md",
+      "role": "reuse literature comparison"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/sahi-next-direction-review/docs/research/SAHI_NEXT_DECISION_20261017.md",
+      "repository_path": "docs/research/SAHI_NEXT_DECISION_20261017.md",
+      "repository_commit": "84005348eac8154ca148800fdb8b1f7a54fd8d46",
+      "bytes": 13642,
+      "sha256": "b6e20bc9217a4febeda56ca2df1d8bb13bf3d4d08d83bff80eaa78c1d727aa30",
+      "git_blob_sha256": "b6e20bc9217a4febeda56ca2df1d8bb13bf3d4d08d83bff80eaa78c1d727aa30",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/84005348eac8154ca148800fdb8b1f7a54fd8d46/docs/research/SAHI_NEXT_DECISION_20261017.md",
+      "role": "previous unexecuted whole-guided backup; not new candidate"
+    },
+    {
+      "path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/sahi-next-direction-review-20261017-001/reading/autofocus-paper.txt",
+      "bytes": 47293,
+      "sha256": "92a9ee43616aa1c46c0edd38f0cbacf805e69aa8d879e51db242224ece8d029c",
+      "role": "reread extracted original body sections4 and5.1-5.4 this round; extraction hash is not original PDF hash"
+    },
+    {
+      "path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/sahi-next-direction-review-20261017-001/reading/autofocus-chips.txt",
+      "bytes": 5368,
+      "sha256": "94cc819013593b53c9e927b8e806d7c3793fdc60b030459ac01b36f38085770a",
+      "role": "reread fixed author chip-generation code, static only"
+    },
+    {
+      "path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/sahi-next-direction-review-20261017-001/FETCH_INDEX_01.json",
+      "bytes": 2312,
+      "sha256": "a2820de6966264adfe23d4fcca166bf35a34029e37d1aa7e232db3b8eedf0877",
+      "role": "historical PDF download hash and author code commit provenance"
+    },
+    {
+      "path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/sahi-next-direction-review-20261017-001/FETCH_INDEX_03.json",
+      "bytes": 2913,
+      "sha256": "03575892f5892062ec1933253a9ead057f951a922bc67bc56b3cf0c49405c087",
+      "role": "historical author source download hash provenance"
+    }
+  ],
+  "literature_provenance": {
+    "autofocus_pdf_sha256_from_original_receipt": "2e5622cd8776cb8e2531176205cd77d21b730da7072bd20022130902fb4a6f7a",
+    "autofocus_author_commit": "66d7d5bff7f2e1e45e7e299c570e43e8698311aa",
+    "autofocus_chips_original_download_sha256": "94cc819013593b53c9e927b8e806d7c3793fdc60b030459ac01b36f38085770a",
+    "SAHI_ROI_aerial_pdf_identity": "reuse prior PDF_SOURCE_INDEX.json; no external byte authentication; original PDFs not copied into Git"
+  },
+  "boundary": "documentation decision only; no new metrics, selection rule, experiment or dataset access"
+}
