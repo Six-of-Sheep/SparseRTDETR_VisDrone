@@ -70,6 +70,11 @@ def run(parent, contract, out):
     root = Path(__file__).parent.parent
     j.require(c['task_id']==TASK and c['parent_sha256']==PARENT_SHA, 'execution identity differs')
     j.require(c['commit'] == read(root/'RUN_SOURCE.json')['commit'], 'release commit differs')
+    gate=json.loads(j.exact(c['CPU_GATE'],contents=True))
+    admission=json.loads(j.exact(c['admission'],contents=True))
+    j.require(gate['status']=='PASS' and gate['tests']==10 and gate['skips']==0
+              and gate['commit']==c['commit'] and admission['status']=='ADMISSION_PASS',
+              'CPU/admission evidence differs')
     for r in c['own_files']:
         j.require(sha(root/r['path'])==r['sha256'], 'own frozen source differs')
     plan = read(root/'configs/large_recall_stage.json')
