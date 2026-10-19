@@ -1,0 +1,40 @@
+{
+  "GPU_timing_status": "NOT_EXECUTED",
+  "automatic_retry": false,
+  "cpu_gate_seconds": 2.9505323820048943,
+  "failed_prepare_seconds": 0.013540876912884414,
+  "new_forward_calls": 0,
+  "new_scientific_evaluator_calls": 0,
+  "new_scientific_score_groups": 0,
+  "new_stage_subtotal_seconds": 2.9640732589177787,
+  "new_training_updates": 0,
+  "prior_formal_entry_elapsed_seconds": 657.8498146060156,
+  "prior_formal_inner_run_seconds": 657.4655530689051,
+  "prior_gate_elapsed_source": "original CPU_GATE does not contain elapsed; preserved handoff recorded 3.413 seconds",
+  "prior_scientific_score_groups": 6,
+  "prior_seed0_recorded_stage_subtotal_seconds": 662.913527904951,
+  "receipts": [
+    {
+      "bytes": 910,
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\returned\\CPU_GATE.json",
+      "sha256": "ba56c8397d7a8043a85d034e59fe126ec1ec24765d8940d0321d9245cba574d4"
+    },
+    {
+      "bytes": 675,
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-p12-cross-seed-20261019-001\\returned\\preparation-001\\STOP.json",
+      "sha256": "71e0c7a9ea34447328b25cd43ab82d93ccf091b2b4bbe0dfdc81f3e5b894a9c5"
+    },
+    {
+      "bytes": 2729,
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-two-of-four-20261019-001\\returned\\attempt-001\\RESULT.json",
+      "sha256": "7bf3eb1b2e5a74a9b91853e615e1f25f63d57cd7ecd20eba6c0f7024ca258340"
+    },
+    {
+      "bytes": 494,
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-two-of-four-20261019-001\\returned\\admission-001\\RESULT.json",
+      "sha256": "060cfc7e3aa2b40d090861a2d52ea72917f279eaa166f84f56d4c586f5e66d5d"
+    }
+  ],
+  "scope": "P12 continuation measured CPU stages only; deployment, development, transfer, GitHub CI excluded",
+  "scope_cumulative_seconds": 665.8776011638688
+}
