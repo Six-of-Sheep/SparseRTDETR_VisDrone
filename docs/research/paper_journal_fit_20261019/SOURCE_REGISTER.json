@@ -1,7 +1,7 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "as_of": "2026-10-19",
-  "status": "PUBLICATION_DECISION_PENDING_EVIDENCE_OPTIONAL_CONTROL_PLAN_ONLY",
+  "status": "BOUNDED_REVIEW_INCOMPLETE_SPECIFIC_BODY_AND_SCOPE_GAPS_NO_ADVISOR_PREREQUISITE",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -19,7 +19,9 @@
     "revision003_new_attempts": 0,
     "revision003_new_channel_or_service_workaround": false,
     "revision004_new_attempts": 0,
-    "revision004_alternative_channel_used": false
+    "revision004_alternative_channel_used": false,
+    "revision005_new_attempts": 0,
+    "revision005_alternative_channel_used": false
   },
   "journal_review": [
     {
@@ -383,14 +385,16 @@
     "author_parts_unverified": [
       "complete backend dependency versions",
       "tie and overlap boundary comparisons",
-      "precision conversion",
+      "FP32 container conversion confirmed; full backend numeric chain still unverified",
       "negative/out-of-image boxes in author container",
       "full numeric call chain",
       "output identity/tie/rank adapter"
     ],
     "PDF": "docs/research/paper_journal_fit_20261019/output/pdf/MERGE_CONTROL_REVIEW_PLAN.pdf",
     "PDF_pages": 1,
-    "PDF_visual_check": "PASS"
+    "PDF_visual_check": "PASS",
+    "strict_single_variable_status": "NOT_ESTABLISHED_AUTHOR_FP32_VS_C_FP64",
+    "PDF_currentness": "Historical revision004 only; current Markdown revision005 supersedes"
   },
   "decision_evidence_update": {
     "new_legal_originals": [],
@@ -402,6 +406,45 @@
       "first perform optional limited control under separate approved protocol",
       "contribution insufficient; adjust research question"
     ],
-    "insufficient_evidence_means": "remain pending; no cosmetic rewrite to hide gap"
+    "insufficient_evidence_means": "remain pending; no cosmetic rewrite to hide gap",
+    "advisor_feedback_required": false,
+    "comparability_finding_changed": true,
+    "contribution_verdict_changed": false
+  },
+  "revision005": {
+    "advisor_feedback_required": false,
+    "document": "BOUNDED_REVIEW_005.md",
+    "decision": "UNABLE_TO_CHOOSE_THREE_ROUTES_RELIABLY_WITHOUT_SPECIFIED_PRIMARY_TEXTS",
+    "interim_advice": "Do not default to merge scoring or submit as confirmed contribution; obtain specified originals first",
+    "new_source_finding": "Author ObjectPredictionList uses float32 arrays; C NMS geometry float64. Strict unique-variable claim withdrawn pending full path audit.",
+    "author_code_review": "three original-SHA snapshots statically read; backend/container incomplete; not executed",
+    "historical_cache_evidence": "Three PREPARED and parent gate byte/SHA verified; 3*137 batches, raw boxes/logits/geometry/identity and prior exact A/B/C rebuild. No current payload admission.",
+    "SAHI_body_review": false,
+    "RTDETRv2_body_review": false,
+    "nearest_aerial_bodies_reviewed": 0,
+    "journal_body_counts": {
+      "计算机工程与应用": 0,
+      "计算机工程": 0,
+      "计算机系统应用": 0
+    },
+    "precise_gaps": [
+      "SAHI methods and experiments body",
+      "at least one nearest aerial slicing methods/experiments body; max3",
+      "fixed author backend/container/dependency sources",
+      "RTDETRv2 necessary report body",
+      "three official scopes and at least one directly related full article per journal; max2"
+    ],
+    "fees_and_cycles_prerequisite": false,
+    "new_scientific_calls": 0,
+    "remote_connections": 0,
+    "historical_pdf": "output/pdf/MERGE_CONTROL_REVIEW_PLAN.pdf remains revision004; current Markdown supersedes",
+    "receipt": "D:/Lzy_CV/workspace_management/delivery/publication/paper-journal-fit-20261019-001/revision-005/LOCAL_EVIDENCE_AUDIT.json",
+    "nearest_historical_lead": {
+      "url": "https://arxiv.org/abs/2608.23923",
+      "title_in_prior_review": "ROI-Gated SAHI",
+      "prior_review": "SAHI_RELATED_WORK_20261017.md at 84005348eac8154ca148800fdb8b1f7a54fd8d46",
+      "status": "HISTORICAL_LEAD_NOT_CURRENT_BODY_OR_BIBLIOGRAPHY_VERIFICATION",
+      "required": "version first page, III methods, IV experiments, limitations"
+    }
   }
 }
