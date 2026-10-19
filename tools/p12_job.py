@@ -9,6 +9,13 @@ import sys
 import time
 import traceback
 
+# The file entry owns its paths, independently of cwd/PYTHONPATH and fixture mode.
+# Never defer root initialization to a data adapter or a test fixture.
+ENTRY_ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ENTRY_ROOT / 'tools'), str(ENTRY_ROOT), str(ENTRY_ROOT / 'src')]
+import two_of_four_job as _entry_common
+if Path(_entry_common.__file__).resolve() != ENTRY_ROOT / 'tools/two_of_four_job.py':
+    raise ImportError('P12 entry common module is not from this release')
 from two_of_four_job import ROOT, PARENT_SHA, read, sha, publish, require, score
 
 TASK = 'sahi-p12-cross-seed-20261019-001'
@@ -39,9 +46,20 @@ def verify_source():
     require(m['experiment_id'] == TASK and m['config_sha256'] == sha(CONFIG), 'source/config task binding')
     for r in m['source_files']:
         p = Path(r['path'])
-        require(not p.is_absolute() and '..' not in p.parts and not (ROOT / p).is_symlink()
-                and (ROOT / p).stat().st_size == r['bytes'] and sha(ROOT / p) == r['sha256'], 'own source SHA: ' + str(p))
-    return m
+        require(not p.is_absolute() and '..' not in p.parts and (ROOT / p).is_file()
+                and not (ROOT / p).is_symlink() and (ROOT / p).stat().st_size == r['bytes']
+                and sha(ROOT / p) == r['sha256'], 'own source missing/identity differs: ' + str(p))
+    require(ROOT == ENTRY_ROOT, 'entry root differs')
+    # Check actual origins as well as manifest bytes; a same-named external module is not accepted.
+    import importlib
+    origins = {}
+    for name, relative in (('two_of_four_job', 'tools/two_of_four_job.py'),
+                           ('two_of_four_core', 'tools/two_of_four_core.py'), ('slice_core', 'slice_core.py')):
+        module = importlib.import_module(name)
+        origin = Path(module.__file__).resolve()
+        require(origin == ROOT / relative, 'loaded module outside this release: ' + name)
+        origins[name] = dict(path=str(origin), sha256=sha(origin))
+    return m, origins
 
 
 def dependency(parent):
@@ -140,7 +158,6 @@ def evaluate(prepared, rows, parsed, repo, out, *, proof=None, inject_failure=Fa
 
 
 def fixture(out, fail):
-    sys.path[:0] = [str(ROOT), str(ROOT / 'src')]
     from slice_core import Candidate
     from two_of_four_core import merge_pair
     from sparse_rtdetr.localization.data import parse_raw
@@ -184,10 +201,16 @@ def main(argv=None):
     start = time.monotonic()
     publish(out / 'WORKER_STARTED.json', dict(pid=os.getpid(), time=time.time(), mode=a.mode))
     try:
-        plan = read(CONFIG); validate_plan(plan)
-        if a.mode == 'fixture': result = fixture(out, a.inject_failure)
+        plan = read(CONFIG)
+        if a.mode == 'fixture':
+            validate_plan(plan)
+            result = fixture(out, a.inject_failure)
         else:
-            m = verify_source()
+            m, origins = verify_source()
+            validate_plan(plan)
+            publish(out / 'ENTRY_IDENTITY.json', dict(status='PASS', cwd=str(Path.cwd()),
+                    executable=sys.executable, argv=sys.argv, modules=origins,
+                    PYTHONPATH=os.environ.get('PYTHONPATH'), source_manifest_sha256=sha(ROOT / 'RUN_SOURCE.json')))
             if a.mode == 'prepare': result = prepare(a.parent, plan, out)
             else:
                 c = read(a.contract)

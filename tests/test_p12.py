@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import hashlib
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'tools'), str(ROOT), str(ROOT/'src')]
@@ -13,6 +15,60 @@ from p12_job import validate_plan, timing_eligible, read, evaluate
 
 
 class Tests(unittest.TestCase):
+    def production_release(self, root):
+        # Minimal own-source snapshot, no fake parent identity or loosened parent gate.
+        names = ['tools/p12_job.py','tools/two_of_four_job.py','tools/two_of_four_core.py',
+                 'slice_core.py','configs/p12_cross_seed.json']
+        refs = []
+        for name in names:
+            p = root/name; p.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(ROOT/name,p)
+            refs.append(dict(path=name,bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+        (root/'RUN_SOURCE.json').write_text(json.dumps(dict(experiment_id='sahi-p12-cross-seed-20261019-001',
+            commit='test-only-own-source',config_sha256=hashlib.sha256((root/names[-1]).read_bytes()).hexdigest(),
+            source_files=refs)),encoding='utf-8')
+        return root
+
+    def prepare_process(self, root, out):
+        env = dict(os.environ,CUDA_VISIBLE_DEVICES='',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1')
+        env.pop('PYTHONPATH',None)
+        parent=root/'untrusted-parent.json';parent.write_text('{}',encoding='utf-8')
+        return subprocess.run([sys.executable,'-B',str(root/'tools/p12_job.py'),'prepare',
+              '--parent',str(parent),'--output',str(out)],cwd=root,env=env,capture_output=True)
+
+    def test_real_prepare_child_bootstrap_reaches_strict_parent_refusal(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=self.production_release(Path(t)/'release')
+            out=Path(t)/'sahi-p12-cross-seed-20261019-001'/'rejected-parent'
+            r=self.prepare_process(root,out)
+            self.assertEqual(r.returncode,2,r.stderr.decode(errors='replace'))
+            stop=read(out/'STOP.json')['traceback']
+            self.assertIn('parent contract SHA',stop)
+            self.assertNotIn('ModuleNotFoundError',stop)
+            identity=read(out/'ENTRY_IDENTITY.json')
+            self.assertEqual(Path(identity['cwd']),root)
+            self.assertIsNone(identity['PYTHONPATH'])
+            self.assertEqual(set(identity['modules']),{'two_of_four_job','two_of_four_core','slice_core'})
+            self.assertFalse((out/'SUMMARY.json').exists())
+
+    def test_real_prepare_child_missing_source_rejected(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=self.production_release(Path(t)/'release')
+            (root/'slice_core.py').unlink()
+            out=Path(t)/'sahi-p12-cross-seed-20261019-001'/'missing'
+            self.assertEqual(self.prepare_process(root,out).returncode,2)
+            self.assertIn('own source missing/identity differs: slice_core.py',read(out/'STOP.json')['traceback'])
+            self.assertFalse((out/'ENTRY_IDENTITY.json').exists())
+
+    def test_real_prepare_child_wrong_source_identity_rejected(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=self.production_release(Path(t)/'release')
+            p=root/'tools/two_of_four_core.py';b=p.read_bytes();p.write_bytes(b.replace(b'PROTECTION',b'PROTECTIOX',1))
+            out=Path(t)/'sahi-p12-cross-seed-20261019-001'/'wrong-identity'
+            self.assertEqual(self.prepare_process(root,out).returncode,2)
+            self.assertIn('own source missing/identity differs: tools/two_of_four_core.py',read(out/'STOP.json')['traceback'])
+            self.assertFalse((out/'ENTRY_IDENTITY.json').exists())
+
     def test_fixed_plan_and_no_new_pair(self):
         p = read(ROOT/'configs/p12_cross_seed.json'); validate_plan(p)
         for k, v in [('pair',[1,3]),('seeds',[0,1]),('budget',300),('gain_retention',.7),
