@@ -13,6 +13,19 @@
   },
   "experiments": [
     {
+      "id": "large-recall-stage-20261019-001",
+      "role": "seed0_fixed_cache_stage_and_counterfactual_diagnostic",
+      "result_status": "COMPLETE_NO_FIXED_PROTOCOL_INTERVENTION_SELECTED_DIRECTION_CLOSED",
+      "source_commit": "aa4398c1f77e58fb01bd963f9c9cdfbe08d48fa4",
+      "plan": "configs/large_recall_stage.json",
+      "report": "docs/research/large_recall_stage_20261019/REPORT.md",
+      "seed_count": 1,
+      "images": 548,
+      "budget": 600,
+      "new_forward_calls": 0,
+      "AP_calls": 0
+    },
+    {
       "id": "rtdetrv2-r18-common-protocol-seed0-e120-20261013-001",
       "role": "primary_development_baseline",
       "result_status": "seed0_e120_evaluated",
