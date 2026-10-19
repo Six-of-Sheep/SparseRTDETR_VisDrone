@@ -1,7 +1,7 @@
 {
-  "schema_version": 7,
+  "schema_version": 8,
   "as_of": "2026-10-19",
-  "status": "MANUSCRIPT_SCOPE_REVISED_TARGET_JOURNAL_ARTICLE_REVIEW_BLOCKED_NO_FINAL_SUBMISSION_VERDICT",
+  "status": "DIRECT_AERIAL_PRECEDENT_REVIEWED_CURRENT_RESEARCH_FRAMING_INSUFFICIENT_RECOMMEND_REFRAME",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -410,11 +410,12 @@
     "new_legal_originals": [
       "2202.06934v5",
       "2407.17140v1",
-      "2608.23923v1"
+      "2608.23923v1",
+      "IEEE Access accepted manuscript DOI10.1109/ACCESS.2024.3363413"
     ],
     "new_specific_advisor_feedback": [],
     "difference_verdict_changed_by_new_evidence": false,
-    "current_recommendation": "REFRAME_BROAD_QUESTION_NO_DEFAULT_MERGER_SCORING_JOURNAL_FIT_PENDING",
+    "current_recommendation": "REFRAME_CURRENT_PROBLEM_DIRECT_PRECEDENT_COVERS_MAIN_CLAIMS",
     "possible_recommendations": [
       "directly improve manuscript for submission",
       "first perform optional limited control under separate approved protocol",
@@ -514,5 +515,27 @@
     "draft_methods_settings_results_unchanged": true,
     "abstract_numeric_tokens_unchanged": true,
     "new_journal_titles_invented": false
+  },
+  "revision008": {
+    "document": "DIRECT_PRECEDENT_DECISION_008.md",
+    "direct_precedent_DOI": "10.1109/ACCESS.2024.3363413",
+    "direct_precedent_source_SHA": "ce9f02cd751e0da105c94e3d4b5a6b2d335befe495c7f600eacebd2c5865e670",
+    "prior_local_report_SHA": "69c5702466501c3e86ea7cc5613c5c22c6b6dd2adda04ca09b4df4a73638c9f8",
+    "missing_aerial_body_blocker_closed": true,
+    "publisher_remote_verified": false,
+    "research_questions": [
+      "NMS-only substitute versus five views",
+      "large-object recall choice and reference dependence",
+      "300-box output constraint",
+      "fixed extension reinvestment"
+    ],
+    "remaining_value": "configuration-specific replication, calibration and maintenance evidence; not new general selection rule",
+    "recommendation": "CURRENT_RESEARCH_FRAMING_INSUFFICIENT_RECOMMEND_REFRAME_NO_DEFAULT_GREEDYNMM",
+    "not_rejected_solely_for_no_new_algorithm": true,
+    "journal_sources_missing_not_used_to_defer_current_overlap_verdict": true,
+    "new_candidate_or_experiment_defined": false,
+    "new_scientific_calls": 0,
+    "new_public_requests": 0,
+    "draft_change_scope": "minimum direct citation and contribution-status correction; experimental sections unchanged"
   }
 }

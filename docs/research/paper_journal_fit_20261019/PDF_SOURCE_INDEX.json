@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "as_of": "2026-10-19T12:21:46.277615+08:00",
+  "schema_version": 2,
+  "as_of": "2026-10-19T16:31:47.628825+08:00",
   "files": [
     {
       "file": "01_SAHI_2202.06934.pdf",
@@ -133,10 +133,65 @@
       "externally_byte_authenticated": false,
       "PDF_in_Git": false,
       "body_reviewed": true
+    },
+    {
+      "file": "Enhancing_UAV_Aerial_Image_Analysis_Integrating_Advanced_SAHI_Techniques_With_Real-Time_Detection_Models_on_the_VisDrone_Dataset.pdf",
+      "project_relative_path": "workspace_management/references/paper-journal-fit/incoming/Enhancing_UAV_Aerial_Image_Analysis_Integrating_Advanced_SAHI_Techniques_With_Real-Time_Detection_Models_on_the_VisDrone_Dataset.pdf",
+      "bytes": 1474026,
+      "sha256": "ce9f02cd751e0da105c94e3d4b5a6b2d335befe495c7f600eacebd2c5865e670",
+      "pages": 13,
+      "title": "Enhancing UAV Aerial Image Analysis: Integrating Advanced SAHI Techniques with Real-Time Detection Models on the VisDrone Dataset",
+      "authors": [
+        "M. Muzammul",
+        "Abdul Mohsen Algarni",
+        "Yazeed Yasin Ghadi",
+        "Muhammad Assam"
+      ],
+      "arxiv": null,
+      "version": null,
+      "version_label": "accepted author manuscript, as printed; no version number supplied",
+      "date": null,
+      "DOI": "10.1109/ACCESS.2024.3363413",
+      "article_ID_from_PDF_metadata": "10423771",
+      "status": "Directly read aerial precedent in supplied IEEE Access accepted author manuscript; publisher page/byte verification not performed",
+      "methods": [
+        4,
+        5,
+        6,
+        8
+      ],
+      "experiments": [
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "conclusion": [
+        11
+      ],
+      "visual": [
+        1,
+        7,
+        8,
+        10
+      ],
+      "source": "user supplied local PDF; existing local review and source index SHA matched",
+      "URL_locator": "https://doi.org/10.1109/ACCESS.2024.3363413",
+      "URL_accessed_this_round": false,
+      "identity_evidence": "accepted-manuscript DOI header, title/authors, PDF DOI metadata, original local SHA index",
+      "metadata_limit": "2017 template DOI/year and xxxx publication dates not bibliographic evidence; final volume/pages not independently checked",
+      "text_parser_warning": "Unbalanced target operations expected ET; key pages rendered and legible; source PDF not repaired",
+      "externally_byte_authenticated": false,
+      "PDF_in_Git": false,
+      "body_reviewed": true,
+      "prior_local_review_project_relative": "workspace_management/delivery/publication/paper-journal-fit-20261019-001/local-uav-sahi-review-001/REPORT.md",
+      "prior_local_review_sha256": "69c5702466501c3e86ea7cc5613c5c22c6b6dd2adda04ca09b4df4a73638c9f8"
     }
   ],
   "integrity_limit": "Structural/printed-identity consistency, not official server byte equivalence or peer-review authentication",
   "external_access_attempts": 0,
   "scientific_calls": 0,
-  "review": "PDF_REVIEW_006.md"
+  "review": "PDF_REVIEW_006.md",
+  "direct_aerial_precedent_review": "DIRECT_PRECEDENT_DECISION_008.md"
 }
