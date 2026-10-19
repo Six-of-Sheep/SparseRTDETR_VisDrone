@@ -1,7 +1,7 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "as_of": "2026-10-19",
-  "status": "DRAFT_COMPLETE_CONTRIBUTION_AND_JOURNAL_FIT_UNCONFIRMED",
+  "status": "PUBLICATION_DECISION_PENDING_EVIDENCE_OPTIONAL_CONTROL_PLAN_ONLY",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -17,7 +17,9 @@
     "revision002_new_attempts": 0,
     "later_history": "Official OpenAI settings page previously accessible, Bing-only tests still refused; not evidence of journal access. No retry this revision.",
     "revision003_new_attempts": 0,
-    "revision003_new_channel_or_service_workaround": false
+    "revision003_new_channel_or_service_workaround": false,
+    "revision004_new_attempts": 0,
+    "revision004_alternative_channel_used": false
   },
   "journal_review": [
     {
@@ -171,7 +173,7 @@
     "sealed_payload_reads": 0,
     "new_scientific_scoring_calls": 0
   },
-  "revision": "003",
+  "revision": "004",
   "user_confirmed_submission_conditions": {
     "source": "用户确认（2026-10-19本轮指令）",
     "school_original_document_verified": false,
@@ -186,7 +188,7 @@
   "formal_selection": {
     "primary": null,
     "backup": null,
-    "reason": "contribution and journal fit unconfirmed; requires supplied core papers and official recent articles/scope, not merely metadata",
+    "reason": "await legal originals or specific advisor evidence to update contribution matrix; no new evidence this revision; no formal journal ranking",
     "basis": "docs/research/paper_journal_fit_20261019/VENUE_DECISION.md"
   },
   "manual_public_source_checklist": "docs/research/paper_journal_fit_20261019/PUBLIC_GAPS.md",
@@ -238,7 +240,7 @@
     "only_literature_missing_claim": false,
     "may_need_experiment": true,
     "need_cannot_be_determined_from_missing_literature_alone": true,
-    "one_priority_proposal": "matched-five-view author GreedyNMM/IoS CPU merger control versus C; not authorized to execute",
+    "one_priority_proposal": "optional same-candidate merger control only; necessity not established, outcome not presumed favorable",
     "proposal_groups": 6,
     "proposal_dual_evaluator_calls": 12,
     "proposal_forward_if_authenticated_cache_reusable": 0,
@@ -357,5 +359,49 @@
   },
   "advisor_summary_PDF": "docs/research/paper_journal_fit_20261019/output/pdf/ADVISOR_BRIEF.pdf",
   "advisor_summary_PDF_pages": 1,
-  "advisor_summary_PDF_visual_review": "PASS_single_A4_no_overlap_or_glyph_errors"
+  "advisor_summary_PDF_visual_review": "PASS_single_A4_no_overlap_or_glyph_errors",
+  "pending_control_plan": {
+    "path": "docs/research/paper_journal_fit_20261019/MERGE_CONTROL_REVIEW_PLAN.md",
+    "author_repository": "obss/sahi",
+    "author_commit": "b5a153ee7bcb1fd84a7b868575ff14131e7423ce",
+    "experimental_factor": "entire merger policy: hard NMS/IoU0.5 -> author GreedyNMM/IoS0.5, class-aware",
+    "component_causes_separable": false,
+    "full_SAHI_reproduction": false,
+    "necessary": null,
+    "necessity_status": "UNDETERMINED",
+    "favorable_outcome_assumed": false,
+    "cache_reuse": "possible in principle, current payload not re-admitted",
+    "max_new_dual_evaluator_groups": 6,
+    "max_new_evaluator_calls": 12,
+    "new_forward_if_cache_admitted": 0,
+    "CPU_time_limit": null,
+    "CPU_memory_limit": null,
+    "minimum_meaningful_difference": null,
+    "implementation_ready": false,
+    "execution_authorized": false,
+    "implementation_or_scoring_this_revision": false,
+    "author_parts_unverified": [
+      "complete backend dependency versions",
+      "tie and overlap boundary comparisons",
+      "precision conversion",
+      "negative/out-of-image boxes in author container",
+      "full numeric call chain",
+      "output identity/tie/rank adapter"
+    ],
+    "PDF": "docs/research/paper_journal_fit_20261019/output/pdf/MERGE_CONTROL_REVIEW_PLAN.pdf",
+    "PDF_pages": 1,
+    "PDF_visual_check": "PASS"
+  },
+  "decision_evidence_update": {
+    "new_legal_originals": [],
+    "new_specific_advisor_feedback": [],
+    "difference_verdict_changed_by_new_evidence": false,
+    "current_recommendation": "PENDING",
+    "possible_recommendations": [
+      "directly improve manuscript for submission",
+      "first perform optional limited control under separate approved protocol",
+      "contribution insufficient; adjust research question"
+    ],
+    "insufficient_evidence_means": "remain pending; no cosmetic rewrite to hide gap"
+  }
 }
