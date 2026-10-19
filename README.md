@@ -24,7 +24,7 @@
 
 [固定二选四可行性筛选](docs/research/two_of_four_20261019/REPORT.md)：seed0完整六组合中，仅整图＋左上/右上通过新80%增益保留及尺度保护标准；仍有中目标和大目标召回代价，实际速度未测。属于development配置选择，未启动跨seed或GPU后续。旧A/B/C与失败配方保持。
 
-[P12跨seed接续](docs/research/p12_cross_seed_20261019/REPORT.md)：已冻结唯一P12及seed1/2各自8项条件；新增小型CPU检查5项通过，但首次生产准备因导入路径缺口STOP，未自动修复重试。真实跨seed评分0/2、GPU测速未执行，不能据此裁决P12质量或成本。旧seed0选择保持；新增测速目标P12/C≤.75仍未检验。
+[P12跨seed复验完成](docs/research/p12_cross_seed_20261019/FINAL_002.md)：入口修复并通过真实prepare；seed1/2全部固定CPU评分完成，但各自尺度保护失败，关闭本固定配方，按计划未执行GPU测速。AP/APS增益保留均≥80%不能抵消保护失败；seed0仍为development配置选择，旧STOP与全部结果保留。新增P12/C≤.75成本目标未检验。
 
 ## 代码地图
 

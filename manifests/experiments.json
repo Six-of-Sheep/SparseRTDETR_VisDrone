@@ -172,29 +172,74 @@
     {
       "id": "sahi-p12-cross-seed-20261019-001",
       "role": "fixed_P12_same_development_cross_training_seed_repeat",
-      "result_status": "STOP_PREPARATION_ENGINEERING_NO_RETRY",
+      "result_status": "COMPLETE_QUALITY_FAIL_NO_GPU",
       "plan": "configs/p12_cross_seed.json",
       "seed_ids": [
         1,
         2
       ],
-      "execution_commit": "b0fc276782428dded4f538a67a16d757d244794c",
-      "source_manifest_sha256": "09c989cf1cd1d0837a4ec64396faf652d5a2751a1593dfcaf6c0f1592b7839ae",
+      "execution_commit": "74178606574ff0d8abf0e2ab461ad9cdbd690ff9",
+      "source_manifest_sha256": "18eda07179c53479357feb025cfa95039956050458e17d913684a5f49eab0550",
       "selected_views": [
         0,
         1,
         2
       ],
       "seed0_status": "configuration selection preserved",
-      "report": "docs/research/p12_cross_seed_20261019/REPORT.md",
-      "scientific_score_groups_completed": 0,
+      "report": "docs/research/p12_cross_seed_20261019/FINAL_002.md",
+      "scientific_score_groups_completed": 2,
       "planned_score_groups": 2,
       "new_forward_calls": 0,
       "training_updates": 0,
-      "GPU_timing_status": "NOT_EXECUTED",
+      "GPU_timing_status": "SKIPPED_QUALITY_PREREQUISITE_FAILED",
       "maximum_P12_over_C_seconds": 0.75,
       "automatic_retry": false,
-      "automatic_next": false
+      "automatic_next": false,
+      "contract_sha256": "fce0029efd3fb7ad4f2e0a76b83aa909b8dfc8bc36e34f0cf38a63a64db35fda",
+      "evaluator_calls_completed": 4,
+      "quality_by_seed": {
+        "0": "original configuration selection PASS",
+        "1": "FAIL",
+        "2": "FAIL"
+      },
+      "failed_gates": {
+        "1": [
+          "AP75_small-C",
+          "APM-C"
+        ],
+        "2": [
+          "AP75_small-C",
+          "APL-A",
+          "APL-C"
+        ]
+      },
+      "old_STOP_record": {
+        "id": "sahi-p12-cross-seed-20261019-001",
+        "role": "fixed_P12_same_development_cross_training_seed_repeat",
+        "result_status": "STOP_PREPARATION_ENGINEERING_NO_RETRY",
+        "plan": "configs/p12_cross_seed.json",
+        "seed_ids": [
+          1,
+          2
+        ],
+        "execution_commit": "b0fc276782428dded4f538a67a16d757d244794c",
+        "source_manifest_sha256": "09c989cf1cd1d0837a4ec64396faf652d5a2751a1593dfcaf6c0f1592b7839ae",
+        "selected_views": [
+          0,
+          1,
+          2
+        ],
+        "seed0_status": "configuration selection preserved",
+        "report": "docs/research/p12_cross_seed_20261019/REPORT.md",
+        "scientific_score_groups_completed": 0,
+        "planned_score_groups": 2,
+        "new_forward_calls": 0,
+        "training_updates": 0,
+        "GPU_timing_status": "NOT_EXECUTED",
+        "maximum_P12_over_C_seconds": 0.75,
+        "automatic_retry": false,
+        "automatic_next": false
+      }
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"
