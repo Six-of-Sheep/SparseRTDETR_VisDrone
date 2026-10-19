@@ -24,6 +24,8 @@
 
 ## 代码地图
 
+[中文期刊投稿适配审查草稿](docs/research/paper_journal_fit_20261019/REPORT.md)与[修订提纲](docs/research/paper_journal_fit_20261019/REVISION_OUTLINE.md)：本地证据已审查，公开期刊／近作核查因浏览器权限阻断尚未完成；未正式推荐主投／备选，学校毕业资格待确认。不改变冻结实验与科学裁决。
+
 | 位置 | 责任 |
 |---|---|
 | src/sparse_rtdetr/protocol_r18/ | 当前共同协议R18模型、数据、状态与训练适配 |

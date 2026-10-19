@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-19",
+  "status": "LOCAL_REVIEW_COMPLETE_PUBLIC_REVIEW_BLOCKED",
+  "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "public_access": {
+    "attempts": 3,
+    "first": "user declined permission",
+    "second": "A saved user permission setting blocks this action",
+    "user_text_authorization": "received",
+    "saved_permission_resolved": false,
+    "bypass_used": false,
+    "new_public_pages_read": 0,
+    "third": "A saved user permission setting blocks this action",
+    "user_settings_screenshot": "Default browsing shown as always allow; third request still denied",
+    "cause_of_UI_runtime_disagreement": "UNKNOWN"
+  },
+  "journal_review": [
+    {
+      "name": "计算机工程与应用",
+      "scope": "UNVERIFIED",
+      "ranking": "UNVERIFIED",
+      "ranking_edition": "UNVERIFIED",
+      "fees": "UNKNOWN",
+      "review_time": "UNKNOWN",
+      "publication_time": "UNKNOWN",
+      "school_qualification": "PENDING_SCHOOL_CONFIRMATION",
+      "verified_related_articles": 0,
+      "zero_count_means": "not searched successfully, not absence of papers"
+    },
+    {
+      "name": "计算机工程",
+      "scope": "UNVERIFIED",
+      "ranking": "UNVERIFIED",
+      "ranking_edition": "UNVERIFIED",
+      "fees": "UNKNOWN",
+      "review_time": "UNKNOWN",
+      "publication_time": "UNKNOWN",
+      "school_qualification": "PENDING_SCHOOL_CONFIRMATION",
+      "verified_related_articles": 0,
+      "zero_count_means": "not searched successfully, not absence of papers"
+    },
+    {
+      "name": "计算机系统应用",
+      "scope": "UNVERIFIED",
+      "ranking": "UNVERIFIED",
+      "ranking_edition": "UNVERIFIED",
+      "fees": "UNKNOWN",
+      "review_time": "UNKNOWN",
+      "publication_time": "UNKNOWN",
+      "school_qualification": "PENDING_SCHOOL_CONFIRMATION",
+      "verified_related_articles": 0,
+      "zero_count_means": "not searched successfully, not absence of papers"
+    }
+  ],
+  "related_article_window": {
+    "start": "2023-10-19",
+    "end": "2026-10-19",
+    "published_and_online_first_separate": true,
+    "preprints_separate": true
+  },
+  "queries": [
+    "计算机工程与应用 SAHI 切片 分块 航拍",
+    "计算机工程与应用 RT-DETR RT-DETRv2 无人机 小目标",
+    "计算机工程与应用 多视图 检测 推理 成本",
+    "计算机工程 SAHI 切片 分块 航拍",
+    "计算机工程 RT-DETR RT-DETRv2 无人机 小目标",
+    "计算机工程 多视图 检测 推理 成本",
+    "计算机系统应用 SAHI 切片 分块 航拍",
+    "计算机系统应用 RT-DETR RT-DETRv2 无人机 小目标",
+    "计算机系统应用 多视图 检测 推理 成本"
+  ],
+  "historical_review": {
+    "git_commit": "84005348eac8154ca148800fdb8b1f7a54fd8d46",
+    "path": "docs/research/SAHI_RELATED_WORK_20261017.md",
+    "reviewed_on": "2026-10-17",
+    "imported_into_this_branch": false,
+    "new_paper_fulltext_read": false,
+    "index_files": [
+      {
+        "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-next-direction-review-20261017-001\\FETCH_INDEX_01.json",
+        "bytes": 2312,
+        "sha256": "a2820de6966264adfe23d4fcca166bf35a34029e37d1aa7e232db3b8eedf0877"
+      },
+      {
+        "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-next-direction-review-20261017-001\\FETCH_INDEX_02.json",
+        "bytes": 3056,
+        "sha256": "51f9a9a44433199dd41d3a80ea1b28a77e706219227ac851ad5c23ad518df961"
+      },
+      {
+        "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-next-direction-review-20261017-001\\FETCH_INDEX_03.json",
+        "bytes": 2913,
+        "sha256": "03575892f5892062ec1933253a9ead057f951a922bc67bc56b3cf0c49405c087"
+      }
+    ]
+  },
+  "local_code_snapshots_verified": [
+    {
+      "id": "sahi-combine",
+      "url": "https://raw.githubusercontent.com/obss/sahi/b5a153ee7bcb1fd84a7b868575ff14131e7423ce/sahi/postprocess/combine.py",
+      "bytes": 17891,
+      "sha256": "f9017441e788d62370e2ac3c647aa5572a5c106f8b61bfa93bb5cafd806a4f2c",
+      "access": "existing_local_snapshot_only",
+      "original_retrieval_date": "2026-10-17"
+    },
+    {
+      "id": "sahi-utils",
+      "url": "https://raw.githubusercontent.com/obss/sahi/b5a153ee7bcb1fd84a7b868575ff14131e7423ce/sahi/postprocess/utils.py",
+      "bytes": 17258,
+      "sha256": "a1294da90df35f540c9ca8d57939b08fddd2448661e38b06d8988a8984b461cf",
+      "access": "existing_local_snapshot_only",
+      "original_retrieval_date": "2026-10-17"
+    },
+    {
+      "id": "sahi-predict",
+      "url": "https://raw.githubusercontent.com/obss/sahi/b5a153ee7bcb1fd84a7b868575ff14131e7423ce/sahi/predict.py",
+      "bytes": 49166,
+      "sha256": "1e431b102c70af84545b3701531df1b56deba72b08989718d92631fe99f711aa",
+      "access": "existing_local_snapshot_only",
+      "original_retrieval_date": "2026-10-17"
+    }
+  ],
+  "literature": [
+    {
+      "id": "SAHI",
+      "url": "https://arxiv.org/abs/2202.06934",
+      "status": "historical_review_reused_not_fresh_fulltext"
+    },
+    {
+      "id": "RT-DETRv2",
+      "url": "https://arxiv.org/abs/2407.17140",
+      "status": "prior_source_reference_only_fresh_fulltext_pending"
+    },
+    {
+      "id": "AutoFocus",
+      "url": "https://openaccess.thecvf.com/content_ICCV_2019/papers/Najibi_AutoFocus_Efficient_Multi-Scale_Inference_ICCV_2019_paper.pdf",
+      "status": "historical_review_only_not_nearest_prior_claim"
+    }
+  ],
+  "nearest_aerial_slicing_work": "NOT_YET_ESTABLISHED",
+  "primary_journal": null,
+  "backup_journal": null,
+  "scientific_execution": {
+    "model_calls": 0,
+    "new_AP_calls": 0,
+    "GPU_calls": 0,
+    "training_updates": 0,
+    "server_connections": 0,
+    "sealed_payload_reads": 0
+  }
+}
