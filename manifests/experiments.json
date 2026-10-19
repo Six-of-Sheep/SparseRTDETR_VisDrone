@@ -149,11 +149,25 @@
     {
       "id": "sahi-two-of-four-20261019-001",
       "role": "fixed_six_pair_development_feasibility_screen",
-      "result_status": "PREPARED_NOT_SCORED",
+      "result_status": "SEED0_DEVELOPMENT_FIXED_PAIR_SCREEN_PASS_COST_UNMEASURED",
       "plan": "configs/sahi_two_of_four.json",
       "seed_count": 1,
       "GPU_authorized": false,
-      "forward_authorized": false
+      "forward_authorized": false,
+      "execution_commit": "7898d3202d690708fd28a9b377cf6634de984da6",
+      "source_manifest_sha256": "f82c6a96b6757bfa99b754938b3113b4f6b2baaeab5b2478f9680e9bcffc984e",
+      "passing_pairs": [
+        "P12"
+      ],
+      "selected_views": [
+        0,
+        1,
+        2
+      ],
+      "report": "docs/research/two_of_four_20261019/REPORT.md",
+      "new_score_groups": 6,
+      "new_forward_calls": 0,
+      "automatic_next": false
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"

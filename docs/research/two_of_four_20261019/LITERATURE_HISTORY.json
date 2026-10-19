@@ -1,0 +1,47 @@
+{
+  "history_limit": "bounded discovery is not a complete audit or novelty proof",
+  "history_result": "prior adaptive whole-guided two-of-four proposal only; no identical completed six-pair evaluation found in reviewed scope",
+  "history_scope": [
+    "listed local literature/decision reports",
+    "delivery localization-distribution task directory names",
+    "main manifests/experiments.json",
+    "bounded git log grep for two-of-four/selected.tile"
+  ],
+  "original_links": {
+    "AutoFocus": "https://openaccess.thecvf.com/content_ICCV_2019/html/Najibi_AutoFocus_Efficient_Multi-Scale_Inference_ICCV_2019_paper.html",
+    "ROI_Gated": "https://arxiv.org/abs/2608.23923v1",
+    "SAHI": "https://arxiv.org/abs/2202.06934",
+    "aerial_SAHI": "https://doi.org/10.1109/ACCESS.2024.3363413"
+  },
+  "scope": "reuse prior full-body literature reviews; no new public access or novelty certification",
+  "sources": [
+    {
+      "bytes": 13602,
+      "local_path": "D:\\Lzy_CV\\development\\worktrees\\paper-journal-fit\\docs\\research\\paper_journal_fit_20261019\\PDF_REVIEW_006.md",
+      "relative_path": "docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md",
+      "repository_commit": "d144af12fb84dedbe3ecf4a14479c22695f4eee4",
+      "sha256": "84977a0025bccb2517862cd7da000697bece7f329148b44dd7933cb5aa2653b2"
+    },
+    {
+      "bytes": 13889,
+      "local_path": "D:\\Lzy_CV\\development\\worktrees\\paper-journal-fit\\docs\\research\\paper_journal_fit_20261019\\DIRECT_PRECEDENT_DECISION_008.md",
+      "relative_path": "docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md",
+      "repository_commit": "d144af12fb84dedbe3ecf4a14479c22695f4eee4",
+      "sha256": "7ff919ff541a48c5a9ade8dee1eb86c08acf7e152f6b638611e83b96bcf536ab"
+    },
+    {
+      "bytes": 6490,
+      "local_path": "D:\\Lzy_CV\\development\\worktrees\\sahi-next-direction-review\\docs\\research\\SAHI_RELATED_WORK_20261017.md",
+      "relative_path": "docs/research/SAHI_RELATED_WORK_20261017.md",
+      "repository_commit": "84005348eac8154ca148800fdb8b1f7a54fd8d46",
+      "sha256": "8b7dbe04e3c118f1c60a550ce4e156439d0d1a0711fbc2d535f3e479f9329613"
+    },
+    {
+      "bytes": 13642,
+      "local_path": "D:\\Lzy_CV\\development\\worktrees\\sahi-next-direction-review\\docs\\research\\SAHI_NEXT_DECISION_20261017.md",
+      "relative_path": "docs/research/SAHI_NEXT_DECISION_20261017.md",
+      "repository_commit": "84005348eac8154ca148800fdb8b1f7a54fd8d46",
+      "sha256": "b6e20bc9217a4febeda56ca2df1d8bb13bf3d4d08d83bff80eaa78c1d727aa30"
+    }
+  ]
+}
