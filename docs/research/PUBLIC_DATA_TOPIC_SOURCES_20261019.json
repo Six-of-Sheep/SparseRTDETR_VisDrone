@@ -1,0 +1,139 @@
+{
+  "review_id": "public-data-topic-review-20261019-001",
+  "review_date": "2026-10-19",
+  "timestamp": "2026-10-19T22:51:47.557947+08:00",
+  "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "decision": "NO_QUALIFIED_METHOD_CANDIDATE_NO_EXPERIMENT",
+  "retained_candidates": [],
+  "dataset_families_screened": [
+    "AI-TOD(v1/v2 distinguished)",
+    "UAVDT"
+  ],
+  "conditional_preferred_dataset": "AI-TOD-v2",
+  "dataset_admission": "NOT_COMPLETE",
+  "validation_type": "separately_trained_per_dataset_if_a_method_is_later_approved",
+  "scientific_calls": 0,
+  "model_forward": 0,
+  "training_updates": 0,
+  "gpu_timing": 0,
+  "server_connections": 0,
+  "dataset_payload_downloads": 0,
+  "online_sources": [
+    {
+      "id": "AI-TOD",
+      "url": "https://github.com/jwwangchn/AI-TOD",
+      "read": "official README; v1 terms, counts, data tooling; v2 version not certified",
+      "version": null
+    },
+    {
+      "id": "AI-TOD-generator",
+      "url": "https://github.com/jwwangchn/AI-TOD/blob/master/aitodtoolkit/generate_aitod_imgs.py",
+      "read": "rendered full generation script; subimage_size800/gap200 and split lists",
+      "version": "directory last commit observed 52d8c6967356e5eb360b65de88fec1d24192a559; not asserted root HEAD"
+    },
+    {
+      "id": "UAVDT",
+      "url": "https://sites.google.com/site/daviddo0323/projects/uavdt",
+      "read": "network timeout; no authoritative fields retrieved",
+      "version": null
+    },
+    {
+      "id": "DQ-DETR-paper",
+      "url": "https://arxiv.org/html/2404.03507v6",
+      "read": "full body including methods, experiments, ablations and appendix",
+      "version": "arXiv2404.03507v6 2024-11-01"
+    },
+    {
+      "id": "DQ-DETR-code",
+      "url": "https://github.com/hoiliu-0801/DQ-DETR",
+      "read": "official README and repository organization; not implementation audit",
+      "version": "c5246797b111d7e5da9e6c20667fe0901aae35ba"
+    },
+    {
+      "id": "NWD-paper",
+      "url": "https://arxiv.org/html/2110.13389v2",
+      "read": "full methods and experiment body; not expanded journal article",
+      "version": "arXiv2110.13389v2 2022-06-14"
+    },
+    {
+      "id": "NWD-code",
+      "url": "https://github.com/jwwangchn/NWD",
+      "read": "official README; old dependencies; Apache2 code license",
+      "version": "9775ac2d24354895fbdf5b8db1f1600c01c54e33"
+    },
+    {
+      "id": "AITOD-adapter",
+      "url": "https://github.com/jwwangchn/NWD/blob/main/mmdet/datasets/aitod.py",
+      "read": "rendered full247 lines: CLASSES, proposal_nums and evaluator assignments",
+      "version": "NWD root9775ac2d24354895fbdf5b8db1f1600c01c54e33 observed; no downloaded source hash"
+    },
+    {
+      "id": "AITOD-evaluator",
+      "url": "https://github.com/jwwangchn/cocoapi-aitod/blob/master/aitodpycocotools/aitodpycocotools/cocoeval.py",
+      "read": "first120 source lines only; raw redirect timed out; final Params not reviewed",
+      "version": "44a230ae5197cb89bf9e5e62f313cac3ad30c7af"
+    },
+    {
+      "id": "NWD-expanded",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0924271622001599?dgcid=author",
+      "read": "CAPTCHA blocked; identity from author repo and DQ references, body not read",
+      "version": "ISPRS JPRS190 79-93 2022"
+    }
+  ],
+  "online_content_sha256": null,
+  "online_sha_note": "Browser reads only; no saved PDFs or complete source bytes. URLs and observed revisions are not fabricated content hashes.",
+  "local_sources": [
+    {
+      "project_relative_path": "development/worktrees/public-data-topic-review/docs/research/abc_results_20261019/MASTER.md",
+      "bytes": 15513,
+      "sha256": "1c0f9a9ffc925d39d1f45ea97c43ea984617d5ecabab652201fc895254479afe",
+      "repository_path": "docs/research/abc_results_20261019/MASTER.md",
+      "repository_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "role": "certified A/B/C summary; no recomputation",
+      "git_blob_sha256": "1c0f9a9ffc925d39d1f45ea97c43ea984617d5ecabab652201fc895254479afe",
+      "worktree_matches_git_after_CRLF_normalization": true
+    },
+    {
+      "project_relative_path": "development/worktrees/public-data-topic-review/docs/research/abc_results_20261019/CLOSED_CANDIDATES.csv",
+      "bytes": 6914,
+      "sha256": "b6fa6d6e1680b09882579e309551e3e803031e41a3527aabc1a5e06db8fd1b22",
+      "repository_path": "docs/research/abc_results_20261019/CLOSED_CANDIDATES.csv",
+      "repository_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "role": "closed recipes retained",
+      "git_blob_sha256": "b6fa6d6e1680b09882579e309551e3e803031e41a3527aabc1a5e06db8fd1b22",
+      "worktree_matches_git_after_CRLF_normalization": true
+    },
+    {
+      "project_relative_path": "workspace_management/delivery/evaluations/Q300_INITIAL_QUERY_PROJECT_DECISION_2026-10-01.md",
+      "bytes": 11636,
+      "sha256": "1043e294d86aabb24a21d4840515902e9d1b5dd35c72e3920de9afb82eccee01",
+      "repository_path": null,
+      "repository_commit": null,
+      "role": "historical Q300 closure; different protocol, not same experiment"
+    },
+    {
+      "project_relative_path": "development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/REPRODUCIBILITY_APPENDIX.md",
+      "bytes": 7983,
+      "sha256": "71c472d655d0e9b28793484ac91531644f2221ccc477218f609170f38d41a8dc",
+      "repository_path": "docs/research/paper_journal_fit_20261019/REPRODUCIBILITY_APPENDIX.md",
+      "repository_commit": null,
+      "role": "historical environment receipt summary; no live probe"
+    },
+    {
+      "project_relative_path": "development/worktrees/view-budget-review/docs/research/VIEW_BUDGET_DECISION_20261019.md",
+      "bytes": 11671,
+      "sha256": "579c86751da8a92d476b86dabafc6d2ad85dad604ee58f4a1bb2b85f49d0dd8d",
+      "repository_path": "docs/research/VIEW_BUDGET_DECISION_20261019.md",
+      "repository_commit": "adfebef2a66bcc80594b6df76f59543c3c52c9c7",
+      "role": "prior adaptive view direction closed; PR13 unmerged",
+      "git_blob_sha256": "579c86751da8a92d476b86dabafc6d2ad85dad604ee58f4a1bb2b85f49d0dd8d",
+      "worktree_matches_git_after_CRLF_normalization": true
+    }
+  ],
+  "access_limits": {
+    "bing": "saved origin permission denied; no retry/alternate search",
+    "uavdt": "network timeout",
+    "publisher": "CAPTCHA; not solved",
+    "github_raw": "network timeout; no alternate transport"
+  }
+}

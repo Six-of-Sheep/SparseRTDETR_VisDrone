@@ -22,6 +22,8 @@
 
 实验扩展到此结束。Soft-NMS、固定微调、框投票和第六中心视图均按原门槛关闭；flip仅控制不升级，不自动调参或新训练。[历史集成审查](docs/research/abc_results_20261019/PR9_REVIEW.md)提出的CI缺口已追加覆盖，见[CPU工程收尾](docs/research/PR9_CI_CLOSEOUT_20261019.md)；合并前核对最终head的CI，PR #9未自动合并。
 
+[公开数据条件选题审查](docs/research/PUBLIC_DATA_TOPIC_DECISION_20261019.md)：单次整图推理范围下，条件首选AI-TOD-v2但正式数据准入未闭合；NWD匹配移植和计数引导query两方向均缺实质增量，本轮不立项、不安排训练或评分。原C及旧关闭裁决保持。
+
 ## 代码地图
 
 | 位置 | 责任 |
