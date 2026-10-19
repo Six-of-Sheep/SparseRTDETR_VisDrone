@@ -40,3 +40,10 @@ jobs:
           MKL_NUM_THREADS: '1'
           OPENBLAS_NUM_THREADS: '1'
         run: python -B -m unittest discover -s tests -p test_two_of_four.py -v
+      - name: Fixed P12 continuation and conditional timing gate
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          OMP_NUM_THREADS: '1'
+          MKL_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+        run: python -B -m unittest discover -s tests -p test_p12.py -v
