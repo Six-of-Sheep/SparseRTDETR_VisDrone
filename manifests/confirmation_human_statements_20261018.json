@@ -1,0 +1,38 @@
+{
+  "schema": "confirmation-human-history-statements-v1",
+  "received_date": "2026-10-18",
+  "source": "direct user message in current chat",
+  "source_statement": "三项历史问题我均无法确认，请全部记录为“用户无法确认”，不要写成“未使用”。",
+  "evidence_kind": "human inability to confirm; not complete machine audit",
+  "items": [
+    {
+      "id": 1,
+      "question": "T6H-R8/2026-09-11 C1/C2决策后是否手工评价、导出或实际实施V3",
+      "user_response": "用户无法确认",
+      "classification": "无法确认项",
+      "machine_verification": "not established",
+      "usage_verdict": "unknown"
+    },
+    {
+      "id": 2,
+      "question": "2026-08-09封存前P1/P2或早期P3是否用未来1602成员进行模型评价、可视化分析或决策",
+      "user_response": "用户无法确认",
+      "classification": "无法确认项",
+      "machine_verification": "not established",
+      "usage_verdict": "unknown"
+    },
+    {
+      "id": 3,
+      "question": "封存后是否存在非标准入口、旧别名或异机副本使用",
+      "user_response": "用户无法确认",
+      "classification": "无法确认项",
+      "machine_verification": "not established",
+      "usage_verdict": "unknown"
+    }
+  ],
+  "confirmed_fact": "用户明确表示三项均无法确认；仅此陈述被本对话证实",
+  "specific_historical_recollections_provided": [],
+  "historical_usage_status": "STILL_UNVERIFIABLE",
+  "independent_qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
+  "historical_search_status": "ENDED_NO_EXPANSION"
+}

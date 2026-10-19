@@ -1,0 +1,104 @@
+{
+  "schema": "original-C-independent-confirmation-plan-v1",
+  "task_id": "sahi-independent-confirmation-20261018-001",
+  "qualification_status": "BLOCKED_PENDING_ACCESS_HISTORY",
+  "eligible_confirmation_set": null,
+  "only_existing_candidate": {
+    "protocol": "P3-VISDRONE-DATA-PROTOCOL-V2",
+    "conversion": "visdrone_protocol_v2_conversion_r3",
+    "images": 1602,
+    "sequence_groups": 57,
+    "split_plan_sha256": "6e7c029cfc707f3eb28cd71496a39e3581aac266b85e827011d056d2cce9966f",
+    "selected_group_list_sha256": "e9cf6a07cd55f23185d9156b391dd2a1a9e65a026c4edfb68d0e3b5cc1c47de4",
+    "sealed_manifest_sha256_reference_only": "1af7eb4248be3097122d2168e18519c8db3ac11e17faff46aca8e3d78e5cfef4",
+    "sealed_manifest_bytes_reference_only": 972181
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "endpoint": "own_original_e120_EMA",
+  "checkpoint_sha256": [
+    "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+    "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+    "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058"
+  ],
+  "arms": [
+    "A",
+    "B",
+    "C"
+  ],
+  "canvas": [
+    768,
+    1344
+  ],
+  "batch_size": 4,
+  "partial_last_batch": "no_drop_no_pad_no_repeat",
+  "precision": "FP32",
+  "views": {
+    "A": [
+      0
+    ],
+    "B": [
+      0
+    ],
+    "C": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "geometry_and_merge": "byte-identical slice_core.py from origin/main cd3b8b788df3852070695db10edd199b1d412eda",
+  "per_view_top": 600,
+  "final_budgets": [
+    600,
+    300
+  ],
+  "nms": {
+    "A": false,
+    "B": true,
+    "C": true,
+    "iou": 0.5,
+    "suppression": "strictly_greater",
+    "class_aware": true
+  },
+  "raw_ignore": "original raster; truncate budget first; no refill; no clipping",
+  "comparisons": [
+    "C-A",
+    "B-A",
+    "C-B"
+  ],
+  "primary": "top600 COCO_bridge AP and APS",
+  "C_minus_A_minimum_pp": {
+    "600_AP": 0.3,
+    "600_APS": 0.5,
+    "600_AP75_small": -0.2,
+    "600_APM": -0.5,
+    "600_APL": -0.5,
+    "300_AP": -0.2,
+    "300_APS": -0.2
+  },
+  "decision": "all seven per seed and C/A<=6 per seed; all three seeds mandatory; scientific failure does not cancel remaining seeds; engineering anomaly STOP",
+  "undefined_metric": "not evaluable, never convert -1 to zero or PASS",
+  "statistics": "paired endpoint deltas for each seed; arithmetic mean, sample SD ddof=1, worst delta; no bootstrap, p value, CI or subgroup search",
+  "official_metrics": "original official-style evaluator separately; its pp units are not multiplied by 100 again",
+  "cost": "same hardware and own fixed development64, independent A/B/C processes, batch4, two original-batch warmups per arm, all real views/preprocessing/mapping/NMS included; C/A<=6",
+  "scientific_dual_evaluator_groups": 18,
+  "individual_evaluator_calls": 36,
+  "planned_forward_batches_if_1602_qualified": {
+    "cost64_each_seed": 126,
+    "full_five_view_each_seed_with_two_warmups": 2015,
+    "all_three_seeds": 6423
+  },
+  "this_round": {
+    "GPU": false,
+    "model_construction": false,
+    "scientific_scoring": false,
+    "training": false,
+    "sealed_payload_access": false
+  },
+  "final_execution_authorized": false
+}

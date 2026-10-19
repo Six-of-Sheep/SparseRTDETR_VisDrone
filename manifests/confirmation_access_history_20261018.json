@@ -1,0 +1,388 @@
+{
+  "schema": 1,
+  "experiment": "sahi-independent-confirmation-20261018-001",
+  "audit": "access-history-001",
+  "verdict": "STILL_UNVERIFIABLE",
+  "qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
+  "qualified_set": null,
+  "manifest_sha256": "1af7eb4248be3097122d2168e18519c8db3ac11e17faff46aca8e3d78e5cfef4",
+  "recorded_generation_window_utc": {
+    "elapsed_seconds": 16.617547273635864,
+    "finished_at_utc": "2026-08-09T04:14:52.962341+00:00",
+    "schema_version": 2,
+    "started_at_utc": "2026-08-09T04:14:36.344828+00:00"
+  },
+  "report": "docs/research/ORIGINAL_C_CONFIRMATION_ACCESS_HISTORY_20261018.md",
+  "delivery_report": "sahi-independent-confirmation-20261018-001/access-history-001/REPORT.md",
+  "evidence": [
+    {
+      "id": "E01",
+      "classification": "ACTUAL_CONVERSION_USE",
+      "time_coverage": "2026-08-09T04:14:36.344828Z .. 04:14:52.962341Z",
+      "finding": "Process completed train,val conversion. Timing/invocation inventory hashes verified; completion binds artifact_inventory and exact sealed-manifest reference. Local time 12:14:36..12:14:52 +08.",
+      "limitation": "Recorded process wallclock, not externally signed time or continuous access log. Creation parsed labels for split planning; not model evaluation.",
+      "sources": [
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/reorganized-20261015-001/history/from-main-artifacts/process_evidence/visdrone_protocol_v2_conversion_r3/process_timing.json",
+          "bytes": 162,
+          "sha256": "87e938ef68046aba8e098956f4e48c85d9a1ca31c340ea98d4af1277eba537e9"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/reorganized-20261015-001/history/from-main-artifacts/process_evidence/visdrone_protocol_v2_conversion_r3/process_completion.json",
+          "bytes": 2833,
+          "sha256": "553e60a525a10e851dc27ca3c808b420566e8a26283fea4fab2320d823fccfba"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone/artifacts/data/visdrone_protocol_v2_conversion_r3/artifact_inventory.json",
+          "bytes": 3449,
+          "sha256": "aaee01ce4e00749b9db8ac5e6e49cf35875a8b266e9c3efc237bdf0b8b109ae7"
+        }
+      ]
+    },
+    {
+      "id": "E02",
+      "classification": "PROCESS_SCOPED_DECLARATION",
+      "time_coverage": "Conversion process only, 2026-08-09",
+      "finding": "confirmatory_metrics_accessed=false and dataset_test_accessed_by_this_process=false in invocation/completion.",
+      "limitation": "Self-report applies to this conversion only; not lifetime non-use. Existing flags were not changed.",
+      "sources": [
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/reorganized-20261015-001/history/from-main-artifacts/process_evidence/visdrone_protocol_v2_conversion_r3/process_completion.json",
+          "bytes": 2833,
+          "sha256": "553e60a525a10e851dc27ca3c808b420566e8a26283fea4fab2320d823fccfba"
+        }
+      ]
+    },
+    {
+      "id": "E03",
+      "classification": "PATH_PROVENANCE",
+      "time_coverage": "2026-09-30 and 2026-10-15 mapping snapshots",
+      "finding": "Sealed data directory remains at main artifacts/data. Original artifacts/process_evidence moved to archive/reorganized-20261015-001/history/from-main-artifacts/process_evidence; receipt located through exact map.",
+      "limitation": "Moves prove path continuity, not access history. Old contracts/logs unchanged.",
+      "sources": [
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/infrastructure/maintenance/2026-09-30/migration/locations.json",
+          "bytes": 13962,
+          "sha256": "57b56f03d18baa7618bee7c59a00ed1bebcb3bb6342cd60778f71ff4728e08d0"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/infrastructure/maintenance/2026-09-30/migration/plan.json",
+          "bytes": 299719,
+          "sha256": "445f29a8bc8779961d546f03a2cce87c979d7f7f03f3ecd223e32e295dc3452e"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/infrastructure/maintenance/2026-10-15/repo-experiment-reorg-001/PATH_MAP.json",
+          "bytes": 38092,
+          "sha256": "ff145b8c8858aca13e2e2380e65fe90b6bab7b3761bb943889d1bc36fe9fcd0e"
+        }
+      ]
+    },
+    {
+      "id": "E04",
+      "classification": "REGISTRY_METADATA",
+      "time_coverage": "Historical snapshots through September/October 2026; observed 2026-10-18",
+      "finding": "Old registry has 7 baseline entries, not a lifetime task ledger. Evaluation registry identifies development548; reserved test-dev label is not SHA-joined to the train-derived1602 set.",
+      "limitation": "Dataset labels and image counts cannot establish identical membership. Registry incompleteness permits no lifetime-negative claim.",
+      "sources": [
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/registry/README.md",
+          "bytes": 2790,
+          "sha256": "2dc8f1b7922f8eacf78f7846ff763974cd8751867e83d8119078ccc7eed12907"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/registry/evaluations.json",
+          "bytes": 338703,
+          "sha256": "2e362c2cd6742fa73971a758514da9c4f486c1d7656f7a35a57663b658ddc0f8"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/registry/experiments.json",
+          "bytes": 15825,
+          "sha256": "1c13c4ce1bd81ac8b91181e21663d2d138f9ebb77aa9901d31ed6ebb3d3224ac"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/registry/protocol_corrections.json",
+          "bytes": 300,
+          "sha256": "6e7388fa0585e17adcf1f360fa6ace6d2bc1b9bd39023a3e95eb07c7f24010d7"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/registry/protocols.json",
+          "bytes": 926,
+          "sha256": "27babf7bcb8f475c731a42bdc98f89adae4866e2a9144f2f8c08602c761dc476"
+        }
+      ]
+    },
+    {
+      "id": "E05",
+      "classification": "ACTUAL_OTHER_DATA_REFERENCES",
+      "time_coverage": "C2 and September25..27 smoke metadata; inspected snapshot 2026-10-18",
+      "finding": "conversion_r3 references found in C2 bindings and old smoke run-binding metadata; included fields identify train_core/development paths, not a sealed-set completed evaluation.",
+      "limitation": "Referencing a directory holding train/dev/sealed siblings is not proof of using each sibling; off-entry execution unknown.",
+      "sources": [
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/binding-B0.json",
+          "bytes": 344706,
+          "sha256": "319cf33a38b8f8b4b6d4021dc8716d76734726bd189d36dfe946112ee3e8d71a"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/binding-B1.json",
+          "bytes": 344706,
+          "sha256": "4da85c758dcd94fb293d14592cc1566a80a9d630171a1578bd8e4bd5fb2652d2"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/pre-gpu-r1/binding-B0.json",
+          "bytes": 344706,
+          "sha256": "cc9039ae4963aba378f9df45c3898ab0d6f1d47fe10e1cdef5b1d01eeacf5119"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/pre-gpu-r1/binding-B1.json",
+          "bytes": 344706,
+          "sha256": "8664d6fa7a30561be6fb68a17d283bad67a8d1449d51f42067d10abd3149d3d9"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/repair-attempt-001/binding-B0.json",
+          "bytes": 345402,
+          "sha256": "622dac13880064fe979716dc4ea01837f254ff69d3114ed6dd87ace2db1e2501"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/repair-attempt-001/binding-B1.json",
+          "bytes": 345402,
+          "sha256": "759137fffe1c4e377eb86a053472411cd92daf29dcd86c4fe651c2ea35aed1f2"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/repair-attempt-001/recovery-attempt-001/dev-002/binding-B1.json",
+          "bytes": 344558,
+          "sha256": "db741c50d615e761f04702951117e5518e574ea4b38f8fa002dd417dd4338ae9"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/repair-attempt-001/recovery-attempt-001/dev-002/binding-before-cpu-002.json",
+          "bytes": 343964,
+          "sha256": "42ea436b10bcead666c258cbc311100736db2b8a0fbc03de49d12d5a521d91de"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/c2-local-refinement/formal/repair-attempt-001/recovery-attempt-001/dev-002/cpu-engineering-001-source/binding-B1.json",
+          "bytes": 343964,
+          "sha256": "42ea436b10bcead666c258cbc311100736db2b8a0fbc03de49d12d5a521d91de"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/legacy-sites/from-liuzhiyang/a3-r1024-s0-smoke-20260925-0818/run-binding.json",
+          "bytes": 225036,
+          "sha256": "950a0093c772d721dcff3bb23d927e9b08a9b60e475d33beae2dfba122cf1996"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/legacy-sites/from-liuzhiyang/a3-r1024-s1-smoke-20260925-1811/run-binding.json",
+          "bytes": 225344,
+          "sha256": "4ae23732c566d5beafd1dad2fd355e1a098120ca13196081ff216334e4165acf"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/legacy-sites/from-liuzhiyang/a3b-r768x1344-s0-smoke-20260926-0911/run-binding.json",
+          "bytes": 224449,
+          "sha256": "781a7befa726a92007f59afc8e6ccad7d4486a106cd48c672736260f3e0a7872"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/legacy-sites/from-liuzhiyang/a3b-r768x1344-s1-smoke-20260927-1645/run-binding.json",
+          "bytes": 224757,
+          "sha256": "cb7204e863b701968833ae1cd7b561ed6263bac6bf7e4bc84c237431256fb2d3"
+        },
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/legacy-sites/from-liuzhiyang/t1sq-r768x1344-s0-smoke-20260927-2110/run-binding.json",
+          "bytes": 224383,
+          "sha256": "03865cce0978da81b18368b42120b516339aa1e52894ae208b5ba14c0128d32a"
+        }
+      ]
+    },
+    {
+      "id": "E06",
+      "classification": "AUTHORIZATION_PROHIBITED",
+      "time_coverage": "R0 October10 and three-seed training contracts (original qualification references)",
+      "finding": "R0 evaluator policy forbids confirmatory/test; current three checkpoint contracts bind train_core4869 and holdout_authorized=false.",
+      "limitation": "Prohibition and actual training-membership evidence do not audit all historical evaluations or decisions.",
+      "sources": [
+        {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r0-seed0-e120-20261010-001/EVALUATOR_BINDING.json",
+          "bytes": 9549,
+          "sha256": "53bfa624b854492993b1112f7a6567d5edbe00cc4052d058b065f2a0e413c95b"
+        },
+        {
+          "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\DATA_QUALIFICATION.json",
+          "bytes": 12172,
+          "sha256": "4d92f48a8fd210adfda0a3517b28dfad8894f52dc5722ba95b074b37f0819ea9"
+        }
+      ]
+    },
+    {
+      "id": "E07",
+      "classification": "DECISION_REPORT_ASSERTION",
+      "time_coverage": "2026-09-11 report and 2026-09-19 review",
+      "finding": "T6H-R8 report asserts no test/confirmatory access. Decision records distinguish desired647 vs actual1602 and discuss keep/replan alternatives; these are not evaluation receipts.",
+      "limitation": "A proposal does not prove the alternative was executed; report assertions are not complete machine audit.",
+      "sources": [
+        {
+          "path": "D:\\Lzy_CV\\P3_BASELINE_V2_DECISION.md",
+          "bytes": 5598,
+          "sha256": "ee159d3e76582c0accc9b08fbccd5ff8cef965875ca3f30fb832d0c036723a40"
+        },
+        {
+          "path": "D:\\Lzy_CV\\P3_REVIEW_claude_2026-09-19.md",
+          "bytes": 39054,
+          "sha256": "8342e05bd78802b7bbbd2a62ba6caaf82005f72a85968636ccb719c5053873b2"
+        }
+      ]
+    },
+    {
+      "id": "E08",
+      "classification": "NO_MATCH_FOUND_IN_SCOPE",
+      "time_coverage": "Audit snapshot 2026-10-18; intended history from creation to audit",
+      "finding": "Within included small metadata files, exact sealed SHA appears in 0 remote and 2 local files (current preparation references). No completed prediction/evaluation/selection task was positively linked to this exact set.",
+      "limitation": "Excluded files, manual scripts, deletions, historical machines/clouds and unregistered jobs are not ruled out. This is scoped absence, not never-used.",
+      "sources": [
+        {
+          "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\access-history-001\\REMOTE_METADATA.jsonl",
+          "bytes": 1445227,
+          "sha256": "e87bc57c8637b8ff254ecacd79f4bd028aa4f194e691a4bee03fe025d2cb1251"
+        },
+        {
+          "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\access-history-001\\LOCAL_METADATA.jsonl",
+          "bytes": 731830,
+          "sha256": "bc8347f7cf9409b53775e711a1369dc0fc491a8d0efbe4b8bee161239f2c0e3e"
+        }
+      ]
+    },
+    {
+      "id": "E09",
+      "classification": "STATIC_GUARD_NOT_HISTORICAL_REFUSAL",
+      "time_coverage": "Relevant Git changes August8..16; preparation CPU October18",
+      "finding": "schema rejects test paths but supports confirmatory parsing for conversion. Preparation contract rejects authorized sealed access. No exact1602 historical attempted-entry refusal receipt identified.",
+      "limitation": "Code or present CPU refusal does not establish that all historical entry points refused or that no bypass occurred.",
+      "sources": [
+        {
+          "path": "D:\\Lzy_CV\\development\\worktrees\\sahi-independent-confirmation\\src\\sparse_rtdetr\\data_protocol\\schema.py",
+          "bytes": 2680,
+          "sha256": "c6b544784ffa5d4929d76846e0c93ed22f437e4f8d8fb09f8af20ab4c2e36815"
+        },
+        {
+          "path": "D:\\Lzy_CV\\development\\worktrees\\sahi-independent-confirmation\\confirmation_prepare.py",
+          "bytes": 16223,
+          "sha256": "4b70f1687a76b94be6fbaada42ccbb216b97d25cfad584331afabe2402de1cf1"
+        },
+        {
+          "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\CPU_REPORT.md",
+          "bytes": 1858,
+          "sha256": "21afd6bcc860b43b26a063308d6361e456dd37d38d688fc6dedafbd752a20e3a"
+        }
+      ]
+    },
+    {
+      "id": "E10",
+      "classification": "GIT_SOURCE_HISTORY",
+      "time_coverage": "All reachable refs in old server repository; history entries dated August2026; observed October18",
+      "finding": "Protocol freeze, converter, V2 planner, completion validator and conversion_r3 runtime binding commits located. Server old repository HEAD30b176d8ba274a184ede356802688d8c36834fec differs from current GitHub main.",
+      "limitation": "Git records tracked source changes, not every execution; author dates are not sealing dates. Uncommitted/deleted/off-host execution is not covered.",
+      "sources": [
+        {
+          "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\access-history-001\\FINAL_TARGETED.jsonl",
+          "bytes": 13086,
+          "sha256": "e4b6ede98a7a5849d95088fe7d3ce169568dec9684fc63e93d379a6bad98d473"
+        }
+      ]
+    },
+    {
+      "id": "E11",
+      "classification": "EVALUATION_ARTIFACT_EXISTENCE_ONLY",
+      "time_coverage": "Registry/index snapshots observed 2026-10-18",
+      "finding": "Evaluation artifacts and prediction/result path references exist for registered historical/development work. Recorded references were stat-checked only; no candidate1602 metric payload opened.",
+      "limitation": "Some old paths are absent after moves; index existence/status does not establish exact sealed membership. No all-output tree scan performed.",
+      "sources": [
+        {
+          "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\access-history-001\\INDEX_AND_LINKS.jsonl",
+          "bytes": 226753,
+          "sha256": "6a2edd54a398bfcf26b8d7147be8371798ddc42205fcd87c3dc49bb12fa7c002"
+        }
+      ]
+    }
+  ],
+  "aliases": [
+    {
+      "name": "P3-VISDRONE-DATA-PROTOCOL-V2 / conversion_r3 / confirmatory_sealed_manifest.json",
+      "relation": "SHA_BOUND",
+      "manifest_sha256": "1af7eb4248be3097122d2168e18519c8db3ac11e17faff46aca8e3d78e5cfef4",
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_VisDrone/artifacts/data/visdrone_protocol_v2_conversion_r3/confirmatory_sealed_manifest.json",
+      "payload_opened": false
+    },
+    {
+      "name": "1602 images /57 sequence groups; P3-confirmatory-v1 salt",
+      "relation": "SPLIT_PLAN_BOUND_DESCRIPTION",
+      "source": "Original qualification and protocol config; sizes alone are not identity"
+    },
+    {
+      "name": "647 confirmatory / holdout target",
+      "relation": "PLANNER_TARGET_NOT_ACTUAL_SIZE",
+      "source": "P3_BASELINE_V2_DECISION.md; must join conversion_r3 identity, not assert another647 set"
+    },
+    {
+      "name": "confirmatory / sealed / holdout",
+      "relation": "GENERIC_SEARCH_ALIASES_ONLY",
+      "source": "Only exact manifest or verified binding can establish identity"
+    },
+    {
+      "name": "VisDrone2019-DET-test-dev /1610 / RESERVED_CONFIRMATORY",
+      "relation": "NOT_ESTABLISHED_SAME_SET",
+      "source": "registry metadata; raw split provenance differs, membership join unavailable"
+    },
+    {
+      "name": "protocol V1 / conversion_r1",
+      "relation": "DISTINCT_FAILED_PREDECESSOR_NOT_SUBSTITUTE",
+      "source": "Planner history; no same-manifest proof"
+    },
+    {
+      "name": "old artifacts/process_evidence/visdrone_protocol_v2_conversion_r3",
+      "relation": "EXACT_MIGRATED_RECEIPT_PATH",
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/archive/reorganized-20261015-001/history/from-main-artifacts/process_evidence/visdrone_protocol_v2_conversion_r3",
+      "source_map_sha256": "ff145b8c8858aca13e2e2380e65fe90b6bab7b3761bb943889d1bc36fe9fcd0e"
+    }
+  ],
+  "preserved_preparation": [
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\DATA_QUALIFICATION.md",
+      "bytes": 1911,
+      "sha256": "88cd865e7f8ec2e06fcf3d38a61c897eb070de02ae689d32322a184ee694d13d"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\DATA_QUALIFICATION.json",
+      "bytes": 12172,
+      "sha256": "4d92f48a8fd210adfda0a3517b28dfad8894f52dc5722ba95b074b37f0819ea9"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\PLAN.md",
+      "bytes": 6941,
+      "sha256": "f20b5cbfaec5e6536d4b119308affb74132e80ece0ae37a2c55de5744ea030bb"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\PLAN.json",
+      "bytes": 3317,
+      "sha256": "a2528da1ebba664c6471f739cc1e80b94cdef7a70bf451376bf69ccbf30b29f6"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\CPU_REPORT.md",
+      "bytes": 1858,
+      "sha256": "21afd6bcc860b43b26a063308d6361e456dd37d38d688fc6dedafbd752a20e3a"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\REPORT.md",
+      "bytes": 2291,
+      "sha256": "223bc4f37927ed885c4fc7bddcf7f29f93ee305fc6777c023668015d4859b2f8"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\UNSEAL_SCOPE.md",
+      "bytes": 1688,
+      "sha256": "a87c39c03347e70e410eaf3c0466c45895644073bdfedd61c0251f8f6e5aaae8"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-independent-confirmation-20261018-001\\VERSION_LINKAGE.json",
+      "bytes": 1474,
+      "sha256": "086cc6e743cfa43f0e8a1f3cdee5e12d405442eecb91bc2d31e8b0b3a17a68b2"
+    }
+  ],
+  "runtime_source_commit_unchanged": "0382a62593dc8ebc33336703bdf04d14ba3ad4de",
+  "runtime_manifest_sha256_unchanged": "1bfe5df04e3c25063efb177f6a5f340a4d13065dbb99a4f8342b526a7b8622e4",
+  "no_unseal_no_new_execution": true
+}

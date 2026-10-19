@@ -32,4 +32,4 @@ git archive --format=tar --output=../run-metadata/example-seed0/source.tar <回�
 
 check --staged读取真实暂存字节，拒绝产物、凭据形态、机器目录、超2MiB文件及未审查链接；它不是完整秘密审计。确需大源码文件时先明确审查例外。
 
-CI只运行管理测试、切片CPU测试、汇总CPU测试与历史源码身份核验。它不训练、不连接服务器，也不能替代GPU验收。
+CI运行管理、切片、汇总CPU测试与历史源码身份核验，并在Python 3.10/3.12中执行确认集入口、补充用途协议及零面积GT生产接口回归。后者通过`python -B tools/check_confirmation_ci.py`运行，任何skip均判失败；CPU-only依赖固定于`environment/requirements-confirmation-ci.txt`。测试只用仓库内的小型夹具，不读取实验室路径、封存材料或checkpoint，不评分完整数据集，不训练、不连接服务器，也不能替代GPU验收。

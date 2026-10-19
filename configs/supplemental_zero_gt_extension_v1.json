@@ -1,0 +1,41 @@
+{
+  "protocol": "supplemental-zero-gt-input-extension-v1",
+  "task_id": "sahi-original-c-supplemental-20261018-001",
+  "manifest_sha256": "1af7eb4248be3097122d2168e18519c8db3ac11e17faff46aca8e3d78e5cfef4",
+  "official_commit": "005445782213e20cb91bc50a597db3dd949e749a",
+  "raw_rows_unchanged": true,
+  "prediction_positive_geometry": true,
+  "independent_qualification": "BLOCKED_PENDING_ACCESS_HISTORY",
+  "allowed_rows": [
+    {
+      "file": "9999985_00000_d_0000020.txt",
+      "image_id": "ed0c75ca472b4571f42ee5d0ac61e8681a81dcdf6d9daf3307d334cfb01c6546",
+      "file_sha256": "999d84a9fcc6632645ffb9b2eca416f4e2d08a966d811d24277960e593f8c814",
+      "physical_line": 12,
+      "raw_line_sha256": "620332c35ca9ce25489b90f61cd656bbcc26181d7f07aec513f63a8b12932a1e",
+      "box": [
+        611.0,
+        158.0,
+        615.0,
+        158.0
+      ],
+      "category": 4,
+      "score": 1.0
+    },
+    {
+      "file": "9999999_00590_d_0000267.txt",
+      "image_id": "4b1f0ecb0197dbc9575118fc6947383202dde95f62dde6ef750c9ff59ed8a62c",
+      "file_sha256": "ccdc1ba4f8b821ef06539696767d1270876d0781c3db07d68eea7235e5c95155",
+      "physical_line": 89,
+      "raw_line_sha256": "ceb68c4451e61767b24758e1f2bc9a4c5f6167bec0729d492de83b8a7246efe0",
+      "box": [
+        545.0,
+        414.0,
+        555.0,
+        414.0
+      ],
+      "category": 0,
+      "score": 0.0
+    }
+  ]
+}

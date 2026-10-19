@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "source_sha256": "8fb15f6d0580b0351ff36c6fb1e269ba4a3884f596f5d7426542dad0611d1f5c",
+  "absolute_rows": 36,
+  "paired_rows": 36,
+  "absolute_stat_rows": 156,
+  "paired_stat_rows": 156,
+  "gates": 42,
+  "all_gates_passed": true,
+  "cost_measurements": 18,
+  "closed_candidate_rows": 36,
+  "new_model_AP_calls": 0,
+  "no_pooled_AP": true,
+  "unit_conversion": "COCO0..1 to percent/pp once; official pp unchanged",
+  "SD": "sample ddof1 over seed, not CI",
+  "forbidden_imports": "no model/evaluator/torch imports"
+}

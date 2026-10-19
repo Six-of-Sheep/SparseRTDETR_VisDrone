@@ -1,0 +1,2710 @@
+{
+  "schema": "abc-frozen-scalar-results-v1",
+  "new_model_calls": 0,
+  "new_AP_calls": 0,
+  "no_pooled_AP": true,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "records": [
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 0,
+      "arm": "A",
+      "budget": 600,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.2978928000787488,
+        "AP50": 0.5033924745103661,
+        "AP75": 0.2989492964371395,
+        "APS": 0.2217618575337924,
+        "APM": 0.39344481665007297,
+        "APL": 0.4725232045664882,
+        "AR1": 0.1187805989752579,
+        "AR10": 0.34972840341290606,
+        "AR100": 0.49477973421872634,
+        "AR_small": 0.42366550582722723,
+        "AR_medium": 0.5993107911143665,
+        "AR_large": 0.6955791078992871,
+        "AP75_small": 0.19968104528445318
+      },
+      "official_pp": {
+        "AP": 30.509493574054822,
+        "AP50": 53.40903995883986,
+        "AP75": 29.64720785202921,
+        "AR1": 0.7133354758942648,
+        "AR10": 6.731470278707097,
+        "AR100": 36.741185916088504,
+        "AR500": 49.39540571298638
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/evaluation/top600-metrics.json",
+        "sha256": "86be4fcc1478442bd4bb6f3b6e5b0c421e29f854e6977c54ba906814e79dfc7e",
+        "bytes": 91375
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 0,
+      "arm": "A",
+      "budget": 300,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.29347668234713176,
+        "AP50": 0.4929628974488825,
+        "AP75": 0.2952200358559255,
+        "APS": 0.2177929184225555,
+        "APM": 0.3883243218218308,
+        "APL": 0.4686511018043208,
+        "AR1": 0.1176752845744647,
+        "AR10": 0.3387727813438179,
+        "AR100": 0.4537076028732705,
+        "AR_small": 0.3792010783896155,
+        "AR_medium": 0.5597742721623722,
+        "AR_large": 0.6735700339473578,
+        "AP75_small": 0.19712874220974094
+      },
+      "official_pp": {
+        "AP": 30.098744056110995,
+        "AP50": 52.4424139877873,
+        "AP75": 29.340262349979103,
+        "AR1": 0.7133354758942648,
+        "AR10": 6.731470278707097,
+        "AR100": 36.7394029580717,
+        "AR500": 45.937088926344956
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/evaluation/top300-metrics.json",
+        "sha256": "5a829d1ed3c68022053605ab5f143d3dd988eb277960918b898ffcaacd7e3129",
+        "bytes": 91341
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 0,
+      "arm": "B",
+      "budget": 600,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.3012178122056181,
+        "AP50": 0.5178901249035128,
+        "AP75": 0.2977282182283944,
+        "APS": 0.22444626408090676,
+        "APM": 0.39617438689418594,
+        "APL": 0.4831888448340962,
+        "AR1": 0.1187805989752579,
+        "AR10": 0.3521224647006316,
+        "AR100": 0.4712077534917663,
+        "AR_small": 0.3999308706269676,
+        "AR_medium": 0.571847942897111,
+        "AR_large": 0.6421856568105548,
+        "AP75_small": 0.1973657621741616
+      },
+      "official_pp": {
+        "AP": 30.725385738051703,
+        "AP50": 54.82442751008691,
+        "AP75": 29.337029270696483,
+        "AR1": 0.7133354758942648,
+        "AR10": 6.751724423172743,
+        "AR100": 37.33077760760553,
+        "AR500": 46.903408095325915
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/evaluation/B-top600-metrics.json",
+        "sha256": "c86a4b94fea430750e61657c6edf92cb1abf85b4a751f93a5844e01f72f96bb2",
+        "bytes": 92053
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 0,
+      "arm": "B",
+      "budget": 300,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.2994821948930536,
+        "AP50": 0.5138884099209575,
+        "AP75": 0.2968200006628346,
+        "APS": 0.22283824787233064,
+        "APM": 0.39436161155676325,
+        "APL": 0.480049062505993,
+        "AR1": 0.11869222042499189,
+        "AR10": 0.3482986911606265,
+        "AR100": 0.45533683306288064,
+        "AR_small": 0.38160878691993316,
+        "AR_medium": 0.5573648130111991,
+        "AR_large": 0.6318886631379432,
+        "AP75_small": 0.1968102363665165
+      },
+      "official_pp": {
+        "AP": 30.567932627145336,
+        "AP50": 54.38363185235222,
+        "AP75": 29.253157277643243,
+        "AR1": 0.7133354758942648,
+        "AR10": 6.751724423172743,
+        "AR100": 37.32933181435009,
+        "AR500": 45.550212326381214
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/evaluation/B-top300-metrics.json",
+        "sha256": "459b8489ae81f43d05e677ee462b5161f290ecc8baff4fe28ddc7c9b5dbd9537",
+        "bytes": 92075
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 0,
+      "arm": "C",
+      "budget": 600,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.3176440868605858,
+        "AP50": 0.5451926607374065,
+        "AP75": 0.3151621887947333,
+        "APS": 0.24969142734267535,
+        "APM": 0.40272958764317973,
+        "APL": 0.4787627091296827,
+        "AR1": 0.12246524890635689,
+        "AR10": 0.3674849219057891,
+        "AR100": 0.5080029034676183,
+        "AR_small": 0.447476039394861,
+        "AR_medium": 0.5927454211963082,
+        "AR_large": 0.6594314706815397,
+        "AP75_small": 0.2243388164829216
+      },
+      "official_pp": {
+        "AP": 32.685550393735866,
+        "AP50": 57.947868513773955,
+        "AP75": 31.31978584965202,
+        "AR1": 0.7450953753922951,
+        "AR10": 6.873898122500874,
+        "AR100": 38.61305566481478,
+        "AR500": 50.62068065197075
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/evaluation/C-top600-metrics.json",
+        "sha256": "b1987e2832f01bb222e0c11e6727299f90c5460ff9cc000d4c432ae0790b0bfe",
+        "bytes": 91955
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 0,
+      "arm": "C",
+      "budget": 300,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.31344750888463196,
+        "AP50": 0.5339353709105054,
+        "AP75": 0.31228336957231256,
+        "APS": 0.24519007152654534,
+        "APM": 0.3985206239190359,
+        "APL": 0.47640325735651673,
+        "AR1": 0.12171486706277554,
+        "AR10": 0.35845336810696315,
+        "AR100": 0.4747933373105468,
+        "AR_small": 0.40830883940628865,
+        "AR_medium": 0.5654051028092979,
+        "AR_large": 0.646924494387915,
+        "AP75_small": 0.2215927472559177
+      },
+      "official_pp": {
+        "AP": 32.275331380495885,
+        "AP50": 56.822998631388884,
+        "AP75": 31.11046477294749,
+        "AR1": 0.7450953753922951,
+        "AR10": 6.873898122500874,
+        "AR100": 38.612365709545315,
+        "AR500": 47.814699466147886
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/evaluation/C-top300-metrics.json",
+        "sha256": "0fbbac0400874eaf4714d3211eda30c172a1b70c84a170bedf92f20fb7fa2efe",
+        "bytes": 91923
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 1,
+      "arm": "A",
+      "budget": 600,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.29941228981126405,
+        "AP50": 0.5077072944663034,
+        "AP75": 0.29807953103921336,
+        "APS": 0.2241661473819683,
+        "APM": 0.396374944610352,
+        "APL": 0.43677373329731317,
+        "AR1": 0.11649837608718962,
+        "AR10": 0.35125463129912626,
+        "AR100": 0.49379650319401414,
+        "AR_small": 0.4244935911479119,
+        "AR_medium": 0.5968371201554294,
+        "AR_large": 0.655914564351558,
+        "AP75_small": 0.1988767770566628
+      },
+      "official_pp": {
+        "AP": 30.72527630887082,
+        "AP50": 53.86827010159403,
+        "AP75": 29.672145141552775,
+        "AR1": 0.732944449194013,
+        "AR10": 6.875703570741098,
+        "AR100": 36.739018582214975,
+        "AR500": 49.33444964066557
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/evaluation/A-top600-metrics.json",
+        "sha256": "9f54db25849086de4b6701fe483d4cbf08acc4bd3e04cbad5f0d12ca1dd1e1f4",
+        "bytes": 92175
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 1,
+      "arm": "A",
+      "budget": 300,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.2955665466574945,
+        "AP50": 0.4990221656885471,
+        "AP75": 0.29489786324636796,
+        "APS": 0.22023617305788376,
+        "APM": 0.3922486229706566,
+        "APL": 0.43445226760659056,
+        "AR1": 0.11610743963908439,
+        "AR10": 0.3410032312992846,
+        "AR100": 0.4544531117509961,
+        "AR_small": 0.3788945764838072,
+        "AR_medium": 0.5625998125344798,
+        "AR_large": 0.6211100003764394,
+        "AP75_small": 0.1964464214201601
+      },
+      "official_pp": {
+        "AP": 30.34782841497724,
+        "AP50": 52.985175570235754,
+        "AP75": 29.401063365160617,
+        "AR1": 0.732944449194013,
+        "AR10": 6.875703570741098,
+        "AR100": 36.73862432206099,
+        "AR500": 46.00445610081646
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/evaluation/A-top300-metrics.json",
+        "sha256": "7c0a0d0d04a7aefc3e46dcec0a486131e5ba170bddaf63474c599e0310052b1b",
+        "bytes": 92148
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 1,
+      "arm": "B",
+      "budget": 600,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.30166151938595864,
+        "AP50": 0.5202794193042823,
+        "AP75": 0.2963725125150786,
+        "APS": 0.2259573519367667,
+        "APM": 0.3998220560473018,
+        "APL": 0.44431865003619686,
+        "AR1": 0.11649837608718962,
+        "AR10": 0.35219449618202003,
+        "AR100": 0.4706764298739419,
+        "AR_small": 0.4010869585407886,
+        "AR_medium": 0.5716671598924292,
+        "AR_large": 0.6132479282949301,
+        "AP75_small": 0.19670038577030358
+      },
+      "official_pp": {
+        "AP": 30.869680809818384,
+        "AP50": 55.093405640213795,
+        "AP75": 29.33532778955573,
+        "AR1": 0.732944449194013,
+        "AR10": 6.89138635572975,
+        "AR100": 37.39791853492309,
+        "AR500": 46.94056507639705
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/evaluation/B-top600-metrics.json",
+        "sha256": "174f64ec4b2c743efcebf9da68310f33ac50e77e73294db6500ee9803dffb33f",
+        "bytes": 92177
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 1,
+      "arm": "B",
+      "budget": 300,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.29999809657431925,
+        "AP50": 0.5159177857279308,
+        "AP75": 0.295505048442094,
+        "APS": 0.22450833271970547,
+        "APM": 0.3977536901849144,
+        "APL": 0.44362389459308954,
+        "AR1": 0.1161479254690439,
+        "AR10": 0.34756517853121366,
+        "AR100": 0.4544487226407768,
+        "AR_small": 0.382231339244427,
+        "AR_medium": 0.5574658675648756,
+        "AR_large": 0.610750284947156,
+        "AP75_small": 0.19605302471166244
+      },
+      "official_pp": {
+        "AP": 30.709098891761137,
+        "AP50": 54.663289712656514,
+        "AP75": 29.243561931225717,
+        "AR1": 0.732944449194013,
+        "AR10": 6.89138635572975,
+        "AR100": 37.39791853492309,
+        "AR500": 45.533852077449495
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/evaluation/B-top300-metrics.json",
+        "sha256": "b20b99c9b1e9e382824244d69bbc7e79f23e8d71aa44dec31b6f825bac3cff47",
+        "bytes": 92189
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 1,
+      "arm": "C",
+      "budget": 600,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.31894856176345854,
+        "AP50": 0.5462039786224158,
+        "AP75": 0.3144200133973794,
+        "APS": 0.24815421384874808,
+        "APM": 0.41078699440712074,
+        "APL": 0.4442740827093912,
+        "AR1": 0.117457103709035,
+        "AR10": 0.3686311022226259,
+        "AR100": 0.5063480533522103,
+        "AR_small": 0.44337210252070514,
+        "AR_medium": 0.5972796497343414,
+        "AR_large": 0.6348444224900662,
+        "AP75_small": 0.22311931697237677
+      },
+      "official_pp": {
+        "AP": 32.8605640522361,
+        "AP50": 58.194231616826514,
+        "AP75": 31.33344298283773,
+        "AR1": 0.6962346404946833,
+        "AR10": 6.897207333430012,
+        "AR100": 38.59305413089995,
+        "AR500": 50.517508076205424
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/evaluation/C-top600-metrics.json",
+        "sha256": "237c9bbf839533fb918923e6d91488d21ec1d64976ecaf0c55bbef830fbd65ed",
+        "bytes": 92176
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 1,
+      "arm": "C",
+      "budget": 300,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.31525074512164714,
+        "AP50": 0.5363902617637,
+        "AP75": 0.3123924221791846,
+        "APS": 0.24420586758823604,
+        "APM": 0.4072739888028363,
+        "APL": 0.44224780159224236,
+        "AR1": 0.11710665309088929,
+        "AR10": 0.360756402592019,
+        "AR100": 0.474759917556543,
+        "AR_small": 0.4056563992018382,
+        "AR_medium": 0.5723323215101561,
+        "AR_large": 0.6214613181500667,
+        "AP75_small": 0.2214604052823853
+      },
+      "official_pp": {
+        "AP": 32.463936670732494,
+        "AP50": 57.12937848932725,
+        "AP75": 31.13854148363577,
+        "AR1": 0.6962346404946833,
+        "AR10": 6.897207333430012,
+        "AR100": 38.59305413089995,
+        "AR500": 47.8020329347217
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/evaluation/C-top300-metrics.json",
+        "sha256": "b8752e462ac082a502827565a7dc9579333c7534e4b11e08dcbcf0643e1c2760",
+        "bytes": 92144
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 2,
+      "arm": "A",
+      "budget": 600,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.3016141583522979,
+        "AP50": 0.5075246289777801,
+        "AP75": 0.2996154680100535,
+        "APS": 0.22313012190049472,
+        "APM": 0.39661815435060993,
+        "APL": 0.4646860387074296,
+        "AR1": 0.12051968902745337,
+        "AR10": 0.35043008442248563,
+        "AR100": 0.4941342315725297,
+        "AR_small": 0.4212339737571346,
+        "AR_medium": 0.5985729448321354,
+        "AR_large": 0.6998611313440566,
+        "AP75_small": 0.19722273798236786
+      },
+      "official_pp": {
+        "AP": 30.726041370764918,
+        "AP50": 53.591914739298026,
+        "AP75": 29.655765561457926,
+        "AR1": 0.7241599873685908,
+        "AR10": 6.835882039498288,
+        "AR100": 36.81862314255438,
+        "AR500": 49.41811203427141
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/evaluation/A-top600-metrics.json",
+        "sha256": "68f4833c74b437e0297c6cf0bc108907ed4f2577ef7ba6912ee477317e5c0804",
+        "bytes": 92308
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 2,
+      "arm": "A",
+      "budget": 300,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.2978408248648181,
+        "AP50": 0.49900772000756083,
+        "AP75": 0.29696230480393654,
+        "APS": 0.21975987337824046,
+        "APM": 0.39215588406617385,
+        "APL": 0.46162901062592415,
+        "AR1": 0.12005511495905287,
+        "AR10": 0.3429881737094449,
+        "AR100": 0.45745058660235094,
+        "AR_small": 0.38126018425012104,
+        "AR_medium": 0.5630436501820613,
+        "AR_large": 0.6847454263595784,
+        "AP75_small": 0.19524024115339736
+      },
+      "official_pp": {
+        "AP": 30.356129849115298,
+        "AP50": 52.71604136709594,
+        "AP75": 29.390969489846242,
+        "AR1": 0.7241599873685908,
+        "AR10": 6.835882039498288,
+        "AR100": 36.81809160413314,
+        "AR500": 46.18506128623142
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/evaluation/A-top300-metrics.json",
+        "sha256": "adb472850ca87d708a86c1612cd41b902b19332a0e7740399d58805b7fc264d6",
+        "bytes": 92294
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 2,
+      "arm": "B",
+      "budget": 600,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.30396372779096575,
+        "AP50": 0.5220021569071247,
+        "AP75": 0.2974012423956596,
+        "APS": 0.22457419440751406,
+        "APM": 0.39972166479465077,
+        "APL": 0.46465565914437246,
+        "AR1": 0.12051968902745337,
+        "AR10": 0.3514251707035539,
+        "AR100": 0.47032634385321337,
+        "AR_small": 0.3965826421719154,
+        "AR_medium": 0.5704486471375722,
+        "AR_large": 0.6306207271559068,
+        "AP75_small": 0.19384546784846599
+      },
+      "official_pp": {
+        "AP": 30.911535142718403,
+        "AP50": 55.01272211062999,
+        "AP75": 29.309844024077616,
+        "AR1": 0.7241599873685908,
+        "AR10": 6.841227492415409,
+        "AR100": 37.46296123604265,
+        "AR500": 46.89606468523941
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/evaluation/B-top600-metrics.json",
+        "sha256": "399216828d4d1a89625b638d88e3874d1bfcedc8392e83c5ae8580c4eaf890b8",
+        "bytes": 92316
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 2,
+      "arm": "B",
+      "budget": 300,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.30252994170255176,
+        "AP50": 0.5176422956549934,
+        "AP75": 0.29660214901967674,
+        "APS": 0.2232678683275133,
+        "APM": 0.39766086286444446,
+        "APL": 0.4625706256329934,
+        "AR1": 0.12043871736753435,
+        "AR10": 0.3482556738492201,
+        "AR100": 0.4553405993999833,
+        "AR_small": 0.38055626463887426,
+        "AR_medium": 0.5549600125147804,
+        "AR_large": 0.6216629560414639,
+        "AP75_small": 0.19351512954462502
+      },
+      "official_pp": {
+        "AP": 30.763507507064535,
+        "AP50": 54.596959993977705,
+        "AP75": 29.233318876909145,
+        "AR1": 0.7241599873685908,
+        "AR10": 6.841227492415409,
+        "AR100": 37.46296123604265,
+        "AR500": 45.57249199204958
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/evaluation/B-top300-metrics.json",
+        "sha256": "86c69d5d9e2b13b61441288716f4e2bcc3ea4f62e034ac5c1b3637264e209df2",
+        "bytes": 92311
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 2,
+      "arm": "C",
+      "budget": 600,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.32094799636287963,
+        "AP50": 0.5471559751556244,
+        "AP75": 0.3164845696173471,
+        "APS": 0.24912004313974756,
+        "APM": 0.40651485947922805,
+        "APL": 0.4742335917819224,
+        "AR1": 0.12312970157223582,
+        "AR10": 0.3675493850818083,
+        "AR100": 0.5073652837927449,
+        "AR_small": 0.4449999084582953,
+        "AR_medium": 0.5920204741267883,
+        "AR_large": 0.6530062258779836,
+        "AP75_small": 0.22338811105375744
+      },
+      "official_pp": {
+        "AP": 32.896472964730066,
+        "AP50": 58.049533849104456,
+        "AP75": 31.474520757821587,
+        "AR1": 0.6628882636993397,
+        "AR10": 6.90184462323274,
+        "AR100": 38.61017074964355,
+        "AR500": 50.5983800759054
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/evaluation/C-top600-metrics.json",
+        "sha256": "f0038c9fbdfaa2f4b8687e622c1784ea9036dff2fdbc1878a5c93a0d42d144d2",
+        "bytes": 92207
+      }
+    },
+    {
+      "collection": "development548",
+      "images": 548,
+      "seed": 2,
+      "arm": "C",
+      "budget": 300,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.31697887533390096,
+        "AP50": 0.536310529699432,
+        "AP75": 0.3148543093116259,
+        "APS": 0.24525904869148077,
+        "APM": 0.40238333659691017,
+        "APL": 0.4729069495928637,
+        "AR1": 0.12262134813231317,
+        "AR10": 0.36032791943663867,
+        "AR100": 0.4756629149613882,
+        "AR_small": 0.40955029782563146,
+        "AR_medium": 0.5634662788793791,
+        "AR_large": 0.6460298219105192,
+        "AP75_small": 0.22200679728631512
+      },
+      "official_pp": {
+        "AP": 32.488588823626685,
+        "AP50": 56.95376379992207,
+        "AP75": 31.282374976799584,
+        "AR1": 0.6628882636993397,
+        "AR10": 6.90184462323274,
+        "AR100": 38.61017074964355,
+        "AR500": 47.816423992333306
+      },
+      "original_metrics": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/evaluation/C-top300-metrics.json",
+        "sha256": "ae0a48b0e3d3abc44a18063174b5dc4e2c3adbc96fd2ac683283962315bb6ad9",
+        "bytes": 92166
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 0,
+      "arm": "A",
+      "budget": 600,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.2695866710330821,
+        "AP50": 0.4522728471478766,
+        "AP75": 0.2718310377465776,
+        "APS": 0.16808949374558002,
+        "APM": 0.3344754417229624,
+        "APL": 0.3893686363689158,
+        "AR1": 0.11091548841942808,
+        "AR10": 0.3345774455182731,
+        "AR100": 0.47288804700878956,
+        "AR_small": 0.36781085511984246,
+        "AR_medium": 0.5579890404881502,
+        "AR_large": 0.629296177647518,
+        "AP75_small": 0.14606198675987167
+      },
+      "official_pp": {
+        "AP": 30.527414853102123,
+        "AP50": 51.731757850252166,
+        "AP75": 30.619453178504386
+      },
+      "canonical_input_sha256": "2a9288b9edd60d7602723baceaee174876d88dcb493cf916db96bf23cda30998",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 961200,
+        "detections_after": 907553
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 0,
+      "arm": "A",
+      "budget": 300,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.26688034442159964,
+        "AP50": 0.44541738822339216,
+        "AP75": 0.27012790279698906,
+        "APS": 0.16581065340473883,
+        "APM": 0.33123268136857414,
+        "APL": 0.3863303011772781,
+        "AR1": 0.11035126022718482,
+        "AR10": 0.3265909572399996,
+        "AR100": 0.43879418429929323,
+        "AR_small": 0.3280351578226685,
+        "AR_medium": 0.5245586826040181,
+        "AR_large": 0.6014016642794064,
+        "AP75_small": 0.14476158106259465
+      },
+      "official_pp": {
+        "AP": 30.244727892557055,
+        "AP50": 51.04356729063817,
+        "AP75": 30.40997201982383
+      },
+      "canonical_input_sha256": "b85b1ac45e7243709131a0a9047b49802fc9c095ae7348d4ff7ec6c8fb869183",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 480600,
+        "detections_after": 453690
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 0,
+      "arm": "B",
+      "budget": 600,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.2720449783221594,
+        "AP50": 0.4643047119614907,
+        "AP75": 0.2702768929107135,
+        "APS": 0.16922849473175566,
+        "APM": 0.3381768209637642,
+        "APL": 0.3969201270923331,
+        "AR1": 0.11091548841942808,
+        "AR10": 0.336424924230751,
+        "AR100": 0.45025275244721213,
+        "AR_small": 0.3463589411786743,
+        "AR_medium": 0.5331415804105428,
+        "AR_large": 0.5908345308304129,
+        "AP75_small": 0.14410528567135752
+      },
+      "official_pp": {
+        "AP": 30.629083759668774,
+        "AP50": 52.78215180645479,
+        "AP75": 30.285055756860974
+      },
+      "canonical_input_sha256": "bee3e40223ae9490b7cad242378919f057854ec82169dee1149b8ce8a7dc8feb",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 652901,
+        "detections_after": 611329
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 0,
+      "arm": "B",
+      "budget": 300,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.2708299719230868,
+        "AP50": 0.460965321170576,
+        "AP75": 0.2695249878666552,
+        "APS": 0.16815805032485479,
+        "APM": 0.33681399244096555,
+        "APL": 0.395717178534652,
+        "AR1": 0.11053984739378707,
+        "AR10": 0.3327578229522454,
+        "AR100": 0.43630390773593875,
+        "AR_small": 0.3267918586000133,
+        "AR_medium": 0.5214682806246453,
+        "AR_large": 0.5852316483887067,
+        "AP75_small": 0.14355974453262893
+      },
+      "official_pp": {
+        "AP": 30.4989720501158,
+        "AP50": 52.42535240691492,
+        "AP75": 30.204719844745505
+      },
+      "canonical_input_sha256": "78cc3388be73713b2c52044e34ed505962074925629b8b4d21fb28f68932657f",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 478818,
+        "detections_after": 450536
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 0,
+      "arm": "C",
+      "budget": 600,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.3024890187565004,
+        "AP50": 0.5088710824722685,
+        "AP75": 0.3025540692844908,
+        "APS": 0.213565138520392,
+        "APM": 0.3627436628070824,
+        "APL": 0.39469169357488365,
+        "AR1": 0.11881429444291669,
+        "AR10": 0.3615414022516096,
+        "AR100": 0.49917442703127063,
+        "AR_small": 0.41207244503195684,
+        "AR_medium": 0.5727886597187442,
+        "AR_large": 0.6087635142880614,
+        "AP75_small": 0.19303405649206434
+      },
+      "official_pp": {
+        "AP": 34.169084763891775,
+        "AP50": 57.790195712319196,
+        "AP75": 34.151502707968106
+      },
+      "canonical_input_sha256": "faafdcc61aadb003ad515b7899bb4b2ccab23e377da09581c9cb0b0b8c8a333d",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 961124,
+        "detections_after": 898632
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 0,
+      "arm": "C",
+      "budget": 300,
+      "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "COCO_0_1": {
+        "AP": 0.29927676990374985,
+        "AP50": 0.500135004202355,
+        "AP75": 0.30087172603584394,
+        "APS": 0.210324364697558,
+        "APM": 0.3597690871145041,
+        "APL": 0.3925549094354123,
+        "AR1": 0.1181799002656654,
+        "AR10": 0.35626233701547727,
+        "AR100": 0.47067543501590997,
+        "AR_small": 0.3772260536304416,
+        "AR_medium": 0.5478678696261099,
+        "AR_large": 0.5874149489889968,
+        "AP75_small": 0.1917306713364262
+      },
+      "official_pp": {
+        "AP": 33.819976805444576,
+        "AP50": 56.84890925337775,
+        "AP75": 33.9698910621312
+      },
+      "canonical_input_sha256": "9e443f3bfc871ed1fce76c4888cee02d9f34656a5db7fff5bf39ec642340aebe",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 480600,
+        "detections_after": 449677
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 1,
+      "arm": "A",
+      "budget": 600,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.2717600542688479,
+        "AP50": 0.45551586889783524,
+        "AP75": 0.27363063244500646,
+        "APS": 0.1690081322473956,
+        "APM": 0.33750808109321373,
+        "APL": 0.38695717267237956,
+        "AR1": 0.11259257725816318,
+        "AR10": 0.3377983038350769,
+        "AR100": 0.4753551620020774,
+        "AR_small": 0.36601568863712475,
+        "AR_medium": 0.5640218068392676,
+        "AR_large": 0.6309194970724603,
+        "AP75_small": 0.14491536705040978
+      },
+      "official_pp": {
+        "AP": 30.728291625075013,
+        "AP50": 52.03023857996311,
+        "AP75": 30.788897981870008
+      },
+      "canonical_input_sha256": "1d62a38d3cdd7fc1de5b267ff967b090abb80db5ce2c8754b493ca3aa934af61",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 961200,
+        "detections_after": 909108
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 1,
+      "arm": "A",
+      "budget": 300,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.26912201034188094,
+        "AP50": 0.44873536126960856,
+        "AP75": 0.27189998761092543,
+        "APS": 0.1666287903086247,
+        "APM": 0.33446567596706134,
+        "APL": 0.38418412091972814,
+        "AR1": 0.1120303827029576,
+        "AR10": 0.3301334395986146,
+        "AR100": 0.4426869668395018,
+        "AR_small": 0.3287912069393456,
+        "AR_medium": 0.5306921507543254,
+        "AR_large": 0.6088364070336754,
+        "AP75_small": 0.14377121838231804
+      },
+      "official_pp": {
+        "AP": 30.445739300599882,
+        "AP50": 51.3539319851713,
+        "AP75": 30.5843367263978
+      },
+      "canonical_input_sha256": "042af995fff1fedb6bf2db3bd2ebe4838b2d6ae6b05a4a5af01963e1f570bb79",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 480600,
+        "detections_after": 453858
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 1,
+      "arm": "B",
+      "budget": 600,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.27366019144095605,
+        "AP50": 0.46618842282950923,
+        "AP75": 0.27176278628967737,
+        "APS": 0.1697367199865737,
+        "APM": 0.3405398926248146,
+        "APL": 0.3964497675036437,
+        "AR1": 0.11259257725816318,
+        "AR10": 0.3391223466673407,
+        "AR100": 0.4537981523785447,
+        "AR_small": 0.3455115145797265,
+        "AR_medium": 0.5393889968773318,
+        "AR_large": 0.598578140862111,
+        "AP75_small": 0.14273801258683738
+      },
+      "official_pp": {
+        "AP": 30.788410097983295,
+        "AP50": 53.00179945884951,
+        "AP75": 30.428464707057817
+      },
+      "canonical_input_sha256": "7f8354a4bc9b09c308f739b58a8b22b842337c43fad0ed3e2c3ef543e58d4cc4",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 639446,
+        "detections_after": 598757
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 1,
+      "arm": "B",
+      "budget": 300,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.27252550968625333,
+        "AP50": 0.46297296226786433,
+        "AP75": 0.27129056794697426,
+        "APS": 0.16866746339723682,
+        "APM": 0.33899148006928315,
+        "APL": 0.39556473731757225,
+        "AR1": 0.11239452033781624,
+        "AR10": 0.3360205085547438,
+        "AR100": 0.43987904917849824,
+        "AR_small": 0.3286936612226656,
+        "AR_medium": 0.525772475491381,
+        "AR_large": 0.5943201632091756,
+        "AP75_small": 0.14239175347138053
+      },
+      "official_pp": {
+        "AP": 30.662141407320114,
+        "AP50": 52.64774506765021,
+        "AP75": 30.363146708057542
+      },
+      "canonical_input_sha256": "50a5cd8a2eb702136355a8dc1f58053ba94d9cd6aec8836b13ae4f907710980e",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 478469,
+        "detections_after": 450202
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 1,
+      "arm": "C",
+      "budget": 600,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.30517691434480493,
+        "AP50": 0.5116562908450303,
+        "AP75": 0.3071205914391999,
+        "APS": 0.21577535007113074,
+        "APM": 0.3649756435512012,
+        "APL": 0.39643070662410174,
+        "AR1": 0.12049494900348473,
+        "AR10": 0.36464616425937124,
+        "AR100": 0.500609175123738,
+        "AR_small": 0.41305373379269983,
+        "AR_medium": 0.5739291318258535,
+        "AR_large": 0.6090052781105986,
+        "AP75_small": 0.1958417357538565
+      },
+      "official_pp": {
+        "AP": 34.44037557435349,
+        "AP50": 58.13823238997696,
+        "AP75": 34.58949122837821
+      },
+      "canonical_input_sha256": "587734813e780f420d06c8f901c1f7383d77e558d83b1be318d3992b40be19b9",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 961105,
+        "detections_after": 898351
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 1,
+      "arm": "C",
+      "budget": 300,
+      "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+      "COCO_0_1": {
+        "AP": 0.3020127530695872,
+        "AP50": 0.503232320496424,
+        "AP75": 0.3054965584606347,
+        "APS": 0.21227902466796242,
+        "APM": 0.3619348531759773,
+        "APL": 0.3945263219490804,
+        "AR1": 0.1199334408179636,
+        "AR10": 0.359369596422695,
+        "AR100": 0.47457928975077196,
+        "AR_small": 0.3810271657206528,
+        "AR_medium": 0.5508853345990521,
+        "AR_large": 0.5927447552329432,
+        "AP75_small": 0.19404639891210035
+      },
+      "official_pp": {
+        "AP": 34.088574742318514,
+        "AP50": 57.1745305728959,
+        "AP75": 34.414874471060344
+      },
+      "canonical_input_sha256": "7a334d790add3a472b0189cf9e685681abddc27c6b8ee3e7f9f78b74d1832c0f",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 480600,
+        "detections_after": 449269
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 2,
+      "arm": "A",
+      "budget": 600,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.270098571685345,
+        "AP50": 0.45330920244168194,
+        "AP75": 0.2723730837329944,
+        "APS": 0.1700269098861376,
+        "APM": 0.33247182435008676,
+        "APL": 0.39538839704238093,
+        "AR1": 0.11119985380820119,
+        "AR10": 0.33691225137740055,
+        "AR100": 0.4747831931706795,
+        "AR_small": 0.3690293639221716,
+        "AR_medium": 0.5584509316641744,
+        "AR_large": 0.6351283826446117,
+        "AP75_small": 0.1475527328527656
+      },
+      "official_pp": {
+        "AP": 30.585912851450807,
+        "AP50": 51.822708340162905,
+        "AP75": 30.71696133928575
+      },
+      "canonical_input_sha256": "ad35fc96b8ee10f8ea817b6f893100034f71d452221b055cbc1e9646823e89db",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 961200,
+        "detections_after": 908896
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 2,
+      "arm": "A",
+      "budget": 300,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.26760436356088924,
+        "AP50": 0.4474006997532337,
+        "AP75": 0.2708404221500916,
+        "APS": 0.16799178596289466,
+        "APM": 0.3295005540829422,
+        "APL": 0.39151688537842533,
+        "AR1": 0.11042107847967712,
+        "AR10": 0.3294484287949445,
+        "AR100": 0.44266836967112083,
+        "AR_small": 0.3324245989821182,
+        "AR_medium": 0.5265934002228032,
+        "AR_large": 0.6081812417982319,
+        "AP75_small": 0.14638350180003856
+      },
+      "official_pp": {
+        "AP": 30.316884943475145,
+        "AP50": 51.171842394661574,
+        "AP75": 30.535713919674272
+      },
+      "canonical_input_sha256": "289b6ebd4cad8780c3038307ef7557e78ed9df8ba7db706e4227bb50c2bcbc0f",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 480600,
+        "detections_after": 454125
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 2,
+      "arm": "B",
+      "budget": 600,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.27273127139042486,
+        "AP50": 0.4659645696065208,
+        "AP75": 0.2707858013462415,
+        "APS": 0.17103423308978608,
+        "APM": 0.33660163463825904,
+        "APL": 0.4032836784425529,
+        "AR1": 0.11119985380820119,
+        "AR10": 0.33926649552042754,
+        "AR100": 0.45325860876678314,
+        "AR_small": 0.34869868529578546,
+        "AR_medium": 0.5343240288624487,
+        "AR_large": 0.6035823166874758,
+        "AP75_small": 0.14514768365982428
+      },
+      "official_pp": {
+        "AP": 30.712684368971036,
+        "AP50": 52.885585114732564,
+        "AP75": 30.400120523694206
+      },
+      "canonical_input_sha256": "62968c6eff5662d143fbf538d74955deb19683cf39e99be6cf7f8a5ec7edb3c3",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 645642,
+        "detections_after": 605302
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 2,
+      "arm": "B",
+      "budget": 300,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.2715922667424267,
+        "AP50": 0.46276650910985156,
+        "AP75": 0.2702523918741341,
+        "APS": 0.16995944363391524,
+        "APM": 0.33521543694995687,
+        "APL": 0.40245287724817386,
+        "AR1": 0.11076331534666274,
+        "AR10": 0.33608516457852167,
+        "AR100": 0.4391851721620469,
+        "AR_small": 0.3301049470594213,
+        "AR_medium": 0.521398590036083,
+        "AR_large": 0.5992118243325657,
+        "AP75_small": 0.14474467577920658
+      },
+      "official_pp": {
+        "AP": 30.58923729406362,
+        "AP50": 52.54787753322197,
+        "AP75": 30.33157238200513
+      },
+      "canonical_input_sha256": "76b591985ae860a4da7def731d47b7ed6fdecaff3d9da3f2b1753d5003d92fbd",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 478649,
+        "detections_after": 450986
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 2,
+      "arm": "C",
+      "budget": 600,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.3033988724051741,
+        "AP50": 0.5109095452055759,
+        "AP75": 0.3043103871767296,
+        "APS": 0.21237703539325864,
+        "APM": 0.36243443242701734,
+        "APL": 0.40210622654816497,
+        "AR1": 0.11956961343810553,
+        "AR10": 0.364892568048468,
+        "AR100": 0.501114469672432,
+        "AR_small": 0.41186384550462085,
+        "AR_medium": 0.5728511671487904,
+        "AR_large": 0.6237675650859937,
+        "AP75_small": 0.1918316541097525
+      },
+      "official_pp": {
+        "AP": 34.21610180362063,
+        "AP50": 57.88088675749519,
+        "AP75": 34.24419865125577
+      },
+      "canonical_input_sha256": "54bb555d7669e3058cd541fa02039c51d1b068cc646f4fdbd98923c05af7fd75",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 961052,
+        "detections_after": 898381
+      }
+    },
+    {
+      "collection": "supplemental1602_history_unverified",
+      "images": 1602,
+      "seed": 2,
+      "arm": "C",
+      "budget": 300,
+      "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058",
+      "COCO_0_1": {
+        "AP": 0.30007575939995274,
+        "AP50": 0.501976956253824,
+        "AP75": 0.30264800551001403,
+        "APS": 0.2091302221435134,
+        "APM": 0.35889025481726705,
+        "APL": 0.40019236764363925,
+        "AR1": 0.11935217827695178,
+        "AR10": 0.3597966058012567,
+        "AR100": 0.474271594074653,
+        "AR_small": 0.38049557857371336,
+        "AR_medium": 0.5464069081536528,
+        "AR_large": 0.6089242254575935,
+        "AP75_small": 0.19045604240724437
+      },
+      "official_pp": {
+        "AP": 33.86429634401105,
+        "AP50": 56.93623743210024,
+        "AP75": 34.07452493731462
+      },
+      "canonical_input_sha256": "f14ae0a2dc3c2317ce49d0c304459b0392fce550139a5d80e24a503ab9572660",
+      "original_counts": {
+        "GT_before": 81319,
+        "GT_after": 81270,
+        "detections_before": 480600,
+        "detections_after": 449517
+      }
+    }
+  ],
+  "benchmarks": [
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 0,
+      "arm": "A",
+      "seconds_64": 2.3351015640073456,
+      "over_A": 1.0,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/accept-A/RESULT.json",
+        "bytes": 6785,
+        "sha256": "e44927e6dcffa8ff4a16ed2a178c03792de8c04b2d40fec6e34e3d689b725997"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 0,
+      "arm": "B",
+      "seconds_64": 2.600105231802445,
+      "over_A": 1.1134869985442164,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/accept-B/RESULT.json",
+        "bytes": 6756,
+        "sha256": "081ca58d69b7241bdd8423d84971cec11050ed1e4cbfe3347669ea34accee118"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 0,
+      "arm": "C",
+      "seconds_64": 10.910770870861597,
+      "over_A": 4.67250377415587,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-fixed-20261016-001/accept-C/RESULT.json",
+        "bytes": 6695,
+        "sha256": "7f9451a4fef8bbda369ac829c4e73a4c677c1111bbc1f6eac3d714fdd46b6812"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 1,
+      "arm": "A",
+      "seconds_64": 2.4088854939327575,
+      "over_A": 1.0,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/accept-A/RESULT.json",
+        "bytes": 6939,
+        "sha256": "8a387afd6f8db43fd8bb34ae81f350223248b3ed682759baecd940ecea401975"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 1,
+      "arm": "B",
+      "seconds_64": 2.7298765490413643,
+      "over_A": 1.133252932078791,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/accept-B/RESULT.json",
+        "bytes": 6935,
+        "sha256": "e495b13f92fd887e90663c30f7d213626f5a070d49612751fe99aeadb39fa16e"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 1,
+      "arm": "C",
+      "seconds_64": 11.34605117002502,
+      "over_A": 4.710083230856028,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed1/accept-C/RESULT.json",
+        "bytes": 6853,
+        "sha256": "ce39a8ee511754817f4c3c9d06b9a686e364df12b85a4629318a7966eb6396c7"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 2,
+      "arm": "A",
+      "seconds_64": 2.405966679798439,
+      "over_A": 1.0,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/accept-A/RESULT.json",
+        "bytes": 6952,
+        "sha256": "8294a6ae09c0dff41f267f1336b512e818a9986e3ecf0e340260bfd6b2df4405"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 2,
+      "arm": "B",
+      "seconds_64": 2.7010434348485433,
+      "over_A": 1.1226437412985388,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/accept-B/RESULT.json",
+        "bytes": 6922,
+        "sha256": "8857b99645192bf36c6e68748349846f807dc5353940ead6ec1205e23f2c8fb0"
+      }
+    },
+    {
+      "measurement": "historical_development64",
+      "performance_context": "development548",
+      "seed": 2,
+      "arm": "C",
+      "seconds_64": 11.225335136929061,
+      "over_A": 4.66562368929792,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/seed2/accept-C/RESULT.json",
+        "bytes": 6852,
+        "sha256": "aa80e8fff463517310ebd2163db5e660ab6099956a2268634a15ff6e78e81ce0"
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 0,
+      "arm": "A",
+      "seconds_64": 2.5188408092362806,
+      "over_A": 1.0,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed0/accept-A/RESULT.json",
+        "sha256": "980a8dfcd64faecf4be5fa16ea846ac40e066e66c298f921b595d0005598d603",
+        "bytes": 7390
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 0,
+      "arm": "B",
+      "seconds_64": 2.6596140591427684,
+      "over_A": 1.05588810908188,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed0/accept-B/RESULT.json",
+        "sha256": "732d59feec4aa304bfa2945279c070700e34e015988d0b61112c5089b5c925c3",
+        "bytes": 7389
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 0,
+      "arm": "C",
+      "seconds_64": 10.810374512104318,
+      "over_A": 4.291805370337022,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed0/accept-C/RESULT.json",
+        "sha256": "c9191c367d07bfe7e5465bd01d3573c545d83e73a11389e321ebc53a0f0627ff",
+        "bytes": 7372
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 1,
+      "arm": "A",
+      "seconds_64": 2.3361360613489524,
+      "over_A": 1.0,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed1/accept-A/RESULT.json",
+        "sha256": "73cbf29131484386aa301cea165de4586576626606762559726ce8eaa8fabc4a",
+        "bytes": 7391
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 1,
+      "arm": "B",
+      "seconds_64": 2.5853482991224155,
+      "over_A": 1.1066771075095518,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed1/accept-B/RESULT.json",
+        "sha256": "90af93893290146e04c468d62be990512cc361c44a50d445bfbe21c7822d8a89",
+        "bytes": 7398
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 1,
+      "arm": "C",
+      "seconds_64": 11.266947208205238,
+      "over_A": 4.82289854371726,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed1/accept-C/RESULT.json",
+        "sha256": "e55ae1bac6bacca1b1980829b10381df32beaa5292620c627cc931c5139d6123",
+        "bytes": 7372
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 2,
+      "arm": "A",
+      "seconds_64": 2.339232342899777,
+      "over_A": 1.0,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed2/accept-A/RESULT.json",
+        "sha256": "bf566d1157403f7335cda16f3b150aa76699beb07a40afd47a283231ab940b10",
+        "bytes": 7389
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 2,
+      "arm": "B",
+      "seconds_64": 2.6963370661251247,
+      "over_A": 1.1526589371548577,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed2/accept-B/RESULT.json",
+        "sha256": "7389ef3a62c5a1857d978008fcead29cf07d8f1e6c494feb71430bd785e079b5",
+        "bytes": 7392
+      }
+    },
+    {
+      "measurement": "supplemental_execution_development64_recheck",
+      "performance_context": "supplemental1602_history_unverified",
+      "seed": 2,
+      "arm": "C",
+      "seconds_64": 11.181788478163071,
+      "over_A": 4.7801102409099805,
+      "peak_allocated_bytes": 1070716928,
+      "peak_reserved_bytes": 1616904192,
+      "original_ref": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-original-c-supplemental-20261018-001/protocol-extension-001/production-001/seed2/accept-C/RESULT.json",
+        "sha256": "f42edb08110942c948269e89ea0bb6c83b2342ec355d1c925e2ef202da8dca20",
+        "bytes": 7371
+      }
+    }
+  ],
+  "prior_candidate_rows": [
+    {
+      "family": "Vote",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-whole",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.29712272579066895,
+        "AP50": 0.5125823375638389,
+        "AP75": 0.292351985964414,
+        "AP75_small": 0.1943575633740948,
+        "APL": 0.4687127437884468,
+        "APM": 0.3908013385666359,
+        "APS": 0.2207533809174314
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-whole",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.29871794866252127,
+        "AP50": 0.5175012521199368,
+        "AP75": 0.2932263435734968,
+        "AP75_small": 0.1949463334208899,
+        "APL": 0.4719579071019123,
+        "APM": 0.3926776619332777,
+        "APS": 0.22227829830973375
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-five",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3091776538717869,
+        "AP50": 0.5354812242568724,
+        "AP75": 0.30667297278434325,
+        "AP75_small": 0.21882379998962873,
+        "APL": 0.42736648500679447,
+        "APM": 0.3914282188500324,
+        "APS": 0.2439302188790887
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-five",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3134614397046263,
+        "AP50": 0.5469240889200127,
+        "AP75": 0.30943142367786647,
+        "AP75_small": 0.22112157953387518,
+        "APL": 0.42971898938930425,
+        "APM": 0.39583290914690467,
+        "APS": 0.24840764059353485
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-whole",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.29824220492208886,
+        "AP50": 0.5169565630784047,
+        "AP75": 0.29091363426908745,
+        "AP75_small": 0.19166573530696648,
+        "APL": 0.4254434285977809,
+        "APM": 0.39495014006987744,
+        "APS": 0.22296609487844757
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-whole",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.299841695107653,
+        "AP50": 0.5215339949703424,
+        "AP75": 0.29224560505613834,
+        "AP75_small": 0.1925029231129677,
+        "APL": 0.4262089685716089,
+        "APM": 0.39687009147564617,
+        "APS": 0.22451511638681584
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-five",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.312481959128239,
+        "AP50": 0.5388771067426714,
+        "AP75": 0.3084815618335152,
+        "AP75_small": 0.21520368250000296,
+        "APL": 0.3999372103256868,
+        "APM": 0.40033555435496854,
+        "APS": 0.24407930837315753
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-five",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.31620409075062933,
+        "AP50": 0.5484299627232363,
+        "AP75": 0.31078448257510066,
+        "AP75_small": 0.21707070330361125,
+        "APL": 0.40208822380908815,
+        "APM": 0.403524683268717,
+        "APS": 0.24807533586737657
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-whole",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.30097279787578285,
+        "AP50": 0.5168601354328427,
+        "AP75": 0.29321163515000204,
+        "AP75_small": 0.18973332101669896,
+        "APL": 0.47600097659403084,
+        "APM": 0.39583264914271044,
+        "APS": 0.22180494148367513
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-whole",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3024325652888238,
+        "AP50": 0.5210853813738247,
+        "AP75": 0.29401741516137797,
+        "AP75_small": 0.19007791892628081,
+        "APL": 0.4781722107106129,
+        "APM": 0.39794219527889907,
+        "APS": 0.22315976818809596
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-five",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3122647051718215,
+        "AP50": 0.5382840374110934,
+        "AP75": 0.3074161810532352,
+        "AP75_small": 0.21858202696669313,
+        "APL": 0.4387197080449903,
+        "APM": 0.39537207845118433,
+        "APS": 0.244759427567249
+      }
+    },
+    {
+      "family": "Vote",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "V-five",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "quality gate failed; GPU cost not executed"
+      },
+      "source": {
+        "runtime_commit": "f563dfb91d87e13e5a7287ea472049e1deb45810"
+      },
+      "report": "sahi-box-vote-fixed-20261018-001/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3162546069613887,
+        "AP50": 0.5486773225806938,
+        "AP75": 0.3097161159372753,
+        "AP75_small": 0.22040708941937442,
+        "APL": 0.4401240704431619,
+        "APM": 0.39934863193789877,
+        "APS": 0.2487162587285346
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "E",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.29934224824922384,
+        "AP50": 0.5129716526210771,
+        "AP75": 0.29665027907099273,
+        "AP75_small": 0.19620599662242666,
+        "APL": 0.4797512551269518,
+        "APM": 0.39492378291618396,
+        "APS": 0.22244087681922514
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "E",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.30267629381682126,
+        "AP50": 0.5198611277155797,
+        "AP75": 0.2997104405931878,
+        "AP75_small": 0.19851674407568615,
+        "APL": 0.4829863968710035,
+        "APM": 0.3985922083419564,
+        "APS": 0.225511322647572
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "D",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3134747373731402,
+        "AP50": 0.5339082953602301,
+        "AP75": 0.31339090568007144,
+        "AP75_small": 0.22234934617185306,
+        "APL": 0.47227665768903604,
+        "APM": 0.39857862612950173,
+        "APS": 0.2447731378091901
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 0,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "D",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3184211984461049,
+        "AP50": 0.5447363352471251,
+        "AP75": 0.31739165493142885,
+        "AP75_small": 0.2255195646809189,
+        "APL": 0.4743740891720781,
+        "APM": 0.40404262207222097,
+        "APS": 0.2497254913327461
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "E",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.29970128829344095,
+        "AP50": 0.5155224896604014,
+        "AP75": 0.2953844477104598,
+        "AP75_small": 0.19575667815646355,
+        "APL": 0.44208120833181,
+        "APM": 0.3977717825089061,
+        "APS": 0.2240015815324257
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "E",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.30314755313387026,
+        "AP50": 0.5221651697365671,
+        "AP75": 0.29828839561133746,
+        "AP75_small": 0.19818179174584746,
+        "APL": 0.4433906729067845,
+        "APM": 0.40169696810093536,
+        "APS": 0.22718970588181508
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "D",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.315614820587404,
+        "AP50": 0.5364566835640255,
+        "AP75": 0.3132966005680229,
+        "AP75_small": 0.2226006746492006,
+        "APL": 0.4452831043174703,
+        "APM": 0.4082786287929483,
+        "APS": 0.24438600469695843
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 1,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "D",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3194610075467767,
+        "AP50": 0.5456553896415384,
+        "AP75": 0.31585712133438054,
+        "AP75_small": 0.2247518641781718,
+        "APL": 0.4463051694778221,
+        "APM": 0.41159831131794566,
+        "APS": 0.24841414811092588
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "E",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3024742507838377,
+        "AP50": 0.5172143263901791,
+        "AP75": 0.29708825906821085,
+        "AP75_small": 0.1936432774691072,
+        "APL": 0.4645867947532615,
+        "APM": 0.3983519753634466,
+        "APS": 0.22299215400749597
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "E",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3057579537540356,
+        "AP50": 0.5233938588696391,
+        "AP75": 0.30001341781385904,
+        "AP75_small": 0.19600470619991128,
+        "APL": 0.4671891202574789,
+        "APM": 0.4022067072431839,
+        "APS": 0.226000467401283
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "D",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.317638159872365,
+        "AP50": 0.53614175049918,
+        "AP75": 0.3170066880971496,
+        "AP75_small": 0.22318511500708377,
+        "APL": 0.472581883113435,
+        "APM": 0.4034668170714274,
+        "APS": 0.245151639031728
+      }
+    },
+    {
+      "family": "Soft-NMS",
+      "seed": 2,
+      "seed_scope": "same three e120 caches; no retraining",
+      "arm": "D",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": false,
+        "reason": "end-to-end GPU not measured"
+      },
+      "source": {
+        "runtime_commit": "c4a8f124d655fa6c4d5a20506b0fb191f49f2c18"
+      },
+      "report": "sahi-softnms-fixed-20261017-001/revision-007/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3219587688495276,
+        "AP50": 0.5467800273433973,
+        "AP75": 0.3197555668017171,
+        "AP75_small": 0.22522238252564136,
+        "APL": 0.47486261108794353,
+        "APM": 0.4082990927272425,
+        "APS": 0.24928954935428524
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-control/A",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.327970582176931,
+          "C_e2e_seconds": 11.198587103164755,
+          "C_over_A": 4.81045043648822,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.2933751230931994,
+        "APS": 0.21705717132945576,
+        "AP75_small": 0.19168878625882732,
+        "APM": 0.3875616891515264,
+        "APL": 0.4719406096573902,
+        "AP50": 0.4967859439702285,
+        "AP75": 0.2924909084362488
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-control/A",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.327970582176931,
+          "C_e2e_seconds": 11.198587103164755,
+          "C_over_A": 4.81045043648822,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.2888903247720137,
+        "APS": 0.2131652494919297,
+        "AP75_small": 0.1893767423243546,
+        "APM": 0.38251993703113635,
+        "APL": 0.46937233847281123,
+        "AP50": 0.48618229605858587,
+        "AP75": 0.28919949014159535
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-control/C",
+      "budget": 600,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.327970582176931,
+          "C_e2e_seconds": 11.198587103164755,
+          "C_over_A": 4.81045043648822,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3116346238229233,
+        "APS": 0.24258866329513668,
+        "AP75_small": 0.2139535296305371,
+        "APM": 0.39573982775182615,
+        "APL": 0.476130053876811,
+        "AP50": 0.5367652020353836,
+        "AP75": 0.30620781896715843
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-control/C",
+      "budget": 300,
+      "quality": "CONTROL_ONLY",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.327970582176931,
+          "C_e2e_seconds": 11.198587103164755,
+          "C_over_A": 4.81045043648822,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3077770288084577,
+        "APS": 0.2386650457583425,
+        "AP75_small": 0.21198571296962382,
+        "APM": 0.39180908931706154,
+        "APL": 0.47440540278516335,
+        "AP50": 0.5260477433369972,
+        "AP75": 0.30413660170968426
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-slice/A",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.2993870129575953,
+          "C_e2e_seconds": 10.914424635237083,
+          "C_over_A": 4.746667078543843,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.2957128712826754,
+        "APS": 0.2188679195036953,
+        "AP75_small": 0.19437638427857246,
+        "APM": 0.3920999384445523,
+        "APL": 0.49294533281797304,
+        "AP50": 0.5008479541292064,
+        "AP75": 0.29570775616303513
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-slice/A",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.2993870129575953,
+          "C_e2e_seconds": 10.914424635237083,
+          "C_over_A": 4.746667078543843,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.291562735460774,
+        "APS": 0.21531345353858564,
+        "AP75_small": 0.1923626451761036,
+        "APM": 0.38729273345776355,
+        "APL": 0.48819361314689097,
+        "AP50": 0.49131492723038656,
+        "AP75": 0.29257613360441587
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-slice/C",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.2993870129575953,
+          "C_e2e_seconds": 10.914424635237083,
+          "C_over_A": 4.746667078543843,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3162200567576184,
+        "APS": 0.24593615088835252,
+        "AP75_small": 0.2169950490741689,
+        "APM": 0.4028024387167097,
+        "APL": 0.4995829025938596,
+        "AP50": 0.5416239288490851,
+        "AP75": 0.3108177419113728
+      }
+    },
+    {
+      "family": "FT",
+      "seed": 0,
+      "seed_scope": "seed0 only; two paired 12-pass arms, not multi-seed",
+      "arm": "T-slice/C",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": true,
+        "protocol_cost_passed": true,
+        "arm_cost": {
+          "A_e2e_seconds": 2.2993870129575953,
+          "C_e2e_seconds": 10.914424635237083,
+          "C_over_A": 4.746667078543843,
+          "passed": true,
+          "A_peak_reserved": 1616904192,
+          "C_peak_reserved": 1616904192
+        }
+      },
+      "source": {
+        "runtime_commit": "57ae4d1990ef059818825e6d8813435b04046505"
+      },
+      "report": "r18-slice-finetune-20261018-001/execution-001/terminal/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.31251362860317333,
+        "APS": 0.24210062523209244,
+        "AP75_small": 0.21530969286272314,
+        "APM": 0.3993508555516931,
+        "APL": 0.4968244172774418,
+        "AP50": 0.531758301638977,
+        "AP75": 0.3089589175559736
+      }
+    },
+    {
+      "family": "Sixth-view",
+      "seed": 0,
+      "seed_scope": "seed0 only; seed1/2 not run",
+      "arm": "C-center",
+      "budget": 600,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": true,
+        "over_A": 5.715428395,
+        "passed": true
+      },
+      "source": {
+        "runtime_commit": "efba2491097fc63c0fb01d7204757e383afe6361"
+      },
+      "report": "sahi-sixth-view-20261018-001/execution-003/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.31780904733083637,
+        "AP50": 0.5451590665383944,
+        "AP75": 0.3154539239634581,
+        "APS": 0.25031182482859515,
+        "APM": 0.4029944740180166,
+        "APL": 0.47046453014693435,
+        "AR1": 0.12195355669582204,
+        "AR10": 0.3668659724878511,
+        "AR100": 0.5085323916993201,
+        "AR_small": 0.44806573317427334,
+        "AR_medium": 0.5930871516485096,
+        "AR_large": 0.6584754253970574,
+        "AP75_small": 0.22539852663521623
+      }
+    },
+    {
+      "family": "Sixth-view",
+      "seed": 0,
+      "seed_scope": "seed0 only; seed1/2 not run",
+      "arm": "C-center",
+      "budget": 300,
+      "quality": "FAIL_CLOSED",
+      "cost": {
+        "measured": true,
+        "over_A": 5.715428395,
+        "passed": true
+      },
+      "source": {
+        "runtime_commit": "efba2491097fc63c0fb01d7204757e383afe6361"
+      },
+      "report": "sahi-sixth-view-20261018-001/execution-003/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.3132042875749878,
+        "AP50": 0.5331781560048141,
+        "AP75": 0.3124268250695643,
+        "APS": 0.245699730698554,
+        "APM": 0.39854168248063165,
+        "APL": 0.46723338617327187,
+        "AR1": 0.12073174590230912,
+        "AR10": 0.3574671618323845,
+        "AR100": 0.47468663691065677,
+        "AR_small": 0.409175520621612,
+        "AR_medium": 0.5649449378391369,
+        "AR_large": 0.6414344944424449,
+        "AP75_small": 0.22280542812080675
+      }
+    },
+    {
+      "family": "Sixth-view",
+      "seed": 0,
+      "seed_scope": "seed0 only; seed1/2 not run",
+      "arm": "C-flip",
+      "budget": 600,
+      "quality": "CONTROL_ONLY_NOT_PROMOTED",
+      "cost": {
+        "measured": true,
+        "over_A": 5.75630246,
+        "passed": true
+      },
+      "source": {
+        "runtime_commit": "efba2491097fc63c0fb01d7204757e383afe6361"
+      },
+      "report": "sahi-sixth-view-20261018-001/execution-003/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.32265869865357,
+        "AP50": 0.550638891558456,
+        "AP75": 0.31897779323947456,
+        "APS": 0.25154708549725785,
+        "APM": 0.4106174506863408,
+        "APL": 0.5018325606348691,
+        "AR1": 0.12366674619279935,
+        "AR10": 0.37175076118791045,
+        "AR100": 0.5132809331885069,
+        "AR_small": 0.4514900775126525,
+        "AR_medium": 0.6000854615824838,
+        "AR_large": 0.6813634320573527,
+        "AP75_small": 0.22236581142943193
+      }
+    },
+    {
+      "family": "Sixth-view",
+      "seed": 0,
+      "seed_scope": "seed0 only; seed1/2 not run",
+      "arm": "C-flip",
+      "budget": 300,
+      "quality": "CONTROL_ONLY_NOT_PROMOTED",
+      "cost": {
+        "measured": true,
+        "over_A": 5.75630246,
+        "passed": true
+      },
+      "source": {
+        "runtime_commit": "efba2491097fc63c0fb01d7204757e383afe6361"
+      },
+      "report": "sahi-sixth-view-20261018-001/execution-003/REPORT.md",
+      "COCO_bridge_original_0_1": {
+        "AP": 0.31816765323514967,
+        "AP50": 0.5386531600776592,
+        "AP75": 0.31628939417596613,
+        "APS": 0.24674962122789862,
+        "APM": 0.4063480739428829,
+        "APL": 0.4991473713694912,
+        "AR1": 0.12279490685933941,
+        "AR10": 0.362338780067876,
+        "AR100": 0.47923375273477453,
+        "AR_small": 0.41159009517131473,
+        "AR_medium": 0.5733148306498042,
+        "AR_large": 0.6648387698858713,
+        "AP75_small": 0.21989900654226743
+      }
+    }
+  ],
+  "quality_minimum_pp": {
+    "600_AP": 0.3,
+    "600_APS": 0.5,
+    "600_AP75_small": -0.2,
+    "600_APM": -0.5,
+    "600_APL": -0.5,
+    "300_AP": -0.2,
+    "300_APS": -0.2
+  },
+  "measured_scientific_status": "all3 seeds quality and matched64 cost PASS separately on both collections",
+  "limitations": [
+    "development repeatedly used",
+    "supplemental historical use unverified",
+    "near duplicate and flight/site association unknown",
+    "independent qualification BLOCKED",
+    "two exact zero-height GT input extension only",
+    "MATLAB/Octave not executed",
+    "fixed64 costs are not dataset-wide or cold-start benchmarks"
+  ],
+  "runtime": {
+    "supplemental_commit": "97c40e6610d8a75bf635c1801dc42e79767d029c",
+    "supplemental_manifest": "ddfd3260697388e42a8b9fa5b30b983e90055f6a538deca5ba1be24f55c14733",
+    "development_inference_by_seed": [
+      {
+        "runtime_commit": null,
+        "source_manifest_sha256": "2c9c37b6d9ed60c23401f4dd467dfcfa112a91b24d2df83be4fd937dc8d0ead4",
+        "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+        "seed0_commit_note": "legacy source manifest, not inventing an original launch commit"
+      },
+      {
+        "runtime_commit": "bcbda80b3f3af7250d2b47bea014f85b76a3f86c",
+        "source_manifest_sha256": "eee776f2a8ac601f0134e6dc2f9d243280845e1279668369c7e755971cc506b8",
+        "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731"
+      },
+      {
+        "runtime_commit": "bcbda80b3f3af7250d2b47bea014f85b76a3f86c",
+        "source_manifest_sha256": "eee776f2a8ac601f0134e6dc2f9d243280845e1279668369c7e755971cc506b8",
+        "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058"
+      }
+    ]
+  },
+  "supplemental_root_wallclock_seconds": 16268.644356313976,
+  "series_measured_lower_bound_seconds": 16611.107041255975,
+  "source_refs": [
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\abc-results-consolidation-20261019-001\\DEVELOPMENT_EXTRACTION_RECEIPT.json",
+      "bytes": 361,
+      "sha256": "236dc6533ed67203750a26c60b2068fcd9e137748603d97e64d8d592744b4dbc"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\abc-results-consolidation-20261019-001\\DEVELOPMENT_AUTHENTICATED.json",
+      "bytes": 25551,
+      "sha256": "d13ac0f59fb1e0b16b85b250b43f79901f1552030fa440e46e9d2750144030a6"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-original-c-supplemental-20261018-001\\protocol-extension-001\\TERMINAL_SHA_RECEIPT.json",
+      "bytes": 10564,
+      "sha256": "a414ed6561491f7d0931dbf5ced44e20e1df8eb7c39d0ea6e215648eae8ed1ab"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-original-c-supplemental-20261018-001\\protocol-extension-001\\returned-terminal-001\\production-001\\SUMMARY.json",
+      "bytes": 66341,
+      "sha256": "ca71948ea748b86dd004a0a2d624658a56f0f8da160a6ff3f6f0d4e5b19df59b"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-sixth-view-20261018-001\\master\\MASTER.json",
+      "bytes": 57556,
+      "sha256": "5151dc7c147953f6b5fba43f44d825752273b5643c135c825c4a772188b90140"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-box-vote-fixed-20261018-001\\returned\\production-001\\RESULT.json",
+      "bytes": 1814198,
+      "sha256": "2698a1df9ef9374fb75b4a171651f9a65f32ad8e3fb09c2477ece7c5feed2652"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-softnms-fixed-20261017-001\\revision-007\\returned\\production-20261018-004\\RESULT.json",
+      "bytes": 1814356,
+      "sha256": "7fdbbdc589bcf5b256986c933beb176d1fc1635734571b178e64e0f88213be21"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\r18-slice-finetune-20261018-001\\execution-001\\terminal\\job\\evaluation\\COMPARISON.json",
+      "bytes": 16218,
+      "sha256": "e5d5bf40feca3734dcfb825663009818c2933078102fc0a626033f9f7d720952"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-sixth-view-20261018-001\\EXISTING_COST_INDEX.json",
+      "bytes": 5382,
+      "sha256": "61d7553c3c46a62951459e2dd3a8459e087e702cc46bbeae7366ebfec6eb2e50"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-sixth-view-20261018-001\\execution-003\\SHA_RECEIPT.json",
+      "bytes": 26182,
+      "sha256": "c9eb4467e7ae246391fe8ec820859355b66602661bf1b3df5d600692e3690d89"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-sixth-view-20261018-001\\execution-003\\returned-001\\SCORES_SUMMARY.json",
+      "bytes": 13772,
+      "sha256": "a62d50bba40e4ad33f075d5d893083fefde38008ff7ad6c0715e5a8b09915882"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-sixth-view-20261018-001\\EXISTING_COST_INDEX.json",
+      "bytes": 5382,
+      "sha256": "61d7553c3c46a62951459e2dd3a8459e087e702cc46bbeae7366ebfec6eb2e50"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-original-c-supplemental-20261018-001\\protocol-extension-001\\returned-terminal-001\\TERMINAL_AUDIT.json",
+      "bytes": 23194,
+      "sha256": "e97048506486c7d46ac25baf51236683dd8e74b65e1c98c02b3519ac8d4edd8d"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-softnms-fixed-20261017-001\\revision-007\\REPORT.md",
+      "bytes": 6499,
+      "sha256": "53410aa66ebbe58b39d12664845f63e8746706504377023104bbfc68c8ed5973"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\r18-slice-finetune-20261018-001\\execution-001\\terminal\\REPORT.md",
+      "bytes": 3976,
+      "sha256": "0d359d23006de3e74b06a327e1525b0e28235303db4a4283165fe7a038e3da43"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-box-vote-fixed-20261018-001\\REPORT.md",
+      "bytes": 9252,
+      "sha256": "9c1d78ff0ad8232c78d7ac77948400b0fc17310286ee74ae9fa7c4589360dc9c"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\sahi-sixth-view-20261018-001\\execution-003\\REPORT.md",
+      "bytes": 5283,
+      "sha256": "4a192ebffa60a110a49feb35a7750b10ba7ef5e177f4935cf7feadce3a24796c"
+    },
+    {
+      "path": "D:\\Lzy_CV\\workspace_management\\delivery\\experiments\\localization-distribution\\rtdetrv2-r18-mal-continue-20261015-001\\REPORT.md",
+      "bytes": 1852,
+      "sha256": "7bef555ca2f0a559c1e27c014a15e7768c502618f8831b504a549a12b0d63ed7"
+    }
+  ]
+}

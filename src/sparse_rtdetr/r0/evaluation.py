@@ -35,18 +35,19 @@ def primary_inputs(rows,parsed,predictions):
  gt=tuple(g for r,p in zip(rows,parsed) for g in truth(r,p))
  detections=tuple(Detection(p["image_id"],p["category_id"],tuple(p["bbox_xyxy"]),p["score"]) for p in predictions)
  return PrimaryEvaluatorInputV2(images,detections,gt)
-def bridge_inputs(rows,parsed,predictions):
+def bridge_inputs(rows,parsed,predictions,*,gt_extension=None):
+ if gt_extension is not None:primary._validate_input(primary_inputs(rows,parsed,predictions),gt_extension=gt_extension)
  # Reuse the exact frozen official raster primitive. Do not replace with
  # continuous training IoA or move budget truncation after this filter.
  ids={r["stable_image_id"]:i+1 for i,r in enumerate(rows)};gt=[];det=[];counts={"GT_before":0,"GT_after":0,"detections_before":len(predictions),"detections_after":0}
  pred_by={r["stable_image_id"]:[] for r in rows}
  for p in predictions:pred_by[p["image_id"]].append(p)
  for row,raw in zip(rows,parsed):
-  image=PrimaryImageV2(row["stable_image_id"],row["width"],row["height"]);regions=[g for g in truth(row,raw) if g.category_id==0];integral=primary._build_integral(image,regions)
+  image=PrimaryImageV2(row["stable_image_id"],row["width"],row["height"]);regions=[g for g in truth(row,raw) if g.category_id==0];integral=primary._build_integral(image,regions,gt_extension=gt_extension)
   for obj in raw["rows"]:
    if obj["category"] not in range(1,11):continue
    counts["GT_before"]+=1;box=tuple(obj["box"])
-   if primary._ignored_fraction(integral,image,box)>=.5:continue
+   if primary._ignored_fraction(integral,image,box,gt_extension=gt_extension)>=.5:continue
    gt.append({"id":len(gt)+1,"image_id":ids[row["stable_image_id"]],"category_id":int(obj["category"]),"bbox":[box[0],box[1],box[2]-box[0],box[3]-box[1]],
               "area":float(obj["raw_area"]),"iscrowd":int(obj["score"]==0),"raw_annotation_id":obj["id"],"raw_score":obj["score"]})
    counts["GT_after"]+=1
@@ -75,9 +76,13 @@ def bridge_metrics(dataset,predictions):
  if not all(np.isfinite(v) for v in values.values()):raise ValueError("nonfinite endpoint metrics")
  return {"protocol":POLICY["id"],"units":"0..1 AP, -1 means no GT in an area/class aggregation","metrics":values,
          "maxDets":[1,10,100],"iouThrs":evaluator.params.iouThrs.tolist(),"areaRng":evaluator.params.areaRng,"category_macro":True}
-def score_budget(rows,parsed,predictions,repo_root):
+def score_budget(rows,parsed,predictions,repo_root,*,gt_extension=None):
  binding=primary.primary_evaluator_contract_binding(repo_root);inputs=primary_inputs(rows,parsed,predictions)
- official=primary.evaluate_primary_v1(inputs,binding);primary.validate_primary_evaluator_result(official,inputs,binding)
- dataset,det,counts=bridge_inputs(rows,parsed,predictions);bridge=bridge_metrics(dataset,det)
- return {"official":asdict(official),"COCO_bridge":bridge,"spatial_filter_counts":counts,"official_APS":None}
+ official=primary.evaluate_primary_v1(inputs,binding,gt_extension=gt_extension);primary.validate_primary_evaluator_result(official,inputs,binding,gt_extension=gt_extension)
+ dataset,det,counts=bridge_inputs(rows,parsed,predictions,gt_extension=gt_extension);bridge=bridge_metrics(dataset,det)
+ result={"official":asdict(official),"COCO_bridge":bridge,"spatial_filter_counts":counts,"official_APS":None}
+ if gt_extension is not None:
+  from ..data_protocol.supplemental_zero_gt import specification
+  result["evaluation_input_extension"]=specification()
+ return result
 

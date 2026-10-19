@@ -1,0 +1,129 @@
+{
+  "schema": "frozen-ABC-research-register-v1",
+  "as_of": "2026-10-19",
+  "status": "EXPERIMENT_EXPANSION_ENDED",
+  "automatic_parameter_or_candidate_or_training_actions": false,
+  "arms": {
+    "A": "common-protocol-adapted RT-DETRv2-R18 whole image, reference",
+    "B": "whole image plus fixed class-aware hard NMS0.5, conventional control",
+    "C": "whole image plus original four corner crops plus same NMS; retained SAHI-style practical adaptation"
+  },
+  "scientific_rules": {
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "endpoint": "own original e120 EMA",
+    "training_updates": 36480,
+    "canvas": [
+      768,
+      1344
+    ],
+    "inference_batch": 4,
+    "precision": "FP32",
+    "per_view_candidates": 600,
+    "output_budgets": [
+      600,
+      300
+    ],
+    "crop": "ceil5H/9 x ceil5W/9, four corners, half-open",
+    "NMS": "same class, IoU strictly >0.5",
+    "ordering": "score descending then view/query/category",
+    "raw_ignore": "truncate output budget first, original raster, no refill",
+    "new_training_or_inference_or_AP_in_this_consolidation": 0
+  },
+  "source_scalar_bundle": {
+    "path": "docs/research/abc_results_20261019/SOURCE_SCALARS.json",
+    "bytes": 95475,
+    "sha256": "8fb15f6d0580b0351ff36c6fb1e269ba4a3884f596f5d7426542dad0611d1f5c"
+  },
+  "source_identities": {
+    "supplemental_commit": "97c40e6610d8a75bf635c1801dc42e79767d029c",
+    "supplemental_manifest": "ddfd3260697388e42a8b9fa5b30b983e90055f6a538deca5ba1be24f55c14733",
+    "development_inference_by_seed": [
+      {
+        "runtime_commit": null,
+        "source_manifest_sha256": "2c9c37b6d9ed60c23401f4dd467dfcfa112a91b24d2df83be4fd937dc8d0ead4",
+        "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+        "seed0_commit_note": "legacy source manifest, not inventing an original launch commit"
+      },
+      {
+        "runtime_commit": "bcbda80b3f3af7250d2b47bea014f85b76a3f86c",
+        "source_manifest_sha256": "eee776f2a8ac601f0134e6dc2f9d243280845e1279668369c7e755971cc506b8",
+        "checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731"
+      },
+      {
+        "runtime_commit": "bcbda80b3f3af7250d2b47bea014f85b76a3f86c",
+        "source_manifest_sha256": "eee776f2a8ac601f0134e6dc2f9d243280845e1279668369c7e755971cc506b8",
+        "checkpoint_sha256": "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058"
+      }
+    ]
+  },
+  "checkpoint_sha256": [
+    "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+    "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+    "0a356a41c9b62e9ef5a934749ddb8bd12b088ca7954b96ba5ffe9b2de6ca4058"
+  ],
+  "collections": [
+    {
+      "id": "development548",
+      "images": 548,
+      "status": "ALL3_SEEDS_C_MINUS_A_QUALITY_AND_FIXED64_COST_PASS",
+      "protocol": "original positive-GT development input, repeatedly used"
+    },
+    {
+      "id": "supplemental1602_history_unverified",
+      "images": 1602,
+      "status": "ALL3_SEEDS_C_MINUS_A_QUALITY_AND_FIXED64_COST_PASS",
+      "GT_input_extension": "supplemental-zero-gt-input-extension-v1",
+      "independent_qualification": "BLOCKED_PENDING_ACCESS_HISTORY"
+    }
+  ],
+  "no_pooling_AP": true,
+  "statistics": "paired seed increments; mean/sampleSD ddof1/worst; descriptive, no new bootstrap",
+  "cost_scope": "both measurements are development fixed64; supplemental execution recheck is not1602 full-dataset throughput",
+  "closed_candidates": [
+    {
+      "id": "sahi-softnms-fixed-20261017-001",
+      "seeds": 3,
+      "quality": "FAIL_CLOSED",
+      "cost": "NOT_MEASURED",
+      "failed_conditions": 7,
+      "total_conditions": 42
+    },
+    {
+      "id": "r18-slice-finetune-20261018-001",
+      "seeds": 1,
+      "quality": "FAIL_CLOSED",
+      "cost": "PASS",
+      "failed_conditions": 9,
+      "total_conditions": 28
+    },
+    {
+      "id": "sahi-box-vote-fixed-20261018-001",
+      "seeds": 3,
+      "quality": "FAIL_CLOSED",
+      "cost": "NOT_MEASURED",
+      "failed_conditions": 21,
+      "total_conditions": 42
+    },
+    {
+      "id": "sahi-sixth-view-20261018-001",
+      "seeds": 1,
+      "center_quality": "FAIL_CLOSED",
+      "cost": "PASS",
+      "failed_conditions": 3,
+      "total_conditions": 14,
+      "same_view_control": "FAIL",
+      "flip": "CONTROL_ONLY_NOT_PROMOTED",
+      "seed1_seed2": "NOT_RUN_BY_PREREGISTERED_STOP"
+    }
+  ],
+  "prior_other_failures": "MAL, boundary probe, Moment/Full and all earlier STOP/FAIL evidence and criteria retained unchanged, not reopened or deleted",
+  "original_evidence_policy": "old reports/releases/STOP/consumed tokens/checkpoints and costs unchanged; full scientific originals remain remote",
+  "manuscript": "docs/research/abc_results_20261019/MANUSCRIPT.md",
+  "master": "docs/research/abc_results_20261019/MASTER.md",
+  "gaps": "docs/research/abc_results_20261019/GAPS.md",
+  "integration_review": "docs/research/abc_results_20261019/PR9_REVIEW.md"
+}
