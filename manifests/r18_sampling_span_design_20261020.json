@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "status": "DESIGN_CPU_PROTOTYPE_ONLY",
+  "base_main": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "vendor_commit": "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47",
+  "branch": "codex/r18-sampling-span",
+  "plan": "docs/research/r18_sampling_span_20261020/PLAN.md",
+  "config": "configs/research/r18_sampling_span_seed0.json",
+  "cpu_checks": {
+    "executed": 13,
+    "skipped": 0,
+    "CUDA_initialized": false
+  },
+  "evidence": [
+    {
+      "project_relative_path": "development/worktrees/r18-sampling-span/docs/research/abc_results_20261019/MASTER.md",
+      "bytes": 15513,
+      "sha256": "1c0f9a9ffc925d39d1f45ea97c43ea984617d5ecabab652201fc895254479afe"
+    },
+    {
+      "project_relative_path": "workspace_management/delivery/research/r18-multiview-distill-20261020-001/gpu-compatibility-002/final-delivery/REPORT.md",
+      "bytes": 25125,
+      "sha256": "b9ac4cbc01f423be9ab4e8adcc3b200fbc33b01b9d6f2d14c0060320351253a7"
+    },
+    {
+      "project_relative_path": "workspace_management/delivery/research/r18-multiview-distill-20261020-001/gpu-compatibility-002/final-delivery/CONTINUATION_STATE_AUDIT.json",
+      "bytes": 661827,
+      "sha256": "17ccd4e27a80794864c8e333b5cb9c5087c58c32536740329cecd24cbec31741"
+    },
+    {
+      "project_relative_path": "workspace_management/delivery/research/r18-sampling-span-20261020-001/cpu-002/CPU_REPORT.json",
+      "bytes": 13013,
+      "sha256": "1e809a15b92a7060e0256fb624e40d100e9183b07ba389bebeb528553196d724"
+    },
+    {
+      "project_relative_path": "workspace_management/delivery/research/r18-sampling-span-20261020-001/cpu-002/unittest.txt",
+      "bytes": 1843,
+      "sha256": "f01dcf86a0a52ec91c30bc905a56b7e58557ec2244c3af309ceb2a0405901f3a"
+    }
+  ],
+  "execution_authorized": false,
+  "production_adapter": false
+}

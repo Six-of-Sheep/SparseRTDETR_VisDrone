@@ -32,3 +32,8 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - run: python -m pip install -r environment/requirements-sampling-span-cpu.txt
+      - name: Isolated R18 sampling-span CPU prototype (no data, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_cpu.py --output /tmp/sampling-span-cpu

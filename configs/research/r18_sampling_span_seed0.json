@@ -1,0 +1,64 @@
+{
+  "schema": "r18-sampling-span-design-v1",
+  "status": "DESIGN_ONLY_REQUIRES_EXECUTION_AUTHORIZATION",
+  "seed": 0,
+  "arms": {
+    "B0": {"points": [4, 4, 4], "finest_span_floor_cells": 0},
+    "B1": {"points": [8, 2, 2], "finest_span_floor_cells": 0},
+    "P": {"points": [4, 4, 4], "finest_span_floor_cells": 1}
+  },
+  "initialization": {
+    "kind": "fresh_common_native_seed0_heads_and_strict_ImageNet_backbone",
+    "ImageNet_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720",
+    "e120_parent_used": false,
+    "shared_tensors_exact": true,
+    "B1_only_native_initial_state_differences_per_layer": ["sampling_offsets.bias", "num_points_scale"]
+  },
+  "training": {
+    "epochs": 120, "updates_per_epoch": 304, "updates_per_arm": 36480,
+    "physical_batch": 8, "accumulation": 2, "input_hw": [768, 1344],
+    "optimizer": "AdamW_fresh", "lr": 0.0001, "minimum_lr": 0.000001,
+    "warmup_updates": 2000, "betas": [0.9, 0.999], "weight_decay": 0.0001,
+    "norm_bn_weight_decay": 0, "clip_max_norm": 0.1,
+    "augmentation": "unchanged_common_strong_e001_e117_weak_e118_e120",
+    "ema": {"initial": "copy_own_initial_model", "updates": 0, "decay": 0.9999, "warmups": 2000},
+    "sampling_backend": "deterministic_gather", "amp": "BF16_forward_FP32_loss",
+    "BN": "unchanged_common_training_running_stats",
+    "endpoint": "e120_EMA_only", "best_epoch_selection": false
+  },
+  "data": {
+    "train": "certified_train_core4869_only",
+    "development": "existing548_development_only",
+    "supplemental1602_access": false,
+    "independent_generalization_claim": false
+  },
+  "evaluation": {
+    "view": "one_whole_image_A_style_no_NMS",
+    "budgets": [600, 300], "evaluators": ["original_primary", "original_COCO_bridge"],
+    "raw_ignore": "original_after_budget_no_refill",
+    "causal_comparisons": ["P-B0", "P-B1"], "historical_context": ["P-A", "P-C"]
+  },
+  "proposed_gates_pp_for_each_of_P_minus_B0_and_P_minus_B1": {
+    "top600_COCO_AP75_small_min": 0.3, "top600_COCO_APS_min": 0.2,
+    "top600_COCO_AP_min": 0.0, "top600_COCO_APM_min": -0.2,
+    "top600_COCO_APL_min": -0.2, "top600_COCO_AR_large_min": -0.2,
+    "top300_COCO_AP75_small_min": 0.0, "top300_COCO_AP_min": -0.2,
+    "top300_COCO_APS_min": -0.2,
+    "top600_primary_AP_min": -0.2, "top300_primary_AP_min": -0.2
+  },
+  "cost_targets": {"P_over_B0_E2E_max": 1.05, "P_over_B0_peak_allocated_max": 1.05},
+  "planned_forward_budget": {
+    "acceptance_3_actual_updates_per_arm": 18,
+    "formal_training": 218880, "endpoint_548_batch4_three_arms": 411,
+    "cost_64_batch4_four_models_six_passes": 384, "total": 219693
+  },
+  "future_cost_protocol": {
+    "models": ["historical_A", "B0", "B1", "P"], "images": 64,
+    "warmup_passes": 2, "measured_passes": 4, "batch": 4, "precision": "FP32",
+    "order": "four_measured_passes_Latin_square_each_model_once_in_each_position",
+    "timing": "preprocess_H2D_forward_postprocess_and_CUDA_synchronize_same_boundary"
+  },
+  "future_resource_limits": {"GPU_hours_cap": 60, "training_peak_allocated_GiB_cap": 18, "task_storage_GiB_cap": 100},
+  "automatic_execution": false,
+  "production_adapter_implemented": false
+}
