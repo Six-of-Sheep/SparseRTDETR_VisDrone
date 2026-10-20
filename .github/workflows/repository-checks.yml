@@ -32,3 +32,8 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - run: python -m pip install -r environment/requirements-distill-cpu.txt
+      - name: Native R18 distillation preparation entry (CPU synthetic only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_distill_cpu.py --output "${{ runner.temp }}/r18-distill-cpu"

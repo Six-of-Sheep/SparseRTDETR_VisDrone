@@ -33,3 +33,5 @@ git archive --format=tar --output=../run-metadata/example-seed0/source.tar <回�
 check --staged读取真实暂存字节，拒绝产物、凭据形态、机器目录、超2MiB文件及未审查链接；它不是完整秘密审计。确需大源码文件时先明确审查例外。
 
 CI运行管理、切片、汇总CPU测试与历史源码身份核验，并在Python 3.10/3.12中执行确认集入口、补充用途协议及零面积GT生产接口回归。后者通过`python -B tools/check_confirmation_ci.py`运行，任何skip均判失败；CPU-only依赖固定于`environment/requirements-confirmation-ci.txt`。测试只用仓库内的小型夹具，不读取实验室路径、封存材料或checkpoint，不评分完整数据集，不训练、不连接服务器，也不能替代GPU验收。
+
+多视图蒸馏准备另用`environment/requirements-distill-cpu.txt`及`tools/check_distill_cpu.py --output <全新目录>`。它实际执行小画布原生R18的合成CPU forward/backward、保存恢复及准备入口拒绝检查，不运行科学训练或AP；它不提供GPU生产启动器。依赖和证据范围见`docs/research/r18_multiview_distill_20261020/CPU_REPORT.md`。
