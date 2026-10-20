@@ -1,5 +1,15 @@
 # 唯一生产执行准备版（PR15，等待单独GPU授权）
 
+## execution-001 STOP后的最小CUDA兼容修订
+
+用户另行授权设备身份兼容及完整诊断留痕，科学配方、执行预算、训练/评价日程、资源门槛和固定环境不变。旧release/STOP及原子进程stdout/stderr缺失保持；当前新诊断确认torch2.4.1成功初始化CUDA并查询设备属性后，在`uuid`属性处抛出AttributeError。这不补回旧stderr，也不证明旧exit1没有其他原因。
+
+新增`tools/distill_cuda_preflight.py --gpu-uuid <完整GPU-UUID> --output <新目录>`，实际调用同release的`r18_distill.py cuda-preflight`。父子进程及nvidia-smi命令、cwd、CUDA可见性、退出码、stdout/stderr原字节与SHA均独立留存，失败不重试。模型forward为0，不创建生产合同或令牌。生产worker使用相同身份接口，每阶段单独保存身份审计。
+
+身份依据为torch已加载的唯一CUDA runtime库，调用runtime API得到**CUDA逻辑设备0实际对应的PCI地址**，再从nvidia-smi物理清单中唯一匹配该PCI的真实UUID。该方法实际测量CUDA_VISIBLE_DEVICES重排后的映射，不将逻辑序号当作nvidia-smi序号，不用名称代替UUID；若torch自身有uuid，还必须与物理/契约一致。生产仍要求完整UUID显式可见且仅一个CUDA设备。缺失、重复、歧义、查询失败、UUID/PCI冲突及环境不一致均拒绝，不引入第二CUDA runtime，不升级环境。开发现场首版误调用未导出的cudaDeviceGetUuid，已保留完整诊断并在兼容范围内修正为PCI映射；该失败未进入生产链。
+
+CPU兼容检查仅模拟设备接口与错误分支；现场PyTorch2.4.1无forward预检另行留证。因修改最终CLI和worker初始化，重新走完整合成CPU生命周期以保留严格源码绑定，不放宽原CPU gate的全文件一致性规则；未变的算法/真实成员认证仅按明确SHA引用复用。新版本及执行状态以新delivery的VERSION/REPORT和共享CURRENT为准，下文保留原生产准备记录。
+
 科学依据仍为PLAN.md与`configs/research/r18_multiview_distill_v1.json`，本轮未改变任何科学参数、门槛或历史裁决。执行工程合同为`configs/research/r18_multiview_distill_execution_v1.json`；独立协议`r18-distill-production-lifecycle-v1`、任务`r18-multiview-distill-20261020-001`。7578876及旧STOP/准备成本保留。Data Distillation缺件已由正文补齐，见同目录审查；PLAN原“尚未读/入口未实现”是旧准备版本的状态，现由本记录补充，不能追认旧版本通过。
 
 本轮只实现/CPU验收，不连接实验室、不发放真实合同/令牌、不生成真实teacher cache、不训练或科学评分。CPU合成AP只检查两个原评价器调用与数值序列化，不是development科学评分。

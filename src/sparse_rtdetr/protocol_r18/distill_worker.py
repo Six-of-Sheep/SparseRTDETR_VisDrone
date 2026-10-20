@@ -120,7 +120,7 @@ def admission(c,out,emit,holder):
     return dict(members=counts,train_supervision_only=True,baseline_recomputed=False,parent= c['parent']['checkpoint'])
 
 
-def setup_runtime(c,gpu):
+def setup_runtime(c,gpu,out=None):
     if gpu:
         require(c['profile']=='LAB_GPU_ONCE' and c['GPU_authorized'] and not torch.cuda.is_initialized(),'unexpected CUDA state/authority')
         require(os.environ['CUDA_VISIBLE_DEVICES']==c['gpu_uuid'] and os.environ['CUBLAS_WORKSPACE_CONFIG']==':4096:8','CUDA launch environment differs')
@@ -129,10 +129,9 @@ def setup_runtime(c,gpu):
         torch.backends.cudnn.allow_tf32=False;torch.backends.cuda.matmul.allow_tf32=False
         actual=dict(torch=str(torch.__version__),torchvision=__import__('torchvision').__version__,cuda_build=torch.version.cuda,cudnn=torch.backends.cudnn.version())
         require(actual==c['environment'],'GPU environment contract differs')
-        torch.cuda.init();require(torch.cuda.device_count()==1,'GPU device count differs')
-        torch.cuda.set_device(0)
-        prop=torch.cuda.get_device_properties(0)
-        require(str(prop.uuid).lower()==c['gpu_uuid'].lower(),'CUDA device UUID conflict')
+        from .cuda_identity import inspect_cuda_identity
+        require(out is not None,'GPU identity audit output required')
+        inspect_cuda_identity(c['gpu_uuid'],Path(out)/'cuda-identity',torch_module=torch)
         return torch.device('cuda:0')
     require(os.environ['CUDA_VISIBLE_DEVICES']=='' and not torch.cuda.is_initialized(),'CPU profile initialized CUDA')
     torch.set_num_threads(1);torch.use_deterministic_algorithms(True)
@@ -470,7 +469,7 @@ def worker(c,stage):
             require(time.monotonic()<deadline,'supervisor handshake timeout');time.sleep(.02)
         ack=rt.read(out/'supervisor-ack.json')
         require(ack==dict(identity=rt.identity(c,stage),writer_pid=os.getpid(),supervisor_pid=owner['pid']),'supervisor acknowledgement differs')
-        holder['device']=setup_runtime(c,gpu_stage(c,stage));live(c,out,gpu=gpu_stage(c,stage))
+        holder['device']=setup_runtime(c,gpu_stage(c,stage),out);live(c,out,gpu=gpu_stage(c,stage))
         emit.emit('begin',CUDA_initialized=torch.cuda.is_initialized(),profile=c['profile'])
         # Explicit fixture-only fault, never available to production contracts.
         if c['profile']=='CPU_FIXTURE_ONLY' and c.get('fixture_fault_stage')==stage:raise RuntimeError('deliberate CPU worker fault')

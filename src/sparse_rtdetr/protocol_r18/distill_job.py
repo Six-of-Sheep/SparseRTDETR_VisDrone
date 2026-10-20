@@ -194,7 +194,7 @@ def bind(spec_path,source_ref,cpu_gate_ref,approval_ref,output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=('run','supervise','worker','verify','make-source','bind'))
+    parser.add_argument('action',choices=('run','supervise','worker','verify','make-source','bind','cuda-preflight'))
     parser.add_argument('--contract',type=Path)
     parser.add_argument('--stage',choices=rt.STAGES)
     parser.add_argument('--output',type=Path)
@@ -202,9 +202,16 @@ def main():
     parser.add_argument('--source',type=Path)
     parser.add_argument('--cpu-gate',type=Path)
     parser.add_argument('--authorization',type=Path)
+    parser.add_argument('--gpu-uuid')
     args=parser.parse_args()
     if args.action=='make-source':
         rt.require(args.output is not None,'source output required');rt.source_receipt(args.output);return 0
+    if args.action=='cuda-preflight':
+        rt.require(args.output is not None and args.gpu_uuid is not None,'explicit GPU UUID/audit output required')
+        from .cuda_identity import inspect_cuda_identity
+        value=inspect_cuda_identity(args.gpu_uuid,args.output)
+        rt.require(value['BF16_supported'],'frozen BF16 runtime unavailable')
+        print(json.dumps(value));return 0
     if args.action=='bind':
         rt.require(all(v is not None for v in (args.spec,args.source,args.cpu_gate,args.authorization,args.output)),'all bind references required')
         bind(args.spec,rt.reference(args.source),rt.reference(args.cpu_gate),rt.reference(args.authorization),args.output);return 0
