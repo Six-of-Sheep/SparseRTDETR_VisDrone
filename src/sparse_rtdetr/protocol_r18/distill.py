@@ -85,9 +85,15 @@ def cache_binding(*, source_manifest_sha256, contract_sha256):
 def verify_record(record, row, expected_binding):
     if record.get('binding') != expected_binding:
         raise ValueError('teacher cache binding differs')
-    if expected_binding != cache_binding(
+    if expected_binding.get('profile') == 'CPU_FIXTURE_ONLY':
+        valid = fixture_cache_binding(source_manifest_sha256=expected_binding['source_manifest_sha256'],
+            contract_sha256=expected_binding['contract_sha256'], manifest_sha256=expected_binding['manifest_sha256'],
+            checkpoint_sha256=expected_binding['checkpoint_sha256'])
+    else:
+        valid = cache_binding(
             source_manifest_sha256=expected_binding['source_manifest_sha256'],
-            contract_sha256=expected_binding['contract_sha256']):
+            contract_sha256=expected_binding['contract_sha256'])
+    if expected_binding != valid:
         raise ValueError('teacher cache is not seed0 training-only parent EMA')
     if record.get('member') != row:
         raise ValueError('teacher cache image/annotation/member identity conflict')
@@ -105,6 +111,17 @@ def verify_record(record, row, expected_binding):
         if [r.view_candidate_rank for r in candidates] != list(range(1, 601)):
             raise ValueError('teacher ranks differ')
     return record
+
+
+def fixture_cache_binding(*, source_manifest_sha256, contract_sha256, manifest_sha256, checkpoint_sha256):
+    """Isolated synthetic provenance; never declares real train/e120 identity."""
+    for value in (source_manifest_sha256, contract_sha256, manifest_sha256, checkpoint_sha256):
+        if type(value) is not str or len(value)!=64 or any(c not in '0123456789abcdef' for c in value):
+            raise ValueError('fixture reference SHA required')
+    return dict(protocol=VERSION, profile='CPU_FIXTURE_ONLY', role='synthetic_train',
+        manifest_sha256=manifest_sha256, checkpoint_sha256=checkpoint_sha256,
+        source_manifest_sha256=source_manifest_sha256, contract_sha256=contract_sha256,
+        EMA=False, epoch=None, input_hw=[128,128], inference_dtype='FP32')
 
 
 def from_raw_views(row, raw_views, binding):

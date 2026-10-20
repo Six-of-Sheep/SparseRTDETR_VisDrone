@@ -37,3 +37,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_distill_cpu.py --output "${{ runner.temp }}/r18-distill-cpu"
+      - name: Final distillation production lifecycle (synthetic CPU only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_distill_production_cpu.py --output "${{ runner.temp }}/r18-distill-production-cpu"

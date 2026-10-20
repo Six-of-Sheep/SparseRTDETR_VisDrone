@@ -149,7 +149,7 @@
     {
       "id": "r18-multiview-distill-20261020-001",
       "role": "single_seed_prediction_distillation_feasibility_preparation",
-      "result_status": "CPU_PREPARATION_PASS_NOT_GPU_READY",
+      "result_status": "PRODUCTION_ENTRY_CPU_PREPARATION_NO_GPU_AUTHORITY",
       "source_commit": null,
       "source_commit_rule": "bind exact preparation commit and source manifest in external delivery index; not a historical run",
       "report": "docs/research/r18_multiview_distill_20261020/PLAN.md",
@@ -157,7 +157,10 @@
       "config": "configs/research/r18_multiview_distill_v1.json",
       "GPU_authorized": false,
       "scientific_updates": 0,
-      "scientific_scoring_groups": 0
+      "scientific_scoring_groups": 0,
+      "production_execution": "docs/research/r18_multiview_distill_20261020/PRODUCTION_EXECUTION.md",
+      "execution_config": "configs/research/r18_multiview_distill_execution_v1.json",
+      "literature_review": "docs/research/r18_multiview_distill_20261020/DATA_DISTILLATION_REVIEW.md"
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"

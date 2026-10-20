@@ -1,0 +1,19 @@
+{
+  "template_status": "NOT_A_CONTRACT_OR_AUTHORIZATION; null fields require fresh lab admission after separate approval",
+  "profile": "LAB_GPU_ONCE",
+  "attempt": null,
+  "nonce": null,
+  "job_root": null,
+  "boot_id": null,
+  "gpu_uuid": null,
+  "storage_identity": null,
+  "environment": {"torch": "2.4.1", "torchvision": "0.19.1", "cuda_build": "12.4", "cudnn": 90100},
+  "parent": {"checkpoint": {"path": null, "bytes": 323460353, "sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757"}, "binding": {"path": null, "bytes": 15150, "sha256": "93d50992a27583832f2ab4ae4039b02db590ffbbb0850f050507bb1a0bdbc938"}},
+  "data": {
+    "train_core": {"role": "train_core", "count": 4869, "manifest": {"path": null, "bytes": null, "sha256": "df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d"}, "roots": {"role": "train_core", "images": null, "annotations": null}},
+    "development": {"role": "development", "count": 548, "manifest": null, "roots": {"role": "development", "images": null, "annotations": null}}
+  },
+  "selection": {"path": null, "bytes": null, "sha256": "b9d1ce181a91f168865b3a717ad635b57c53c898a3a3d3519952f9197cc794ec"},
+  "fixed_ids": null,
+  "baselines": {"path": null, "bytes": null, "sha256": "8fb15f6d0580b0351ff36c6fb1e269ba4a3884f596f5d7426542dad0611d1f5c"}
+}

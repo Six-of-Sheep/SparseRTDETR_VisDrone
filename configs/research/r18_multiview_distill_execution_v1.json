@@ -1,0 +1,43 @@
+{
+  "protocol": "r18-distill-production-lifecycle-v1",
+  "status": "EXECUTION_PREPARATION_NOT_AUTHORITY",
+  "resources": {
+    "minimum_CPUs": 16,
+    "minimum_RAM_GiB": 16,
+    "minimum_free_disk_GiB": 80,
+    "entry_shm_GiB": 8,
+    "live_shm_GiB": 4,
+    "max_resource_age_seconds": 25,
+    "monitor_interval_seconds": 2,
+    "activity_idle_seconds": 300,
+    "operation_seconds": 1800,
+    "CPU_temperature_C_below": 90,
+    "GPU_temperature_C_below": 80,
+    "GPU_entry_free_MiB": 20000,
+    "GPU_live_free_MiB": 3072,
+    "CPU_PL1_uW_max": 125000000,
+    "CPU_PL2_uW_max": 150000000,
+    "GPU_graphics_MHz_max": 1500
+  },
+  "environment": {
+    "torch": "2.4.1",
+    "torchvision": "0.19.1",
+    "cuda_build": "12.4",
+    "cudnn": 90100
+  },
+  "teacher_first_checks_images": 8,
+  "teacher_batch": 4,
+  "student_evaluation_batch": 4,
+  "warmup_full64_passes_per_model": 2,
+  "timed_full64_passes_per_model": 4,
+  "timing_orders": [
+    ["A", "T0", "T1", "T2"],
+    ["T0", "T1", "T2", "A"],
+    ["T1", "T2", "A", "T0"],
+    ["T2", "A", "T0", "T1"]
+  ],
+  "stages": ["admission", "teacher", "accept-T0", "accept-T1", "accept-T2", "train-T0", "train-T1", "train-T2", "infer-T0", "infer-T1", "infer-T2", "score", "cost", "compare", "export"],
+  "no_retry": true,
+  "training_from_acceptance_state": false,
+  "production_authorization_in_this_file": false
+}

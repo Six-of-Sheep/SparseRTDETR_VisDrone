@@ -1,5 +1,7 @@
 # CPU准备验收：范围、证据与未完成项
 
+2026-10-20生产准备002补充：Data Distillation正文及最终15阶段执行入口见[生产执行准备](PRODUCTION_EXECUTION.md)和[正文核对](DATA_DISTILLATION_REVIEW.md)。本文件下文保留7578876原prepare证据的范围，不将其追认为完整生产入口。新增最终CLI的Linux/WSL合成CPU闭环结果、命令、逐项通过/拒绝及源字节绑定在delivery `production-preparation-002/CPU_GATE.json`与`REPORT.md`独立记录；真实材料/BF16/GPU仍未验收。原17项算法检查因缓存fixture身份接口变化已定向重跑，17/17、0 skip；旧真实小型元数据证据复用，未重复读取训练图像/父checkpoint。
+
 任务 `r18-multiview-distill-20261020-001`；以[唯一计划](PLAN.md)、[配置](../../../configs/research/r18_multiview_distill_v1.json)和[来源记录](SOURCES.json)为准。状态为 **CPU_PREPARATION_PASS / NOT_GPU_READY**，不是科学质量通过。代码从main `458d645f70839cda3d1ff35d67bf3ff812e68bd1`隔离新增，无未合并PR源码依赖；旧实验目录、release、指标及PR #10不变。
 
 ## 实际执行
