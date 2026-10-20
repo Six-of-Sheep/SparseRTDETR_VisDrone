@@ -19,7 +19,8 @@ def environment(c,gpu=False):
 
 
 def command(c,action,stage=None):
-    argv=[c['python'],'-B',str(rt.ROOT/'r18_sampling_span.py'),action,'--contract',c['_path']]
+    entry = 'r18_sampling_acceptance.py' if rt.acceptance_only(c) else 'r18_sampling_span.py'
+    argv=[c['python'],'-B',str(rt.ROOT/entry),action,'--contract',c['_path']]
     if stage is not None:argv+=['--stage',stage]
     return argv
 
@@ -29,7 +30,9 @@ def gpu_stage(c,stage):
 
 
 def predecessors(c,stage):
-    for previous in rt.STAGES[:rt.STAGES.index(stage)]:rt.verify_stage(c,previous)
+    stages=rt.permitted_stages(c)
+    rt.require(stage in stages,'stage outside contract scope')
+    for previous in stages[:stages.index(stage)]:rt.verify_stage(c,previous)
 
 
 def supervise(c,stage):
@@ -151,6 +154,7 @@ def supervise(c,stage):
 
 
 def run(c):
+    rt.require(not rt.acceptance_only(c),'full run refuses acceptance contract')
     root=Path(c['job_root']);root.mkdir(parents=True,exist_ok=False)
     rt.publish(root/'RUN-CONSUMED.json',dict(identity=rt.identity(c,'admission'),nonce=c['nonce'],no_retry=True))
     start=time.monotonic();done=[]
@@ -208,7 +212,7 @@ def prepare(c,output):
         rt.require(not torch.cuda.is_initialized(),'prepare initialized CUDA')
         rt.publish(out/'PREPARE_PASS.json',dict(status='PREPARE_PASS',result=result,source=c['source'],
             source_sha256=c['source']['sha256'],data_sha256=rt.digest(c['data']),model_forward_calls=0,
-            CUDA_initialized=False,profile=c['profile'],input_list_proof=c.get('input_list_proof')))
+            CUDA_initialized=False,profile=c['profile'],contract_protocol=c['protocol'],input_list_proof=c.get('input_list_proof')))
         return 0
     except BaseException as exc:
         rt.publish(out/'STOP.json',dict(status='STOP_NO_RETRY',error=repr(exc),traceback=traceback.format_exc()))
@@ -217,6 +221,7 @@ def prepare(c,output):
 
 def prepare_spec(spec_path,source_path,output):
     c=rt.read(spec_path);ref=rt.reference(source_path)
+    rt.require('acceptance_limits' not in c and c.get('execution_scope','GPU_TRAIN_EVAL_ONCE')=='GPU_TRAIN_EVAL_ONCE','acceptance spec refused by full-chain entry')
     c.update(task_id=rt.TASK,protocol=rt.PROTOCOL,source_root=str(rt.ROOT),python=sys.executable,
         commit=rt.verify_source(ref)['commit'],source=ref,science_sha256=rt.digest(rt.recipe()),
         execution_sha256=rt.digest(rt.execution()),stages=list(rt.STAGES),resources=rt.execution()['resources'],
@@ -230,6 +235,7 @@ def prepare_spec(spec_path,source_path,output):
 def bind(spec_path,source_ref,cpu_gate_ref,approval_ref,output):
     """Future authorized binding, no forward. Caller supplies current lab facts."""
     c=rt.read(spec_path)
+    rt.require('acceptance_limits' not in c and c.get('execution_scope','GPU_TRAIN_EVAL_ONCE')=='GPU_TRAIN_EVAL_ONCE','acceptance spec refused by full-chain entry')
     from .span_inputs import adapt
     adapt(c)
     c.update(task_id=rt.TASK,protocol=rt.PROTOCOL,source_root=str(rt.ROOT),python=sys.executable,

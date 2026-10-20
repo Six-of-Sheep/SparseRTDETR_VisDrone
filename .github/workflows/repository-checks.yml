@@ -41,3 +41,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_sampling_span_production_cpu.py --output /tmp/sampling-span-production-cpu
+      - name: Acceptance-only final CLI CPU lifecycle and scope rejection (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_acceptance_cpu.py --output /tmp/sampling-span-acceptance-cpu

@@ -12,6 +12,8 @@ from ..localization.runio import (read, publish, atomic, reference, require, sha
 ROOT = Path(__file__).resolve().parents[3]
 TASK = 'r18-sampling-span-20261020-001'
 PROTOCOL = 'r18-sampling-span-production-v1'
+ACCEPTANCE_PROTOCOL = 'r18-sampling-span-acceptance-v1'
+ACCEPTANCE_CONFIG = 'configs/research/r18_sampling_span_acceptance_v1.json'
 SCIENCE = 'configs/research/r18_sampling_span_seed0.json'
 EXECUTION = 'configs/research/r18_sampling_span_execution_v1.json'
 STAGES = ('admission', 'accept-B0', 'accept-B1', 'accept-P',
@@ -59,7 +61,9 @@ def verify_source(ref):
         require(target.is_file() and not target.is_symlink() and target.resolve().is_relative_to(ROOT), 'source member escaped/missing')
         require(reference(target) == dict(path=str(target), bytes=row['bytes'], sha256=row['sha256']), 'actual source bytes changed: '+name)
         names.append(name)
-    require(len(names) == len(set(names)) and {'r18_sampling_span.py', SCIENCE, EXECUTION,
+    require(len(names) == len(set(names)) and {'r18_sampling_span.py', 'r18_sampling_acceptance.py', SCIENCE, EXECUTION, ACCEPTANCE_CONFIG,
+        'src/sparse_rtdetr/protocol_r18/span_acceptance.py',
+        'src/sparse_rtdetr/protocol_r18/span_acceptance_budget.py',
         'src/sparse_rtdetr/protocol_r18/span_runtime.py',
         'src/sparse_rtdetr/protocol_r18/span_job.py',
         'src/sparse_rtdetr/protocol_r18/span_worker.py',
@@ -82,14 +86,50 @@ def profile(c):
                 eval_count=548, fixed_count=64, input_hw=(768,1344), workers=2)
 
 
-def load(path, *, preparation=False):
+def acceptance_config():
+    return read(ROOT/ACCEPTANCE_CONFIG)
+
+
+def acceptance_only(c):
+    require(c['protocol'] in (PROTOCOL, ACCEPTANCE_PROTOCOL), 'foreign execution protocol')
+    return c['protocol'] == ACCEPTANCE_PROTOCOL
+
+
+def permitted_stages(c):
+    return tuple(acceptance_config()['stages']) if acceptance_only(c) else STAGES
+
+
+def verify_cpu_gate(gate, source_ref, gate_status):
+    """Validate original or byte-identical relocated CPU evidence, by protocol."""
+    require(gate['status'] == gate_status and gate['source_sha256'] == source_ref['sha256'],
+            'final-source CPU entry gate absent')
+    if 'byte_identical_parent_gate' in gate:
+        parent = exact(gate['byte_identical_parent_gate']); ref = gate['byte_identical_parent_source']
+        require(all(ref[k] == parent['source'][k] for k in ('bytes','sha256')),
+                'relocated CPU source evidence differs')
+        old = exact(ref); source = exact(source_ref)
+        require(parent['status'] == gate_status and parent['skips'] == 0 and old['files'] == source['files'],
+                'CPU evidence rebind changed protocol/source bytes')
+    return gate
+
+
+def load(path, *, preparation=False, acceptance=False):
     require(platform.system() == 'Linux', 'final lifecycle requires POSIX evaluator/process interfaces; CPU via WSL/CI only')
     c = read(path)
-    require(c['task_id'] == TASK and c['protocol'] == PROTOCOL, 'foreign task/protocol')
+    expected_protocol = ACCEPTANCE_PROTOCOL if acceptance else PROTOCOL
+    require(c['task_id'] == TASK and c['protocol'] == expected_protocol, 'foreign task/protocol')
     require(c['contract_sha256'] == digest({k:v for k,v in c.items() if k != 'contract_sha256'}), 'contract digest differs')
     require(c['source_root'] == str(ROOT) and c['python'] == sys.executable, 'release/interpreter differs')
     require(c['science_sha256'] == digest(recipe()) and c['execution_sha256'] == digest(execution()), 'frozen recipe/execution differs')
-    require(c['stages'] == list(STAGES), 'phase omission/reorder')
+    require(c['stages'] == list(permitted_stages(c)), 'phase omission/reorder')
+    if acceptance:
+        aconfig = acceptance_config()
+        require(c['execution_scope'] == aconfig['scope'] and c['acceptance_limits'] == aconfig['limits']
+                and c['acceptance_sha256'] == digest(aconfig), 'acceptance scope/limits differ')
+        require(c['science_authorized'] is False, 'acceptance cannot authorize scientific execution')
+    else:
+        require('acceptance_limits' not in c and 'acceptance_sha256' not in c and
+                c.get('execution_scope', 'GPU_TRAIN_EVAL_ONCE') == 'GPU_TRAIN_EVAL_ONCE', 'acceptance contract refused by full-chain entry')
     require(type(c['attempt']) is str and c['attempt'].startswith('attempt-') and '/' not in c['attempt'] and '\\' not in c['attempt'], 'invalid new attempt identity')
     require(Path(c['job_root']).is_absolute() and Path(c['job_root']).name == c['attempt'], 'attempt/output identity differs')
     require(str(Path(c['job_root']).resolve())==c['job_root'],'noncanonical output path')
@@ -102,21 +142,20 @@ def load(path, *, preparation=False):
                 'CPU fixture cannot carry production authority')
     else:
         require(platform.system() == 'Linux' and os.uname().machine == 'x86_64', 'production requires admitted lab Linux')
-        require(c['GPU_authorized'] is (not preparation) and c['science_authorized'] is (not preparation), 'execution/preparation authority mismatch')
+        require(c['GPU_authorized'] is (not preparation) and c['science_authorized'] is (False if acceptance else not preparation), 'execution/preparation authority mismatch')
         if preparation:
             require(c['authorization'] is None, 'preparation cannot carry GPU authority')
         a = None if preparation else exact(c['authorization'])
-        require(preparation or a == dict(scope='GPU_TRAIN_EVAL_ONCE', task_id=TASK, attempt=c['attempt'],
+        approval = dict(scope='GPU_ACCEPTANCE_ONLY' if acceptance else 'GPU_TRAIN_EVAL_ONCE', task_id=TASK, attempt=c['attempt'],
                          commit=c['commit'], source_sha256=c['source']['sha256'],
                          science_sha256=c['science_sha256'], execution_sha256=c['execution_sha256'],
-                         nonce=c['nonce']), 'separate exact-source GPU approval absent/conflicting')
-        gate = dict(status='PRODUCTION_CPU_ENTRY_PASS', source_sha256=c['source']['sha256']) if preparation else exact(c['CPU_gate'])
-        require(gate['status'] == 'PRODUCTION_CPU_ENTRY_PASS' and gate['source_sha256'] == c['source']['sha256'], 'final-source CPU entry gate absent')
-        if 'byte_identical_parent_gate' in gate:
-            parent=exact(gate['byte_identical_parent_gate']);ref=gate['byte_identical_parent_source']
-            require(all(ref[k]==parent['source'][k] for k in ('bytes','sha256')),'relocated CPU source evidence differs')
-            old=exact(ref)
-            require(parent['status']=='PRODUCTION_CPU_ENTRY_PASS' and parent['skips']==0 and old['files']==source['files'], 'CPU evidence rebind changed source bytes')
+                         nonce=c['nonce'])
+        if acceptance:
+            approval.update(acceptance_sha256=c['acceptance_sha256'], limits=acceptance_config()['limits'])
+        require(preparation or a == approval, 'separate exact-source GPU approval absent/conflicting')
+        gate_status = 'ACCEPTANCE_CPU_ENTRY_PASS' if acceptance else 'PRODUCTION_CPU_ENTRY_PASS'
+        gate = dict(status=gate_status, source_sha256=c['source']['sha256']) if preparation else exact(c['CPU_gate'])
+        verify_cpu_gate(gate, c['source'], gate_status)
         require(c['environment'] == execution()['environment'], 'certified lab runtime changed')
         require(c['resources'] == execution()['resources'], 'resource limits changed')
         require(Path(c['job_root']).is_relative_to('/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/'+TASK), 'output not in this lab task')
@@ -131,6 +170,12 @@ def load(path, *, preparation=False):
     require(set(c['data']) == {'train_core','development'}, 'unauthorized data role')
     require(c['pretrained']['sha256'] == recipe()['initialization']['ImageNet_sha256'] or c['profile']=='CPU_FIXTURE_ONLY', 'ImageNet binding differs')
     require(c['prior_cost']['path'] != c['job_root'], 'prior cost must be external evidence')
+    if acceptance and c['profile']=='LAB_GPU_ONCE':
+        prior=exact(c['prior_cost'])
+        require(prior['task_id']==TASK and prior['profile']=='LAB_GPU_ONCE' and
+            type(prior['GPU_seconds']) in (int,float) and prior['GPU_seconds']>=0 and
+            type(prior['forward_calls']) is int and prior['forward_calls']>=0,
+            'acceptance prior cumulative cost identity/values differ')
     require(not (c['profile']=='LAB_GPU_ONCE' and any(k.startswith('fixture_') for k in c)), 'production fixture override refused')
     from .span_inputs import adapt
     before = digest(c)
@@ -193,14 +238,14 @@ def snapshot(c, *, entry, gpu, baseline=None):
 
 
 def identity(c,stage):
-    require(stage in STAGES,'unknown stage')
-    return dict(task_id=TASK,protocol=PROTOCOL,attempt=c['attempt'],stage=stage,
+    require(stage in permitted_stages(c),'stage outside contract scope')
+    return dict(task_id=TASK,protocol=c['protocol'],attempt=c['attempt'],stage=stage,
                 source_sha256=c['source']['sha256'],contract_sha256=c['contract_sha256'],
                 science_sha256=c['science_sha256'],profile=c['profile'],initialization_sha256=c['pretrained']['sha256'])
 
 
 def stage_path(c,stage):
-    require(stage in STAGES,'unknown stage path')
+    require(stage in permitted_stages(c),'stage outside contract scope')
     return Path(c['job_root'])/stage
 
 

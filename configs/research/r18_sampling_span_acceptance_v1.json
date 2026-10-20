@@ -1,0 +1,16 @@
+{
+  "protocol": "r18-sampling-span-acceptance-v1",
+  "scope": "GPU_ACCEPTANCE_ONLY",
+  "stages": ["admission", "accept-B0", "accept-B1", "accept-P"],
+  "limits": {
+    "actual_updates_per_arm": 3,
+    "batch_forward_calls_per_arm": 6,
+    "actual_updates_total": 9,
+    "batch_forward_calls_total": 18
+  },
+  "formal_training_authorized": false,
+  "scientific_scoring_authorized": false,
+  "full_timing_authorized": false,
+  "no_retry": true,
+  "acceptance_state_usable_for_formal": false
+}

@@ -348,16 +348,21 @@ def live(c,out,*,gpu):
 
 def update(c,e,images,targets,out,holder,*,capture=False,observed=False):
     live(c,out,gpu=e.device.type=='cuda')
+    from . import span_acceptance_budget as acceptance_budget
+    scoped=rt.acceptance_only(c)
+    if scoped:acceptance_budget.reserve_update(c,e.arm)
     limits.guard(c,forward_calls=2,save=lambda:save(e,out,'budget-stop.pth'))
     holder['input']=dict(images=images,targets=targets)
     rows=[]
-    with observe(e.model,e.arm,rows) if observed else contextlib.nullcontext():
+    with acceptance_budget.forward_counter(c,e.model,e.arm) if scoped else contextlib.nullcontext(), \
+         observe(e.model,e.arm,rows) if observed else contextlib.nullcontext():
         result=e.train_window(images,targets,capture=capture)
     require(e.completed_updates==e.ema.updates==result['update'] and result['finite'] and e.phase==0,
             'complete training update/EMA clock differs')
     if e.device.type=='cuda':
         require(torch.cuda.max_memory_allocated()<=c['resources']['training_peak_allocated_GiB_cap']*rt.GIB,
                 'training peak memory exceeds frozen limit')
+    if scoped:acceptance_budget.complete_update(c,e.arm)
     return result,rows
 
 
