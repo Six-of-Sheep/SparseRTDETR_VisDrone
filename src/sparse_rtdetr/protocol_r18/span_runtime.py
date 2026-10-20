@@ -67,6 +67,7 @@ def verify_source(ref):
         'src/sparse_rtdetr/protocol_r18/span_checkpoint.py',
         'src/sparse_rtdetr/protocol_r18/span_observation.py',
         'src/sparse_rtdetr/protocol_r18/span_budget.py',
+        'src/sparse_rtdetr/protocol_r18/span_inputs.py',
         'src/sparse_rtdetr/research/sampling_span.py',
         'src/sparse_rtdetr/protocol_r18/cuda_identity.py'} <= set(names), 'incomplete source manifest')
     return value
@@ -131,6 +132,10 @@ def load(path, *, preparation=False):
     require(c['pretrained']['sha256'] == recipe()['initialization']['ImageNet_sha256'] or c['profile']=='CPU_FIXTURE_ONLY', 'ImageNet binding differs')
     require(c['prior_cost']['path'] != c['job_root'], 'prior cost must be external evidence')
     require(not (c['profile']=='LAB_GPU_ONCE' and any(k.startswith('fixture_') for k in c)), 'production fixture override refused')
+    from .span_inputs import adapt
+    before = digest(c)
+    adapt(c)
+    require(digest(c) == before, 'sealed contract lacks explicit input-list normalization')
     c['_path'] = str(Path(path).resolve())
     return c
 

@@ -73,3 +73,15 @@ CPU检查命令：`CUDA_VISIBLE_DEVICES='' python -B tools/check_sampling_span_p
 监督器的语义进展来自经身份/SHA链验证的追加事件日志，原progress.json保留为人类查看指针；不是在读失败后重试或忽略错误。原训练reader对物理行的分类和过滤不变，development继续使用既有严格几何保护。
 
 实时监督只增量读取完整追加事件并保存游标、链SHA、PID及单调时钟，拒绝日志消失、替换、截断和错误追加，避免120轮逐次重扫完整日志。闭合时仍全量核验最终事件字节和完整SHA链，不放宽终态保护。
+
+## preparation-002：用途字段适配（仅CPU授权）
+
+旧preparation-001在读取真实成员后STOP，原因是外部spec构造器将历史`fixed_ids`（train_core两组16张）误作development固定64张。旧release、合同和STOP不改。本修订在实际`prepare --spec`及`bind`入口调用显式`span_inputs.adapt`，已封印合同在`load`中再次验证；缺失或冲突不接受默认值。
+
+原始spec必须显式提供`input_lists.training_acceptance`与`input_lists.timing`，各含`purpose/role/source/ids`四字段。前者purpose为`historical_training_acceptance_2x16_audit_only`、role=train_core、source为SHA `6dbe86d56d5dd4053bcbc373276ad0c137cc4e892e48035bb41ee2173d1ddba7`的原合同，ids保留原2×16结构。后者purpose为`fixed64_development_cost`、role=development、source为原认证trace-selection三字段引用，ids逐项等于原`selected[].stable_image_id`。两者分别检查认证来源字节、数量、顺序、成员role及manifest SHA，并保存用途证明。仅timing派生下游`fixed_ids`；已有字段若冲突立即拒绝。
+
+历史2×16清单仅作审计，**不是新GPU验收的输入选择**。新验收仍由原训练采样器取得epoch1首两个logical16窗口，未改变公式、增强、采样、更新、门槛或219693 forward/60 GPU小时上限。
+
+真实CPU检查使用`tools/check_sampling_span_lab_inputs.py --spec <未预映射的真实spec> --source <本release manifest> --output <新目录>`。九类拒绝直接调用最终CLI（清单互换、两类各自同数量错成员、缺字段、缺清单、两类各自错SHA、错大小、旧字段混接），然后正常spec原样交CLI完成全部真实成员reader、原A状态绑定与三臂CPU初始化。子进程不继承PYTHONPATH，留存命令、stdout/stderr、退出码；拒绝须发生在封印合同/reader前。正常路径任何异常立即STOP，不重试。
+
+108项production-cpu-006旧门禁保持原source/contract身份。适配修订通过明确源码差异和受影响路径检查绑定其未受影响的恢复、跨epoch、双评价器、闭合与异常/重复拒绝证据；不声称整个旧source字节未变，不重写旧门禁或放宽其byte-identical校验。GPU/BF16/真实更新与正式训练继续等待授权。

@@ -208,7 +208,7 @@ def prepare(c,output):
         rt.require(not torch.cuda.is_initialized(),'prepare initialized CUDA')
         rt.publish(out/'PREPARE_PASS.json',dict(status='PREPARE_PASS',result=result,source=c['source'],
             source_sha256=c['source']['sha256'],data_sha256=rt.digest(c['data']),model_forward_calls=0,
-            CUDA_initialized=False,profile=c['profile']))
+            CUDA_initialized=False,profile=c['profile'],input_list_proof=c.get('input_list_proof')))
         return 0
     except BaseException as exc:
         rt.publish(out/'STOP.json',dict(status='STOP_NO_RETRY',error=repr(exc),traceback=traceback.format_exc()))
@@ -221,6 +221,8 @@ def prepare_spec(spec_path,source_path,output):
         commit=rt.verify_source(ref)['commit'],source=ref,science_sha256=rt.digest(rt.recipe()),
         execution_sha256=rt.digest(rt.execution()),stages=list(rt.STAGES),resources=rt.execution()['resources'],
         GPU_authorized=False,science_authorized=False,authorization=None)
+    from .span_inputs import adapt
+    adapt(c)
     path=Path(output).resolve().with_name(Path(output).name+'-contract.json')
     rt.seal_contract(c,path)
     return prepare(rt.load(path,preparation=True),output)
@@ -228,6 +230,8 @@ def prepare_spec(spec_path,source_path,output):
 def bind(spec_path,source_ref,cpu_gate_ref,approval_ref,output):
     """Future authorized binding, no forward. Caller supplies current lab facts."""
     c=rt.read(spec_path)
+    from .span_inputs import adapt
+    adapt(c)
     c.update(task_id=rt.TASK,protocol=rt.PROTOCOL,source_root=str(rt.ROOT),python=sys.executable,
              commit=rt.verify_source(source_ref)['commit'],source=source_ref,
              science_sha256=rt.digest(rt.recipe()),execution_sha256=rt.digest(rt.execution()),
