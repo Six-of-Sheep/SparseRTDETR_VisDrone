@@ -1,7 +1,7 @@
 {
-  "schema_version": 9,
-  "as_of": "2026-10-20T00:24:03.971796+08:00",
-  "status": "JOURNAL_REVIEW_PARTIAL_CURRENT_FRAMING_INSUFFICIENT_NO_NEW_CANDIDATE",
+  "schema_version": 10,
+  "as_of": "2026-10-20T09:48:22.483045+08:00",
+  "status": "OPTION_3_END_CURRENT_MANUSCRIPT_SUBMISSION_PREPARATION",
   "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
   "public_access": {
     "attempts": 3,
@@ -43,14 +43,14 @@
       "review_time": "UNKNOWN",
       "publication_time": "UNKNOWN",
       "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
-      "verified_related_articles": 0,
-      "zero_count_means": "not searched successfully, not absence of papers",
+      "verified_related_articles": 1,
       "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
       "official_directory_entry": "https://www.ccf.org.cn/",
       "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
       "official_directory_page_or_snapshot_located": false,
       "current_round_official_access": false,
-      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION"
+      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION",
+      "article_count_basis": "page-internal identity and full body review; revision009 reused for ECICE, revision010 user PDFs for CEA/CSA"
     },
     {
       "name": "计算机工程",
@@ -62,18 +62,19 @@
       "publication_time": "UNKNOWN",
       "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
       "verified_related_articles": 2,
-      "zero_count_means": "not searched successfully, not absence of papers",
       "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
       "official_directory_entry": "https://www.ccf.org.cn/",
       "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
       "official_directory_page_or_snapshot_located": false,
-      "current_round_official_access": true,
+      "current_round_official_access": false,
       "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION",
       "scope_url": "https://www.ecice06.com/CN/column/column35.shtml",
       "article_ids": [
         "ECICE_MA_2026",
         "ECICE_SR_2024"
-      ]
+      ],
+      "article_count_basis": "page-internal identity and full body review; revision009 reused for ECICE, revision010 user PDFs for CEA/CSA",
+      "scope_evidence_revision": "009; not revisited in 010"
     },
     {
       "name": "计算机系统应用",
@@ -84,14 +85,14 @@
       "review_time": "UNKNOWN",
       "publication_time": "UNKNOWN",
       "school_qualification": "APPLICABLE_UNDER_USER_CONFIRMED_CCF2025_CONDITIONS_NOT_INDEPENDENT_SCHOOL_DOCUMENT_AUDIT",
-      "verified_related_articles": 0,
-      "zero_count_means": "not searched successfully, not absence of papers",
+      "verified_related_articles": 2,
       "ranking_evidence": "prior conversation information carried forward by explicit user instruction; user-confirmed this revision",
       "official_directory_entry": "https://www.ccf.org.cn/",
       "official_directory_navigation": "学术评价／中文科技期刊分级目录2025发布通知及附件，正式原题和精确PDF URL待提供",
       "official_directory_page_or_snapshot_located": false,
       "current_round_official_access": false,
-      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION"
+      "pku_core_membership": "NOT_CHECKED_SEPARATE_FROM_ACCEPTED_EDITION",
+      "article_count_basis": "page-internal identity and full body review; revision009 reused for ECICE, revision010 user PDFs for CEA/CSA"
     }
   ],
   "related_article_window": {
@@ -190,7 +191,7 @@
     "sealed_payload_reads": 0,
     "new_scientific_scoring_calls": 0
   },
-  "revision": "004",
+  "revision": "010",
   "user_confirmed_submission_conditions": {
     "source": "用户确认（2026-10-19本轮指令）",
     "school_original_document_verified": false,
@@ -205,8 +206,8 @@
   "formal_selection": {
     "primary": null,
     "backup": null,
-    "reason": "await legal originals or specific advisor evidence to update contribution matrix; no new evidence this revision; no formal journal ranking",
-    "basis": "docs/research/paper_journal_fit_20261019/VENUE_DECISION.md"
+    "reason": "option3: end current manuscript submission preparation; content compatibility does not establish sufficient contribution",
+    "basis": "docs/research/paper_journal_fit_20261019/JOURNAL_TOPIC_FIT_DECISION_010.md"
   },
   "manual_public_source_checklist": "docs/research/paper_journal_fit_20261019/PUBLIC_GAPS.md",
   "official_journal_entry_links": [
@@ -233,9 +234,9 @@
     "path": "docs/research/paper_journal_fit_20261019/CHINESE_DRAFT.md",
     "tables": "docs/research/paper_journal_fit_20261019/DRAFT_TABLES.md",
     "scientific_numbers": "frozen tables copied and formatted only",
-    "reference_status": "R1/R2/R8 versioned user-PDF body and bibliography checked; remaining items explicitly pending",
-    "reference_pages_requested": "each journal at most 2 most relevant articles plus SAHI/RT-DETRv2 and closest aerial slicing paper",
-    "editorial_status": "full manuscript ready for advisor; contribution and journal fit not established; citations pending",
+    "reference_status": "core SAHI/RTDETRv2/direct aerial work reviewed in earlier revisions; five target-journal papers consolidated in 010; legacy draft pending markers remain historical",
+    "reference_pages_requested": "none required to continue this closed framing; official CEA/CSA scope remains unverified but does not block option3",
+    "editorial_status": "complete historical draft retained; option3 end current manuscript submission preparation",
     "operations_moved_to_appendix": true,
     "environment_completed_fields": [
       "GPU model",
@@ -266,19 +267,25 @@
   },
   "advisor_summary": "docs/research/paper_journal_fit_20261019/ADVISOR_BRIEF.md",
   "reproducibility_appendix": "docs/research/paper_journal_fit_20261019/REPRODUCIBILITY_APPENDIX.md",
-  "supplied_public_materials_this_revision": [],
+  "supplied_public_materials_this_revision": [
+    "CEA_DRONE_YOLO_2023",
+    "CSA_AMD_2025",
+    "CSA_RTDETR_2026"
+  ],
   "journal_article_review_slots": [
     {
       "slot": "J1.1",
       "journal": "计算机工程与应用",
-      "title": null,
-      "year": null,
+      "title": "改进YOLOv5的无人机影像小目标检测算法",
+      "year": 2023,
       "official_article_URL": null,
-      "fulltext_available": false,
-      "problem_solved": null,
-      "extra_evidence": null,
-      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
-      "counts_as_reviewed": false
+      "fulltext_available": true,
+      "problem_solved": "see consolidated problem-mechanism-control-evidence table",
+      "extra_evidence": "see consolidated comparison with our fixed evidence",
+      "sufficiency": "CONTENT_COMPATIBLE_CURRENT_MANUSCRIPT_INSUFFICIENT",
+      "counts_as_reviewed": true,
+      "source_id": "CEA_DRONE_YOLO_2023",
+      "review": "JOURNAL_TOPIC_FIT_DECISION_010.md"
     },
     {
       "slot": "J1.2",
@@ -289,56 +296,64 @@
       "fulltext_available": false,
       "problem_solved": null,
       "extra_evidence": null,
-      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
+      "sufficiency": "UNUSED_SLOT_NO_FURTHER_COLLECTION_REQUIRED",
       "counts_as_reviewed": false
     },
     {
       "slot": "J2.1",
       "journal": "计算机工程",
-      "title": null,
-      "year": null,
-      "official_article_URL": null,
-      "fulltext_available": false,
-      "problem_solved": null,
-      "extra_evidence": null,
-      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
-      "counts_as_reviewed": false
+      "title": "基于特征融合的多属性小目标检测",
+      "year": 2026,
+      "official_article_URL": "https://www.ecice06.com/CN/10.19678/j.issn.1000-3428.0252596",
+      "fulltext_available": true,
+      "problem_solved": "see consolidated problem-mechanism-control-evidence table",
+      "extra_evidence": "see consolidated comparison with our fixed evidence",
+      "sufficiency": "CONTENT_COMPATIBLE_CURRENT_MANUSCRIPT_INSUFFICIENT",
+      "counts_as_reviewed": true,
+      "source_id": "ECICE_MA_2026",
+      "review": "JOURNAL_TOPIC_FIT_DECISION_010.md"
     },
     {
       "slot": "J2.2",
       "journal": "计算机工程",
-      "title": null,
-      "year": null,
-      "official_article_URL": null,
-      "fulltext_available": false,
-      "problem_solved": null,
-      "extra_evidence": null,
-      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
-      "counts_as_reviewed": false
+      "title": "基于多任务学习的超分辨率辅助小目标检测",
+      "year": 2024,
+      "official_article_URL": "https://www.ecice06.com/CN/abstract/abstract32926.shtml",
+      "fulltext_available": true,
+      "problem_solved": "see consolidated problem-mechanism-control-evidence table",
+      "extra_evidence": "see consolidated comparison with our fixed evidence",
+      "sufficiency": "CONTENT_COMPATIBLE_CURRENT_MANUSCRIPT_INSUFFICIENT",
+      "counts_as_reviewed": true,
+      "source_id": "ECICE_SR_2024",
+      "review": "JOURNAL_TOPIC_FIT_DECISION_010.md"
     },
     {
       "slot": "J3.1",
       "journal": "计算机系统应用",
-      "title": null,
-      "year": null,
-      "official_article_URL": null,
-      "fulltext_available": false,
-      "problem_solved": null,
-      "extra_evidence": null,
-      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
-      "counts_as_reviewed": false
+      "title": "基于AMD-YOLOv8的无人机图像小目标检测",
+      "year": 2025,
+      "official_article_URL": "http://www.c-s-a.org.cn/1003-3254/9994.html",
+      "fulltext_available": true,
+      "problem_solved": "see consolidated problem-mechanism-control-evidence table",
+      "extra_evidence": "see consolidated comparison with our fixed evidence",
+      "sufficiency": "CONTENT_COMPATIBLE_CURRENT_MANUSCRIPT_INSUFFICIENT",
+      "counts_as_reviewed": true,
+      "source_id": "CSA_AMD_2025",
+      "review": "JOURNAL_TOPIC_FIT_DECISION_010.md"
     },
     {
       "slot": "J3.2",
       "journal": "计算机系统应用",
-      "title": null,
-      "year": null,
-      "official_article_URL": null,
-      "fulltext_available": false,
-      "problem_solved": null,
-      "extra_evidence": null,
-      "sufficiency": "CANNOT_JUDGE_MISSING_MATERIAL",
-      "counts_as_reviewed": false
+      "title": "RT-DETR在无人机目标检测中的轻量化与精度增强",
+      "year": 2026,
+      "official_article_URL": "http://www.c-s-a.org.cn/1003-3254/10180.html",
+      "fulltext_available": true,
+      "problem_solved": "see consolidated problem-mechanism-control-evidence table",
+      "extra_evidence": "see consolidated comparison with our fixed evidence",
+      "sufficiency": "CONTENT_COMPATIBLE_CURRENT_MANUSCRIPT_INSUFFICIENT",
+      "counts_as_reviewed": true,
+      "source_id": "CSA_RTDETR_2026",
+      "review": "JOURNAL_TOPIC_FIT_DECISION_010.md"
     }
   ],
   "local_reference_review": {
@@ -559,5 +574,146 @@
       "Bing_retried": false,
       "old_public_access_counters_are_historical": true
     }
+  },
+  "revision010": {
+    "decision": "OPTION_3_END_CURRENT_MANUSCRIPT_SUBMISSION_PREPARATION",
+    "article_counts": {
+      "计算机工程与应用": 1,
+      "计算机系统应用": 2,
+      "计算机工程": 2
+    },
+    "fulltext_journals": 3,
+    "scope_pages": {
+      "计算机工程": "official scope read in revision009; not rerequested",
+      "计算机工程与应用": "unverified; prior certificate mismatch preserved",
+      "计算机系统应用": "unverified; prior captcha barrier preserved"
+    },
+    "new_network_requests": 0,
+    "candidate_count": 0,
+    "review": "JOURNAL_TOPIC_FIT_DECISION_010.md",
+    "source_index": "JOURNAL_REVIEW_SOURCES_010.json",
+    "new_PDFs": [
+      {
+        "id": "CEA_DRONE_YOLO_2023",
+        "title": "改进YOLOv5的无人机影像小目标检测算法",
+        "authors": [
+          "谢椿辉",
+          "吴金明",
+          "徐怀宇"
+        ],
+        "journal": "计算机工程与应用",
+        "year": 2023,
+        "volume": 59,
+        "issue": 9,
+        "pages": "198-206",
+        "doi": "10.3778/j.issn.1002-8331.2212-0336",
+        "arxiv": null,
+        "arxiv_status": "not present in supplied journal PDF",
+        "path": "D:/Lzy_CV/workspace_management/references/paper-journal-fit/incoming/改进YOLOv5的无人机影像小目标检测算法.pdf",
+        "bytes": 826870,
+        "sha256": "76123a3c683846379d9d4665750d1a166f904066c566ba8d07b46755e06b383d",
+        "provenance": "user supplied; page-internal identity checked; not publisher byte authentication",
+        "pages_count": 9,
+        "continuous_printed_pages": true,
+        "all_pages_parsed_and_rendered": true,
+        "contact_sheet_visually_checked": true,
+        "reviewed_sections": "full method, experiments, ablations, discussion and references; not abstract only",
+        "key_pages_visually_read": [
+          1,
+          6,
+          7
+        ],
+        "tables_visually_read": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "supplement": "no separate supplement supplied or reviewed; absence not established",
+        "url": null
+      },
+      {
+        "id": "CSA_AMD_2025",
+        "title": "基于AMD-YOLOv8的无人机图像小目标检测",
+        "authors": [
+          "杨树莹",
+          "葛华勇"
+        ],
+        "journal": "计算机系统应用",
+        "year": 2025,
+        "volume": 34,
+        "issue": 10,
+        "pages": "173-183",
+        "doi": "10.15888/j.cnki.csa.009994",
+        "arxiv": null,
+        "arxiv_status": "not present in supplied journal PDF",
+        "path": "D:/Lzy_CV/workspace_management/references/paper-journal-fit/incoming/基于AMD-YOLOv8的无人机图像小目标检测.pdf",
+        "bytes": 3369581,
+        "sha256": "341ff5701d8e9ac1e1c3b8d4416116d91ea63da5deb1872892d842de3be0c8a9",
+        "provenance": "user supplied; page-internal identity checked; not publisher byte authentication",
+        "pages_count": 11,
+        "continuous_printed_pages": true,
+        "all_pages_parsed_and_rendered": true,
+        "contact_sheet_visually_checked": true,
+        "reviewed_sections": "full method, experiments, ablations, discussion and references; not abstract only",
+        "key_pages_visually_read": [
+          1,
+          7,
+          9
+        ],
+        "tables_visually_read": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "supplement": "no separate supplement supplied or reviewed; absence not established",
+        "url": "http://www.c-s-a.org.cn/1003-3254/9994.html"
+      },
+      {
+        "id": "CSA_RTDETR_2026",
+        "title": "RT-DETR在无人机目标检测中的轻量化与精度增强",
+        "authors": [
+          "王军",
+          "陆姚沈"
+        ],
+        "journal": "计算机系统应用",
+        "year": 2026,
+        "volume": 35,
+        "issue": 6,
+        "pages": "195-210",
+        "doi": "10.15888/j.cnki.csa.010180",
+        "arxiv": null,
+        "arxiv_status": "not present in supplied journal PDF",
+        "path": "D:/Lzy_CV/workspace_management/references/paper-journal-fit/incoming/RT-DETR在无人机目标检测中的轻量化与精度增强.pdf",
+        "bytes": 6144678,
+        "sha256": "6529c993d51d4515a0f25597bc3df1e7efc8469dd6587e47a9c85922907a9b1f",
+        "provenance": "user supplied; page-internal identity checked; not publisher byte authentication",
+        "pages_count": 16,
+        "continuous_printed_pages": true,
+        "all_pages_parsed_and_rendered": true,
+        "contact_sheet_visually_checked": true,
+        "reviewed_sections": "full method, experiments, ablations, discussion and references; not abstract only",
+        "key_pages_visually_read": [
+          1,
+          11,
+          12,
+          13,
+          14
+        ],
+        "tables_visually_read": [
+          3,
+          4,
+          5,
+          6
+        ],
+        "supplement": "no separate supplement supplied or reviewed; absence not established",
+        "url": "http://www.c-s-a.org.cn/1003-3254/10180.html"
+      }
+    ]
   }
 }
