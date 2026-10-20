@@ -45,3 +45,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_sampling_span_acceptance_cpu.py --output /tmp/sampling-span-acceptance-cpu
+      - name: Raw-spec admission CLI and frozen resource construction (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_admission_cpu.py --output /tmp/sampling-span-admission-cpu

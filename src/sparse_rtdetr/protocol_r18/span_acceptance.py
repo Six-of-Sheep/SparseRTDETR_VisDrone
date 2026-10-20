@@ -15,27 +15,41 @@ def load(path, *, preparation=False):
 
 def base(spec, source):
     c = rt.read(spec); config = rt.acceptance_config()
+    required = {'profile','seed','attempt','job_root','nonce','boot_id','gpu_uuid',
+                'storage_identity','data','pretrained','prior_cost','baselines','execution_scope'}
+    if c.get('profile') == 'LAB_GPU_ONCE':
+        required |= {'environment','historical_A','selection','input_lists'}
+    rt.require(not required-set(c), 'raw acceptance spec missing fields: '+','.join(sorted(required-set(c))))
     rt.require(c.get('execution_scope') == config['scope'] and
         c.get('protocol', rt.ACCEPTANCE_PROTOCOL) == rt.ACCEPTANCE_PROTOCOL,
         'acceptance entry refuses full-chain spec/contract')
     rt.require('acceptance_limits' not in c or c['acceptance_limits'] == config['limits'],
                'acceptance limits cannot be changed')
-    c.update(task_id=rt.TASK, protocol=rt.ACCEPTANCE_PROTOCOL, source_root=str(rt.ROOT),
+    bound = dict(task_id=rt.TASK, protocol=rt.ACCEPTANCE_PROTOCOL, source_root=str(rt.ROOT),
         python=sys.executable, source=source, commit=rt.verify_source(source)['commit'],
         science_sha256=rt.digest(rt.recipe()), execution_sha256=rt.digest(rt.execution()),
         acceptance_sha256=rt.digest(config), acceptance_limits=config['limits'],
         stages=config['stages'], resources=rt.execution()['resources'])
+    for key, value in bound.items():
+        rt.require(key not in c or c[key] == value, 'raw acceptance spec conflicts with frozen field: '+key)
+    c.update(bound)
     from .span_inputs import adapt
     adapt(c)
     return c
 
 
 def prepare(spec, source, output):
+    c = preparation_contract(spec, source, output)
+    return job.prepare(c, output)
+
+
+def preparation_contract(spec, source, output):
+    """Only construction path used by prepare and admission before screening."""
     c = base(spec, source)
     c.update(GPU_authorized=False, science_authorized=False, authorization=None)
     path = Path(output).resolve().with_name(Path(output).name+'-contract.json')
     rt.seal_contract(c, path)
-    return job.prepare(load(path, preparation=True), output)
+    return load(path, preparation=True)
 
 
 def bind(spec, source, gate, approval, output):

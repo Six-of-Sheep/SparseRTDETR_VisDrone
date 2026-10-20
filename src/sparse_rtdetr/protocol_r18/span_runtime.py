@@ -61,7 +61,8 @@ def verify_source(ref):
         require(target.is_file() and not target.is_symlink() and target.resolve().is_relative_to(ROOT), 'source member escaped/missing')
         require(reference(target) == dict(path=str(target), bytes=row['bytes'], sha256=row['sha256']), 'actual source bytes changed: '+name)
         names.append(name)
-    require(len(names) == len(set(names)) and {'r18_sampling_span.py', 'r18_sampling_acceptance.py', SCIENCE, EXECUTION, ACCEPTANCE_CONFIG,
+    require(len(names) == len(set(names)) and {'r18_sampling_span.py', 'r18_sampling_acceptance.py', 'r18_sampling_admission.py', SCIENCE, EXECUTION, ACCEPTANCE_CONFIG,
+        'src/sparse_rtdetr/protocol_r18/span_admission.py',
         'src/sparse_rtdetr/protocol_r18/span_acceptance.py',
         'src/sparse_rtdetr/protocol_r18/span_acceptance_budget.py',
         'src/sparse_rtdetr/protocol_r18/span_runtime.py',
@@ -204,6 +205,8 @@ def fixture_sample():
 
 def screen(sample, c, *, entry, gpu, baseline=None):
     from ..localization import lab_consumer, thermal_resume
+    require(isinstance(c.get('resources'),dict) and c['resources']==execution()['resources'],
+            'resource screen requires constructed contract with frozen resources')
     r = c['resources']; s = sample['snapshot']
     require(0 <= time.time()-sample['sampled_epoch'] < r['max_resource_age_seconds'], 'stale resource sample')
     require(sample['boot_id'] == c['boot_id'], 'boot identity differs')

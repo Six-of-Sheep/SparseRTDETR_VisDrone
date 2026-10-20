@@ -38,3 +38,11 @@ CUDA_VISIBLE_DEVICES='' "$SPAN_PYTHON" -B r18_sampling_acceptance.py export --co
 本轮实际CLI CPU工具：`python -B tools/check_sampling_span_acceptance_cpu.py --output <全新目录>`，CPU-only PyTorch、cwd=release、子进程无PYTHONPATH。覆盖三臂3更新保存恢复与9/18实际计数、仅四阶段闭合退出/自动与独立导出、越界/修改限额/混用合同/科学授权/正式训练拒绝、重复启动、worker异常及不重试。CI在Python3.10/3.12执行；合成CPU通过不能替代真实GPU/BF16/deterministic backward/768画布显存或实测成本。
 
 归档迁移仍STOP，本修订不触碰D盘28份旧合成原件、旧partial或其他历史材料。CPU工具仅在自身成功后移除本次新建的可重建合成tensor，小型SHA/闭合证据保留；失败现场不删。
+
+## 实际准入工具（本修订）
+
+实际部署统一使用纳入Git/source manifest的`r18_sampling_admission.py lab`，不再现场编写字典拼装脚本。输入显式parent-spec及SHA、source、精确head四成功CI回执、CPU gate、旧STOP引用、新attempt/session/output。lab从历史原始spec构造新raw-spec，resources只绑定冻结execution配置；与prepare共用preparation_contract→base→seal→load接口，完整字段/冲突/身份检查通过后才调用资源screen。既有字段与冻结配置冲突即拒绝，不覆盖。
+
+lab依次完成新source/CI/旧成本与STOP/新输出缺席、真实输入CPU准备、真实CUDA UUID映射预检（无模型forward）、当前资源复核、新授权与bind。历史GPU attempt存在时本首GPU绑定器拒绝，不能默认成本0；CPU旧成本单独留存。生产profile不能使用resource-observation夹具。`check`从未补齐的raw spec经同构造器→真实资源screen做CPU检查，`screen`拒绝未经构造的原始spec；测试夹具资源只用于CPU模拟，不是生产资源通过。
+
+所有子进程argv/cwd/stdout/stderr/rc持久记录。`launch`只运行已绑定验收合同的唯一tmux，`execute`只调用验收run并写退出回执/完成信号；run自身完成白名单导出和根闭合。部署者只能提供显式材料和命令参数，不改运行字节。GPU新异常STOP、失败成本保留；正式训练/科学评分/完整测速仍无权启动。
