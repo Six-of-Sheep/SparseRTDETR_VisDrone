@@ -29,3 +29,5 @@ CUDA_VISIBLE_DEVICES='' python -B tools/check_sampling_span_cpu.py --output <new
 未运行完整模型图像forward、训练更新、科学AP、模型权重加载、任何GPU或生产闭环。叶层state roundtrip不等于完整optimizer/EMA/RNG恢复验收。生产类型保护保留；这里只证明候选在真实计算叶层上的实现可行性。
 
 CI初次失败保留：d38ea81的工具遍历所有外部模块时，把PyTorch虚拟文件名_ops.py按仓库cwd解析成真实源文件，记录SHA时FileNotFoundError。只修清单收集的模块归属，不改计算/测试/门槛；最终从仓库cwd实际走同一CLI，13项再次通过。旧CI失败不改写，最终head CI按GitHub实际状态另记；不能用本地PASS替代。
+
+修正失败日志后，d367b65的CI明确暴露原生registry导入SummaryWriter所需tensorboard未列入CI依赖，实际仅执行1个导入失败测试而非13项，不能通过。补入本地既有CPU环境同版本tensorboard2.20.0；计算及最终CPU004证据字节未变、可复用。初次SHA记录异常掩盖了测试导入错误，因此不将_ops.py问题称为原失败的唯一原因。两个旧失败均保留；最终CI须实际运行13项且零skip。
