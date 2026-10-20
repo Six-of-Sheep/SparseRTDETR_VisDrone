@@ -24,6 +24,8 @@ CUDA_VISIBLE_DEVICES='' python -B tools/check_sampling_span_cpu.py --output <new
 |负/零extent、NaN/Inf、错shape/层级和arm拒绝|PASS|
 |完整共同R18构建，三臂20,094,584参数与精确state差异；旧validator拒绝候选|PASS|
 
-执行记录保存在D盘delivery/research/r18-sampling-span-20261020-001/cpu-002/的CPU_REPORT.json及unittest.txt。JSON绑定本进程实际导入的项目/vendor Python SHA；依赖版本和工具字节一并记录。源码入Git，输出不重复拷入仓库。
+执行记录保存在D盘delivery/research/r18-sampling-span-20261020-001/cpu-004/的CPU_REPORT.json及unittest.txt。JSON绑定本进程实际导入的项目/vendor Python SHA；依赖版本和工具字节一并记录。源码入Git，输出不重复拷入仓库。
 
 未运行完整模型图像forward、训练更新、科学AP、模型权重加载、任何GPU或生产闭环。叶层state roundtrip不等于完整optimizer/EMA/RNG恢复验收。生产类型保护保留；这里只证明候选在真实计算叶层上的实现可行性。
+
+CI初次失败保留：d38ea81的工具遍历所有外部模块时，把PyTorch虚拟文件名_ops.py按仓库cwd解析成真实源文件，记录SHA时FileNotFoundError。只修清单收集的模块归属，不改计算/测试/门槛；最终从仓库cwd实际走同一CLI，13项再次通过。旧CI失败不改写，最终head CI按GitHub实际状态另记；不能用本地PASS替代。

@@ -26,7 +26,14 @@ def main():
         result=unittest.TextTestRunner(stream=log,verbosity=2).run(suite)
     # Bind every project/vendor Python file actually imported by this process.
     sources={}
-    for module in tuple(sys.modules.values()):
+    for name,module in tuple(sys.modules.items()):
+        # torch exposes pseudo-module filenames such as "_ops.py". Resolving
+        # arbitrary relative external filenames against the current directory
+        # must not turn them into purported repository source files.
+        owned=(name=='sparse_rtdetr' or name.startswith('sparse_rtdetr.')
+               or name=='src' or name.startswith('src.') or name=='test_sampling_span')
+        if not owned:
+            continue
         filename=getattr(module,'__file__',None)
         if filename and Path(filename).resolve().is_relative_to(ROOT):
             path=Path(filename).resolve()
