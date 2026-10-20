@@ -1,0 +1,7 @@
+# Isolated CPU preparation only, not the certified lab BF16 environment.
+-r requirements-confirmation-ci.txt
+scipy==1.15.3
+PyYAML==6.0.2
+tensorboard==2.20.0
+pycocotools==2.0.10
+faster-coco-eval==1.6.7

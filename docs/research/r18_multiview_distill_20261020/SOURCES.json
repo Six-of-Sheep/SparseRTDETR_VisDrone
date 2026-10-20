@@ -1,0 +1,165 @@
+{
+  "as_of": "2026-10-20",
+  "DETRDistill": {
+    "path": "D:\\Lzy_CV\\workspace_management\\references\\paper-journal-fit\\incoming\\DETRDistill.pdf",
+    "bytes": 7292695,
+    "sha256": "fd33fd5257b2c571cac79b957708b4f1e5b0df320b704ac1bcc403e417cb9a91",
+    "pages": 10,
+    "encrypted": false,
+    "page_characters": [
+      3896,
+      4807,
+      3629,
+      4752,
+      4085,
+      5125,
+      4327,
+      3725,
+      5845,
+      3560
+    ],
+    "metadata": {
+      "/Author": "",
+      "/CreationDate": "D:20230320011541Z",
+      "/Creator": "LaTeX with hyperref",
+      "/Keywords": "",
+      "/ModDate": "D:20230320011541Z",
+      "/PTEX.Fullbanner": "This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020) kpathsea version 6.3.2",
+      "/Producer": "pdfTeX-1.40.21",
+      "/Subject": "",
+      "/Title": "",
+      "/Trapped": "/False"
+    },
+    "source_kind": "user_provided_single_local_PDF_not_publisher_byte_authentication",
+    "title": "DETRDistill: A Universal Knowledge Distillation Framework for DETR-families",
+    "authors": [
+      "Jiahao Chang",
+      "Shuo Wang",
+      "Hai-Ming Xu",
+      "Zehui Chen",
+      "Chenhongyi Yang",
+      "Feng Zhao"
+    ],
+    "arxiv": "2211.10156v4",
+    "version_date": "2023-03-17",
+    "reviewed_sections": [
+      "3",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "5.1",
+      "5.2",
+      "6",
+      "7"
+    ],
+    "visual_pages": [
+      4,
+      8
+    ],
+    "separate_supplement": "not_in_this_10page_PDF",
+    "official_code": "not_accessed_not_pinned"
+  },
+  "local_sources": [
+    {
+      "path": "docs/research/abc_results_20261019/MASTER.md",
+      "bytes": 15513,
+      "sha256": "1c0f9a9ffc925d39d1f45ea97c43ea984617d5ecabab652201fc895254479afe",
+      "kind": "certified_existing_summary",
+      "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1"
+    },
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/engine.py",
+      "bytes": 11248,
+      "sha256": "1be4a1644f89bcbea771071f1d8492ddd7604bf4e3b58298c32e290ce2d7c7c1",
+      "kind": "unchanged_engine_math",
+      "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1"
+    },
+    {
+      "path": "src/sparse_rtdetr/localization/data.py",
+      "bytes": 18005,
+      "sha256": "cfbb38888283bb20517ece97777114bb5dda43c29a388476677adb6b5759227e",
+      "kind": "unchanged_actual_augmentation",
+      "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1"
+    },
+    {
+      "path": "slice_core.py",
+      "bytes": 13053,
+      "sha256": "2e048f7c4f61b7c85f107417512dacbae5dc67b45a35bc864b6b6984d8d34a7f",
+      "kind": "unchanged_C_geometry_NMS",
+      "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1"
+    },
+    {
+      "path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/matcher.py",
+      "bytes": 5010,
+      "sha256": "11a221ea7a2ad4e728a008ead7f73d1cba3649066f795b2076200c0d41738ad1",
+      "kind": "reused_native_matching",
+      "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1"
+    }
+  ],
+  "network": {
+    "action": "Bing read-only DETR distillation search",
+    "result": "saved browser permission denied",
+    "retried": false,
+    "bypass": false
+  },
+  "multiview_prior": {
+    "title": "Data Distillation: Towards Omni-Supervised Learning",
+    "status": "full_text_reviewed_20261020_user_PDF; prior_missing_status_retained_in_7578876",
+    "official_entry": "https://openaccess.thecvf.com/content_cvpr_2018/html/Radosavovic_Data_Distillation_Towards_CVPR_2018_paper.html",
+    "sections_needed": [
+      "multi-transform prediction merging and remapping",
+      "training controls and experiments"
+    ]
+  },
+  "originality": "unknown_not_claimed",
+  "experiment_executed": false,
+  "DataDistillation": {
+    "path": "D:\\Lzy_CV\\workspace_management\\references\\paper-journal-fit\\incoming\\Radosavovic_Data_Distillation_Towards_CVPR_2018_paper.pdf",
+    "bytes": 3937008,
+    "sha256": "db6e6ac4fc7f96e85914614ee4daa86c270f32fe0a6043e48178ee31e2d5fe34",
+    "pages": 10,
+    "encrypted": false,
+    "metadata": {
+      "/Title": "Data Distillation: Towards Omni-Supervised Learning",
+      "/Producer": "PyPDF2",
+      "/Author": "Ilija Radosavovic, Piotr Dollar, Ross Girshick, Georgia Gkioxari, Kaiming He",
+      "/Subject": "2018 IEEE Conference on Computer Vision and Pattern Recognition"
+    },
+    "page_characters": [
+      4058,
+      5830,
+      5058,
+      4529,
+      4278,
+      5467,
+      4928,
+      4872,
+      5785,
+      2789
+    ],
+    "source": "user_provided_not_publisher_byte_authentication",
+    "title": "Data Distillation: Towards Omni-Supervised Learning",
+    "authors": [
+      "Ilija Radosavovic",
+      "Piotr Dollár",
+      "Ross Girshick",
+      "Georgia Gkioxari",
+      "Kaiming He"
+    ],
+    "publication": "CVPR 2018",
+    "printed_pages": "4119-4128",
+    "reviewed_sections": [
+      "3",
+      "4",
+      "5",
+      "6"
+    ],
+    "visual_pages": [
+      8
+    ],
+    "arxiv_version": null,
+    "DOI": null,
+    "review": "DATA_DISTILLATION_REVIEW.md"
+  }
+}

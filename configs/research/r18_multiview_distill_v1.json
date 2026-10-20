@@ -1,0 +1,171 @@
+{
+  "protocol": "r18-multiview-positive-kd-v1",
+  "GPU_authorized": false,
+  "training_authorized": false,
+  "status": "CPU_PREPARATION_NOT_EXECUTION_AUTHORITY",
+  "arms": [
+    "T0",
+    "T1",
+    "T2"
+  ],
+  "seed": 0,
+  "parent": {
+    "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+    "epoch": 120,
+    "updates": 36480,
+    "selected": "EMA.module only; independent strict load for every student and frozen teacher",
+    "reuse_optimizer": false,
+    "reuse_rng": false
+  },
+  "data": {
+    "training_role": "train_core",
+    "members": 4869,
+    "manifest_sha256": "df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d",
+    "teacher_supervision_excludes": [
+      "development548",
+      "supplemental1602"
+    ],
+    "augmentation": "original final-phase weak RawAugmentation only: strong OFF throughout, sanitize + random horizontal flip + resize; sampler epochs109..120, augmentation epochs118..129; identical all arms",
+    "views_per_update": 16,
+    "student_input_hw": [
+      768,
+      1344
+    ],
+    "student_views": "whole original RGB only before original augmentation, all arms identical",
+    "drop_last_per_epoch": 5
+  },
+  "teacher": {
+    "T0": "none",
+    "T1": "original whole view0, same NMS/filter/teacher budget as T2; B-style teacher rather than raw A teacher",
+    "T2": "C views0..4, original ceil(5H/9),ceil(5W/9) corner geometry",
+    "shared_view0": true,
+    "FP32_inference": true,
+    "per_view_candidates": 600,
+    "NMS": {
+      "classwise": true,
+      "iou": 0.5,
+      "suppress": "strictly_greater"
+    },
+    "sort": "score descending, view/query/category ascending; IDs only provenance",
+    "selection_order": "map original coordinates -> original hard NMS -> top600 -> score>=0.5 -> top300 -> replay actual augmentation -> training ignore removal, no refill",
+    "confidence_minimum": 0.5,
+    "maximum_targets_per_image": 300,
+    "temperature": 1.0,
+    "precision": "original FP32 sigmoid/decode; frozen C FP64 NMS; FP32 aligned KD tensors",
+    "pseudo_alignment": "initial clip to original image; fixed weak trace only (strong trace rejected), actual horizontal flip, min_size1 before and after resize; empty retained; no random crop replay in production",
+    "ignore": "reuse training negative_keep_mask on pseudo boxes with no matched exemptions, selected category only; no evaluation raster substitution",
+    "raw_audit": "complete training raw views plus SHA/server only; no preexisting development cache reuse"
+  },
+  "KD": {
+    "head": "final normal decoder only",
+    "matching": "unchanged native Hungarian: 2*focal(alpha=.25,gamma=2)+5*L1-2*GIoU; no teacher/student query-ID equality",
+    "classification": "Bernoulli KL(q_teacher || sigmoid(student selected-class logit)); no other-class or unmatched KD",
+    "regression": "5*L1 normalized cxcywh + 2*(1-GIoU)",
+    "weight": "q_teacher",
+    "denominator": "max(1,sum q_teacher) per physical batch; empty yields differentiable zero",
+    "lambda": 1.0,
+    "teacher_stop_gradient": true,
+    "supervised": "unchanged all native VFL/L1/GIoU aux/encoder/DN terms and raw-ignore; GT and pseudo assignments separate",
+    "no_feature_or_query_module": true
+  },
+  "training": {
+    "epochs": 12,
+    "updates_per_epoch": 304,
+    "updates_per_arm": 3648,
+    "physical_batch": 8,
+    "accumulation": 2,
+    "precision": "BF16 forward FP32 supervised/KD loss; no scaler",
+    "optimizer": "new AdamW, betas .9/.999, WD1e-4 except original norm/bn groups0; clip0.1",
+    "lr_peak": 1e-05,
+    "lr_minimum": 1e-06,
+    "warmup_updates": 200,
+    "schedule": "update cosine to fixed3648",
+    "EMA": "new copy of parent-loaded student incl buffers, updates0, decay.9999, warmups2000",
+    "RNG": "reset Python/NumPy/torch CPU/CUDA seed0 after each independent construction; no arm-dependent random draws",
+    "order": [
+      "T0",
+      "T1",
+      "T2"
+    ],
+    "endpoint": "local FT012 EMA only; no intermediate AP or best epoch selection"
+  },
+  "evaluation": {
+    "data": "548 development only; repeated-use limitation retained",
+    "student_inference": "original A single-view unchanged; no KD head or teacher at inference",
+    "budgets": [
+      600,
+      300
+    ],
+    "evaluators": "original primary and COCO bridge; truncate then raw-ignore, no refill",
+    "new_groups": 6,
+    "baseline": "reuse certified original A/C seed0 metrics; no old AP recalculation",
+    "comparisons": [
+      "T2-T0",
+      "T2-T1",
+      "T2-A",
+      "T1-T0",
+      "T0-A",
+      "T1-A",
+      "T2-C"
+    ]
+  },
+  "quality_gates_pp": {
+    "T2-T0": {
+      "600_AP": 0.2,
+      "600_APS": 0.3,
+      "600_AP75_small": -0.1,
+      "600_AP75": -0.1,
+      "600_APM": -0.3,
+      "600_APL": -0.3,
+      "600_AR_large": -0.3,
+      "300_AP": -0.1,
+      "300_APS": -0.1
+    },
+    "T2-T1": {
+      "600_AP": 0.2,
+      "600_APS": 0.3,
+      "600_AP75_small": -0.1,
+      "600_AP75": -0.1,
+      "600_APM": -0.3,
+      "600_APL": -0.3,
+      "600_AR_large": -0.3,
+      "300_AP": -0.1,
+      "300_APS": -0.1
+    },
+    "T2-A": {
+      "600_AP": 0.4,
+      "600_APS": 0.6,
+      "600_AP75_small": 0.0,
+      "600_AP75": -0.1,
+      "600_APM": -0.3,
+      "600_APL": -0.3,
+      "600_AR_large": -0.3,
+      "300_AP": -0.1,
+      "300_APS": -0.1
+    }
+  },
+  "cost_gates": {
+    "T2_over_A_E2E_max": 1.05,
+    "T2_over_A_peak_allocated_max": 1.05,
+    "same_architecture_required": true
+  },
+  "forward_budget": {
+    "teacher_images_times_views": 24345,
+    "teacher_batch4_calls": 6090,
+    "teacher_whole_calls_shared": 1218,
+    "student_training_updates_total": 10944,
+    "student_training_batch8_forward_backward_calls": 21888,
+    "student_training_images_total": 175104,
+    "future_GPU_restore_actual_updates_total": 9,
+    "student_endpoint_batch4_calls": 411,
+    "future_cost_fixed64": "A,T0,T1,T2; 2 warmup +4 timed repetitions x16 batches each =384 forward calls; balanced four orders stated in PLAN.md",
+    "GPU_forward_calls_total_including_restore_and_timing": 28791,
+    "GPU_time_estimate_hours": [
+      5.5,
+      8.0
+    ],
+    "not_a_deadline": true
+  },
+  "stop": "new production engineering/numerical/identity/resource/restore anomaly STOP preserve; no automatic retry; science fail completes all fixed endpoints then closes recipe; no extra seed/epoch/parameter search",
+  "execution_gate": "new separate GPU authorization after preparation review; no production token or GPU launcher in this preparation"
+}

@@ -56,3 +56,9 @@ python -B test_seed_readout.py
 
 Git保存代码、配置、测试、方法文档和小型索引；checkpoint、预测、数据、日志、审计、环境留在独立工作区。索引不是大文件备份。
 历史test划分曾在P1被观察，不能重新称为未见确认集。
+
+## 多视图教师蒸馏准备（未授权GPU）
+
+[固定三臂计划](docs/research/r18_multiview_distill_20261020/PLAN.md)及[CPU范围](docs/research/r18_multiview_distill_20261020/CPU_REPORT.md)：T0监督续训、T1整图教师、T2原C教师；学生均为单整图R18。[生产入口及预算](docs/research/r18_multiview_distill_20261020/PRODUCTION_EXECUTION.md)与[Data Distillation正文审查](docs/research/r18_multiview_distill_20261020/DATA_DISTILLATION_REVIEW.md)已补充；最终生命周期须经CPU验收及另一次GPU授权才能绑定真实生产合同。本轮无GPU、真实教师缓存、训练或科学评分。旧稿/失败配方不重开。
+
+独立CPU环境安装 `environment/requirements-distill-cpu.txt` 后，运行 `python -B tools/check_distill_cpu.py --output <全新检查目录>`；它包含合成小画布的原生forward/backward与保存恢复，不训练科学模型、不调用AP。
