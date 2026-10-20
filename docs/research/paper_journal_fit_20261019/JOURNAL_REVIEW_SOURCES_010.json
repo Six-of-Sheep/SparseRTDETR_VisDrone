@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-20T09:48:22.483045+08:00",
+  "review_id": "journal-topic-fit-decision-010",
+  "decision": "OPTION_3_END_CURRENT_MANUSCRIPT_SUBMISSION_PREPARATION",
+  "candidate_count": 0,
+  "new_experiments": 0,
+  "new_training_updates": 0,
+  "new_scoring": 0,
+  "new_server_access": false,
+  "new_network_requests": 0,
+  "articles": [
+    {
+      "id": "CEA_DRONE_YOLO_2023",
+      "title": "改进YOLOv5的无人机影像小目标检测算法",
+      "authors": [
+        "谢椿辉",
+        "吴金明",
+        "徐怀宇"
+      ],
+      "journal": "计算机工程与应用",
+      "year": 2023,
+      "volume": 59,
+      "issue": 9,
+      "pages": "198-206",
+      "doi": "10.3778/j.issn.1002-8331.2212-0336",
+      "arxiv": null,
+      "arxiv_status": "not present in supplied journal PDF",
+      "path": "D:/Lzy_CV/workspace_management/references/paper-journal-fit/incoming/改进YOLOv5的无人机影像小目标检测算法.pdf",
+      "bytes": 826870,
+      "sha256": "76123a3c683846379d9d4665750d1a166f904066c566ba8d07b46755e06b383d",
+      "provenance": "user supplied; page-internal identity checked; not publisher byte authentication",
+      "pages_count": 9,
+      "continuous_printed_pages": true,
+      "all_pages_parsed_and_rendered": true,
+      "contact_sheet_visually_checked": true,
+      "reviewed_sections": "full method, experiments, ablations, discussion and references; not abstract only",
+      "key_pages_visually_read": [
+        1,
+        6,
+        7
+      ],
+      "tables_visually_read": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "supplement": "no separate supplement supplied or reviewed; absence not established",
+      "url": null
+    },
+    {
+      "id": "CSA_AMD_2025",
+      "title": "基于AMD-YOLOv8的无人机图像小目标检测",
+      "authors": [
+        "杨树莹",
+        "葛华勇"
+      ],
+      "journal": "计算机系统应用",
+      "year": 2025,
+      "volume": 34,
+      "issue": 10,
+      "pages": "173-183",
+      "doi": "10.15888/j.cnki.csa.009994",
+      "arxiv": null,
+      "arxiv_status": "not present in supplied journal PDF",
+      "path": "D:/Lzy_CV/workspace_management/references/paper-journal-fit/incoming/基于AMD-YOLOv8的无人机图像小目标检测.pdf",
+      "bytes": 3369581,
+      "sha256": "341ff5701d8e9ac1e1c3b8d4416116d91ea63da5deb1872892d842de3be0c8a9",
+      "provenance": "user supplied; page-internal identity checked; not publisher byte authentication",
+      "pages_count": 11,
+      "continuous_printed_pages": true,
+      "all_pages_parsed_and_rendered": true,
+      "contact_sheet_visually_checked": true,
+      "reviewed_sections": "full method, experiments, ablations, discussion and references; not abstract only",
+      "key_pages_visually_read": [
+        1,
+        7,
+        9
+      ],
+      "tables_visually_read": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "supplement": "no separate supplement supplied or reviewed; absence not established",
+      "url": "http://www.c-s-a.org.cn/1003-3254/9994.html"
+    },
+    {
+      "id": "CSA_RTDETR_2026",
+      "title": "RT-DETR在无人机目标检测中的轻量化与精度增强",
+      "authors": [
+        "王军",
+        "陆姚沈"
+      ],
+      "journal": "计算机系统应用",
+      "year": 2026,
+      "volume": 35,
+      "issue": 6,
+      "pages": "195-210",
+      "doi": "10.15888/j.cnki.csa.010180",
+      "arxiv": null,
+      "arxiv_status": "not present in supplied journal PDF",
+      "path": "D:/Lzy_CV/workspace_management/references/paper-journal-fit/incoming/RT-DETR在无人机目标检测中的轻量化与精度增强.pdf",
+      "bytes": 6144678,
+      "sha256": "6529c993d51d4515a0f25597bc3df1e7efc8469dd6587e47a9c85922907a9b1f",
+      "provenance": "user supplied; page-internal identity checked; not publisher byte authentication",
+      "pages_count": 16,
+      "continuous_printed_pages": true,
+      "all_pages_parsed_and_rendered": true,
+      "contact_sheet_visually_checked": true,
+      "reviewed_sections": "full method, experiments, ablations, discussion and references; not abstract only",
+      "key_pages_visually_read": [
+        1,
+        11,
+        12,
+        13,
+        14
+      ],
+      "tables_visually_read": [
+        3,
+        4,
+        5,
+        6
+      ],
+      "supplement": "no separate supplement supplied or reviewed; absence not established",
+      "url": "http://www.c-s-a.org.cn/1003-3254/10180.html"
+    }
+  ],
+  "reused_articles": [
+    {
+      "id": "ECICE_MA_2026",
+      "journal": "计算机工程",
+      "title": "基于特征融合的多属性小目标检测",
+      "authors": [
+        "辛振伟",
+        "张粼",
+        "王宝龙",
+        "石少华",
+        "杨一鹏",
+        "程辉",
+        "陈涛"
+      ],
+      "year": 2026,
+      "volume": 52,
+      "issue": 10,
+      "pages": "164-176",
+      "doi": "10.19678/j.issn.1000-3428.0252596",
+      "url": "https://www.ecice06.com/CN/10.19678/j.issn.1000-3428.0252596",
+      "full": "https://www.ecice06.com/CN/rich_html/10.19678/j.issn.1000-3428.0252596",
+      "reviewed_sections": [
+        "2.1",
+        "2.2",
+        "3.1",
+        "3.2",
+        "3.3",
+        "3.4",
+        "3.5",
+        "4"
+      ],
+      "tables_visually_read": [
+        3,
+        8
+      ],
+      "table_url_prefix": "https://www.ecice06.com/article/2026/1000-3428/35380/2610164/jsjgc-52-10-164-",
+      "evidence": {
+        "T3_object_AP50": [
+          75.3,
+          85.85,
+          86.07,
+          85.45,
+          85.31
+        ],
+        "T3_order": "baseline;decoupled;decoupled+AF;ACmix+NWD;all",
+        "T8": "VisDrone Baseline vs Baseline+ACmix only; not attribute-bridge validation",
+        "T8_AP50": [
+          46.3,
+          48.0
+        ],
+        "T8_small": [
+          17.5,
+          18.6
+        ],
+        "T8_medium": [
+          36.4,
+          38.5
+        ],
+        "T8_large": [
+          44.4,
+          53.8
+        ]
+      },
+      "limitations": [
+        "WIDER attribute preprocessing not adopted by this project",
+        "VisDrone train-to-validation only",
+        "table6 is WIDER attribute ablation without multi-attribute design, not VisDrone",
+        "no matched multi-seed/end-to-end cost report located in read body",
+        "correlation visualization is not causal identification"
+      ],
+      "review_reused_from": "JOURNAL_TOPIC_FIT_REVIEW_009.md at 11758577c33df7beec3bf82ede2aaac626d69e07"
+    },
+    {
+      "id": "ECICE_SR_2024",
+      "journal": "计算机工程",
+      "title": "基于多任务学习的超分辨率辅助小目标检测",
+      "authors": [
+        "张天鹏",
+        "韩晶",
+        "吕学强"
+      ],
+      "year": 2024,
+      "volume": 50,
+      "issue": 9,
+      "pages": "304-312",
+      "doi": "10.19678/j.issn.1000-3428.0069039",
+      "url": "https://www.ecice06.com/CN/abstract/abstract32926.shtml",
+      "full": "https://www.ecice06.com/CN/rich_html/10.19678/j.issn.1000-3428.0069039",
+      "reviewed_sections": [
+        "2.1",
+        "2.2",
+        "2.3 equations1-7",
+        "3.1",
+        "3.2",
+        "3.3.1",
+        "3.3.2",
+        "4"
+      ],
+      "tables_visually_read": [
+        1,
+        2,
+        6
+      ],
+      "table_url_prefix": "https://www.ecice06.com/article/2024/1000-3428/32926/249304/jsjgc-50-9-304-",
+      "evidence": {
+        "T2_SPCD512_AP50": [
+          0.874,
+          0.876
+        ],
+        "T2_SPCD512_AP50_95": [
+          0.637,
+          0.57
+        ],
+        "T1_YOLOv8n640_infer_ms": 1.9,
+        "T1_MultiYOLO640_infer_ms": 3.4,
+        "T1_YOLOv8n640_infer_post_ms": 3.4,
+        "T1_MultiYOLO640_infer_post_ms": 4.7,
+        "T6_VEDAI640_AP50_baseline_SR_auxhead_full": [
+          0.626,
+          0.681,
+          0.637,
+          0.735
+        ]
+      },
+      "limitations": [
+        "removing auxiliary heads does not imply full-model equal latency",
+        "not equal-training-compute causal control",
+        "exact split members/official code version not authenticated",
+        "author latest-model names and references24/25 correspondence ambiguous; not treated as complete closest-method audit"
+      ],
+      "review_reused_from": "JOURNAL_TOPIC_FIT_REVIEW_009.md at 11758577c33df7beec3bf82ede2aaac626d69e07"
+    }
+  ],
+  "reused_review_bindings": [
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/JOURNAL_TOPIC_FIT_REVIEW_009.md",
+      "repo_path": "docs/research/paper_journal_fit_20261019/JOURNAL_TOPIC_FIT_REVIEW_009.md",
+      "bytes": 13322,
+      "sha256": "9fa1819aca13ff833eadab5e7ee1b7fc855106f24c7b4b560aa70da076eba442",
+      "commit": "11758577c33df7beec3bf82ede2aaac626d69e07",
+      "git_blob_sha256": "9fa1819aca13ff833eadab5e7ee1b7fc855106f24c7b4b560aa70da076eba442",
+      "note": "working bytes may use CRLF; git blob separately bound"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/JOURNAL_REVIEW_SOURCES_009.json",
+      "repo_path": "docs/research/paper_journal_fit_20261019/JOURNAL_REVIEW_SOURCES_009.json",
+      "bytes": 10620,
+      "sha256": "e80986ec7960d31ff106f5a0137788e83d3094be0ef062c9b5b3a853a9daa843",
+      "commit": "11758577c33df7beec3bf82ede2aaac626d69e07",
+      "git_blob_sha256": "ea2e3301ce589555ec580489cdbbd0e803e1e31c9ad708c3591b38a5390067f8",
+      "note": "working bytes may use CRLF; git blob separately bound"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md",
+      "repo_path": "docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md",
+      "bytes": 13889,
+      "sha256": "7ff919ff541a48c5a9ade8dee1eb86c08acf7e152f6b638611e83b96bcf536ab",
+      "commit": "11758577c33df7beec3bf82ede2aaac626d69e07",
+      "git_blob_sha256": "7ff919ff541a48c5a9ade8dee1eb86c08acf7e152f6b638611e83b96bcf536ab",
+      "note": "working bytes may use CRLF; git blob separately bound"
+    },
+    {
+      "path": "D:/Lzy_CV/development/worktrees/paper-journal-fit/docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md",
+      "repo_path": "docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md",
+      "bytes": 13602,
+      "sha256": "84977a0025bccb2517862cd7da000697bece7f329148b44dd7933cb5aa2653b2",
+      "commit": "11758577c33df7beec3bf82ede2aaac626d69e07",
+      "git_blob_sha256": "0194d06cacae90612f9895b7ee5a7079d80774af6043aa75d441b4876a444e89",
+      "note": "working bytes may use CRLF; git blob separately bound"
+    }
+  ],
+  "fulltext_journals": 3,
+  "article_counts": {
+    "计算机工程与应用": 1,
+    "计算机系统应用": 2,
+    "计算机工程": 2
+  },
+  "scope_pages": {
+    "计算机工程": "official scope read in revision009; not rerequested",
+    "计算机工程与应用": "unverified; prior certificate mismatch preserved",
+    "计算机系统应用": "unverified; prior captcha barrier preserved"
+  },
+  "ccf2025_T2": "prior registered official verification reused; not reverified this revision",
+  "school_conditions": "user confirmation; original school document not audited",
+  "pdf_copied": false,
+  "pdf_committed": false,
+  "limits": [
+    "548 development reused extensively",
+    "1602 historical use and data relations unknown; independent qualification BLOCKED",
+    "limited zero-height GT input extension",
+    "MATLAB not executed"
+  ],
+  "tool_note": "one read-only console command hit GBK UnicodeEncodeError; no file or evidence changed; rerun with UTF-8 stdout"
+}

@@ -24,6 +24,10 @@
 
 ## 代码地图
 
+本轮[三刊正文合并审查与投稿决定](docs/research/paper_journal_fit_20261019/JOURNAL_TOPIC_FIT_DECISION_010.md)：三份用户PDF与既有两篇合并，CEA 1篇、CSA 2篇、计算机工程2篇。内容相容与贡献充分性分开；明确选择③结束当前稿件投稿准备，保留原C／完整初稿／旧结果，不默认补实验。两刊官方范围页未认证不再作为终局建议的阻断；PDF单份、不入Git。该状态优先于下方历史缺件和待定。
+
+[直接先例与剩余工程选择裁决](docs/research/paper_journal_fit_20261019/DIRECT_PRECEDENT_DECISION_008.md)（当前主线贡献不足，建议调整问题；航拍正文缺口已关闭）、[上一轮收窄问题与近作状态](docs/research/paper_journal_fit_20261019/NARROWED_CLAIMS_007.md)（摘要／引言已修；公开取文受阻，期刊逐篇判断未完成）、[三份用户PDF身份／正文与贡献审查](docs/research/paper_journal_fit_20261019/PDF_REVIEW_006.md)（建议先收窄问题；不默认加合并评分）、[上一轮限定审查](docs/research/paper_journal_fit_20261019/BOUNDED_REVIEW_005.md)（导师非前置；原文／范围缺证，未宣告可投稿）、[同候选合并控制待审修订](docs/research/paper_journal_fit_20261019/MERGE_CONTROL_REVIEW_PLAN.md)（[旧revision-004 PDF，仅历史参考](docs/research/paper_journal_fit_20261019/output/pdf/MERGE_CONTROL_REVIEW_PLAN.pdf)）、[导师预审摘要](docs/research/paper_journal_fit_20261019/ADVISOR_BRIEF.md)（[一页PDF](docs/research/paper_journal_fit_20261019/output/pdf/ADVISOR_BRIEF.pdf)）、[投稿前实质审查](docs/research/paper_journal_fit_20261019/SUBSTANTIVE_REVIEW.md)、[中文论文完整初稿](docs/research/paper_journal_fit_20261019/CHINESE_DRAFT.md)、[投稿审查](docs/research/paper_journal_fit_20261019/REPORT.md)、[定刊依据](docs/research/paper_journal_fit_20261019/VENUE_DECISION.md)与[最小公开资料清单](docs/research/paper_journal_fit_20261019/PUBLIC_GAPS.md)：采用用户确认的CCF2025／北大2023年第10版、正式录用与署名条件；三刊中文T2按此前信息承接，不冒称本轮官网访问。费用／范围／近作待补后定一个主投一个备选。完整初稿可立即导师预审，但研究贡献与投稿适配未确认，不能认定只缺文献、不缺实验。初稿引用待核，不改变冻结实验与科学裁决。
+
 | 位置 | 责任 |
 |---|---|
 | src/sparse_rtdetr/protocol_r18/ | 当前共同协议R18模型、数据、状态与训练适配 |
