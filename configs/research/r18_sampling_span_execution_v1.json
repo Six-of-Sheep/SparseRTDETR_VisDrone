@@ -1,0 +1,116 @@
+{
+  "protocol": "r18-sampling-span-production-v1",
+  "status": "EXECUTION_PREPARATION_NOT_AUTHORITY",
+  "resources": {
+    "minimum_CPUs": 16,
+    "minimum_RAM_GiB": 16,
+    "minimum_free_disk_GiB": 80,
+    "entry_shm_GiB": 8,
+    "live_shm_GiB": 4,
+    "max_resource_age_seconds": 25,
+    "monitor_interval_seconds": 2,
+    "activity_idle_seconds": 300,
+    "operation_seconds": 1800,
+    "CPU_temperature_C_below": 90,
+    "GPU_temperature_C_below": 80,
+    "GPU_entry_free_MiB": 20000,
+    "GPU_live_free_MiB": 3072,
+    "CPU_PL1_uW_max": 125000000,
+    "CPU_PL2_uW_max": 150000000,
+    "GPU_graphics_MHz_max": 1500,
+    "GPU_hours_cap": 60,
+    "checkpoint_reserve_seconds": 180,
+    "training_peak_allocated_GiB_cap": 18,
+    "task_storage_GiB_cap": 100
+  },
+  "environment": {
+    "torch": "2.4.1",
+    "torchvision": "0.19.1",
+    "cuda_build": "12.4",
+    "cudnn": 90100
+  },
+  "student_evaluation_batch": 4,
+  "warmup_full64_passes_per_model": 2,
+  "timed_full64_passes_per_model": 4,
+  "timing_orders": [
+    [
+      "A",
+      "B0",
+      "B1",
+      "P"
+    ],
+    [
+      "B0",
+      "B1",
+      "P",
+      "A"
+    ],
+    [
+      "B1",
+      "P",
+      "A",
+      "B0"
+    ],
+    [
+      "P",
+      "A",
+      "B0",
+      "B1"
+    ]
+  ],
+  "stages": [
+    "admission",
+    "accept-B0",
+    "accept-B1",
+    "accept-P",
+    "train-B0",
+    "train-B1",
+    "train-P",
+    "infer-B0",
+    "infer-B1",
+    "infer-P",
+    "score",
+    "cost",
+    "compare",
+    "export"
+  ],
+  "no_retry": true,
+  "training_from_acceptance_state": false,
+  "production_authorization_in_this_file": false,
+  "forward_budget": {
+    "preparation": 0,
+    "acceptance": 18,
+    "formal": 218880,
+    "endpoint": 411,
+    "cost": 384,
+    "total": 219693
+  },
+  "checkpoint_epochs": [
+    0,
+    1,
+    40,
+    80,
+    117,
+    118,
+    119,
+    120
+  ],
+  "observations": {
+    "train_epochs": [
+      1,
+      40,
+      80,
+      117,
+      118,
+      120
+    ],
+    "window": 0,
+    "queries_per_group": 8,
+    "groups": [
+      "ordinary",
+      "DN"
+    ],
+    "scope": "first physical microbatch only; all three decoder layers",
+    "cost_observers": false
+  }
+}

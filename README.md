@@ -56,3 +56,8 @@ python -B test_seed_readout.py
 
 Git保存代码、配置、测试、方法文档和小型索引；checkpoint、预测、数据、日志、审计、环境留在独立工作区。索引不是大文件备份。
 历史test划分曾在P1被观察，不能重新称为未见确认集。
+
+
+## 当前受控探索：采样reference extent下限
+
+[三臂设计](docs/research/r18_sampling_span_20261020/PLAN.md)及[生产准备](docs/research/r18_sampling_span_20261020/PRODUCTION_PREPARATION.md)：B0 / 原生8-2-2控制B1 / 候选P，共同ImageNet初始化、完整120轮、显式入口和有限采样观测。本轮只做CPU工程验收，GPU、正式训练及科学评分未执行；不宣称实际采样跨度有固定下限或质量改善。旧A/C与失败裁决不变。

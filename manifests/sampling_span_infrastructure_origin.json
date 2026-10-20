@@ -1,0 +1,44 @@
+{
+  "commit": "fb69a9728596bcf74dbeec35515da542b98b316b",
+  "files": [
+    {
+      "source": "src\\sparse_rtdetr\\protocol_r18\\distill_runtime.py",
+      "destination": "src/sparse_rtdetr/protocol_r18/span_runtime.py",
+      "source_sha256": "74d9b13501e6102fe7ad2c0e1f9393f0d30f70b783b0424d6005828e26159c2c",
+      "reuse": "derived lifecycle infrastructure only; no KD scientific code"
+    },
+    {
+      "source": "src\\sparse_rtdetr\\protocol_r18\\distill_job.py",
+      "destination": "src/sparse_rtdetr/protocol_r18/span_job.py",
+      "source_sha256": "5b3d9b564643de54eafd16eb0fd94a66c8283b6a57bf5c3779f4782f2bbbb361",
+      "reuse": "derived lifecycle infrastructure only; no KD scientific code"
+    },
+    {
+      "source": "src\\sparse_rtdetr\\protocol_r18\\cuda_identity.py",
+      "destination": "src/sparse_rtdetr/protocol_r18/cuda_identity.py",
+      "source_sha256": "b445280929890487e5525ecb2b50123af90d2d358813e8e5bbe866d0c958f9ea",
+      "reuse": "derived lifecycle infrastructure only; no KD scientific code"
+    },
+    {
+      "source": "src/sparse_rtdetr/protocol_r18/distill_worker.py",
+      "destination": "src/sparse_rtdetr/protocol_r18/span_worker.py",
+      "commit": "fb69a9728596bcf74dbeec35515da542b98b316b",
+      "source_sha256": "818b313830c633906883f45b5c0aa46d3dd13edbd5b2c98501fee09692a64f3a",
+      "reuse": "explicitly adapted infrastructure; old source unchanged"
+    },
+    {
+      "source": "tools/check_distill_production_cpu.py",
+      "destination": "tools/check_sampling_span_production_cpu.py",
+      "commit": "fb69a9728596bcf74dbeec35515da542b98b316b",
+      "source_sha256": "e8e384311d9b6f04f02aeb5efb8bb5563d0f34935d0cdb05b098d932cb50b34b",
+      "reuse": "explicitly adapted infrastructure; old source unchanged"
+    },
+    {
+      "source": "src/sparse_rtdetr/protocol_r18/checkpoint.py",
+      "destination": "src/sparse_rtdetr/protocol_r18/span_checkpoint.py",
+      "commit": "4d6d0c609b6691b46503615e56640700f4f860a9",
+      "source_sha256": "7dd65671c8cf41092f34b1f7c8aed547267db2f42d181313d21e5b0366e60e9f",
+      "reuse": "explicitly adapted infrastructure; old source unchanged"
+    }
+  ]
+}

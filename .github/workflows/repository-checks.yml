@@ -37,3 +37,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_sampling_span_cpu.py --output /tmp/sampling-span-cpu
+      - name: Sampling-span final CLI CPU lifecycle (synthetic only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_production_cpu.py --output /tmp/sampling-span-production-cpu

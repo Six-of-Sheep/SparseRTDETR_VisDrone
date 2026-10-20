@@ -1,9 +1,9 @@
-"""CPU design prototype: a one-cell floor on finest-level sampling extent.
+"""Reference-extent adapter: a one-cell floor on finest-level sampling extent.
 
 No global/vendor patch; no change to regression references, losses or queries.
-This is deliberately outside the certified production sampling type inventory.
-The existing validator must reject it until a separately authorized explicit
-production adapter and its source/type binding have been implemented.
+The legacy production validator deliberately rejects this class. The explicit
+span_model adapter admits it only under the new sampling-span task binding;
+legacy task identities are not widened.
 """
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def from_baseline(baseline, arm):
 
 
 def adapt_cpu_model(baseline, arm):
-    """Prototype integration seam only, without bypassing the old validator."""
+    """CPU construction seam, used by the explicit production adapter; legacy guard unchanged."""
     vendor.validate_model_sampling(baseline, sampling_backend='deterministic_gather')
     result = copy.deepcopy(baseline)
     layers = result.decoder.decoder.layers

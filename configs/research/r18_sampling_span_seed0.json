@@ -1,6 +1,6 @@
 {
   "schema": "r18-sampling-span-design-v1",
-  "status": "DESIGN_ONLY_REQUIRES_EXECUTION_AUTHORIZATION",
+  "status": "PRODUCTION_PREPARATION_REQUIRES_SEPARATE_GPU_AUTHORIZATION",
   "seed": 0,
   "arms": {
     "B0": {"points": [4, 4, 4], "finest_span_floor_cells": 0},
@@ -60,5 +60,5 @@
   },
   "future_resource_limits": {"GPU_hours_cap": 60, "training_peak_allocated_GiB_cap": 18, "task_storage_GiB_cap": 100},
   "automatic_execution": false,
-  "production_adapter_implemented": false
+  "production_adapter_implemented": true
 }
