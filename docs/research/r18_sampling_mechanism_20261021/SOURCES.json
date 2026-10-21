@@ -1,0 +1,91 @@
+{
+  "schema": "r18-sampling-mechanism-sources-v1",
+  "review_date": "2026-10-21",
+  "base_main": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "frozen_commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+  "runtime_manifest_sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+  "frozen_sources": [
+    {
+      "role": "adapter",
+      "path": "src/sparse_rtdetr/research/sampling_span.py",
+      "sha256": "85f0728270b24dc6403d7258797541bf1d38dcc7f35ffbdfb46b8e03c332a706",
+      "bytes": 5343,
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/research/sampling_span.py"
+    },
+    {
+      "role": "core",
+      "path": "src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py",
+      "sha256": "b53536a51f865459a0392230763ba055b60f21491fd6c7e4e3b04ae05c1b121b",
+      "bytes": 9275,
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py"
+    },
+    {
+      "role": "decoder",
+      "path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py",
+      "sha256": "01c7b7ab8f070de09dd10e0b34cdd8332874cf63f48cae7e9a608a8574122b6a",
+      "bytes": 24521,
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py"
+    },
+    {
+      "role": "DN_input",
+      "path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/denoising.py",
+      "sha256": "a10115c9e06e55c6bdbf79e1883c5a13b74c7626a20cc9f6ee539ecc34589f3d",
+      "bytes": 4625,
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/denoising.py"
+    },
+    {
+      "role": "observation",
+      "path": "src/sparse_rtdetr/protocol_r18/span_observation.py",
+      "sha256": "2b8e0bc23b10cdfc039119811fc9fc1e21b048a59dcf509abf418ebfa4ab90f4",
+      "bytes": 6453,
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_observation.py"
+    }
+  ],
+  "source_authentication_scope": "Local read-only bytes compared to the existing runtime manifest; no new server authentication. The script extracts only sampling_references AST and imports only the standalone interpolation core, never a detector.",
+  "prior_body_reviews_reused": [
+    {
+      "path": "docs/research/r18_sampling_paper_tools_20261021/FORMULA_COMPARISON.md",
+      "local_bytes_sha256": "087c3ff96bd947a9d9ab7b912b6a64d8eb8aa499afae283f289799c3c9aa0651",
+      "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/6611db33de381e561378c4e0ca848b5c5b5dc9d2/docs/research/r18_sampling_paper_tools_20261021/FORMULA_COMPARISON.md"
+    },
+    {
+      "path": "docs/research/r18_sampling_paper_tools_20261021/REFERENCES.json",
+      "local_bytes_sha256": "484a07e43ce7d1300106ceb3fb15e1bb965976e917e5a5730b7f3d30a09ff24b",
+      "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/6611db33de381e561378c4e0ca848b5c5b5dc9d2/docs/research/r18_sampling_paper_tools_20261021/REFERENCES.json"
+    },
+    {
+      "path": "docs/research/r18_sampling_paper_tools_20261021/MECHANISM_FIELDS.md",
+      "local_bytes_sha256": "240fd02593699292a12a5e30ebfa5ec92d6a689c441e4b351812da03dc366659",
+      "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/6611db33de381e561378c4e0ca848b5c5b5dc9d2/docs/research/r18_sampling_paper_tools_20261021/MECHANISM_FIELDS.md"
+    }
+  ],
+  "only_new_direct_reference": {
+    "title": "Estimating or Propagating Gradients Through Stochastic Neurons for Conditional Computation",
+    "authors": [
+      "Yoshua Bengio",
+      "Nicholas Leonard",
+      "Aaron Courville"
+    ],
+    "arxiv": "1308.3432v1",
+    "date": "2013-08-15",
+    "url": "https://arxiv.org/pdf/1308.3432v1",
+    "reviewed_body": [
+      "Section4, PDF page7, Equation13",
+      "Section5, PDF page8",
+      "AppendixA.4, PDF page12"
+    ],
+    "relevant_fact": "The straight-through rule specifies a surrogate backward instead of the actual hard-forward derivative; the paper calls it biased. Its stochastic-gating experiment is not an extent-floor or R18 result.",
+    "PDF_downloaded": false,
+    "PDF_local_SHA": null,
+    "scope": "Public full PDF text read via web tool; no local-byte certification and no original-method claim."
+  },
+  "runtime_changes": false,
+  "lab_connections": 0,
+  "detector_or_checkpoint_loads": 0,
+  "real_image_or_annotation_reads": 0,
+  "model_forward_calls": 0,
+  "scientific_scoring_calls": 0
+}
