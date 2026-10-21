@@ -37,6 +37,45 @@ def worker_binding_only(before,after):
                'worker computation changed beyond endpoint binding/export')
 
 
+def checkpoint_health(state):
+    """Allow only the native invalid-anchor +inf sentinel, never arbitrary inf.
+
+    The original save-time geometry check authenticates generated cache values.
+    Reconciliation additionally checks their named masks and model/EMA equality;
+    every tensor outside these two exact cache paths must remain finite.
+    """
+    import torch
+    caches=[];summary={}
+    for label,component in (('model',state['model']),('ema',state['ema']['module'])):
+        anchors=component['decoder.anchors'];mask=component['decoder.valid_mask']
+        rt.require(isinstance(anchors,torch.Tensor) and isinstance(mask,torch.Tensor)
+            and anchors.dtype==torch.float32 and mask.dtype==torch.bool
+            and anchors.ndim==3 and anchors.shape[0]==1 and anchors.shape[-1]==4
+            and mask.shape==anchors.shape[:-1]+(1,), 'B0 native anchor cache schema differs')
+        valid=mask.expand_as(anchors)
+        rt.require(bool(anchors[valid].isfinite().all())
+            and bool(anchors[~valid].isposinf().all()), 'B0 native anchor sentinel/mask differs')
+        caches.append((anchors,mask))
+        summary[label]=dict(invalid_coordinates=int((~valid).sum()),
+            valid_coordinates=int(valid.sum()),invalid_values='positive_infinity_only')
+    rt.require(all(torch.equal(a,b) for a,b in zip(caches[0],caches[1])),
+        'B0 model/EMA native caches differ')
+    count=0
+    def check(value,path=()):
+        nonlocal count
+        if isinstance(value,torch.Tensor):
+            count+=1
+            if path not in {('model','decoder.anchors'),('ema','module','decoder.anchors')}:
+                rt.require(bool(value.isfinite().all()),'B0 state nonfinite: '+ '/'.join(map(str,path)))
+        elif isinstance(value,dict):
+            for key,item in value.items():check(item,path+(key,))
+        elif isinstance(value,(list,tuple)):
+            for key,item in enumerate(value):check(item,path+(key,))
+    check(state)
+    return dict(status='PASS',tensor_count=count,native_anchor_caches=summary,
+                all_other_tensors_finite=True)
+
+
 def build(parent_contract,new_source,output):
     contract_ref=rt.reference(Path(parent_contract).resolve());old=rt.exact(contract_ref)
     rt.require(old['protocol']==rt.FORMAL_PROTOCOL and old['task_id']==rt.TASK and 'external_B0' not in old,'only original formal B0 may be reused')
@@ -83,7 +122,7 @@ def build(parent_contract,new_source,output):
     torch.set_num_threads(2)
     state=checkpoint.read(path,cp['sha256'],binding)
     rt.require(state['engine']['completed_updates']==state['ema']['updates']==updates and state['binding_sha256']==cp['binding_sha256'],'B0 optimizer/EMA clocks differ')
-    rt.require(all(bool(torch.isfinite(t).all()) for t in checkpoint._tensors(state)),'B0 state nonfinite')
+    health=checkpoint_health(state)
     del state
     cost_ref=rt.reference(Path(old['job_root'])/'COST_LEDGER.json');ledger=rt.exact(cost_ref)
     rt.require(ledger['active'] is None and ledger['forward_calls']==18+2*updates and ledger['completed_GPU_seconds']>=ledger['prior']['GPU_seconds'],'parent cost incomplete/reset')
@@ -99,7 +138,7 @@ def build(parent_contract,new_source,output):
         status='AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE',contract=contract_ref,source=old['source'],new_source=new_source,
         result=result_ref,worker_exit=exit_ref,endpoint=result['endpoint'],stop=stop_ref,failed_supervisor_process=proc_ref,
         ledger=cost_ref,initialization=init_ref,events=dict(path=str(stage/'events.jsonl'),bytes=scan.bytes,sha256=scan.sha256),
-        events_count=len(scan),student_inputs_sha256=scan.input_sha256,watched=watched,changed_source_files=changes,
+        events_count=len(scan),student_inputs_sha256=scan.input_sha256,watched=watched,changed_source_files=changes,state_health=health,
         old_closure_created=False,checkpoint_copied=False,training_repeated=False,checkpoint_loaded_for_training=False)
     rt.publish(output,proof);return rt.reference(output)
 

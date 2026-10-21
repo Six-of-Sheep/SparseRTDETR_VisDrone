@@ -65,3 +65,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_sampling_span_continuation_cpu.py --output /tmp/sampling-span-continuation
+      - name: Native anchor sentinel checkpoint health (CPU only, no model)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_anchor_health.py --output /tmp/sampling-span-anchor-health

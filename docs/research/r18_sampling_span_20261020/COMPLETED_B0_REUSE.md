@@ -42,3 +42,19 @@ unchanged. Worker changes are restricted by AST comparison to two mechanical
 endpoint-contract/export-provenance substitutions. GPU acceptance is not rerun.
 All new engineering, identity, numerical or resource failures STOP without retry.
 CPU fixtures remain synthetic, with no CUDA/BF16 or production quality claims.
+
+The first continuation admission (`formal-execution-002`) stopped before binding:
+the added unconditional finite-state check rejected the official decoder's
+invalid-anchor positive-infinity sentinel. Read-only CPU inspection found only
+the model/EMA `decoder.anchors` caches nonfinite, each at 3,232 coordinates and
+exactly at `decoder.valid_mask == false`; all other state tensors were finite.
+This is an admission-check incompatibility, not evidence of training divergence.
+That STOP and release remain unchanged. The corrected reuse check permits +inf
+only at these two exact named cache paths and invalid mask positions, requires
+finite valid positions, boolean masks, native shape/dtype and equal model/EMA
+caches, and still requires all other tensors finite. It does not change the
+training-time health checks, native anchors, training or inference computation.
+`tools/check_sampling_span_anchor_health.py` uses the pinned native generator
+on CPU (no model/checkpoint/forward), covers the production canvas and an
+all-valid small fixture, and rejects malformed masks, NaN, -inf, misplaced +inf,
+cache disagreement and nonfinite weights/optimizer/other similarly named fields.
