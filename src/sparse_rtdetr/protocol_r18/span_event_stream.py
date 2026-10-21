@@ -16,8 +16,8 @@ def fingerprint(path):
 class VerifiedEvents:
     """Full scan, retaining only one record; iteration reauthenticates the file.
 
-    Existing callers use len, terminal [-1], or iteration. Random indexing and
-    slicing are intentionally unsupported rather than silently materializing.
+    Terminal indexing is cached. Other integer indexing reauthenticates the
+    complete stream, retaining only the requested record; never a record list.
     """
     def __init__(self,c,stage,path,complete=True):
         self.c,self.stage,self.path,self.complete=c,stage,Path(path),complete
@@ -58,5 +58,11 @@ class VerifiedEvents:
     def __len__(self):return self.count
     def __iter__(self):return self._scan()
     def __getitem__(self,index):
-        if self.count and index in (-1,self.count-1):return self.last
-        raise IndexError('only authenticated terminal indexing is supported')
+        if type(index) is not int:raise TypeError('event indexing requires an integer; slices cannot materialize a journal')
+        wanted=index if index>=0 else self.count+index
+        if not 0<=wanted<self.count:raise IndexError('event index outside authenticated journal')
+        if wanted==self.count-1:return self.last
+        selected=None
+        for i,row in enumerate(self._scan()):
+            if i==wanted:selected=row
+        return selected

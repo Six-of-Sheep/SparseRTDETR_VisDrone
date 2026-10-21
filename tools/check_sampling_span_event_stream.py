@@ -22,6 +22,7 @@ def main():
             raise RuntimeError('legacy memory stress did not exceed cap')
         scan=rt.verify_events(c,'train-B0',path)
         rt.require(len(scan)==34 and scan.input_count==32,'bounded scan incomplete')
+        rt.require(scan[1]['event']=='update-1','bounded nonterminal lookup differs')
         print(json.dumps(dict(count=len(scan),bytes=scan.bytes,sha256=scan.sha256,
             peak_RSS_KiB=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,torch_imported='torch' in sys.modules)))
         return
@@ -43,6 +44,8 @@ def main():
     small=copy.deepcopy(rows)
     for r in small:r['fields'].pop('padding',None)
     write(small,out/'valid.jsonl');scan=rt.verify_events(c,'train-B0',out/'valid.jsonl')
+    rt.require(scan[2]['event']==names[2] and scan[-2]['event']==names[-2],'legacy nonterminal indexing differs')
+    checks.append('nonterminal positive and negative indexing fully reauthenticate')
     rt.require(scan.input_sha256==rt.digest([rt.digest(r['fields']['input']) for r in small if r['event'].startswith('update-')]),'input digest differs')
     checks.append('streaming input digest equals original list digest')
     cases={'missing':lambda r:r.pop(), 'identity':lambda r:r[2]['identity'].update(attempt='foreign'),
