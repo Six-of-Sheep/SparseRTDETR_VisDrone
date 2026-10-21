@@ -1,0 +1,14 @@
+{
+  "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+  "scope": "GPU_FORMAL_E120_ONCE",
+  "accepted_commit": "04fe90d6f41cb26d2e7b17e931f20c9a3b4b42d4",
+  "accepted_source_sha256": "d10ee5d29aab3d3962fdab1b8eb20cac7339204a815adfa3d5e57f17728384ac",
+  "accepted_contract_sha256": "4890902950a6db90201cc53e6a2bb95231f370e9f18625653b2ae46219f99f02",
+  "prior_forward_calls": 18,
+  "prior_GPU_seconds_rounded6": 79.265549,
+  "remaining_forward_calls": 219675,
+  "stages": ["admission", "train-B0", "train-B1", "train-P", "infer-B0", "infer-B1", "infer-P", "score", "cost", "compare", "export"],
+  "existing_file_changes_allowed": ["src/sparse_rtdetr/protocol_r18/span_runtime.py", "src/sparse_rtdetr/protocol_r18/span_job.py", ".github/workflows/repository-checks.yml", "README.md", "manifests/experiments.json"],
+  "no_retry": true,
+  "training_from_acceptance_state": false
+}

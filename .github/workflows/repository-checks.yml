@@ -49,3 +49,11 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_sampling_span_admission_cpu.py --output /tmp/sampling-span-admission-cpu
+      - name: Formal CLI reuses external acceptance and cumulative budget (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_formal_cpu.py --output /tmp/sampling-span-formal-cpu
+      - name: Resource-age rejection diagnostics (no model, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_resource_age.py --output /tmp/sampling-span-resource-age

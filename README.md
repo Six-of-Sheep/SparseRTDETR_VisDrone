@@ -63,3 +63,5 @@ Git保存代码、配置、测试、方法文档和小型索引；checkpoint、�
 [三臂设计](docs/research/r18_sampling_span_20261020/PLAN.md)及[生产准备](docs/research/r18_sampling_span_20261020/PRODUCTION_PREPARATION.md)：B0 / 原生8-2-2控制B1 / 候选P，共同ImageNet初始化、完整120轮、显式入口和有限采样观测。本轮只做CPU工程验收，GPU、正式训练及科学评分未执行；不宣称实际采样跨度有固定下限或质量改善。旧A/C与失败裁决不变。
 
 [独立GPU工程验收入口](docs/research/r18_sampling_span_20261020/ACCEPTANCE_ONLY.md)使用单独合同，仅允许三臂合计9次更新／18次batch forward，闭合导出后退出；拒绝正式训练、科学评分和完整测速。CPU准备通过不授予GPU执行权限，旧全链入口不接受验收合同。
+
+[正式链的外部验收引用](docs/research/r18_sampling_span_20261020/FORMAL_EXTERNAL_ACCEPTANCE.md)保留原9更新/18forward验收证据，只读核验并继承成本，不重跑或伪造本地验收。三臂正式训练仍从共同ImageNet初态独立开始，不能接验收state；正式执行状态以对应冻结attempt回执为准。

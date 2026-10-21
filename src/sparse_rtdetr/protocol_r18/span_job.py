@@ -19,7 +19,7 @@ def environment(c,gpu=False):
 
 
 def command(c,action,stage=None):
-    entry = 'r18_sampling_acceptance.py' if rt.acceptance_only(c) else 'r18_sampling_span.py'
+    entry = 'r18_sampling_formal.py' if c['protocol']==rt.FORMAL_PROTOCOL else ('r18_sampling_acceptance.py' if rt.acceptance_only(c) else 'r18_sampling_span.py')
     argv=[c['python'],'-B',str(rt.ROOT/entry),action,'--contract',c['_path']]
     if stage is not None:argv+=['--stage',stage]
     return argv
@@ -43,7 +43,7 @@ def supervise(c,stage):
     rt.require(consumed['identity']==rt.identity(c,stage),'phase token differs')
     predecessors(c,stage)
     out.mkdir(exist_ok=False)
-    gpu=gpu_stage(c,stage);first=rt.snapshot(c,entry=True,gpu=gpu)
+    gpu=gpu_stage(c,stage);first=rt.snapshot(c,entry=True,gpu=gpu,stage=stage)
     rt.publish(out/'resource-entry.json',first)
     owner=dict(pid=os.getpid(),identity=rt.identity(c,stage))
     if platform.system()=='Linux':
@@ -70,7 +70,7 @@ def supervise(c,stage):
                     if gpu:
                         from .span_budget import guard as budget_guard
                         budget_guard(c,hard=True)
-                    last_snapshot=rt.snapshot(c,entry=False,gpu=gpu,baseline=first)
+                    last_snapshot=rt.snapshot(c,entry=False,gpu=gpu,baseline=first,stage=stage)
                     rt.atomic(out/'resource-live.json',last_snapshot)
                     resources.write(json.dumps(last_snapshot,allow_nan=False)+'\n');resources.flush()
                     if writer is None and (out/'worker-start.json').exists():

@@ -14,6 +14,8 @@ TASK = 'r18-sampling-span-20261020-001'
 PROTOCOL = 'r18-sampling-span-production-v1'
 ACCEPTANCE_PROTOCOL = 'r18-sampling-span-acceptance-v1'
 ACCEPTANCE_CONFIG = 'configs/research/r18_sampling_span_acceptance_v1.json'
+FORMAL_PROTOCOL = 'r18-sampling-span-formal-external-acceptance-v1'
+FORMAL_CONFIG = 'configs/research/r18_sampling_span_formal_v1.json'
 SCIENCE = 'configs/research/r18_sampling_span_seed0.json'
 EXECUTION = 'configs/research/r18_sampling_span_execution_v1.json'
 STAGES = ('admission', 'accept-B0', 'accept-B1', 'accept-P',
@@ -61,7 +63,10 @@ def verify_source(ref):
         require(target.is_file() and not target.is_symlink() and target.resolve().is_relative_to(ROOT), 'source member escaped/missing')
         require(reference(target) == dict(path=str(target), bytes=row['bytes'], sha256=row['sha256']), 'actual source bytes changed: '+name)
         names.append(name)
-    require(len(names) == len(set(names)) and {'r18_sampling_span.py', 'r18_sampling_acceptance.py', 'r18_sampling_admission.py', SCIENCE, EXECUTION, ACCEPTANCE_CONFIG,
+    require(len(names) == len(set(names)) and {'r18_sampling_span.py', 'r18_sampling_acceptance.py', 'r18_sampling_admission.py', 'r18_sampling_formal.py', FORMAL_CONFIG, SCIENCE, EXECUTION, ACCEPTANCE_CONFIG,
+        'src/sparse_rtdetr/protocol_r18/span_formal.py',
+        'src/sparse_rtdetr/protocol_r18/span_formal_admission.py',
+        'src/sparse_rtdetr/protocol_r18/span_external_acceptance.py',
         'src/sparse_rtdetr/protocol_r18/span_admission.py',
         'src/sparse_rtdetr/protocol_r18/span_acceptance.py',
         'src/sparse_rtdetr/protocol_r18/span_acceptance_budget.py',
@@ -92,11 +97,12 @@ def acceptance_config():
 
 
 def acceptance_only(c):
-    require(c['protocol'] in (PROTOCOL, ACCEPTANCE_PROTOCOL), 'foreign execution protocol')
+    require(c['protocol'] in (PROTOCOL, ACCEPTANCE_PROTOCOL, FORMAL_PROTOCOL), 'foreign execution protocol')
     return c['protocol'] == ACCEPTANCE_PROTOCOL
 
 
 def permitted_stages(c):
+    if c['protocol']==FORMAL_PROTOCOL:return tuple(read(ROOT/FORMAL_CONFIG)['stages'])
     return tuple(acceptance_config()['stages']) if acceptance_only(c) else STAGES
 
 
@@ -114,10 +120,11 @@ def verify_cpu_gate(gate, source_ref, gate_status):
     return gate
 
 
-def load(path, *, preparation=False, acceptance=False):
+def load(path, *, preparation=False, acceptance=False, formal=False):
     require(platform.system() == 'Linux', 'final lifecycle requires POSIX evaluator/process interfaces; CPU via WSL/CI only')
     c = read(path)
-    expected_protocol = ACCEPTANCE_PROTOCOL if acceptance else PROTOCOL
+    require(not (acceptance and formal),'ambiguous protocol loader')
+    expected_protocol = FORMAL_PROTOCOL if formal else (ACCEPTANCE_PROTOCOL if acceptance else PROTOCOL)
     require(c['task_id'] == TASK and c['protocol'] == expected_protocol, 'foreign task/protocol')
     require(c['contract_sha256'] == digest({k:v for k,v in c.items() if k != 'contract_sha256'}), 'contract digest differs')
     require(c['source_root'] == str(ROOT) and c['python'] == sys.executable, 'release/interpreter differs')
@@ -128,6 +135,10 @@ def load(path, *, preparation=False, acceptance=False):
         require(c['execution_scope'] == aconfig['scope'] and c['acceptance_limits'] == aconfig['limits']
                 and c['acceptance_sha256'] == digest(aconfig), 'acceptance scope/limits differ')
         require(c['science_authorized'] is False, 'acceptance cannot authorize scientific execution')
+    elif formal:
+        policy=read(ROOT/FORMAL_CONFIG)
+        require(c['execution_scope']==policy['scope'] and c['formal_sha256']==digest(policy), 'formal policy/scope differs')
+        require('acceptance_limits' not in c and 'acceptance_sha256' not in c,'formal cannot carry acceptance authority')
     else:
         require('acceptance_limits' not in c and 'acceptance_sha256' not in c and
                 c.get('execution_scope', 'GPU_TRAIN_EVAL_ONCE') == 'GPU_TRAIN_EVAL_ONCE', 'acceptance contract refused by full-chain entry')
@@ -147,14 +158,15 @@ def load(path, *, preparation=False, acceptance=False):
         if preparation:
             require(c['authorization'] is None, 'preparation cannot carry GPU authority')
         a = None if preparation else exact(c['authorization'])
-        approval = dict(scope='GPU_ACCEPTANCE_ONLY' if acceptance else 'GPU_TRAIN_EVAL_ONCE', task_id=TASK, attempt=c['attempt'],
+        approval = dict(scope='GPU_FORMAL_E120_ONCE' if formal else ('GPU_ACCEPTANCE_ONLY' if acceptance else 'GPU_TRAIN_EVAL_ONCE'), task_id=TASK, attempt=c['attempt'],
                          commit=c['commit'], source_sha256=c['source']['sha256'],
                          science_sha256=c['science_sha256'], execution_sha256=c['execution_sha256'],
                          nonce=c['nonce'])
         if acceptance:
             approval.update(acceptance_sha256=c['acceptance_sha256'], limits=acceptance_config()['limits'])
+        if formal:approval.update(formal_sha256=c['formal_sha256'],external_acceptance_sha256=c['external_acceptance']['sha256'],remaining_forward_calls=219675)
         require(preparation or a == approval, 'separate exact-source GPU approval absent/conflicting')
-        gate_status = 'ACCEPTANCE_CPU_ENTRY_PASS' if acceptance else 'PRODUCTION_CPU_ENTRY_PASS'
+        gate_status = 'FORMAL_CPU_ENTRY_PASS' if formal else ('ACCEPTANCE_CPU_ENTRY_PASS' if acceptance else 'PRODUCTION_CPU_ENTRY_PASS')
         gate = dict(status=gate_status, source_sha256=c['source']['sha256']) if preparation else exact(c['CPU_gate'])
         verify_cpu_gate(gate, c['source'], gate_status)
         require(c['environment'] == execution()['environment'], 'certified lab runtime changed')
@@ -183,16 +195,20 @@ def load(path, *, preparation=False, acceptance=False):
     adapt(c)
     require(digest(c) == before, 'sealed contract lacks explicit input-list normalization')
     c['_path'] = str(Path(path).resolve())
+    if formal:
+        from .span_external_acceptance import verify
+        verify(c)
     return c
 
 
 def fixture_sample():
     """Schema fixture only; goes through the SAME resource screen as production."""
+    began = dict(epoch=time.time(), monotonic=time.monotonic())
     dev = {k:dict(status='OBSERVED',value=v) for k,v in {
         'uuid':'CPU_FIXTURE_NO_GPU','name':'NO_GPU_SIMULATION','memory.total':24576,
         'memory.free':24576,'temperature.gpu':40,'utilization.gpu':0,
         'clocks.current.graphics':1500,'power.limit':250}.items()}
-    return dict(sampled_epoch=time.time(),monotonic=time.monotonic(),boot_id='CPU_FIXTURE_BOOT',
+    sample = dict(sampled_epoch=time.time(),monotonic=time.monotonic(),boot_id='CPU_FIXTURE_BOOT',
         snapshot=dict(gpu=dict(devices=[dev]), resources=dict(cpu_count=16,ram_available=32*GIB),
                       cpu_temperature_max=40,shm_free=16*GIB),
         storage=dict(canonical_mount='CPU_FIXTURE',platform_entry='CPU_FIXTURE',mount=dict(source='FIXTURE',rw=True),
@@ -201,14 +217,69 @@ def fixture_sample():
         cpu_power_constraints=dict(constraint_0_name='long_term',constraint_1_name='short_term',
                                    constraint_0_power_limit_uw='125000000',constraint_1_power_limit_uw='150000000'),
         fixture_only=True)
+    sample['sampling_timing'] = dict(started=began,
+        completed=dict(epoch=time.time(),monotonic=time.monotonic()),
+        source='fixture_sample: actual Python time.time/CLOCK_REALTIME and time.monotonic/CLOCK_MONOTONIC')
+    return sample
 
 
-def screen(sample, c, *, entry, gpu, baseline=None):
+def resource_context(c, stage=None):
+    """Explicit stage argument, or the actual worker/supervisor CLI stage."""
+    if stage is None and '--stage' in sys.argv:
+        i=sys.argv.index('--stage')
+        stage=sys.argv[i+1] if i+1<len(sys.argv) else None
+    if stage is not None:require(stage in permitted_stages(c),'resource diagnostic stage outside contract')
+    return dict(task_id=c.get('task_id'),protocol=c.get('protocol'),attempt=c.get('attempt'),
+        contract_sha256=c.get('contract_sha256'),source_sha256=c.get('source',{}).get('sha256'),
+        stage=stage,action=sys.argv[1] if len(sys.argv)>1 else None,pid=os.getpid())
+
+
+def resource_age(sample,c,stage=None):
+    """Observe the original wall-clock predicate; never replace a sample time.
+
+    Monotonic values diagnose duration/clock disagreement, not an alternate
+    permission to admit negative or expired wall-clock ages.
+    """
+    checked=dict(epoch=time.time(),monotonic=time.monotonic())
+    timing=sample.get('sampling_timing',{})
+    start=timing.get('started');finish=timing.get('completed')
+    return dict(sampled_epoch=sample['sampled_epoch'],sampled_monotonic=sample.get('monotonic'),
+        sampling_started=start,sampling_completed=finish,checked=checked,
+        actual_age_seconds=checked['epoch']-sample['sampled_epoch'],
+        monotonic_age_seconds=None if 'monotonic' not in sample else checked['monotonic']-sample['monotonic'],
+        sampling_elapsed_seconds=None if start is None or finish is None else finish['monotonic']-start['monotonic'],
+        threshold_seconds=c['resources']['max_resource_age_seconds'],
+        clock_sources=dict(age='Python time.time / CLOCK_REALTIME',duration='Python time.monotonic / CLOCK_MONOTONIC'),
+        sampling_time_source=timing.get('source','legacy sample: collection boundaries unavailable'),
+        phase_identity=resource_context(c,stage),sampling_phase_identity=sample.get('sampling_phase_identity'))
+
+
+def reject_resource_age(sample,c,record):
+    """Persist the rejected sample before raising; never overwrite a failure."""
+    root=Path(c['job_root']);stage=record['phase_identity']['stage']
+    if root.is_dir():
+        folder=root/stage if stage is not None and (root/stage).is_dir() else root
+    else:
+        # Do not consume the future job directory before run's exist_ok=False.
+        folder=root.with_name(root.name+'-resource-rejections')
+        folder.mkdir(parents=True,exist_ok=True)
+    age=record['actual_age_seconds']
+    publish(folder/('resource-age-rejected-'+str(os.getpid())+'-'+str(time.monotonic_ns())+'.json'),
+        dict(status='REJECTED_RESOURCE_AGE_NO_RETRY',
+             reason='negative age' if age<0 else ('nonfinite age' if not math.isfinite(age) else 'expired sample'),
+             age=record,sample=sample))
+
+
+def screen(sample, c, *, entry, gpu, baseline=None, stage=None):
     from ..localization import lab_consumer, thermal_resume
     require(isinstance(c.get('resources'),dict) and c['resources']==execution()['resources'],
             'resource screen requires constructed contract with frozen resources')
     r = c['resources']; s = sample['snapshot']
-    require(0 <= time.time()-sample['sampled_epoch'] < r['max_resource_age_seconds'], 'stale resource sample')
+    age=resource_age(sample,c,stage)
+    if not 0 <= age['actual_age_seconds'] < r['max_resource_age_seconds']:
+        reject_resource_age(sample,c,age)
+        raise RuntimeError('stale resource sample')
+    sample['age_check']=age
     require(sample['boot_id'] == c['boot_id'], 'boot identity differs')
     require(s['resources']['cpu_count'] >= r['minimum_CPUs'] and s['resources']['ram_available'] >= r['minimum_RAM_GiB']*GIB, 'CPU/RAM admission failed')
     require(s['shm_free'] >= (r['entry_shm_GiB'] if entry else r['live_shm_GiB'])*GIB, 'shared memory admission failed')
@@ -228,7 +299,8 @@ def screen(sample, c, *, entry, gpu, baseline=None):
     return sample
 
 
-def snapshot(c, *, entry, gpu, baseline=None):
+def snapshot(c, *, entry, gpu, baseline=None, stage=None):
+    began=dict(epoch=time.time(),monotonic=time.monotonic())
     if c['profile']=='CPU_FIXTURE_ONLY':
         sample=fixture_sample()
     else:
@@ -237,10 +309,17 @@ def snapshot(c, *, entry, gpu, baseline=None):
         while not target.exists():target=target.parent
         sample=observe(str(target))
         require(not sample.get('fixture_only'), 'production cannot use resource fixture')
-    return screen(sample,c,entry=entry,gpu=gpu,baseline=baseline)
+    sample['sampling_timing']=dict(started=began,
+        completed=dict(epoch=time.time(),monotonic=time.monotonic()),
+        source='snapshot collection boundaries: actual CLOCK_REALTIME/CLOCK_MONOTONIC; sampled_epoch preserved from collector')
+    sample['sampling_phase_identity']=resource_context(c,stage)
+    return screen(sample,c,entry=entry,gpu=gpu,baseline=baseline,stage=stage)
 
 
 def identity(c,stage):
+    if c['protocol']==FORMAL_PROTOCOL and stage.startswith('accept-'):
+        from .span_external_acceptance import parent
+        return identity(parent(c),stage)
     require(stage in permitted_stages(c),'stage outside contract scope')
     return dict(task_id=TASK,protocol=c['protocol'],attempt=c['attempt'],stage=stage,
                 source_sha256=c['source']['sha256'],contract_sha256=c['contract_sha256'],
@@ -248,6 +327,9 @@ def identity(c,stage):
 
 
 def stage_path(c,stage):
+    if c['protocol']==FORMAL_PROTOCOL and stage.startswith('accept-'):
+        from .span_external_acceptance import parent
+        return stage_path(parent(c),stage)
     require(stage in permitted_stages(c),'stage outside contract scope')
     return Path(c['job_root'])/stage
 
@@ -334,6 +416,9 @@ class EventReader:
 
 
 def verify_stage(c,stage):
+    if c['protocol']==FORMAL_PROTOCOL and stage.startswith('accept-'):
+        from .span_external_acceptance import parent
+        return verify_stage(parent(c),stage)
     out=stage_path(c,stage);closed=read(out/'CLOSED.json')
     require(closed['identity']==identity(c,stage) and closed['status']=='PASS', 'stage not closed under this identity')
     value=exact(closed['result']);require(value['identity']==identity(c,stage) and value['status']=='PASS', 'result binding differs')
