@@ -1,0 +1,2 @@
+# Optional local paper figures only. Never install into the frozen R18 environment.
+matplotlib==3.10.8
