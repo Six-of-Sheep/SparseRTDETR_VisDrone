@@ -32,3 +32,40 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - run: python -m pip install -r environment/requirements-sampling-span-cpu.txt
+      - name: Isolated R18 sampling-span CPU prototype (no data, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_cpu.py --output /tmp/sampling-span-cpu
+      - name: Sampling-span final CLI CPU lifecycle (synthetic only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_production_cpu.py --output /tmp/sampling-span-production-cpu
+      - name: Acceptance-only final CLI CPU lifecycle and scope rejection (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_acceptance_cpu.py --output /tmp/sampling-span-acceptance-cpu
+      - name: Raw-spec admission CLI and frozen resource construction (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_admission_cpu.py --output /tmp/sampling-span-admission-cpu
+      - name: Formal CLI reuses external acceptance and cumulative budget (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_formal_cpu.py --output /tmp/sampling-span-formal-cpu
+      - name: Resource-age rejection diagnostics (no model, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_resource_age.py --output /tmp/sampling-span-resource-age
+      - name: Streaming event authentication under bounded address space
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_event_stream.py --output /tmp/sampling-span-event-stream
+      - name: Completed B0 provenance and actual continuation CLI (synthetic only)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_continuation_cpu.py --output /tmp/sampling-span-continuation
+      - name: Native anchor sentinel checkpoint health (CPU only, no model)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_anchor_health.py --output /tmp/sampling-span-anchor-health

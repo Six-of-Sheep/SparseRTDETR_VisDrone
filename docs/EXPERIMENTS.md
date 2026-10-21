@@ -14,3 +14,7 @@
 当前仅seed1/2共同源码完成精确Git导入；其他实验先登记原manifest，source_commit=null表示精确映射尚未完成。F0、OR、R-small等旧结论与材料保持，不由本次整理重启。
 
 新实验在任务分支增加代码/配置，提交后记录实际执行commit。结果确定后另作小提交更新科学状态及报告引用，不能把结果文档commit误当运行源码commit。
+
+## R18单整图高IoU小目标设计（2026-10-20）
+
+[集中方案](research/r18_sampling_span_20261020/PLAN.md)：只保留最细层采样跨度下限一个候选，原生点数重分配作为常规控制。13项合成CPU原型通过；未生产接线、未启动GPU/训练/科学评分，不宣称创新或有效。DQ-DETR暂停、蒸馏及旧失败配方继续关闭，A/C保留。配置`configs/research/r18_sampling_span_seed0.json`仅设计，不授予执行。

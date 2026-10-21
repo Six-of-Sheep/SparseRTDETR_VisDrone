@@ -1,0 +1,7 @@
+# Isolated CPU prototype/CI; never install into certified training environment.
+-r requirements-confirmation-ci.txt
+PyYAML==6.0.2
+scipy==1.15.3
+faster-coco-eval==1.6.7
+pycocotools==2.0.10
+tensorboard==2.20.0
