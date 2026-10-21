@@ -1,0 +1,61 @@
+{
+  "schema": "sampling-paper-readonly-binding-v1",
+  "task_id": "r18-sampling-span-20261020-001",
+  "attempt": "attempt-formal-001",
+  "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+  "source_sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+  "contract_sha256": "08a0835fd9df656aae8e87af065e7a528f4037e9382ae854211a5ab592769a7b",
+  "reference_files": [
+    {
+      "path": "configs/research/r18_sampling_span_seed0.json",
+      "local_bytes_sha256": "984038ad03e4eb97b58c995caedf1866df12457ecb814899e4ab92b6037375cf"
+    },
+    {
+      "path": "configs/research/r18_sampling_span_execution_v1.json",
+      "local_bytes_sha256": "4c9494a074d8740eb68ca4801cadf54c9bb844dc8e3dd003e016d76f2047bef5"
+    },
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/span_worker.py",
+      "local_bytes_sha256": "1407050c0c385f4c3e69ddc41af800e6001920d90e937856f7ab186f5660e4e2"
+    },
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/span_formal.py",
+      "local_bytes_sha256": "ff8edc6c2fd9859ccfefdd255eb71396583b6afef1cee7c71a6b7c3e5e113377"
+    },
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/span_observation.py",
+      "local_bytes_sha256": "2b8e0bc23b10cdfc039119811fc9fc1e21b048a59dcf509abf418ebfa4ab90f4"
+    }
+  ],
+  "gates": {
+    "top600_COCO_AP75_small_min": 0.3,
+    "top600_COCO_APS_min": 0.2,
+    "top600_COCO_AP_min": 0.0,
+    "top600_COCO_APM_min": -0.2,
+    "top600_COCO_APL_min": -0.2,
+    "top600_COCO_AR_large_min": -0.2,
+    "top300_COCO_AP75_small_min": 0.0,
+    "top300_COCO_AP_min": -0.2,
+    "top300_COCO_APS_min": -0.2,
+    "top600_primary_AP_min": -0.2,
+    "top300_primary_AP_min": -0.2
+  },
+  "cost_targets": {
+    "P_over_B0_E2E_max": 1.05,
+    "P_over_B0_peak_allocated_max": 1.05
+  },
+  "stages": [
+    "admission",
+    "train-B0",
+    "train-B1",
+    "train-P",
+    "infer-B0",
+    "infer-B1",
+    "infer-P",
+    "score",
+    "cost",
+    "compare",
+    "export"
+  ],
+  "note": "Read-only output schema reference, not execution authority. No experimental result included."
+}

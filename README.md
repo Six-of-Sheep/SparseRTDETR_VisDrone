@@ -8,6 +8,7 @@
 - [实验导航](docs/EXPERIMENTS.md)与[机器可读登记](manifests/experiments.json)：科学状态和代码身份分别记录。
 - [源码导入说明](docs/SOURCE_IMPORT.md)：317文件的出处及复现限制。
 - [历史分支索引](docs/HISTORY_BRANCHES.md)：保留历史，不用旧分支充当默认入口。
+- [三臂采样探索的先例与论文表图工具](docs/research/r18_sampling_paper_tools_20261021/README.md)：只读冻结输出；构造方法图和待终态结果模板，不运行模型或评价。
 
 ## 已有结果
 
