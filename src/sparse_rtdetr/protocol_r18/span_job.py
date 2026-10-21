@@ -99,7 +99,10 @@ def supervise(c,stage):
         final_events=rt.verify_events(c,stage,out/'events.jsonl')
         # On Windows the redirector/worker may already have exited; bind its
         # observed writer while live and the exact terminal worker receipt.
-        rt.require(writer is not None and rt.read(out/'worker-exit.json')['pid']==writer and all(e['pid']==writer for e in final_events),'terminal writer receipt differs')
+        rt.require(writer is not None and rt.read(out/'worker-exit.json')['pid']==writer and final_events.pid==writer,'terminal writer receipt differs')
+        if c.get('CPU_fixture_supervisor_loss_after_B0') and stage=='train-B0':
+            rt.require(c['profile']=='CPU_FIXTURE_ONLY','CPU loss fixture scope differs')
+            os.kill(os.getpid(),signal.SIGKILL)
         result=rt.read(out/'RESULT.json')
         rt.require(result['identity']==rt.identity(c,stage) and result['status']=='PASS','worker result identity/status')
         rt.require(rt.read(out/'worker-exit.json')['status']=='PASS','worker exit receipt absent')

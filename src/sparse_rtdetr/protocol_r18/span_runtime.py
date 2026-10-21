@@ -78,6 +78,8 @@ def verify_source(ref):
         'src/sparse_rtdetr/protocol_r18/span_observation.py',
         'src/sparse_rtdetr/protocol_r18/span_budget.py',
         'src/sparse_rtdetr/protocol_r18/span_inputs.py',
+        'src/sparse_rtdetr/protocol_r18/span_event_stream.py',
+        'src/sparse_rtdetr/protocol_r18/span_B0_reuse.py',
         'src/sparse_rtdetr/research/sampling_span.py',
         'src/sparse_rtdetr/protocol_r18/cuda_identity.py'} <= set(names), 'incomplete source manifest')
     return value
@@ -164,7 +166,9 @@ def load(path, *, preparation=False, acceptance=False, formal=False):
                          nonce=c['nonce'])
         if acceptance:
             approval.update(acceptance_sha256=c['acceptance_sha256'], limits=acceptance_config()['limits'])
-        if formal:approval.update(formal_sha256=c['formal_sha256'],external_acceptance_sha256=c['external_acceptance']['sha256'],remaining_forward_calls=219675)
+        if formal:
+            approval.update(formal_sha256=c['formal_sha256'],external_acceptance_sha256=c['external_acceptance']['sha256'],remaining_forward_calls=remaining_forward_calls(c))
+            if 'external_B0' in c:approval['external_B0_sha256']=c['external_B0']['sha256']
         require(preparation or a == approval, 'separate exact-source GPU approval absent/conflicting')
         gate_status = 'FORMAL_CPU_ENTRY_PASS' if formal else ('ACCEPTANCE_CPU_ENTRY_PASS' if acceptance else 'PRODUCTION_CPU_ENTRY_PASS')
         gate = dict(status=gate_status, source_sha256=c['source']['sha256']) if preparation else exact(c['CPU_gate'])
@@ -189,7 +193,7 @@ def load(path, *, preparation=False, acceptance=False, formal=False):
             type(prior['GPU_seconds']) in (int,float) and prior['GPU_seconds']>=0 and
             type(prior['forward_calls']) is int and prior['forward_calls']>=0,
             'acceptance prior cumulative cost identity/values differ')
-    require(not (c['profile']=='LAB_GPU_ONCE' and any(k.startswith('fixture_') for k in c)), 'production fixture override refused')
+    require(not (c['profile']=='LAB_GPU_ONCE' and any(k.startswith(('fixture_','CPU_fixture_')) for k in c)), 'production fixture override refused')
     from .span_inputs import adapt
     before = digest(c)
     adapt(c)
@@ -198,7 +202,35 @@ def load(path, *, preparation=False, acceptance=False, formal=False):
     if formal:
         from .span_external_acceptance import verify
         verify(c)
+        if 'external_B0' in c:
+            from .span_B0_reuse import verify as verify_B0
+            verify_B0(c)
     return c
+
+
+def remaining_forward_calls(c):
+    prior=exact(c['prior_cost'])
+    expected=72978 if 'external_B0' in c else 18
+    if c['profile']=='LAB_GPU_ONCE':require(prior['forward_calls']==expected,'formal prior forward count differs')
+    return execution()['forward_budget']['total']-prior['forward_calls']
+
+
+def reused_B0(c):return c.get('protocol')==FORMAL_PROTOCOL and 'external_B0' in c
+
+
+def training_contract(c,arm):
+    if arm=='B0' and reused_B0(c):
+        from .span_B0_reuse import verify
+        return verify(c)['parent']
+    return c
+
+
+def export_stage_evidence(c,stage):
+    if stage=='train-B0' and reused_B0(c):
+        from .span_B0_reuse import verify
+        verify(c)
+        return 'train-B0-REUSE.json',Path(c['external_B0']['path'])
+    return stage+'-CLOSED.json',stage_path(c,stage)/'CLOSED.json'
 
 
 def fixture_sample():
@@ -330,6 +362,7 @@ def stage_path(c,stage):
     if c['protocol']==FORMAL_PROTOCOL and stage.startswith('accept-'):
         from .span_external_acceptance import parent
         return stage_path(parent(c),stage)
+    if stage=='train-B0' and reused_B0(c):return Path(training_contract(c,'B0')['job_root'])/stage
     require(stage in permitted_stages(c),'stage outside contract scope')
     return Path(c['job_root'])/stage
 
@@ -365,19 +398,8 @@ class Events:
 
 
 def verify_events(c,stage,path,*,complete=True):
-    names=event_spec(c,stage);previous='0'*64;records=[];last=-1.;pid=None
-    raw=Path(path).read_bytes()
-    require(not complete or not raw or raw.endswith(b'\n'), 'incomplete terminal event bytes')
-    if not complete and not raw.endswith(b'\n'):raw=raw[:raw.rfind(b'\n')+1]
-    for line in raw.decode('utf-8').splitlines():
-        r=json.loads(line);i=len(records)
-        require(i<len(names) and r['event']==names[i] and r['number']==i+1 and r['identity']==identity(c,stage), 'event phase/identity/order differs')
-        require(r['previous']==previous and r['sha256']==digest({k:v for k,v in r.items() if k!='sha256'}), 'event chain SHA differs')
-        require(type(r['monotonic']) in (int,float) and math.isfinite(r['monotonic']) and r['monotonic']>=last, 'nonmonotonic event')
-        require(type(r['pid']) is int and r['pid']>0 and pid in (None,r['pid']), 'event writer process changed')
-        pid=r['pid'];last=r['monotonic'];previous=r['sha256'];records.append(r)
-    require(not complete or len(records)==len(names), 'terminal event missing')
-    return records
+    from .span_event_stream import VerifiedEvents
+    return VerifiedEvents(c,stage,path,complete)
 
 
 class EventReader:
@@ -419,6 +441,9 @@ def verify_stage(c,stage):
     if c['protocol']==FORMAL_PROTOCOL and stage.startswith('accept-'):
         from .span_external_acceptance import parent
         return verify_stage(parent(c),stage)
+    if stage=='train-B0' and reused_B0(c):
+        from .span_B0_reuse import verify
+        return verify(c)['result']
     out=stage_path(c,stage);closed=read(out/'CLOSED.json')
     require(closed['identity']==identity(c,stage) and closed['status']=='PASS', 'stage not closed under this identity')
     value=exact(closed['result']);require(value['identity']==identity(c,stage) and value['status']=='PASS', 'result binding differs')

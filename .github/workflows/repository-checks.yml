@@ -57,3 +57,11 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_sampling_span_resource_age.py --output /tmp/sampling-span-resource-age
+      - name: Streaming event authentication under bounded address space
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_event_stream.py --output /tmp/sampling-span-event-stream
+      - name: Completed B0 provenance and actual continuation CLI (synthetic only)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_sampling_span_continuation_cpu.py --output /tmp/sampling-span-continuation

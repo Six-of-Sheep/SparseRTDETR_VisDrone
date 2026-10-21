@@ -48,17 +48,29 @@ def bind(spec,source,cpu_gate,authorization,output):
     rt.publish(output,rt.read(candidate));return rt.reference(output)
 
 
+def executed_stages(c):
+    return [s for s in rt.permitted_stages(c) if not(s=='train-B0' and rt.reused_B0(c))]
+
+
+def reject_reexecution(c,stage):
+    rt.require(not(stage=='train-B0' and rt.reused_B0(c)),'reused B0 cannot execute under new contract')
+
+
 def verify(c):
     root=Path(c['job_root']);rt.require(not(root/'STOP.json').exists(),'formal root has STOP')
     closed=rt.read(root/'CLOSED.json');result=rt.exact(closed['result'])
     rt.require(closed['status']==result['status']=='PASS' and result['contract_sha256']==c['contract_sha256'],'formal root closure differs')
     rt.require(closed['external_acceptance']==c['external_acceptance'] and
-        closed['stage_closures']==[rt.reference(rt.stage_path(c,s)/'CLOSED.json') for s in rt.permitted_stages(c)],'formal closure references differ')
+        closed['stage_closures']==[rt.reference(rt.stage_path(c,s)/'CLOSED.json') for s in executed_stages(c)],'formal closure references differ')
+    rt.require(closed.get('external_B0')==c.get('external_B0') and result.get('external_B0')==c.get('external_B0')
+        and result['stages']==executed_stages(c),'formal completed-worker reference differs')
     rt.require(not any((root/('accept-'+a)).exists() for a in ('B0','B1','P')),'local acceptance stage forbidden')
     verify_external(c)
     for stage in rt.permitted_stages(c):rt.verify_stage(c,stage)
-    rt.require(result['forward_calls_total']==(219693 if c['profile']=='LAB_GPU_ONCE' else 84) and result['inherited_forward_calls']==18
-        and result['new_forward_calls']==result['forward_calls_total']-18,'formal cumulative forward result differs')
+    inherited=rt.exact(c['prior_cost'])['forward_calls']
+    rt.require(result['forward_calls_total']==(219693 if c['profile']=='LAB_GPU_ONCE' else 84) and result['inherited_forward_calls']==inherited
+        and result['new_forward_calls']==result['forward_calls_total']-inherited,'formal cumulative forward result differs')
+    if rt.reused_B0(c):rt.require(not(root/'train-B0').exists(),'reused B0 cannot have a new local stage')
     if c['profile']=='LAB_GPU_ONCE':
         ledger=rt.read(root/'COST_LEDGER.json')
         rt.require(ledger['active'] is None and ledger['forward_calls']==219693,'formal cumulative ledger incomplete')
@@ -71,10 +83,16 @@ def run(c):
     rt.publish(root/'RUN-CONSUMED.json',dict(identity=rt.identity(c,'admission'),nonce=c['nonce'],no_retry=True))
     proof=verify_external(c)
     rt.publish(root/'EXTERNAL_ACCEPTANCE_REUSED.json',{k:v for k,v in proof.items() if k!='parent'})
+    inherited=rt.exact(c['prior_cost'])['forward_calls']
+    if rt.reused_B0(c):
+        from .span_B0_reuse import verify as verify_B0
+        verify_B0(c)
+        rt.publish(root/'COMPLETED_B0_REFERENCED.json',dict(evidence=c['external_B0'],original_closure_absent=True,
+            no_training_reexecution=True,no_checkpoint_copy=True))
     start=time.monotonic();done=[]
     try:
         from .cuda_identity import recorded_subprocess
-        for stage in rt.permitted_stages(c):
+        for stage in executed_stages(c):
             gpu=job.gpu_stage(c,stage)
             if gpu:span_budget.start(c,stage);span_budget.guard(c)
             rt.snapshot(c,entry=True,gpu=gpu,stage=stage)
@@ -86,13 +104,13 @@ def run(c):
         comparison=rt.verify_stage(c,'compare');calls=comparison['total_forward_calls']
         rt.publish(root/'RESULT.json',dict(status='PASS',task_id=rt.TASK,contract_sha256=c['contract_sha256'],
             source_sha256=c['source']['sha256'],profile=c['profile'],stages=done,
-            external_acceptance=c['external_acceptance'],inherited_forward_calls=18,new_forward_calls=calls-18,
+            external_acceptance=c['external_acceptance'],external_B0=c.get('external_B0'),inherited_forward_calls=inherited,new_forward_calls=calls-inherited,
             forward_calls_total=calls,quality_passed=comparison['quality_passed'],cost_passed=comparison['cost_passed'],
             elapsed_seconds=time.monotonic()-start,no_retry=True))
         rt.publish(root/'CLOSED.json',dict(status='PASS',result=rt.reference(root/'RESULT.json'),
             external_acceptance=c['external_acceptance'],
-            stage_closures=[rt.reference(rt.stage_path(c,s)/'CLOSED.json') for s in rt.permitted_stages(c)]))
-        verify(c);print(json.dumps(dict(status='PASS',stages=len(done),forward_calls_total=calls,new_forward_calls=calls-18)));return 0
+            external_B0=c.get('external_B0'),stage_closures=[rt.reference(rt.stage_path(c,s)/'CLOSED.json') for s in executed_stages(c)]))
+        verify(c);print(json.dumps(dict(status='PASS',stages=len(done),forward_calls_total=calls,new_forward_calls=calls-inherited)));return 0
     except BaseException as exc:
         ledger=root/'COST_LEDGER.json'
         if ledger.exists() and rt.read(ledger)['active'] is not None:span_budget.finish(c)
@@ -102,11 +120,16 @@ def run(c):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action',choices=('prepare','bind','run','supervise','worker','verify','lab','launch','execute'))
-    for name in ('spec','source','output','cpu-gate','authorization','contract','ci','parent-spec','acceptance-contract'):
+    p.add_argument('action',choices=('prepare','bind','run','supervise','worker','verify','lab','launch','execute','reconcile-B0'))
+    for name in ('spec','source','output','cpu-gate','authorization','contract','ci','parent-spec','acceptance-contract','completed-B0-contract'):
         p.add_argument('--'+name,type=Path)
     p.add_argument('--parent-sha');p.add_argument('--attempt');p.add_argument('--session')
     p.add_argument('--stage',choices=tuple(policy()['stages']));a=p.parse_args()
+    if a.action=='reconcile-B0':
+        rt.require(a.completed_B0_contract is not None and a.source is not None and a.output is not None,'B0 reconciliation arguments missing')
+        rt.require(os.environ.get('CUDA_VISIBLE_DEVICES')=='','B0 reconciliation must hide CUDA')
+        from .span_B0_reuse import build
+        build(a.completed_B0_contract,rt.reference(a.source.resolve()),a.output);return 0
     if a.action in ('lab','launch','execute'):
         from . import span_formal_admission as admission
         return admission.dispatch(a)
@@ -122,6 +145,7 @@ def main():
     if a.action=='run':return run(c)
     if a.action=='verify':verify(c);return 0
     rt.require(a.stage in rt.permitted_stages(c),'formal stage outside scope')
+    reject_reexecution(c,a.stage)
     if a.action=='supervise':return job.supervise(c,a.stage)
     from .span_worker import worker
     return worker(c,a.stage)

@@ -445,7 +445,7 @@ def endpoint_model(c,arm,device):
     else:
         ep=rt.exact(rt.verify_stage(c,'train-'+arm)['endpoint']);state=torch_ref(ep['checkpoint'])
         require(state['binding']==rt.exact(ep['binding']) and state['binding']['arm']==VERSION+'/'+arm
-                and state['binding']['contract_sha256']==c['contract_sha256'], 'endpoint arm/contract binding differs')
+                and state['binding']['contract_sha256']==rt.training_contract(c,arm)['contract_sha256'], 'endpoint arm/contract binding differs')
         require(ep['EMA'] and ep['epoch']==rt.profile(c)['epochs'] and state['engine']['completed_updates']==
                 rt.profile(c)['epochs']*rt.profile(c)['windows'], 'endpoint clock differs')
     model.load_state_dict(state['ema']['module'],strict=True)
@@ -498,7 +498,7 @@ def export(c,out,emit,holder):
     # Explicit whitelist: never export tensors, predictions, per-update logs.
     files=[]
     sources=[('comparison.json',rt.stage_path(c,'compare')/'RESULT.json'),('science.json',rt.ROOT/rt.SCIENCE),('execution.json',rt.ROOT/rt.EXECUTION)]
-    for stage in rt.STAGES[:-1]:sources.append((stage+'-CLOSED.json',rt.stage_path(c,stage)/'CLOSED.json'))
+    for stage in rt.STAGES[:-1]:sources.append(rt.export_stage_evidence(c,stage))
     sources+=[('source-manifest.json',Path(c['source']['path'])),('contract.json',Path(c['_path']))]
     for name,source in sources:
         target=out/name;require(not target.exists(),'export already exists');target.write_bytes(source.read_bytes())

@@ -8,7 +8,8 @@
   "prior_GPU_seconds_rounded6": 79.265549,
   "remaining_forward_calls": 219675,
   "stages": ["admission", "train-B0", "train-B1", "train-P", "infer-B0", "infer-B1", "infer-P", "score", "cost", "compare", "export"],
-  "existing_file_changes_allowed": ["src/sparse_rtdetr/protocol_r18/span_runtime.py", "src/sparse_rtdetr/protocol_r18/span_job.py", ".github/workflows/repository-checks.yml", "README.md", "manifests/experiments.json"],
+  "existing_file_changes_allowed": ["src/sparse_rtdetr/protocol_r18/span_runtime.py", "src/sparse_rtdetr/protocol_r18/span_job.py", "src/sparse_rtdetr/protocol_r18/span_worker.py", ".github/workflows/repository-checks.yml", "README.md", "manifests/experiments.json"],
+  "worker_changes_limited_by_AST": "endpoint contract identity and export provenance only; all computation unchanged",
   "no_retry": true,
   "training_from_acceptance_state": false
 }

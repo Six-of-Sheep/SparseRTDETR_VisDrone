@@ -44,6 +44,10 @@ def verify(c):
     rt.require(set(before)<=set(after),'new source dropped authenticated files')
     changed=[n for n in before if before[n]!=after[n]]
     rt.require(set(changed)<=set(policy['existing_file_changes_allowed']),'accepted computation changed: '+','.join(sorted(set(changed)-set(policy['existing_file_changes_allowed']))))
+    worker='src/sparse_rtdetr/protocol_r18/span_worker.py'
+    if worker in changed:
+        from .span_B0_reuse import worker_binding_only
+        worker_binding_only((root/worker).read_bytes(),(rt.ROOT/worker).read_bytes())
     # Includes all model/training/checkpoint/criterion/observation/evaluation
     # workers, unchanged byte-for-byte, not an assertion of full-source equality.
     rt.require('src/sparse_rtdetr/protocol_r18/span_worker.py' in before and rt.SCIENCE in before and rt.EXECUTION in before,'external source incomplete')
@@ -57,7 +61,7 @@ def verify(c):
         r=rt.verify_stage(old,'accept-'+arm);state=r['checkpoint'];p=Path(state['path'])
         rt.require(r['actual_updates']==3 and r['forward_calls']==6 and r['full_state_RNG_exact'] and r['gradient_finite'] and not r['state_usable_for_formal'],'external engineering result incomplete')
         rt.require(p.stat().st_size==state['size_bytes'] and rt.sha(p)==state['sha256'] and rt.read(p.with_suffix('.pth.complete.json'))==state,'external checkpoint size/SHA/sidecar conflict')
-    ledger=rt.exact(d['cost_ledger']);prior=rt.exact(c['prior_cost'])
+    ledger=rt.exact(d['cost_ledger']);prior=rt.exact(c.get('acceptance_prior_cost',c['prior_cost']))
     rt.require(ledger['active'] is None and ledger['forward_calls']==18 and prior['forward_calls']==18 and
         prior['task_id']==rt.TASK and prior['profile']==c['profile'] and prior['GPU_seconds']==ledger['completed_GPU_seconds'], 'external cumulative cost differs/reset')
     if c['profile']=='LAB_GPU_ONCE':
