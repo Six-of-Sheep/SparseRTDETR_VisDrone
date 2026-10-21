@@ -1,0 +1,138 @@
+{
+  "schema": "r18-sampling-manuscript-source-index-v1",
+  "manuscript": "MANUSCRIPT_v0.1.md",
+  "document_version": "0.1",
+  "base_main": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "frozen_run_reference": {
+    "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+    "manifest_sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+    "attempt": "attempt-formal-001",
+    "read_only": true,
+    "source_entries": [
+      {
+        "path": "configs/research/r18_sampling_span_seed0.json",
+        "sha256": "984038ad03e4eb97b58c995caedf1866df12457ecb814899e4ab92b6037375cf",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/configs/research/r18_sampling_span_seed0.json"
+      },
+      {
+        "path": "configs/research/r18_sampling_span_execution_v1.json",
+        "sha256": "4c9494a074d8740eb68ca4801cadf54c9bb844dc8e3dd003e016d76f2047bef5",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/configs/research/r18_sampling_span_execution_v1.json"
+      },
+      {
+        "path": "src/sparse_rtdetr/research/sampling_span.py",
+        "sha256": "85f0728270b24dc6403d7258797541bf1d38dcc7f35ffbdfb46b8e03c332a706",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/research/sampling_span.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/span_worker.py",
+        "sha256": "1407050c0c385f4c3e69ddc41af800e6001920d90e937856f7ab186f5660e4e2",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_worker.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/span_observation.py",
+        "sha256": "2b8e0bc23b10cdfc039119811fc9fc1e21b048a59dcf509abf418ebfa4ab90f4",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_observation.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/engine.py",
+        "sha256": "1be4a1644f89bcbea771071f1d8492ddd7604bf4e3b58298c32e290ce2d7c7c1",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/engine.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/model.py",
+        "sha256": "102e4639b5f23a450c212c66235327d94bee2a6237770b0ec5501d5d297a03a0",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/model.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/r0/model.py",
+        "sha256": "66a6adcd418c020f39c421149b93ede4bb1672331607df02b56661c9ae4dfabe",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/r0/model.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/r0/evaluation.py",
+        "sha256": "66afa7c1f14b9d6d0c07a22567a50da33fe89c390e283954a23a9705aa87b89f",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/r0/evaluation.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/localization/data.py",
+        "sha256": "cfbb38888283bb20517ece97777114bb5dda43c29a388476677adb6b5759227e",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/localization/data.py"
+      }
+    ]
+  },
+  "paper_material_reference": {
+    "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2",
+    "PR": 17,
+    "entries": [
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/FORMULA_COMPARISON.md",
+        "local_bytes_sha256": "087c3ff96bd947a9d9ab7b912b6a64d8eb8aa499afae283f289799c3c9aa0651",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/REFERENCES.json",
+        "local_bytes_sha256": "484a07e43ce7d1300106ceb3fb15e1bb965976e917e5a5730b7f3d30a09ff24b",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/FIGURE_NOTES.md",
+        "local_bytes_sha256": "831462a0a2b2c42225d16440fbbff85c18d5a39d3e21a9566106419819ca7117",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/MECHANISM_FIELDS.md",
+        "local_bytes_sha256": "240fd02593699292a12a5e30ebfa5ec92d6a689c441e4b351812da03dc366659",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/FROZEN_OUTPUT_BINDING.json",
+        "local_bytes_sha256": "a175961d41b5a5fab0613d374ca7c574bd567594045a6e2ba9aebfab35cc5a0e",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      }
+    ]
+  },
+  "method_figure": {
+    "path": "figures/sampling_schematic.svg",
+    "sha256": "3d6622ed4a83d6385769481a339e6f061f4b4011e6e0c043971c16bfc402fef2",
+    "source": "D:\\Lzy_CV\\workspace_management\\delivery\\research\\r18-sampling-paper-tools-20261021-001\\figures\\sampling_schematic.svg",
+    "kind": "CONSTRUCTED_ILLUSTRATION_NOT_MODEL_OBSERVATIONS",
+    "copied_byte_exact": false,
+    "source_sha256": "07d2021672da1c5989877d61341a9016368a40a4f2f0aa9916a6f6ab480a32f2",
+    "normalization": "Included copy only: LF line endings and removal of trailing whitespace; XML tree identical after normalizing whitespace inside path d/points attributes. Original PR17 figure unchanged."
+  },
+  "history_context": {
+    "commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+    "path": "docs/research/abc_results_20261019/MASTER.md",
+    "role": "motivation_only_not_same_run_causal_control"
+  },
+  "bibliography": {
+    "source": "reused PR17 audited body reviews; existing local title/reference metadata",
+    "entries": 8,
+    "unverified_field": "VisDrone benchmark paper full formal bibliographic entry omitted; versioned toolkit cited instead",
+    "new_broad_search": false
+  },
+  "scientific_results": {
+    "status": "PENDING_TERMINAL_VERIFICATION",
+    "values_inserted": false,
+    "synthetic_results_used": false,
+    "acceptance_values_used": false
+  },
+  "writing_scope": {
+    "connected_lab_server": false,
+    "model_loaded": false,
+    "new_inference_or_evaluation": false,
+    "running_code_or_contract_changed": false
+  },
+  "precedence": "Actual frozen code and final configuration take priority over superseded early PLAN prose; mechanism windows are fixed e001/040/080/117/118/120, window0, first microbatch"
+}
