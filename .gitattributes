@@ -44,3 +44,6 @@
 /src/sparse_rtdetr/r0/engine.py -text
 /src/sparse_rtdetr/r0/model.py -text
 /tools/localization/deploy.py -text
+
+# Authenticated historical N metadata must retain its original SHA bytes.
+/docs/research/r18_local_detail_context/historical_cpu/snapshot/** -text

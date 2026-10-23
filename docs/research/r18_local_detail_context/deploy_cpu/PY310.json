@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "tests": 10,
+  "skips": 0,
+  "actual_CLI_invocations": 10,
+  "cases": [
+    "normal",
+    "duplicate-target",
+    "archive-SHA-corruption",
+    "missing-archive-input",
+    "missing-manifest-member",
+    "per-file-SHA-corruption",
+    "unindexed-member",
+    "traversal-refusal",
+    "symlink-refusal",
+    "wrong-manifest-commit"
+  ],
+  "python": "3.10.16",
+  "real_materials_or_GPU_used": false,
+  "model_forward_calls": 0,
+  "source_files": [
+    {
+      "path": "tools/deploy_h2_source.py",
+      "bytes": 6260,
+      "sha256": "81bb02274e4f0860ae430e8cd25baa1f70b1fa83ba4e566cfd2ee66511d1d790"
+    },
+    {
+      "path": "tools/check_h2_deploy_cli.py",
+      "bytes": 4755,
+      "sha256": "8137cd9eb5f1e53384bd794e9f6a535bff62c3528d2f2b16067326855aaf4bbb"
+    }
+  ]
+}

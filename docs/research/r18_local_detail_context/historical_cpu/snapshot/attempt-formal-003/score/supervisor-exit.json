@@ -1,0 +1,187 @@
+{
+  "status": "PASS",
+  "identity": {
+    "task_id": "r18-sampling-span-20261020-001",
+    "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+    "attempt": "attempt-formal-003",
+    "stage": "score",
+    "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+    "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+    "science_sha256": "b1d742b3026146fabead4011b4c6262d29e8d787e59b881269f9aaf20dda1017",
+    "profile": "LAB_GPU_ONCE",
+    "initialization_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720"
+  },
+  "returncode": 0,
+  "remaining_live": [],
+  "cleanup_errors": [],
+  "error": null,
+  "elapsed_seconds": 606.7057478679344,
+  "fixture_only": false,
+  "last_resource_sample": {
+    "sampled_epoch": 1792747013.972748,
+    "monotonic": 965412.970245885,
+    "boot_id": "872adc04-5d73-46b9-8b0b-973a69c33dc8",
+    "snapshot": {
+      "gpu": {
+        "devices": [
+          {
+            "uuid": {
+              "status": "OBSERVED",
+              "value": "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8"
+            },
+            "name": {
+              "status": "OBSERVED",
+              "value": "NVIDIA GeForce RTX 4090 D"
+            },
+            "memory.total": {
+              "status": "OBSERVED",
+              "value": 24564.0
+            },
+            "memory.free": {
+              "status": "OBSERVED",
+              "value": 24067.0
+            },
+            "temperature.gpu": {
+              "status": "OBSERVED",
+              "value": 48.0
+            },
+            "utilization.gpu": {
+              "status": "OBSERVED",
+              "value": 0.0
+            },
+            "clocks.current.graphics": {
+              "status": "OBSERVED",
+              "value": 1500.0
+            },
+            "power.limit": {
+              "status": "OBSERVED",
+              "value": 425.0
+            }
+          }
+        ]
+      },
+      "resources": {
+        "cpu_count": 24,
+        "ram_available": 51402326016
+      },
+      "cpu_temperature_max": 35.0,
+      "shm_free": 33523900416
+    },
+    "compute_apps": [],
+    "compute_apps_status": "OBSERVED",
+    "memory_events": {
+      "vmstat": {
+        "oom_kill": 1
+      }
+    },
+    "storage": {
+      "canonical_mount": "/media/lyy/Data",
+      "platform_entry": "/media/lyy/Data",
+      "mount": {
+        "mountpoint": "/media/lyy/Data",
+        "type": "ext4",
+        "source": "/dev/sda",
+        "rw": true
+      },
+      "st_dev": 2048,
+      "planning_cap_bytes": 3936820731904,
+      "admitted_available_bytes": 1320319119360,
+      "ssd_free_bytes": 50112679936
+    },
+    "cpu_power_constraints": {
+      "constraint_0_name": "long_term",
+      "constraint_1_name": "short_term",
+      "constraint_0_power_limit_uw": "125000000",
+      "constraint_1_power_limit_uw": "150000000"
+    },
+    "sampling_timing": {
+      "started": {
+        "epoch": 1792747013.9256263,
+        "monotonic": 965412.92312652
+      },
+      "completed": {
+        "epoch": 1792747013.9728413,
+        "monotonic": 965412.970338845
+      },
+      "source": "snapshot collection boundaries: actual CLOCK_REALTIME/CLOCK_MONOTONIC; sampled_epoch preserved from collector"
+    },
+    "sampling_phase_identity": {
+      "task_id": "r18-sampling-span-20261020-001",
+      "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+      "attempt": "attempt-formal-003",
+      "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+      "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+      "stage": "score",
+      "action": "supervise",
+      "pid": 1607579
+    },
+    "age_check": {
+      "sampled_epoch": 1792747013.972748,
+      "sampled_monotonic": 965412.970245885,
+      "sampling_started": {
+        "epoch": 1792747013.9256263,
+        "monotonic": 965412.92312652
+      },
+      "sampling_completed": {
+        "epoch": 1792747013.9728413,
+        "monotonic": 965412.970338845
+      },
+      "checked": {
+        "epoch": 1792747013.9729242,
+        "monotonic": 965412.97042178
+      },
+      "actual_age_seconds": 0.0001761913299560547,
+      "monotonic_age_seconds": 0.00017589505296200514,
+      "sampling_elapsed_seconds": 0.047212325036525726,
+      "threshold_seconds": 25,
+      "clock_sources": {
+        "age": "Python time.time / CLOCK_REALTIME",
+        "duration": "Python time.monotonic / CLOCK_MONOTONIC"
+      },
+      "sampling_time_source": "snapshot collection boundaries: actual CLOCK_REALTIME/CLOCK_MONOTONIC; sampled_epoch preserved from collector",
+      "phase_identity": {
+        "task_id": "r18-sampling-span-20261020-001",
+        "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+        "attempt": "attempt-formal-003",
+        "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+        "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+        "stage": "score",
+        "action": "supervise",
+        "pid": 1607579
+      },
+      "sampling_phase_identity": {
+        "task_id": "r18-sampling-span-20261020-001",
+        "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+        "attempt": "attempt-formal-003",
+        "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+        "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+        "stage": "score",
+        "action": "supervise",
+        "pid": 1607579
+      }
+    }
+  },
+  "tracked": {
+    "1609963": "96480642"
+  },
+  "command": [
+    "/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python",
+    "-B",
+    "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/a97e1eaf750c-stream-continuation-003/r18_sampling_formal.py",
+    "worker",
+    "--contract",
+    "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-003/contract.json",
+    "--stage",
+    "score"
+  ],
+  "stdout": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/worker.stdout",
+    "sha256": "337d539c499af88ea77ed1e1676cd8733ee5e94a0887f8ce83d6a4fff57d0be5",
+    "bytes": 7758
+  },
+  "stderr": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/worker.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  }
+}

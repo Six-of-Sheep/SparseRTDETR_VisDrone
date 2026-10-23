@@ -1,0 +1,377 @@
+{
+  "profile": "LAB_GPU_ONCE",
+  "seed": 0,
+  "attempt": "attempt-formal-001",
+  "job_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001",
+  "nonce": "baa01979f92647c5bfdea3951e2cc45c",
+  "boot_id": "872adc04-5d73-46b9-8b0b-973a69c33dc8",
+  "gpu_uuid": "GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8",
+  "storage_identity": {
+    "canonical_mount": "/media/lyy/Data",
+    "mount": {
+      "mountpoint": "/media/lyy/Data",
+      "type": "ext4",
+      "source": "/dev/sda",
+      "rw": true
+    },
+    "st_dev": 2048
+  },
+  "environment": {
+    "torch": "2.4.1",
+    "torchvision": "0.19.1",
+    "cuda_build": "12.4",
+    "cudnn": 90100
+  },
+  "data": {
+    "train_core": {
+      "role": "train_core",
+      "count": 4869,
+      "manifest": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/train_core_manifest.json",
+        "sha256": "df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d",
+        "bytes": 2955809
+      },
+      "roots": {
+        "role": "train_core",
+        "images": "/home/lyy/.cache/r0-seed0-e120-20261010-001/data/train_core/images",
+        "annotations": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r0-seed0-e120-20261010-001/materials/train_core/annotations"
+      }
+    },
+    "development": {
+      "role": "development",
+      "count": 548,
+      "manifest": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/development_manifest.json",
+        "sha256": "5f4d788591b60bd2a6223c15e548248f4c0296656373d6d98c016d912a7537dd",
+        "bytes": 329199
+      },
+      "roots": {
+        "role": "development",
+        "images": "/home/lyy/.cache/r0-seed0-e120-20261010-001/data/development/images",
+        "annotations": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r0-seed0-e120-20261010-001/materials/development/annotations"
+      }
+    }
+  },
+  "pretrained": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/materials/ResNet18_vd_pretrained_from_paddle.pth",
+    "sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720",
+    "bytes": 44878642
+  },
+  "historical_A": {
+    "checkpoint": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/formal/checkpoint-epoch-120.pth",
+      "sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+      "bytes": 323460353
+    },
+    "binding": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/formal/binding.json",
+      "sha256": "93d50992a27583832f2ab4ae4039b02db590ffbbb0850f050507bb1a0bdbc938",
+      "bytes": 15150
+    }
+  },
+  "selection": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/trace-selection.json",
+    "sha256": "b9d1ce181a91f168865b3a717ad635b57c53c898a3a3d3519952f9197cc794ec",
+    "bytes": 54612
+  },
+  "baselines": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/9d6454fd2397-preparation-002/docs/research/abc_results_20261019/SOURCE_SCALARS.json",
+    "sha256": "8fb15f6d0580b0351ff36c6fb1e269ba4a3884f596f5d7426542dad0611d1f5c",
+    "bytes": 95475
+  },
+  "prior_cost": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/PRIOR_COST.json",
+    "sha256": "63223120632b3d65bcfb8d2ddc5d357386613bba4e86c7d3f23e22c695384ee0",
+    "bytes": 838
+  },
+  "input_lists": {
+    "training_acceptance": {
+      "purpose": "historical_training_acceptance_2x16_audit_only",
+      "role": "train_core",
+      "source": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/execution-contract.json",
+        "sha256": "6dbe86d56d5dd4053bcbc373276ad0c137cc4e892e48035bb41ee2173d1ddba7",
+        "bytes": 57853
+      },
+      "ids": [
+        [
+          "12cd2d2f2726d806f146f14322930486e189e28d0c955a938e560def844be44e",
+          "0f69e2a4ca9e3ea587d90a89e456030709c9e652a52299fdc75aa9afaa9c1152",
+          "db4cb6fbcdae420ac4fd1b20ab0b6df8a687da2243ab56297daa5d3cc18159b0",
+          "2e3626bc3c83a8a081cf06b4f84806e249a48a092548ef6014916eb3d742d8fd",
+          "38486d70e81ba4df094ba7c765e9d30fa722d94c7f0684bed6f29c2ff1afbb9c",
+          "cfe6a34c7d0e970e0885b3c3eb9c719bb33b3211fb3103cdde9d7d82002a02e2",
+          "2fb75f524d3c57efa6518017946168ff05f81f849e65398b40a661dd13f18f0d",
+          "0cdeac865fe4031c2b48ef2e5efb6b86baeceef4e7a601de9509e48957670cc3",
+          "daf8576cfe2d66f445bca4dfe5f3f7d3928fe3b12b7b0cc64d3cbe313c4a6b33",
+          "f127fd18eea314f9fa5406905544acc1f6524a60c903e6226fdd94a66775bbf8",
+          "cb45e8869c4b781debea3bd25573eacf755e73b5886b61b528d9cb09af74351e",
+          "0bb6315131b7bf1f911cad286665dcd0532f99c7d007863a9ecb3925ee88730a",
+          "62a3d01f49ba1d535312058c455790260d417653e2e97e07a697ac022b657895",
+          "43bc08440c6992295136449972c9aeb2351d270d2a783fb4381f9e16cef7a3b5",
+          "1e50f891415fda08717503408a597a3c16521e8e42577da8a88a2c7505e93759",
+          "584c8093b781da711077940b897d3b1a2c09c1a13e5ed1b3b924690e771ac04d"
+        ],
+        [
+          "9562e4f00eaabe723dc56ce8394a9656a913da18ce7d28174ed5461cd17cc61b",
+          "262de899b8da0ea7af68c4be1bb3c29da9dddaaed91d78ec863c69dde6450b3e",
+          "9158ad9aa4e71d9f4a536fd2d1eb153419dd836538d1e15217c48e022703d228",
+          "fbc79003fff48d79f71fa35a795a771ce6c65251d49645e7f723c22ba9879f7b",
+          "65406d139aa9aa2f1abea9808066a47e395d143dcb36fd56e0e21d11a01cf7e2",
+          "9e188f4af625414426a4ba8ee4d3d1d1a65f3abf8ae67970cd76f06f36c5fbd6",
+          "0df76b7514d9bdc6e8f784cbe3986b0d9bc31ea7be51911df9f28135c43c36bb",
+          "179a6c47737d2cd64e93598bf022f5d4e28c217d3a12cd6d5200bce11423f02d",
+          "ea085c339d70631aecaca01cc4b769fca4bf727e5104b45de4781fa9ab1b7547",
+          "021664c90c49c667cf25e12a14effeb695280c861d4adc84b08d24483431f6f9",
+          "6cab7680813fd0fdd7d64eed1ea77b5b0498920bd01e5614cd0d04287a4b45ff",
+          "392f0edbf5674c659d5c06584e152d01c570dfd2d10c450ed3a3f0a1f47d7cd9",
+          "87064672596061237e7ebbacdbe6d627b18c2dc4357a28039fafabdecb03c541",
+          "b80e0e3e8d37f59986ea26920e0677b0a604bfe266af6483f70f4688f6c56d8f",
+          "8f8289ea9fe2bf011963dacf51e019d07267ef058033c0232320b2e158bddea5",
+          "2c5e8af3945ba58209c1f7475d66f0b40aa3d580f8c44a57bd5cfc803c0c4f25"
+        ]
+      ]
+    },
+    "timing": {
+      "purpose": "fixed64_development_cost",
+      "role": "development",
+      "source": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/trace-selection.json",
+        "sha256": "b9d1ce181a91f168865b3a717ad635b57c53c898a3a3d3519952f9197cc794ec",
+        "bytes": 54612
+      },
+      "ids": [
+        "434ed583025e170876f476c5499b847c8880e17a89663f588d0fabac664391c6",
+        "93885386b3a56307c455251f22a6e72757f73c4683dbbf36b23d782d6f0e2d2e",
+        "42392c187569fe65fae7b2da61352eca87d4a973c6a6a5df48fdaf46cfa7bf66",
+        "3c32a3cd844409e2de068753cf449032e5871a4a15361b1de3b0eec290e19422",
+        "d6b2285fcf93fbe826574a3b51014c6f0d3025795877b4232611c8dae83f8481",
+        "d5913fe3f6c736c6f7adbad1d5c36275f07b5c7c6e6a2e643ab884ad2a3fc9f6",
+        "347ea5c7f08c893987df2eb4ca7fad323de24b2b1f724b83f60a84eb7ce0392f",
+        "7dc1775ca3384007d1d3a0e6cb26b02590b2bc849c9347b35e13f726a872a4a9",
+        "ce04c276a9561158f48c8ddd9ed79ee3674c1ff911712d1342111a6323a51df1",
+        "93102489d6074ed90145ca1352b01f9a2a8db532d5550273839c4156fca1848b",
+        "2de42587f47bd2e3dcb3a3a455d62a4fdcec1a32dc5c0076ce06cdf72f4f5326",
+        "863a97950a1e3563be546e5567a205f3192f799d23473876b4de8548d9fb7092",
+        "b9e88d94576074deb5e919876e0c7d3d72f168adaf4cd3098fe31e6e4b5fa5df",
+        "2460d27a80a341a49163a362fd5827fcd6b72aacc4137ad71b5917a26fb8ec32",
+        "3730b77cef201124d17cd3497605b4206896c0feb198277343152b6a6d3e9d55",
+        "edad586c9b2c6f3d9baa6cd8842bc4d22f85ebd016179f4abb5e3996bc89031d",
+        "544d419b7ffa47452a3e68400b18133a5e1d80b0c99bca0f62f15b400273f1b1",
+        "ea3b9ec44eb959c645cfb93506fbb7d5469e1280c320d1b32f6e42fd5c4ecf9a",
+        "89292db4f935fbc9495f6d90193173d7d1f7fdaf1bc7744e7d0467deda45f074",
+        "fd57254788598dcd181eda9ecbe132fdbb91ea00164f750620bee73a11fadd49",
+        "5bee7cfd441573e678a8798b914c7d399a092afff23a9cb37fd861767138d473",
+        "03b327dd752d9c1f3d92cd1aa3299df7e387650e3a750ef97c92a5dc11d6766d",
+        "5b0ab36dee8ea401abdb73b173d2c5d8f9357b6e833d2ca5176d2232933ae75c",
+        "35065b273df0f29a47765b6698871afec7e1e2a6db8437f46b8eb43e5c0b0491",
+        "fdfaf775fefc1177f9f480e9cf6773b8ea75b84b76617549d62ad319b6931e8c",
+        "f8e10d3254ed74af843371b6028de9e32747981997c7d880fc35e1533f87a77f",
+        "77bc869b346c421a21bafa7a6aaa27fe88747becc7eaa7e3310807d9c78dfbb7",
+        "b0a9fc1984e911f42b9a179c49b1398d7d8fd67e2c8b6d36788a506931549c07",
+        "2e0f84cc9b0d2e3ca02b14c8656ac801c8ae73f02baa0affe1a7a03acbdade9a",
+        "16d5518f8a8a7508664fb6a706ac2351437ef41cfb3094c6ad2dda7815b752b9",
+        "b533d187412fd3c2a0ad9fe28f7ef284a4df306cfc4c003c4e3207d2fa1adfb9",
+        "ccca9bae7470ebd28dd1d1d1cf6910fc963b68b2a32d3ea8e53fa23df0cb0e1b",
+        "43299551663df9895b34dbf1e9605d6eba704f5f7e8a2070ffe63841549dcfe2",
+        "8c807ed207e6a7271c35eb570595b5abd9de63aad05c3431e1e4f8d6a651e4d7",
+        "bf95e453b7bd0dde0724449ab1cae1572ba8d0283c8f2a5ae88d082182dcae30",
+        "e926656c3eb0d76214ee29386a74e23e327ea3fbdd5bca90d45a627b397f61b5",
+        "40804fffa255a4a22eaf0a8973235b159ab3bab2d624f3630b31da3170f1208a",
+        "2383c467c351a5bd43afad110100cfc02391612388b7175d3f3ada1d2b3bbead",
+        "cfe4c880bc768ca82257b7032b55a8643d54cd22c660a7e9760976f7cb5930b1",
+        "cde1bdbf1373a7c64aa8e5d16f3f3840dbc59044d0584b828626665c670842db",
+        "06d0c5aa00dd44792284d0a3413fef8a15d773ecef9530f768343c98825800d8",
+        "ad88cbe817259cd151e7015492f868c3e7b112e84f2486fd838ad0e3b60bb3ac",
+        "e07d6a195e9ea435a64eb197b6593e8f69a46e2a2018ed6aca1778f824286f66",
+        "55f8ab6a66d1bb2d90f65fa8df688388d29fd1738c581435f1372ba9f9553323",
+        "a3b3def2f15735e0b9e956e39443042063cb64beaa22f1bdb94cba2089ee6010",
+        "9e42c96bd2c94f25527ac88f296ecc1519eceb0fc06025d0bfb416ebc0501504",
+        "7392886e2ccd809fb6553789256f0075cc8b60dc010dab0afbf8cee7bc7f5ce5",
+        "18df66c1226785c56bdca9e7801d8c43609baed21b2ffaf5dc1b452a14ce4b3e",
+        "f2b228b76a30cb99a32f2ba11042388da949d553f01f75a2ff0ee01427676637",
+        "02a34eb8a81b44338df18e01999f663913cad86620c0e70670c76d6f9f143313",
+        "b5a5a22d58bd09a4cce12bfcd3ee362857560a7c0bfd9336c07c3bb820efc826",
+        "7d77425e733e66872413f78e67b6fa21c5e1560c837b448d83e5f49628566a42",
+        "ec810ad454dc08ed934915f2fa0714212c9dd08e0cd70ad2b26ba9f415b74c78",
+        "6d713e988816d2461ed4b5dd7ce05889e77dc54fe85628da02a6ec1f03b455e0",
+        "6380aceb080a7a859688e272341939ed12d83e834324e5365e4f9865a6bc54a3",
+        "875d3f83e85d30f8e6223904ecacd9a703e6a0e01cc9bdf3f7d25062ce939284",
+        "9eb666052e49ed8633228b21bdad458ceb8f3026589a7b129a9c872777b889b8",
+        "7c6032b49e6d926e229a68794a9dacdba58cf0261df75f68271772dacbe9e7a5",
+        "4cf461ed6d54974c5d23cf2d5a660dfb33ea4661a6d5f10168aa74229aef4ad9",
+        "c5123c56ffe21f53b1fb652a9460b508fa2063f84495e94c8db38b2de93529ff",
+        "4c2c3c6ef1ae2fc5b2a37128afa5ab7911a3d32e40c2c498bbb245643cbd2790",
+        "904a925a7ac656210919f082e07a055d1e072e6f5aed54c98b745bb55e0a551a",
+        "3718062e4c562f0da4ae1023215c32c3a962773c6782cdfe55c9234b8972bb86",
+        "dbce587455b41cfe984ebdd80791cfe682afb959a2b78b67da3561cd4926213b"
+      ]
+    }
+  },
+  "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+  "execution_scope": "GPU_FORMAL_E120_ONCE",
+  "external_acceptance": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/external-acceptance.json",
+    "sha256": "6e1181b6b61f2dc82d48be7b2c1fce9419f21e62c3ad618c842be92987c0ff3f",
+    "bytes": 1610
+  },
+  "prepare_gate": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/prepare/PREPARE_PASS.json",
+    "sha256": "9a9187e321190212cda28f1ee29b733a4b171ecf8b9bea5ebc0cd9d2bc54a1b0",
+    "bytes": 2585
+  },
+  "task_id": "r18-sampling-span-20261020-001",
+  "source_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001",
+  "python": "/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python",
+  "source": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/resource-age-repair-bundle-001/RUN_SOURCE_MANIFEST.json",
+    "sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+    "bytes": 83131
+  },
+  "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+  "science_sha256": "b1d742b3026146fabead4011b4c6262d29e8d787e59b881269f9aaf20dda1017",
+  "execution_sha256": "fe36761135ed50e14feed793f5060b05f15619b0d4dfccecda1c527c02cc6c71",
+  "formal_sha256": "fe71af33025aa46ba341702ce692b77d6f39e102660038873a666d5faf4f826a",
+  "stages": [
+    "admission",
+    "train-B0",
+    "train-B1",
+    "train-P",
+    "infer-B0",
+    "infer-B1",
+    "infer-P",
+    "score",
+    "cost",
+    "compare",
+    "export"
+  ],
+  "resources": {
+    "minimum_CPUs": 16,
+    "minimum_RAM_GiB": 16,
+    "minimum_free_disk_GiB": 80,
+    "entry_shm_GiB": 8,
+    "live_shm_GiB": 4,
+    "max_resource_age_seconds": 25,
+    "monitor_interval_seconds": 2,
+    "activity_idle_seconds": 300,
+    "operation_seconds": 1800,
+    "CPU_temperature_C_below": 90,
+    "GPU_temperature_C_below": 80,
+    "GPU_entry_free_MiB": 20000,
+    "GPU_live_free_MiB": 3072,
+    "CPU_PL1_uW_max": 125000000,
+    "CPU_PL2_uW_max": 150000000,
+    "GPU_graphics_MHz_max": 1500,
+    "GPU_hours_cap": 60,
+    "checkpoint_reserve_seconds": 180,
+    "training_peak_allocated_GiB_cap": 18,
+    "task_storage_GiB_cap": 100
+  },
+  "fixed_ids": [
+    "434ed583025e170876f476c5499b847c8880e17a89663f588d0fabac664391c6",
+    "93885386b3a56307c455251f22a6e72757f73c4683dbbf36b23d782d6f0e2d2e",
+    "42392c187569fe65fae7b2da61352eca87d4a973c6a6a5df48fdaf46cfa7bf66",
+    "3c32a3cd844409e2de068753cf449032e5871a4a15361b1de3b0eec290e19422",
+    "d6b2285fcf93fbe826574a3b51014c6f0d3025795877b4232611c8dae83f8481",
+    "d5913fe3f6c736c6f7adbad1d5c36275f07b5c7c6e6a2e643ab884ad2a3fc9f6",
+    "347ea5c7f08c893987df2eb4ca7fad323de24b2b1f724b83f60a84eb7ce0392f",
+    "7dc1775ca3384007d1d3a0e6cb26b02590b2bc849c9347b35e13f726a872a4a9",
+    "ce04c276a9561158f48c8ddd9ed79ee3674c1ff911712d1342111a6323a51df1",
+    "93102489d6074ed90145ca1352b01f9a2a8db532d5550273839c4156fca1848b",
+    "2de42587f47bd2e3dcb3a3a455d62a4fdcec1a32dc5c0076ce06cdf72f4f5326",
+    "863a97950a1e3563be546e5567a205f3192f799d23473876b4de8548d9fb7092",
+    "b9e88d94576074deb5e919876e0c7d3d72f168adaf4cd3098fe31e6e4b5fa5df",
+    "2460d27a80a341a49163a362fd5827fcd6b72aacc4137ad71b5917a26fb8ec32",
+    "3730b77cef201124d17cd3497605b4206896c0feb198277343152b6a6d3e9d55",
+    "edad586c9b2c6f3d9baa6cd8842bc4d22f85ebd016179f4abb5e3996bc89031d",
+    "544d419b7ffa47452a3e68400b18133a5e1d80b0c99bca0f62f15b400273f1b1",
+    "ea3b9ec44eb959c645cfb93506fbb7d5469e1280c320d1b32f6e42fd5c4ecf9a",
+    "89292db4f935fbc9495f6d90193173d7d1f7fdaf1bc7744e7d0467deda45f074",
+    "fd57254788598dcd181eda9ecbe132fdbb91ea00164f750620bee73a11fadd49",
+    "5bee7cfd441573e678a8798b914c7d399a092afff23a9cb37fd861767138d473",
+    "03b327dd752d9c1f3d92cd1aa3299df7e387650e3a750ef97c92a5dc11d6766d",
+    "5b0ab36dee8ea401abdb73b173d2c5d8f9357b6e833d2ca5176d2232933ae75c",
+    "35065b273df0f29a47765b6698871afec7e1e2a6db8437f46b8eb43e5c0b0491",
+    "fdfaf775fefc1177f9f480e9cf6773b8ea75b84b76617549d62ad319b6931e8c",
+    "f8e10d3254ed74af843371b6028de9e32747981997c7d880fc35e1533f87a77f",
+    "77bc869b346c421a21bafa7a6aaa27fe88747becc7eaa7e3310807d9c78dfbb7",
+    "b0a9fc1984e911f42b9a179c49b1398d7d8fd67e2c8b6d36788a506931549c07",
+    "2e0f84cc9b0d2e3ca02b14c8656ac801c8ae73f02baa0affe1a7a03acbdade9a",
+    "16d5518f8a8a7508664fb6a706ac2351437ef41cfb3094c6ad2dda7815b752b9",
+    "b533d187412fd3c2a0ad9fe28f7ef284a4df306cfc4c003c4e3207d2fa1adfb9",
+    "ccca9bae7470ebd28dd1d1d1cf6910fc963b68b2a32d3ea8e53fa23df0cb0e1b",
+    "43299551663df9895b34dbf1e9605d6eba704f5f7e8a2070ffe63841549dcfe2",
+    "8c807ed207e6a7271c35eb570595b5abd9de63aad05c3431e1e4f8d6a651e4d7",
+    "bf95e453b7bd0dde0724449ab1cae1572ba8d0283c8f2a5ae88d082182dcae30",
+    "e926656c3eb0d76214ee29386a74e23e327ea3fbdd5bca90d45a627b397f61b5",
+    "40804fffa255a4a22eaf0a8973235b159ab3bab2d624f3630b31da3170f1208a",
+    "2383c467c351a5bd43afad110100cfc02391612388b7175d3f3ada1d2b3bbead",
+    "cfe4c880bc768ca82257b7032b55a8643d54cd22c660a7e9760976f7cb5930b1",
+    "cde1bdbf1373a7c64aa8e5d16f3f3840dbc59044d0584b828626665c670842db",
+    "06d0c5aa00dd44792284d0a3413fef8a15d773ecef9530f768343c98825800d8",
+    "ad88cbe817259cd151e7015492f868c3e7b112e84f2486fd838ad0e3b60bb3ac",
+    "e07d6a195e9ea435a64eb197b6593e8f69a46e2a2018ed6aca1778f824286f66",
+    "55f8ab6a66d1bb2d90f65fa8df688388d29fd1738c581435f1372ba9f9553323",
+    "a3b3def2f15735e0b9e956e39443042063cb64beaa22f1bdb94cba2089ee6010",
+    "9e42c96bd2c94f25527ac88f296ecc1519eceb0fc06025d0bfb416ebc0501504",
+    "7392886e2ccd809fb6553789256f0075cc8b60dc010dab0afbf8cee7bc7f5ce5",
+    "18df66c1226785c56bdca9e7801d8c43609baed21b2ffaf5dc1b452a14ce4b3e",
+    "f2b228b76a30cb99a32f2ba11042388da949d553f01f75a2ff0ee01427676637",
+    "02a34eb8a81b44338df18e01999f663913cad86620c0e70670c76d6f9f143313",
+    "b5a5a22d58bd09a4cce12bfcd3ee362857560a7c0bfd9336c07c3bb820efc826",
+    "7d77425e733e66872413f78e67b6fa21c5e1560c837b448d83e5f49628566a42",
+    "ec810ad454dc08ed934915f2fa0714212c9dd08e0cd70ad2b26ba9f415b74c78",
+    "6d713e988816d2461ed4b5dd7ce05889e77dc54fe85628da02a6ec1f03b455e0",
+    "6380aceb080a7a859688e272341939ed12d83e834324e5365e4f9865a6bc54a3",
+    "875d3f83e85d30f8e6223904ecacd9a703e6a0e01cc9bdf3f7d25062ce939284",
+    "9eb666052e49ed8633228b21bdad458ceb8f3026589a7b129a9c872777b889b8",
+    "7c6032b49e6d926e229a68794a9dacdba58cf0261df75f68271772dacbe9e7a5",
+    "4cf461ed6d54974c5d23cf2d5a660dfb33ea4661a6d5f10168aa74229aef4ad9",
+    "c5123c56ffe21f53b1fb652a9460b508fa2063f84495e94c8db38b2de93529ff",
+    "4c2c3c6ef1ae2fc5b2a37128afa5ab7911a3d32e40c2c498bbb245643cbd2790",
+    "904a925a7ac656210919f082e07a055d1e072e6f5aed54c98b745bb55e0a551a",
+    "3718062e4c562f0da4ae1023215c32c3a962773c6782cdfe55c9234b8972bb86",
+    "dbce587455b41cfe984ebdd80791cfe682afb959a2b78b67da3561cd4926213b"
+  ],
+  "input_list_proof": {
+    "version": "sampling-span-input-list-binding-v1",
+    "training_acceptance": {
+      "purpose": "historical_training_acceptance_2x16_audit_only",
+      "role": "train_core",
+      "source": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/execution-contract.json",
+        "sha256": "6dbe86d56d5dd4053bcbc373276ad0c137cc4e892e48035bb41ee2173d1ddba7",
+        "bytes": 57853
+      },
+      "groups": 2,
+      "per_group": 16,
+      "ids_sha256": "b94770322c1b4f6237f09c84e84e1eeb98ebff8e4bd5760c0e3a3d97d9414c35",
+      "used_for_new_GPU_acceptance": false
+    },
+    "timing": {
+      "purpose": "fixed64_development_cost",
+      "role": "development",
+      "source": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/trace-selection.json",
+        "sha256": "b9d1ce181a91f168865b3a717ad635b57c53c898a3a3d3519952f9197cc794ec",
+        "bytes": 54612
+      },
+      "count": 64,
+      "ids_sha256": "70fa08077a49d4c496da03944cff1b90ead9b85e4bde5a73df33b6588767f882"
+    },
+    "new_GPU_acceptance": "original sampler epoch1 first two logical16 windows; unchanged"
+  },
+  "GPU_authorized": true,
+  "science_authorized": true,
+  "authorization": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/authorization.json",
+    "sha256": "8a5271514f12fc0dee59b515a75dd8d52fce71191aad310e81a2d4a4082a5508",
+    "bytes": 711
+  },
+  "CPU_gate": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/resource-age-repair-bundle-001/CPU_GATE.json",
+    "sha256": "3c8fc509d8bb9f8ffa69382f0723722977702c87fea87af200025d20b656b395",
+    "bytes": 918
+  },
+  "contract_sha256": "44fcb7481f393b6c54169b30611b3ec83666d20d59a58997ea6923a65557cb29"
+}

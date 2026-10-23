@@ -1,0 +1,21 @@
+test_background_ramp_can_generate_false_center_motion (local_detail_tests.DetailTests) ... ok
+test_cardinal_nonsquare_and_no_floor (local_detail_tests.DetailTests) ... ok
+test_even_odd_are_reversible_not_new_information (local_detail_tests.DetailTests) ... ok
+test_fixed_input_common_mode_cancels_only_interior (local_detail_tests.DetailTests) ... ok
+test_flat_feature_wrong_anchor_is_a_real_counterexample (local_detail_tests.DetailTests) ... ok
+test_invalid_shape_nonfinite_negative_extent_rejected (local_detail_tests.DetailTests) ... ok
+test_multibatch_multichannel_readout_state (local_detail_tests.DetailTests) ... ok
+test_native_aux_output_reference_gradient_is_separate (local_detail_tests.DetailTests) ... ok
+test_native_inverse_sigmoid_expression (local_detail_tests.DetailTests) ... ok
+test_pdc_folds_to_conventional_linear_weights (local_detail_tests.DetailTests) ... ok
+test_sampler_matches_original_cpu_grid (local_detail_tests.DetailTests) ... ok
+test_sampling_detach_and_feature_gradients (local_detail_tests.DetailTests) ... ok
+test_signed_information_changes_under_pair_swap (local_detail_tests.DetailTests) ... ok
+test_zero_detail_blocks_context_center_but_not_size (local_detail_tests.DetailTests) ... ok
+test_zero_init_is_not_a_dead_readout (local_detail_tests.DetailTests) ... ok
+test_zero_padding_breaks_common_mode_property_at_boundary (local_detail_tests.DetailTests) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.020s
+
+OK

@@ -1,0 +1,58 @@
+{
+  "groups": 6,
+  "evaluator_calls": 12,
+  "results": {
+    "B0": {
+      "600": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B0-600.json",
+        "sha256": "86be4fcc1478442bd4bb6f3b6e5b0c421e29f854e6977c54ba906814e79dfc7e",
+        "bytes": 91375
+      },
+      "300": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B0-300.json",
+        "sha256": "5a829d1ed3c68022053605ab5f143d3dd988eb277960918b898ffcaacd7e3129",
+        "bytes": 91341
+      }
+    },
+    "B1": {
+      "600": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B1-600.json",
+        "sha256": "aaafcd1520e3bf120a03dab9f2695fe3a1ef07e626c0684a178053614d5b1781",
+        "bytes": 91357
+      },
+      "300": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B1-300.json",
+        "sha256": "dbeafd8a3fde7be17cb8a687e7b8ec58fcd85631e011adf911dc90d262138789",
+        "bytes": 91360
+      }
+    },
+    "P": {
+      "600": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/P-600.json",
+        "sha256": "6deb3a792562fe6df44222326d6d980f529cf84967990552cf8c8d85e7ab6b76",
+        "bytes": 91393
+      },
+      "300": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/P-300.json",
+        "sha256": "7e45e56c629bc69c08b3e7856f00506f882f62b1bb0cfcaaaa0716eaf61f2c56",
+        "bytes": 91373
+      }
+    }
+  },
+  "scope": "development548",
+  "status": "PASS",
+  "identity": {
+    "task_id": "r18-sampling-span-20261020-001",
+    "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+    "attempt": "attempt-formal-003",
+    "stage": "score",
+    "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+    "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+    "science_sha256": "b1d742b3026146fabead4011b4c6262d29e8d787e59b881269f9aaf20dda1017",
+    "profile": "LAB_GPU_ONCE",
+    "initialization_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720"
+  },
+  "elapsed_seconds": 351.0825400679605,
+  "CUDA_initialized": false,
+  "fixture_only": false
+}

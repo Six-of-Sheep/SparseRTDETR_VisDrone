@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "identity": {
+    "task_id": "r18-sampling-span-20261020-001",
+    "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+    "attempt": "attempt-formal-003",
+    "stage": "score",
+    "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+    "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+    "science_sha256": "b1d742b3026146fabead4011b4c6262d29e8d787e59b881269f9aaf20dda1017",
+    "profile": "LAB_GPU_ONCE",
+    "initialization_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720"
+  },
+  "result": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/RESULT.json",
+    "sha256": "27b42d824615062757a714b4e415c78a467ee9918089421490b8e0b1cfe5b1b7",
+    "bytes": 2762
+  },
+  "events": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/events.jsonl",
+    "sha256": "20e572e01efec7e5ce07c9785660e6dc70d437ffcd9f0ecc33fdac91a5934f4f",
+    "bytes": 9350
+  },
+  "supervisor_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/supervisor-exit.json",
+    "sha256": "44d703a541eb8bfa739407f3354fdd4f81265dd4707b3dca025261883f08965a",
+    "bytes": 6768
+  },
+  "worker_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/worker-exit.json",
+    "sha256": "9a16249aec98c4c8d64ba5476c7ad0416470eaeda1870ea31a049c91faa2dfd9",
+    "bytes": 690
+  }
+}

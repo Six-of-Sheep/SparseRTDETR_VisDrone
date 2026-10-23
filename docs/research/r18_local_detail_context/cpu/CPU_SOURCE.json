@@ -1,0 +1,22 @@
+[
+  {
+    "path": "src/sparse_rtdetr/research/local_detail_center.py",
+    "sha256": "740e2808bf1aa47776866a3bb7acd870f50f7aa68955b024ef7d87973c8214ad",
+    "bytes": 4332
+  },
+  {
+    "path": "tests/test_local_detail_center.py",
+    "sha256": "8ba46a775e2c1301ce5cac6c3c083dfa414c1869521209a4330de65d87600ba5",
+    "bytes": 6737
+  },
+  {
+    "path": "tools/local_detail_cpu.py",
+    "sha256": "9ae777d8cecbd6c3c08fe7badfe461a095ea21cd7b6f28d4de75ec8a74837f13",
+    "bytes": 4841
+  },
+  {
+    "path": "src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py",
+    "sha256": "b53536a51f865459a0392230763ba055b60f21491fd6c7e4e3b04ae05c1b121b",
+    "bytes": 9275
+  }
+]

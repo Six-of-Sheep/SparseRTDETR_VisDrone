@@ -1,0 +1,19 @@
+{
+  "schema": "H2-accepted-GPU-receipt-identities-v1",
+  "commit": "7527c4646a7e86138b197d7e4dfabfb1cd4d4100",
+  "task": "r18-h2-acceptance-20261023-001",
+  "attempt": "attempt-acceptance-001",
+  "forward_calls": 18,
+  "GPU_seconds": 77.11586332297884,
+  "reference_sha256": {
+    "contract": "2dd6ffc91a2a9e02c1baff01b394d6e088cf48fb1faaa8ed31ad4fa57a4c847d",
+    "closed": "dab1ca33f14511e2172e9d29dbad51ffa1375a04fe5066f4a103ab5bbc01d0a3",
+    "result": "bdf734b66e07cd91c112a6738cc60b84e1946650b6356cbbd2eb92ac3fc81c68",
+    "exit": "fd64b7e21847fa951047dd4f3207d45c5a7d7e79d957e0cabb8aecbe13f77bb0",
+    "cost": "8cc5a55bcb1c0ab40511573d61d2f6b84efb5fa7befae5934106364d3a69c839",
+    "N": "7d9182070308a8a68759701c764c9e3320958534f1a9b52647b96cf02ca6125d",
+    "U": "214157a3f518e3545417e5c8a82d25e3587ebf9deedd4f31c0e3b5e6e1c6ed67",
+    "D": "2f13e90afe594b7b4b35c48d008848927b07bd520bfcffb04e4b20bc415b6b96"
+  },
+  "formal_training_state_reused": false
+}

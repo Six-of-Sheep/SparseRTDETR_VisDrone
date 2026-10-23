@@ -22,6 +22,12 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -B tools/repo_manage.py check
+      - name: H2 actual source deployment CLI (stdlib, Python 3.10 and 3.12)
+        run: python -B tools/check_h2_deploy_cli.py --output /tmp/h2-deploy-cpu
+      - name: H2 authenticated historical N actual admission CLI (no models)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_h2_history_cli.py --output /tmp/h2-history-cpu
       - run: python -B tools/repo_manage.py verify-import
       - run: python -B -m unittest discover -s tests -p test_repo_management.py
       - run: python -m pip install -r environment/requirements-ci.txt
@@ -32,3 +38,20 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - name: Local-detail center design leaf (synthetic CPU only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/local_detail_cpu.py --check-only
+      - run: python -m pip install -r environment/requirements-local-detail-cpu.txt
+      - name: H2 full N U D CPU acceptance and exact state replay (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/local_detail_model_cpu.py --check-only
+      - name: H2 actual acceptance CLI scope limits cleanup and slim export (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_h2_acceptance_cli.py --output /tmp/h2-cli-cpu
+      - name: H2 formal actual CLI lifecycle (synthetic CPU only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_h2_formal_cli.py --output /tmp/h2-formal-cpu --acceptance-fixture /tmp/h2-cli-cpu
