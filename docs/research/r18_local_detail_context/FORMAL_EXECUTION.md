@@ -52,3 +52,13 @@ U/D仅固定e120 EMA、单整图FP32、batch4；同一次预测按原规则生�
 安装器要求显式固定源码包、manifest及安装器自身SHA和commit。bootstrap脚本必须等于包内`tools/deploy_h2_source.py`的manifest条目；拒绝已有目标/回执、不规则成员、越界路径、缺项/额外项、大小或逐文件SHA不符。独占创建新release，不覆盖旧上传和STOP；失败回执及已解包部分保留，不自动清理/重试。新部署使用metadata-002及独立release。
 
 实际CLI测试`tools/check_h2_deploy_cli.py`在Python3.10/3.12分别覆盖正常包校验/解包/完整manifest、损坏包、缺包、缺成员、包内同大小损坏文件、重复目标、额外成员、越界、链接和错误commit。多块构造数据只验证SHA与拒绝行为；不代表真实材料准入。生产中先用该入口取得SOURCE_VERIFIED，再从正式prepare/绑定/隐藏CUDA检查/物理身份检查/唯一launch推进；短GPU验收和原成本仍仅只读复用。
+
+## 历史N清单格式与真实元数据验收
+
+3367d8c部署后，真实prepare在历史N的`files`读取处STOP；该release、metadata-002、旧STOP及源清单均保留。适配仅接受已登记的legacy `commit/files/scope`和schema_version=1的`source_files`格式。条目字段、规范相对路径、非负整数字节数、SHA及新格式mode/config绑定均显式核验，拒绝空表、未知格式、双格式、缺字段、重复或冲突路径。原清单不转换或重新写入，公共183项依赖同时核对大小和SHA。
+
+`historical()`完整读取原endpoint/binding、认证记录和原STOP、旧源清单和合同、原worker结果/退出，以及固定两档评分、推理/评分RESULT和CLOSED/退出引用。原checkpoint binding摘要、source/contract/data/pretrained身份与认证链交叉核对。原B0缺CLOSED仍是缺CLOSED，不用续后推理/评分的闭合追认原训练阶段。
+
+`h2_formal.py historical-check --spec ... --output ...`与prepare调用同一个`historical()`；原生LAB路径还核物理checkpoint。显式`--snapshot-index --snapshot-index-sha256`只为离线元数据审查解析原绝对路径，逐引用检查原始大小/SHA，不改原JSON。snapshot模式不能用于prepare/bind/launch/run，也不能证明checkpoint实物或当前服务器缺CLOSED。`historical_cpu/snapshot`为原终态精简回传中19份、640221B认证元数据原字节，原路径映射与历史缺CLOSED观测保存在INDEX，Git禁止换行转换。没有模型、图像、预测或checkpoint。
+
+`tools/check_h2_history_cli.py`经实际CLI检查真实LAB元数据完整链、数据/预训练/评分/源/终点身份冲突、损坏或缺失快照；另用明确标注的CPU构造夹具在同一historical接口检查两种正常格式及缺字段、未知版本、重复路径、越界、大小/SHA/mode/config冲突等拒绝。构造新版清单不冒充新的历史N认证。真实物理材料、环境与资源仍须在新release重新准入，短GPU验收不重放。

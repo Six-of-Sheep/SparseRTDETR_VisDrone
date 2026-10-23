@@ -3,12 +3,13 @@
 No acceptance worker or checkpoint is a formal training predecessor.
 """
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import sys
 from ..localization.runio import require,read,publish,reference,digest,sha
 from . import h2_contract as accepted
 from .h2_formal_resources import LIMITS
+from .h2_history_metadata import source_rows
 
 ROOT=accepted.ROOT
 SCOPE='H2_FORMAL_UD_HISTORICAL_N_V1'
@@ -41,7 +42,7 @@ def fixed_ids(c):
 def verify_source(ref):
     src=accepted.verify_source(ref)
     rows=src.get('source_files',src.get('files'));names={x['path'] for x in rows}
-    require({'h2_formal.py',*(f'src/sparse_rtdetr/research/h2_formal{n}.py' for n in ('','_contract','_resources','_worker'))}<=names,'formal helper missing from source inventory')
+    require({'h2_formal.py','src/sparse_rtdetr/research/h2_history_metadata.py',*(f'src/sparse_rtdetr/research/h2_formal{n}.py' for n in ('','_contract','_resources','_worker'))}<=names,'formal helper missing from source inventory')
     return src
 
 def original_reference(ref,root):
@@ -75,11 +76,17 @@ def acceptance(c):
         require(set(r['logits_dtypes'])=={'torch.bfloat16'} and len(r['logits_dtypes'])==6 and e['status']=='PASS' and not e['cleanup_errors'] and not e['remaining_live'],'acceptance BF16/exit invalid')
     return result
 
-def historical(c,*,physical=False):
+def historical(c,*,physical=False,references=None):
+    # Only the explicit metadata audit CLI supplies a read-only snapshot resolver.
+    # Every production prepare/bind/load call retains native exact()/physical IO.
+    require(not (physical and references is not None),'snapshot cannot certify physical checkpoint')
+    exact = accepted.exact if references is None else references.exact
     n=c['historical_N'];ep=exact(n['endpoint']);b=exact(ep['binding']);proof=exact(n['authentication']);stop=exact(n['original_STOP'])
     require(ep['updates']==36480 and ep['epoch']==120 and ep['EMA'] and not ep['used_acceptance_state'],'historical N endpoint differs')
-    require(not Path(n['original_CLOSED_path']).exists(),'historical missing CLOSED changed')
+    require(not Path(n['original_CLOSED_path']).exists() if references is None else references.absent(n['original_CLOSED_path']),'historical missing CLOSED changed')
     require(n['status']=='AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE' and proof and stop,'historical provenance missing')
+    if 'source' in n:
+        old=exact(n['source']);by={r['path']:r for r in source_rows(old)}
     if c['profile']=='LAB_GPU_ONCE':
         cfg=read(ROOT/'configs/research/r18_h2_nud_v1.json')
         require(ep['checkpoint']['sha256']==cfg['N_checkpoint_sha256'] and ep['initial_model_sha256']==cfg['N_initial_model_sha256'],'N checkpoint/initial identity differs')
@@ -90,12 +97,41 @@ def historical(c,*,physical=False):
         score_result=exact(n['score_result']);inference=exact(n['infer_result'])
         require(score_result['results']['B0']==n['scores'] and inference['EMA'] and inference['images']==548,'N score origin/coverage differs')
         require(n['source']['sha256']=='c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1','N source reference changed')
-        old=exact(n['source']);by={r['path']:r for r in old['source_files']}
+        require(proof['endpoint']==n['endpoint'] and proof['stop']==n['original_STOP'] and proof['new_source']==n['source']
+            and proof['status']==n['status'] and proof['old_closure_created'] is False
+            and proof['training_repeated'] is False and proof['checkpoint_loaded_for_training'] is False,'N authentication references differ')
+        origin=exact(proof['contract']);origin_source=exact(proof['source']);source_rows(origin_source)
+        require(origin['source']==proof['source'] and origin['commit']==origin_source['commit']
+            and b['source_sha256']==proof['source']['sha256'] and b['contract_sha256']==origin['contract_sha256']
+            and b['data_sha256']==digest(c['data']) and b['pretrained_sha256']==c['pretrained']['sha256']
+            and b['arm']=='r18-sampling-span-v1/B0' and b['scope']=='span_formal_e120'
+            and digest(b)==ep['checkpoint']['binding_sha256'],'N checkpoint binding identity differs')
+        result=exact(proof['result']);worker_exit=exact(proof['worker_exit'])
+        require(result['endpoint']==n['endpoint'] and result['actual_updates']==36480 and result['status']=='PASS'
+            and worker_exit['status']=='PASS' and not worker_exit['remaining_children']
+            and result['identity']==worker_exit['identity']
+            and result['identity']['contract_sha256']==origin['contract_sha256'],'N original endpoint/worker references differ')
+        score_dir=PurePosixPath(n['score_result']['path']).parent;infer_dir=PurePosixPath(n['infer_result']['path']).parent
+        # CLOSED paths are derived from immutable, pinned RESULT paths. Snapshot
+        # lookup still requires their original authenticated size/SHA entries.
+        def related(path):
+            ref=reference(path) if references is None else references.rows[str(path)][0]
+            return exact(ref)
+        for directory,ref,stage in ((score_dir,n['score_result'],'score'),(infer_dir,n['infer_result'],'infer-B0')):
+            cl=related(directory/'CLOSED.json');sx=exact(cl['supervisor_exit']);wx=exact(cl['worker_exit'])
+            require(cl['status']=='PASS' and cl['result']==ref and sx['status']=='PASS' and wx['status']=='PASS'
+                and not sx['remaining_live'] and not sx['cleanup_errors'] and not wx['remaining_children']
+                and cl['identity']==wx['identity'] and cl['identity']['stage']==stage
+                and cl['identity']['source_sha256']==n['source']['sha256'],'N inference/score closure differs')
+        require(score_result['identity']==related(score_dir/'CLOSED.json')['identity']
+            and inference['identity']==related(infer_dir/'CLOSED.json')['identity']
+            and score_result['identity']['contract_sha256']==inference['identity']['contract_sha256'],'N score/inference identity differs')
         audit=read(ROOT/'docs/research/r18_local_detail_context/full_cpu/B0_N_REUSE_AUDIT.json')
         require(audit['status']=='PASS_LOCAL_REFERENCE_AUDIT','N scientific reuse audit absent')
         # All common model/data/loss/evaluator dependencies are compared to the authenticated source.
         for row in audit['source_files_equal']:
-            path=row['path'];require(path in by and by[path]['sha256']==row['sha256'] and sha(ROOT/path)==row['sha256'],'N shared scientific dependency differs: '+path)
+            path=row['path'];require(path in by and by[path]['sha256']==row['sha256'] and by[path]['bytes']==row['bytes']
+                and (ROOT/path).stat().st_size==row['bytes'] and sha(ROOT/path)==row['sha256'],'N shared scientific dependency differs: '+path)
     for budget in ('600','300'):
         if c['profile']=='LAB_GPU_ONCE':
             require(n['scores'][budget]['sha256']=={'600':'86be4fcc1478442bd4bb6f3b6e5b0c421e29f854e6977c54ba906814e79dfc7e','300':'5a829d1ed3c68022053605ab5f143d3dd988eb277960918b898ffcaacd7e3129'}[budget],'N frozen score SHA differs')

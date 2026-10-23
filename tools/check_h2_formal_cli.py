@@ -5,7 +5,8 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'src'))
 from sparse_rtdetr.localization.runio import read,publish,reference,sha
 from sparse_rtdetr.research import h2_formal_contract as ct
 
-FILES=['h2_formal.py',*[f'src/sparse_rtdetr/research/h2_formal{x}.py' for x in ('','_contract','_resources','_worker')],'tools/check_h2_formal_cli.py']
+FILES=['h2_formal.py',*[f'src/sparse_rtdetr/research/h2_formal{x}.py' for x in ('','_contract','_resources','_worker')],
+    'src/sparse_rtdetr/research/h2_history_metadata.py','tools/check_h2_formal_cli.py']
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--acceptance-fixture',type=Path,required=True);p.add_argument('--source-inventory',type=Path);a=p.parse_args()

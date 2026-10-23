@@ -1,0 +1,22 @@
+{
+  "checkpoint": {
+    "schema": "sparse_rtdetr.sampling_span_fullstate_v1",
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/checkpoint-e120.pth",
+    "sha256": "be5e9e1fb7a514eceaf2a1343dc29d2f512115bdd85b7fcc26dc11d3a66c9a83",
+    "size_bytes": 323457665,
+    "binding_sha256": "db0dcb7308de738a60b2e05202d985a1b008e8391d9a053d054047f25b814711",
+    "scope": "span_formal_e120",
+    "completed_updates": 36480,
+    "written_at": "2026-10-21T16:45:01.490618+00:00"
+  },
+  "binding": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/binding.json",
+    "sha256": "892367d5de47d2d3e84418ff60c3b8a95c07fe04e47e97b5bc798d86df126a47",
+    "bytes": 12351
+  },
+  "updates": 36480,
+  "epoch": 120,
+  "EMA": true,
+  "initial_model_sha256": "40f9d83dff1acf1918855c17b1d7a000c03a6153394487a3e4b168a4c2bee995",
+  "used_acceptance_state": false
+}

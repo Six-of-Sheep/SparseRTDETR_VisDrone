@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "identity": {
+    "task_id": "r18-sampling-span-20261020-001",
+    "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+    "attempt": "attempt-formal-001",
+    "stage": "train-B0",
+    "source_sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+    "contract_sha256": "44fcb7481f393b6c54169b30611b3ec83666d20d59a58997ea6923a65557cb29",
+    "science_sha256": "b1d742b3026146fabead4011b4c6262d29e8d787e59b881269f9aaf20dda1017",
+    "profile": "LAB_GPU_ONCE",
+    "initialization_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720"
+  },
+  "pid": 3646824,
+  "remaining_children": [],
+  "profile": "LAB_GPU_ONCE"
+}

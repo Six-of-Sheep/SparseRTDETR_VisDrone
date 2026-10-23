@@ -321,11 +321,25 @@ def launch(c,session,foreground):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action',choices=('prepare','bind','contract-check','cuda-check','launch','run','supervise','worker','verify'))
+    p.add_argument('action',choices=('prepare','bind','contract-check','cuda-check','launch','run','supervise','worker','verify','historical-check'))
     for n in ('spec','source','output','contract','cpu-gate','prepare-gate','authorization'):p.add_argument('--'+n,type=Path)
     p.add_argument('--arm',choices=ct.STAGES);p.add_argument('--session');p.add_argument('--foreground',action='store_true')
+    p.add_argument('--snapshot-index',type=Path);p.add_argument('--snapshot-index-sha256')
     a=p.parse_args()
     try:
+        if a.action=='historical-check':
+            require(a.spec and a.output,'historical spec/output required')
+            c=read(a.spec);require(c['profile'] in ('LAB_GPU_ONCE','CPU_FIXTURE_ONLY'),'historical profile differs')
+            from .h2_history_metadata import SnapshotReferences
+            require(bool(a.snapshot_index)==bool(a.snapshot_index_sha256),'snapshot index/SHA must be paired')
+            refs=SnapshotReferences(a.snapshot_index,a.snapshot_index_sha256) if a.snapshot_index else None
+            ep,_=ct.historical(c,physical=refs is None and c['profile']=='LAB_GPU_ONCE',references=refs)
+            publish(a.output,dict(status='PASS',interface='h2_formal_contract.historical',profile=c['profile'],
+                snapshot_only=refs is not None,physical_checkpoint_verified=refs is None and c['profile']=='LAB_GPU_ONCE',
+                absence_is_historical_snapshot=refs is not None,forward_calls=0,
+                endpoint_updates=ep['updates'],references_read=[] if refs is None else refs.reads))
+            return 0
+        require(a.snapshot_index is None and a.snapshot_index_sha256 is None,'snapshots forbidden for execution actions')
         if a.action in ('prepare','bind'):
             require(a.spec and a.source and a.output,'raw spec/source/output required')
             c=ct.base(a.spec,reference(a.source))

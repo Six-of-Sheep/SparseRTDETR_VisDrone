@@ -1,0 +1,160 @@
+{
+  "schema": "H2_N_METADATA_SNAPSHOT_V1",
+  "files": [
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/stream-continuation-bundle-003/RUN_SOURCE_MANIFEST.json",
+        "bytes": 84232,
+        "sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1"
+      },
+      "relative": "stream-continuation-bundle-003/RUN_SOURCE_MANIFEST.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/resource-age-repair-bundle-001/RUN_SOURCE_MANIFEST.json",
+        "bytes": 83131,
+        "sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197"
+      },
+      "relative": "resource-age-repair-bundle-001/RUN_SOURCE_MANIFEST.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-003/COMPLETED_B0_AUTHENTICATED.json",
+        "bytes": 184139,
+        "sha256": "3e0da19564a8b52cf5ab8156ff39bd08cdc843cea0202216a2c7238efa9898d7"
+      },
+      "relative": "formal-execution-003/COMPLETED_B0_AUTHENTICATED.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/contract.json",
+        "bytes": 21982,
+        "sha256": "08a0835fd9df656aae8e87af065e7a528f4037e9382ae854211a5ab592769a7b"
+      },
+      "relative": "formal-execution-001/contract.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/STOP.json",
+        "bytes": 1007,
+        "sha256": "b501b494728af6b55cd8fd88aebaa84874ba6d8433e4f01a2f906e791e92c40d"
+      },
+      "relative": "attempt-formal-001/STOP.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/endpoint.json",
+        "bytes": 1081,
+        "sha256": "7ad40e93db6ae028b0c97f7da69eba8a40908a8e03258a45ab97633d6d6276ab"
+      },
+      "relative": "attempt-formal-001/train-B0/endpoint.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/binding.json",
+        "bytes": 12351,
+        "sha256": "892367d5de47d2d3e84418ff60c3b8a95c07fe04e47e97b5bc798d86df126a47"
+      },
+      "relative": "attempt-formal-001/train-B0/binding.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/RESULT.json",
+        "bytes": 4128,
+        "sha256": "d7052582c0fc00c4e6bc447b6341e3f57229cded971f9957d2519d7710969966"
+      },
+      "relative": "attempt-formal-001/train-B0/RESULT.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/worker-exit.json",
+        "bytes": 693,
+        "sha256": "062480c92cf0aa1af24a128a7e2b9d6e7db32ebe039a8c3bd7a1ade1546b1aa3"
+      },
+      "relative": "attempt-formal-001/train-B0/worker-exit.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/RESULT.json",
+        "bytes": 2762,
+        "sha256": "27b42d824615062757a714b4e415c78a467ee9918089421490b8e0b1cfe5b1b7"
+      },
+      "relative": "attempt-formal-003/score/RESULT.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/CLOSED.json",
+        "bytes": 1847,
+        "sha256": "d190bb08f8ef3e8fb9767b905a59d469ac929daa3c837b7eaab03bf52652fe9b"
+      },
+      "relative": "attempt-formal-003/score/CLOSED.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/supervisor-exit.json",
+        "bytes": 6768,
+        "sha256": "44d703a541eb8bfa739407f3354fdd4f81265dd4707b3dca025261883f08965a"
+      },
+      "relative": "attempt-formal-003/score/supervisor-exit.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/worker-exit.json",
+        "bytes": 690,
+        "sha256": "9a16249aec98c4c8d64ba5476c7ad0416470eaeda1870ea31a049c91faa2dfd9"
+      },
+      "relative": "attempt-formal-003/score/worker-exit.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/RESULT.json",
+        "bytes": 43349,
+        "sha256": "99609528d93f60dc79572b005c3cd3a5dd4d453adb3ef9c5e328751ac55102a9"
+      },
+      "relative": "attempt-formal-003/infer-B0/RESULT.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/CLOSED.json",
+        "bytes": 1865,
+        "sha256": "e411dcc00bab4801d67e8288771bb4a2d9cbc6bc117d261ca0107f35a19239a0"
+      },
+      "relative": "attempt-formal-003/infer-B0/CLOSED.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/supervisor-exit.json",
+        "bytes": 6787,
+        "sha256": "57cabc54a98f83034782600ba0c807c1940bc3409e188ee848cfec161bfab3fa"
+      },
+      "relative": "attempt-formal-003/infer-B0/supervisor-exit.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/worker-exit.json",
+        "bytes": 693,
+        "sha256": "746ef3c735011b6085cc5c79c7e7f2b48c6e05c7e9ec0db6e76a20d4dae6a7ae"
+      },
+      "relative": "attempt-formal-003/infer-B0/worker-exit.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B0-600.json",
+        "bytes": 91375,
+        "sha256": "86be4fcc1478442bd4bb6f3b6e5b0c421e29f854e6977c54ba906814e79dfc7e"
+      },
+      "relative": "attempt-formal-003/score/B0-600.json"
+    },
+    {
+      "original": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B0-300.json",
+        "bytes": 91341,
+        "sha256": "5a829d1ed3c68022053605ab5f143d3dd988eb277960918b898ffcaacd7e3129"
+      },
+      "relative": "attempt-formal-003/score/B0-300.json"
+    }
+  ],
+  "observed_absent": [
+    "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/CLOSED.json"
+  ]
+}

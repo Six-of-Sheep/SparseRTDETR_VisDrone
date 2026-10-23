@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "identity": {
+    "task_id": "r18-sampling-span-20261020-001",
+    "protocol": "r18-sampling-span-formal-external-acceptance-v1",
+    "attempt": "attempt-formal-003",
+    "stage": "infer-B0",
+    "source_sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+    "contract_sha256": "6f493dd17831ae73061bea2e8e46d6a030fbf6767a0b45b0c32ff0d1d1e6bba2",
+    "science_sha256": "b1d742b3026146fabead4011b4c6262d29e8d787e59b881269f9aaf20dda1017",
+    "profile": "LAB_GPU_ONCE",
+    "initialization_sha256": "911a745b62e173c8f4b9af513c2ea295428cf23f1bbfe9048381500f140fd720"
+  },
+  "result": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/RESULT.json",
+    "sha256": "99609528d93f60dc79572b005c3cd3a5dd4d453adb3ef9c5e328751ac55102a9",
+    "bytes": 43349
+  },
+  "events": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/events.jsonl",
+    "sha256": "acf4c793423482350f2513944b08d2a76f86778c1022b3d0188cbf77324f8f0f",
+    "bytes": 117895
+  },
+  "supervisor_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/supervisor-exit.json",
+    "sha256": "57cabc54a98f83034782600ba0c807c1940bc3409e188ee848cfec161bfab3fa",
+    "bytes": 6787
+  },
+  "worker_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/worker-exit.json",
+    "sha256": "746ef3c735011b6085cc5c79c7e7f2b48c6e05c7e9ec0db6e76a20d4dae6a7ae",
+    "bytes": 693
+  }
+}

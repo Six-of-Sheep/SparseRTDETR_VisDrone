@@ -42,13 +42,13 @@
     },
     {
       "path": "src/sparse_rtdetr/research/h2_formal.py",
-      "bytes": 24917,
-      "sha256": "e4c5c37fbf18c7a3152fcc7c10fc042d8e83b5581ef74d9228738bc45465ec45"
+      "bytes": 26207,
+      "sha256": "7c7413afcf9e4801a4b517d59f0ee86d08d8d6ffe69560bc5697ea0c8cc992ef"
     },
     {
       "path": "src/sparse_rtdetr/research/h2_formal_contract.py",
-      "bytes": 11983,
-      "sha256": "f20273e7c2ff03f4821b7c6be77b9e08f89c33d16a51a5b43ce03a0dab3f39a8"
+      "bytes": 15454,
+      "sha256": "3e94630b3dd1d3534073c065eecbc91702807d07e288a0aef3a68821eeb9ddc4"
     },
     {
       "path": "src/sparse_rtdetr/research/h2_formal_resources.py",
@@ -61,11 +61,16 @@
       "sha256": "b7badd86b0d6669f38239911c14dafafc6e3eae5ef907492f341219659d6b7e9"
     },
     {
+      "path": "src/sparse_rtdetr/research/h2_history_metadata.py",
+      "bytes": 4577,
+      "sha256": "5e9ed7ff0fc60a838e6948605e9909f24a95c92c32a93a0a490cab0fb2920687"
+    },
+    {
       "path": "tools/check_h2_formal_cli.py",
-      "bytes": 11388,
-      "sha256": "24a416aabc83f518f89de0a9b663ac329207146ec42b010589368bd41d719516"
+      "bytes": 11445,
+      "sha256": "460fa5a80780652c52a19229a66f96ff7553e2790d157d33dfdbaf1d4ea420de"
     }
   ],
   "python": "3.10.16",
-  "time_epoch": 1792774979.3366518
+  "time_epoch": 1792780832.968082
 }

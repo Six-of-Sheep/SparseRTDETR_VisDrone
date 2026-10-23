@@ -1,0 +1,3870 @@
+{
+  "schema": "sampling-span-completed-B0-with-failed-supervision-v1",
+  "status": "AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE",
+  "contract": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/contract.json",
+    "sha256": "08a0835fd9df656aae8e87af065e7a528f4037e9382ae854211a5ab592769a7b",
+    "bytes": 21982
+  },
+  "source": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/resource-age-repair-bundle-001/RUN_SOURCE_MANIFEST.json",
+    "sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+    "bytes": 83131
+  },
+  "new_source": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/stream-continuation-bundle-003/RUN_SOURCE_MANIFEST.json",
+    "sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+    "bytes": 84232
+  },
+  "result": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/RESULT.json",
+    "sha256": "d7052582c0fc00c4e6bc447b6341e3f57229cded971f9957d2519d7710969966",
+    "bytes": 4128
+  },
+  "worker_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/worker-exit.json",
+    "sha256": "062480c92cf0aa1af24a128a7e2b9d6e7db32ebe039a8c3bd7a1ade1546b1aa3",
+    "bytes": 693
+  },
+  "endpoint": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/endpoint.json",
+    "sha256": "7ad40e93db6ae028b0c97f7da69eba8a40908a8e03258a45ab97633d6d6276ab",
+    "bytes": 1081
+  },
+  "stop": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/STOP.json",
+    "sha256": "b501b494728af6b55cd8fd88aebaa84874ba6d8433e4f01a2f906e791e92c40d",
+    "bytes": 1007
+  },
+  "failed_supervisor_process": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0-supervisor-process/PROCESS.json",
+    "sha256": "9f57e4df62d583ee2d0e5043e44b1d4be9309e46838530460708e84708a7507f",
+    "bytes": 1191
+  },
+  "ledger": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/COST_LEDGER.json",
+    "sha256": "b3e81d9842d6e96753a778a889a2c37311410769be681a998bf5466b4b396525",
+    "bytes": 1507
+  },
+  "initialization": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/admission/initialization.json",
+    "sha256": "bff1b74ed5e4a603217b77e36d07372d7886e96e2b35893924a6c316c9f99e4d",
+    "bytes": 3847
+  },
+  "events": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/events.jsonl",
+    "bytes": 15509099568,
+    "sha256": "cd9450a987df70eba62c7d63c4e7f0686c9f65141119f1b9706c17f731f14286"
+  },
+  "events_count": 36724,
+  "student_inputs_sha256": "84fa4b1eebc1e0862f7fd944993cdc1d5ebf92bcff8d732dbcfee49f2e8759ec",
+  "watched": [
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/.gitattributes",
+      "device": 2048,
+      "inode": 121275805,
+      "bytes": 1808,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/.github/pull_request_template.md",
+      "device": 2048,
+      "inode": 121275807,
+      "bytes": 305,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/.github/workflows/repository-checks.yml",
+      "device": 2048,
+      "inode": 121275809,
+      "bytes": 2654,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/.gitignore",
+      "device": 2048,
+      "inode": 121275810,
+      "bytes": 331,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/AGENTS.md",
+      "device": 2048,
+      "inode": 121275811,
+      "bytes": 917,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/CLAUDE.md",
+      "device": 2048,
+      "inode": 121275812,
+      "bytes": 38,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/README.md",
+      "device": 2048,
+      "inode": 121275813,
+      "bytes": 5156,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/aggregate_seeds.py",
+      "device": 2048,
+      "inode": 121275814,
+      "bytes": 15342,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/README.md",
+      "device": 2048,
+      "inode": 121275816,
+      "bytes": 250,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_baseline_v1.json",
+      "device": 2048,
+      "inode": 121275818,
+      "bytes": 4316,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a.json",
+      "device": 2048,
+      "inode": 121275819,
+      "bytes": 12751,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_baseline_v2a_t7h_pilot.json",
+      "device": 2048,
+      "inode": 121275820,
+      "bytes": 4890,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_engineering.json",
+      "device": 2048,
+      "inode": 121275821,
+      "bytes": 2194,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_baseline_v2b_runtime.json",
+      "device": 2048,
+      "inode": 121275822,
+      "bytes": 2922,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v1.json",
+      "device": 2048,
+      "inode": 121275823,
+      "bytes": 3265,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v2.json",
+      "device": 2048,
+      "inode": 121275824,
+      "bytes": 3631,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v3.json",
+      "device": 2048,
+      "inode": 121275825,
+      "bytes": 3631,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v4.json",
+      "device": 2048,
+      "inode": 121275826,
+      "bytes": 3631,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v5.json",
+      "device": 2048,
+      "inode": 121275827,
+      "bytes": 3631,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v6.json",
+      "device": 2048,
+      "inode": 121275828,
+      "bytes": 3631,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_smoke_v7.json",
+      "device": 2048,
+      "inode": 121275829,
+      "bytes": 4083,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_training_evidence_v1.json",
+      "device": 2048,
+      "inode": 121275830,
+      "bytes": 7139,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_training_launch_t6_v1.json",
+      "device": 2048,
+      "inode": 121275831,
+      "bytes": 11730,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_training_process_v1.json",
+      "device": 2048,
+      "inode": 121275832,
+      "bytes": 10468,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_training_runtime_v1.json",
+      "device": 2048,
+      "inode": 121275833,
+      "bytes": 12957,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_training_t6b_v1.json",
+      "device": 2048,
+      "inode": 121275834,
+      "bytes": 7325,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/rtdetrv2_r18_visdrone_training_v1.json",
+      "device": 2048,
+      "inode": 121275835,
+      "bytes": 10907,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023825972522
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/baseline/visdrone_official_evaluator_v1.json",
+      "device": 2048,
+      "inode": 121275836,
+      "bytes": 3857,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/research/r18_sampling_span_acceptance_v1.json",
+      "device": 2048,
+      "inode": 121275838,
+      "bytes": 491,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/research/r18_sampling_span_execution_v1.json",
+      "device": 2048,
+      "inode": 121275839,
+      "bytes": 2273,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/research/r18_sampling_span_formal_v1.json",
+      "device": 2048,
+      "inode": 121275840,
+      "bytes": 888,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/research/r18_sampling_span_seed0.json",
+      "device": 2048,
+      "inode": 121275841,
+      "bytes": 3181,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/sahi_independent_confirmation.json",
+      "device": 2048,
+      "inode": 121275842,
+      "bytes": 3213,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/sahi_supplemental_evaluation.json",
+      "device": 2048,
+      "inode": 121275843,
+      "bytes": 7165,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/supplemental_zero_gt_extension_v1.json",
+      "device": 2048,
+      "inode": 121275844,
+      "bytes": 1383,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/visdrone_protocol_v1.json",
+      "device": 2048,
+      "inode": 121275845,
+      "bytes": 1514,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/visdrone_protocol_v2.json",
+      "device": 2048,
+      "inode": 121275846,
+      "bytes": 1746,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/workspace/a3b-q300-duration.json",
+      "device": 2048,
+      "inode": 121275848,
+      "bytes": 1293,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/configs/workspace/future-experiment.template.json",
+      "device": 2048,
+      "inode": 121275849,
+      "bytes": 970,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/confirmation_cpu_check.py",
+      "device": 2048,
+      "inode": 121275850,
+      "bytes": 4326,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/confirmation_prepare.py",
+      "device": 2048,
+      "inode": 121275851,
+      "bytes": 16893,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/cpu_front.py",
+      "device": 2048,
+      "inode": 121275852,
+      "bytes": 5595,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/DEVELOPMENT.md",
+      "device": 2048,
+      "inode": 121275854,
+      "bytes": 3020,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/EXPERIMENTS.md",
+      "device": 2048,
+      "inode": 121275855,
+      "bytes": 1652,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/HISTORY_BRANCHES.md",
+      "device": 2048,
+      "inode": 121275856,
+      "bytes": 596,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/SOURCE_IMPORT.md",
+      "device": 2048,
+      "inode": 121275857,
+      "bytes": 1487,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/contracts/ARTIFACT_POLICY.md",
+      "device": 2048,
+      "inode": 121275859,
+      "bytes": 560,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/contracts/AUTODL_MIGRATION.md",
+      "device": 2048,
+      "inode": 121275860,
+      "bytes": 535,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/contracts/DATA_PROTOCOL.md",
+      "device": 2048,
+      "inode": 121275861,
+      "bytes": 673,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/contracts/ENVIRONMENT_POLICY.md",
+      "device": 2048,
+      "inode": 121275862,
+      "bytes": 594,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/contracts/EVALUATION_CONTRACT.md",
+      "device": 2048,
+      "inode": 121275863,
+      "bytes": 574,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/contracts/P3_RESEARCH_CONTRACT.md",
+      "device": 2048,
+      "inode": 121275864,
+      "bytes": 917,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/legacy_p2/P2_FINAL_CLOSURE.md",
+      "device": 2048,
+      "inode": 121275866,
+      "bytes": 3048,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_CONFIRMATION_ACCESS_HISTORY_20261018.md",
+      "device": 2048,
+      "inode": 121275868,
+      "bytes": 8004,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_CONFIRMATION_CPU_20261018.md",
+      "device": 2048,
+      "inode": 121275869,
+      "bytes": 1847,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_CONFIRMATION_DISPOSITION_20261018.md",
+      "device": 2048,
+      "inode": 121275870,
+      "bytes": 3343,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_CONFIRMATION_PREPARATION_20261018.md",
+      "device": 2048,
+      "inode": 121275871,
+      "bytes": 7373,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_GT_EXTENSION_EXECUTION_20261019.md",
+      "device": 2048,
+      "inode": 121275872,
+      "bytes": 7125,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_SUPPLEMENTAL_ANNOTATION_RECOVERY_20261019.md",
+      "device": 2048,
+      "inode": 121275873,
+      "bytes": 5415,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_SUPPLEMENTAL_EXECUTION_STOP_20261018.md",
+      "device": 2048,
+      "inode": 121275874,
+      "bytes": 3944,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_SUPPLEMENTAL_MATERIAL_LOCATION_20261018.md",
+      "device": 2048,
+      "inode": 121275875,
+      "bytes": 5232,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_SUPPLEMENTAL_PLAN_20261018.md",
+      "device": 2048,
+      "inode": 121275876,
+      "bytes": 8448,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/ORIGINAL_C_ZERO_AREA_GT_REVIEW_20261019.md",
+      "device": 2048,
+      "inode": 121275877,
+      "bytes": 8968,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/PR9_CI_CLOSEOUT_20261019.md",
+      "device": 2048,
+      "inode": 121275878,
+      "bytes": 4192,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/ABSOLUTE_ALL.csv",
+      "device": 2048,
+      "inode": 121275880,
+      "bytes": 15409,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/ABSOLUTE_MEAN_SD.csv",
+      "device": 2048,
+      "inode": 121275881,
+      "bytes": 17933,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/CLOSED_CANDIDATES.csv",
+      "device": 2048,
+      "inode": 121275882,
+      "bytes": 6914,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/COST_FIXED64.csv",
+      "device": 2048,
+      "inode": 121275883,
+      "bytes": 2239,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/COST_MEAN_SD.csv",
+      "device": 2048,
+      "inode": 121275884,
+      "bytes": 1227,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG1_ABSOLUTE.pdf",
+      "device": 2048,
+      "inode": 121275885,
+      "bytes": 21419,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG1_ABSOLUTE.png",
+      "device": 2048,
+      "inode": 121275886,
+      "bytes": 101351,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG1_ABSOLUTE.svg",
+      "device": 2048,
+      "inode": 121275887,
+      "bytes": 45512,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG2_TRADEOFFS.pdf",
+      "device": 2048,
+      "inode": 121275888,
+      "bytes": 18458,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG2_TRADEOFFS.png",
+      "device": 2048,
+      "inode": 121275889,
+      "bytes": 177442,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG2_TRADEOFFS.svg",
+      "device": 2048,
+      "inode": 121275890,
+      "bytes": 41037,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG3_COST64.pdf",
+      "device": 2048,
+      "inode": 121275891,
+      "bytes": 13858,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG3_COST64.png",
+      "device": 2048,
+      "inode": 121275892,
+      "bytes": 39424,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FIG3_COST64.svg",
+      "device": 2048,
+      "inode": 121275893,
+      "bytes": 9867,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/FROZEN_QUALITY_GATES.csv",
+      "device": 2048,
+      "inode": 121275894,
+      "bytes": 2762,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023826972540
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/GAPS.md",
+      "device": 2048,
+      "inode": 121275895,
+      "bytes": 3017,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/MANUSCRIPT.md",
+      "device": 2048,
+      "inode": 121275896,
+      "bytes": 9659,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/MASTER.md",
+      "device": 2048,
+      "inode": 121275897,
+      "bytes": 15513,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/OFFICIAL_MEAN_SD_PP.csv",
+      "device": 2048,
+      "inode": 121275898,
+      "bytes": 4421,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/OFFICIAL_PAIRED_MEAN_SD_PP.csv",
+      "device": 2048,
+      "inode": 121275899,
+      "bytes": 9039,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/PAIRED_ALL_PP.csv",
+      "device": 2048,
+      "inode": 121275900,
+      "bytes": 15511,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/PAIRED_MEAN_SD_PP.csv",
+      "device": 2048,
+      "inode": 121275901,
+      "bytes": 24368,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/PR9_REVIEW.md",
+      "device": 2048,
+      "inode": 121275902,
+      "bytes": 4215,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/README.md",
+      "device": 2048,
+      "inode": 121275903,
+      "bytes": 2028,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/SOURCE_SCALARS.json",
+      "device": 2048,
+      "inode": 121275904,
+      "bytes": 95475,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/TABLE_MAIN.tex",
+      "device": 2048,
+      "inode": 121275905,
+      "bytes": 1666,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/abc_results_20261019/VALIDATION.json",
+      "device": 2048,
+      "inode": 121275906,
+      "bytes": 538,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/r18_sampling_span_20261020/ACCEPTANCE_ONLY.md",
+      "device": 2048,
+      "inode": 121275908,
+      "bytes": 7323,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/r18_sampling_span_20261020/CPU_REPORT.md",
+      "device": 2048,
+      "inode": 121275909,
+      "bytes": 2830,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/r18_sampling_span_20261020/FORMAL_EXTERNAL_ACCEPTANCE.md",
+      "device": 2048,
+      "inode": 121275910,
+      "bytes": 4159,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/r18_sampling_span_20261020/PLAN.md",
+      "device": 2048,
+      "inode": 121275911,
+      "bytes": 12298,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/docs/research/r18_sampling_span_20261020/PRODUCTION_PREPARATION.md",
+      "device": 2048,
+      "inode": 121275912,
+      "bytes": 12597,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/environment/README.md",
+      "device": 2048,
+      "inode": 121275914,
+      "bytes": 147,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/environment/requirements-ci.txt",
+      "device": 2048,
+      "inode": 121275915,
+      "bytes": 130,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/environment/requirements-confirmation-ci.txt",
+      "device": 2048,
+      "inode": 121275916,
+      "bytes": 411,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/environment/requirements-sampling-span-cpu.txt",
+      "device": 2048,
+      "inode": 121275917,
+      "bytes": 208,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/infer_seed.py",
+      "device": 2048,
+      "inode": 121275918,
+      "bytes": 33540,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/confirmation_access_history_20261018.json",
+      "device": 2048,
+      "inode": 121275920,
+      "bytes": 21859,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/confirmation_human_statements_20261018.json",
+      "device": 2048,
+      "inode": 121275921,
+      "bytes": 1603,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/experiments.json",
+      "device": 2048,
+      "inode": 121275922,
+      "bytes": 8736,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/frozen_abc_results_20261019.json",
+      "device": 2048,
+      "inode": 121275923,
+      "bytes": 4993,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/history/branches-20261016.json",
+      "device": 2048,
+      "inode": 121275925,
+      "bytes": 22865,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/imports/PROVENANCE.json",
+      "device": 2048,
+      "inode": 121275927,
+      "bytes": 826,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/imports/r18-seed12-release-002.json",
+      "device": 2048,
+      "inode": 121275928,
+      "bytes": 58000,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/legacy_source_identity.json",
+      "device": 2048,
+      "inode": 121275929,
+      "bytes": 973,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/p2_legacy_manifest.json",
+      "device": 2048,
+      "inode": 121275930,
+      "bytes": 6091,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/r18_sampling_span_design_20261020.json",
+      "device": 2048,
+      "inode": 121275931,
+      "bytes": 1853,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/sampling_span_infrastructure_origin.json",
+      "device": 2048,
+      "inode": 121275932,
+      "bytes": 2198,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/supplemental_material_location_20261018.json",
+      "device": 2048,
+      "inode": 121275933,
+      "bytes": 2434,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/manifests/visdrone_det_toolkit_005445.json",
+      "device": 2048,
+      "inode": 121275934,
+      "bytes": 4166,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/new_chain.py",
+      "device": 2048,
+      "inode": 121275935,
+      "bytes": 8116,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/new_entry.py",
+      "device": 2048,
+      "inode": 121275936,
+      "bytes": 13428,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/new_runtime.py",
+      "device": 2048,
+      "inode": 121275937,
+      "bytes": 8062,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/pyproject.toml",
+      "device": 2048,
+      "inode": 121275938,
+      "bytes": 455,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/r18_sampling_acceptance.py",
+      "device": 2048,
+      "inode": 121275939,
+      "bytes": 678,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/r18_sampling_admission.py",
+      "device": 2048,
+      "inode": 121275940,
+      "bytes": 640,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/r18_sampling_formal.py",
+      "device": 2048,
+      "inode": 121275941,
+      "bytes": 607,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/r18_sampling_span.py",
+      "device": 2048,
+      "inode": 121275942,
+      "bytes": 713,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/scripts/README.md",
+      "device": 2048,
+      "inode": 121275944,
+      "bytes": 165,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/seed_cpu_tests.py",
+      "device": 2048,
+      "inode": 121275945,
+      "bytes": 6558,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/seed_protocol.py",
+      "device": 2048,
+      "inode": 121275946,
+      "bytes": 16510,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/slice_core.py",
+      "device": 2048,
+      "inode": 121275947,
+      "bytes": 13053,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/slim_delivery.py",
+      "device": 2048,
+      "inode": 121275948,
+      "bytes": 3115,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/__init__.py",
+      "device": 2048,
+      "inode": 121275951,
+      "bytes": 99,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/__init__.py",
+      "device": 2048,
+      "inode": 121275953,
+      "bytes": 1300,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/artifacts.py",
+      "device": 2048,
+      "inode": 121275954,
+      "bytes": 11602,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/categories.py",
+      "device": 2048,
+      "inode": 121275955,
+      "bytes": 4355,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/config.py",
+      "device": 2048,
+      "inode": 121275956,
+      "bytes": 12685,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023827972557
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/contract.py",
+      "device": 2048,
+      "inode": 121275957,
+      "bytes": 3347,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/dataset.py",
+      "device": 2048,
+      "inode": 121275958,
+      "bytes": 4169,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/postprocessor.py",
+      "device": 2048,
+      "inode": 121275959,
+      "bytes": 6520,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/primary_evaluator.py",
+      "device": 2048,
+      "inode": 121275960,
+      "bytes": 70543,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/smoke.py",
+      "device": 2048,
+      "inode": 121275961,
+      "bytes": 55767,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/smoke_evidence.py",
+      "device": 2048,
+      "inode": 121275962,
+      "bytes": 89943,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/smoke_launcher.py",
+      "device": 2048,
+      "inode": 121275963,
+      "bytes": 53419,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/smoke_outer_launcher.py",
+      "device": 2048,
+      "inode": 121275964,
+      "bytes": 137276,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_adapter.py",
+      "device": 2048,
+      "inode": 121275965,
+      "bytes": 90937,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_contract.py",
+      "device": 2048,
+      "inode": 121275966,
+      "bytes": 151656,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_entry.py",
+      "device": 2048,
+      "inode": 121275967,
+      "bytes": 67560,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_evidence.py",
+      "device": 2048,
+      "inode": 121275968,
+      "bytes": 108891,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_process_launcher.py",
+      "device": 2048,
+      "inode": 121275969,
+      "bytes": 61791,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_runtime.py",
+      "device": 2048,
+      "inode": 121275970,
+      "bytes": 36824,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_t6_authorization.py",
+      "device": 2048,
+      "inode": 121275971,
+      "bytes": 53551,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_t6_engine.py",
+      "device": 2048,
+      "inode": 121275972,
+      "bytes": 81675,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_t6_entry.py",
+      "device": 2048,
+      "inode": 121275973,
+      "bytes": 89927,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_t6_outer_launcher.py",
+      "device": 2048,
+      "inode": 121275974,
+      "bytes": 49127,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_t6_process_launcher.py",
+      "device": 2048,
+      "inode": 121275975,
+      "bytes": 51014,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2a_contract.py",
+      "device": 2048,
+      "inode": 121275976,
+      "bytes": 56760,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2a_launcher.py",
+      "device": 2048,
+      "inode": 121275977,
+      "bytes": 66779,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2a_pilot.py",
+      "device": 2048,
+      "inode": 121275978,
+      "bytes": 52575,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2a_production.py",
+      "device": 2048,
+      "inode": 121275979,
+      "bytes": 100085,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2a_runtime.py",
+      "device": 2048,
+      "inode": 121275980,
+      "bytes": 62507,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b.py",
+      "device": 2048,
+      "inode": 121275981,
+      "bytes": 27880,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023828972576
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_admission.py",
+      "device": 2048,
+      "inode": 121275982,
+      "bytes": 113092,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_campaign.py",
+      "device": 2048,
+      "inode": 121275983,
+      "bytes": 28745,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_checkpoint.py",
+      "device": 2048,
+      "inode": 121275984,
+      "bytes": 51909,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_control.py",
+      "device": 2048,
+      "inode": 121275985,
+      "bytes": 99608,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_cross_eval.py",
+      "device": 2048,
+      "inode": 121275986,
+      "bytes": 33749,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_data.py",
+      "device": 2048,
+      "inode": 121275987,
+      "bytes": 36591,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py",
+      "device": 2048,
+      "inode": 121275988,
+      "bytes": 9275,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_development.py",
+      "device": 2048,
+      "inode": 121275989,
+      "bytes": 44360,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_device.py",
+      "device": 2048,
+      "inode": 121275990,
+      "bytes": 22097,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_engine.py",
+      "device": 2048,
+      "inode": 121275991,
+      "bytes": 27127,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_epoch60_continuation.py",
+      "device": 2048,
+      "inode": 121275992,
+      "bytes": 45064,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_evidence.py",
+      "device": 2048,
+      "inode": 121275993,
+      "bytes": 56310,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_evidence_campaign.py",
+      "device": 2048,
+      "inode": 121275994,
+      "bytes": 18916,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_geometry.py",
+      "device": 2048,
+      "inode": 121275995,
+      "bytes": 6964,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_hardware.py",
+      "device": 2048,
+      "inode": 121275996,
+      "bytes": 44308,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_official_gt.py",
+      "device": 2048,
+      "inode": 121275997,
+      "bytes": 13507,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_primary_cache.py",
+      "device": 2048,
+      "inode": 121275998,
+      "bytes": 8828,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_replication_campaign.py",
+      "device": 2048,
+      "inode": 121275999,
+      "bytes": 35252,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_replication_capacity.py",
+      "device": 2048,
+      "inode": 121276000,
+      "bytes": 53176,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_replication_gate.py",
+      "device": 2048,
+      "inode": 121276001,
+      "bytes": 69055,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_replication_summary.py",
+      "device": 2048,
+      "inode": 121276002,
+      "bytes": 54535,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_replication_worker.py",
+      "device": 2048,
+      "inode": 121276003,
+      "bytes": 56529,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_resolution.py",
+      "device": 2048,
+      "inode": 121276004,
+      "bytes": 39354,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_resolution_analysis.py",
+      "device": 2048,
+      "inode": 121276005,
+      "bytes": 18689,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_resolution_campaign.py",
+      "device": 2048,
+      "inode": 121276006,
+      "bytes": 22051,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_resolution_diagnostics.py",
+      "device": 2048,
+      "inode": 121276007,
+      "bytes": 57716,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_runtime.py",
+      "device": 2048,
+      "inode": 121276008,
+      "bytes": 12575,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_seed2_completion.py",
+      "device": 2048,
+      "inode": 121276009,
+      "bytes": 39925,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_seed2_completion_campaign.py",
+      "device": 2048,
+      "inode": 121276010,
+      "bytes": 17709,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_seed2_completion_summary.py",
+      "device": 2048,
+      "inode": 121276011,
+      "bytes": 38385,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_seed2_completion_worker.py",
+      "device": 2048,
+      "inode": 121276012,
+      "bytes": 35309,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/baseline/training_v2b_seed2_process_logs.py",
+      "device": 2048,
+      "inode": 121276013,
+      "bytes": 18029,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/c2_local_refinement.py",
+      "device": 2048,
+      "inode": 121276014,
+      "bytes": 6943,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/__init__.py",
+      "device": 2048,
+      "inode": 121276016,
+      "bytes": 2706,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/categories.py",
+      "device": 2048,
+      "inode": 121276017,
+      "bytes": 2056,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023829972593
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/cli.py",
+      "device": 2048,
+      "inode": 121276018,
+      "bytes": 3193,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/converter.py",
+      "device": 2048,
+      "inode": 121276019,
+      "bytes": 39001,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/evaluation.py",
+      "device": 2048,
+      "inode": 121276020,
+      "bytes": 4168,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/lineage.py",
+      "device": 2048,
+      "inode": 121276021,
+      "bytes": 3704,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/parser.py",
+      "device": 2048,
+      "inode": 121276022,
+      "bytes": 3887,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/process_launcher.py",
+      "device": 2048,
+      "inode": 121276023,
+      "bytes": 39210,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/protocol.py",
+      "device": 2048,
+      "inode": 121276024,
+      "bytes": 3829,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/schema.py",
+      "device": 2048,
+      "inode": 121276025,
+      "bytes": 2680,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/split.py",
+      "device": 2048,
+      "inode": 121276026,
+      "bytes": 15349,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/data_protocol/supplemental_zero_gt.py",
+      "device": 2048,
+      "inode": 121276027,
+      "bytes": 4527,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/encoder_fullpool.py",
+      "device": 2048,
+      "inode": 121276028,
+      "bytes": 12242,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/__init__.py",
+      "device": 2048,
+      "inode": 121276030,
+      "bytes": 254,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/acceptance_reuse.py",
+      "device": 2048,
+      "inode": 121276031,
+      "bytes": 8235,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/cache_adapter.py",
+      "device": 2048,
+      "inode": 121276032,
+      "bytes": 4507,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/channel.py",
+      "device": 2048,
+      "inode": 121276033,
+      "bytes": 31828,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/channel_simulation.py",
+      "device": 2048,
+      "inode": 121276034,
+      "bytes": 6009,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/checkpoint.py",
+      "device": 2048,
+      "inode": 121276035,
+      "bytes": 12310,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/client.py",
+      "device": 2048,
+      "inode": 121276036,
+      "bytes": 21260,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/cloud_probe.py",
+      "device": 2048,
+      "inode": 121276037,
+      "bytes": 15307,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/consumer_geometry.py",
+      "device": 2048,
+      "inode": 121276038,
+      "bytes": 9602,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/control.py",
+      "device": 2048,
+      "inode": 121276039,
+      "bytes": 29783,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/criterion.py",
+      "device": 2048,
+      "inode": 121276040,
+      "bytes": 9019,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/data.py",
+      "device": 2048,
+      "inode": 121276041,
+      "bytes": 18005,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/distribution.py",
+      "device": 2048,
+      "inode": 121276042,
+      "bytes": 7512,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/engine.py",
+      "device": 2048,
+      "inode": 121276043,
+      "bytes": 9702,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/forensic_capture.py",
+      "device": 2048,
+      "inode": 121276044,
+      "bytes": 8073,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/guard.py",
+      "device": 2048,
+      "inode": 121276045,
+      "bytes": 18518,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/ignore.py",
+      "device": 2048,
+      "inode": 121276046,
+      "bytes": 3956,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/lab_consumer.py",
+      "device": 2048,
+      "inode": 121276047,
+      "bytes": 37109,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/lab_geometry.py",
+      "device": 2048,
+      "inode": 121276048,
+      "bytes": 4283,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/lab_numerical.py",
+      "device": 2048,
+      "inode": 121276049,
+      "bytes": 25022,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/lab_run.py",
+      "device": 2048,
+      "inode": 121276050,
+      "bytes": 26335,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/limited_forensics.py",
+      "device": 2048,
+      "inode": 121276051,
+      "bytes": 18193,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/local_ready.py",
+      "device": 2048,
+      "inode": 121276052,
+      "bytes": 2254,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/material_paths.py",
+      "device": 2048,
+      "inode": 121276053,
+      "bytes": 2701,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/model.py",
+      "device": 2048,
+      "inode": 121276054,
+      "bytes": 14958,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/moment_prior.py",
+      "device": 2048,
+      "inode": 121276055,
+      "bytes": 5438,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/numerics.py",
+      "device": 2048,
+      "inode": 121276056,
+      "bytes": 1948,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/operators.py",
+      "device": 2048,
+      "inode": 121276057,
+      "bytes": 8093,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/process_io.py",
+      "device": 2048,
+      "inode": 121276058,
+      "bytes": 1639,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/protocol_evidence.py",
+      "device": 2048,
+      "inode": 121276059,
+      "bytes": 3906,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/recovery.py",
+      "device": 2048,
+      "inode": 121276060,
+      "bytes": 32382,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/recovery_client.py",
+      "device": 2048,
+      "inode": 121276061,
+      "bytes": 11887,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/role_resume.py",
+      "device": 2048,
+      "inode": 121276062,
+      "bytes": 37595,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/runio.py",
+      "device": 2048,
+      "inode": 121276063,
+      "bytes": 3788,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/storage.py",
+      "device": 2048,
+      "inode": 121276064,
+      "bytes": 3646,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/terminal_geometry.py",
+      "device": 2048,
+      "inode": 121276065,
+      "bytes": 4185,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/thermal_resume.py",
+      "device": 2048,
+      "inode": 121276066,
+      "bytes": 27345,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/trace.py",
+      "device": 2048,
+      "inode": 121276067,
+      "bytes": 11361,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/trace_contract.py",
+      "device": 2048,
+      "inode": 121276068,
+      "bytes": 5689,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/worker.py",
+      "device": 2048,
+      "inode": 121276069,
+      "bytes": 29176,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/__init__.py",
+      "device": 2048,
+      "inode": 121276071,
+      "bytes": 73,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/checkpoint.py",
+      "device": 2048,
+      "inode": 121276072,
+      "bytes": 12849,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/control.py",
+      "device": 2048,
+      "inode": 121276073,
+      "bytes": 12149,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/criterion.py",
+      "device": 2048,
+      "inode": 121276074,
+      "bytes": 5063,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/cuda_identity.py",
+      "device": 2048,
+      "inode": 121276075,
+      "bytes": 9840,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/data.py",
+      "device": 2048,
+      "inode": 121276076,
+      "bytes": 2459,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023830972611
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/endpoint.py",
+      "device": 2048,
+      "inode": 121276077,
+      "bytes": 4722,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/engine.py",
+      "device": 2048,
+      "inode": 121276078,
+      "bytes": 11248,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/evidence.py",
+      "device": 2048,
+      "inode": 121276079,
+      "bytes": 5872,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/failure.py",
+      "device": 2048,
+      "inode": 121276080,
+      "bytes": 1277,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/geometry.py",
+      "device": 2048,
+      "inode": 121276081,
+      "bytes": 2862,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/lifecycle.py",
+      "device": 2048,
+      "inode": 121276082,
+      "bytes": 7456,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/model.py",
+      "device": 2048,
+      "inode": 121276083,
+      "bytes": 7838,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/monitor_cpu.py",
+      "device": 2048,
+      "inode": 121276084,
+      "bytes": 5689,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/progress_v3.py",
+      "device": 2048,
+      "inode": 121276085,
+      "bytes": 8573,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/progress_v4.py",
+      "device": 2048,
+      "inode": 121276086,
+      "bytes": 9044,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/protocol_cpu.py",
+      "device": 2048,
+      "inode": 121276087,
+      "bytes": 8476,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/protocol_cpu_v4.py",
+      "device": 2048,
+      "inode": 121276088,
+      "bytes": 8530,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/recovery.py",
+      "device": 2048,
+      "inode": 121276089,
+      "bytes": 16123,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/recovery_e088.py",
+      "device": 2048,
+      "inode": 121276090,
+      "bytes": 16515,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/reuse.py",
+      "device": 2048,
+      "inode": 121276091,
+      "bytes": 4406,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/runio.py",
+      "device": 2048,
+      "inode": 121276092,
+      "bytes": 35,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_acceptance.py",
+      "device": 2048,
+      "inode": 121276093,
+      "bytes": 12350,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_acceptance_budget.py",
+      "device": 2048,
+      "inode": 121276094,
+      "bytes": 4417,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_acceptance_checks.py",
+      "device": 2048,
+      "inode": 121276095,
+      "bytes": 9773,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_admission.py",
+      "device": 2048,
+      "inode": 121276096,
+      "bytes": 10764,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_budget.py",
+      "device": 2048,
+      "inode": 121276097,
+      "bytes": 3215,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_checkpoint.py",
+      "device": 2048,
+      "inode": 121276098,
+      "bytes": 12570,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_external_acceptance.py",
+      "device": 2048,
+      "inode": 121276099,
+      "bytes": 5838,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_formal.py",
+      "device": 2048,
+      "inode": 121276100,
+      "bytes": 8227,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_formal_admission.py",
+      "device": 2048,
+      "inode": 121276101,
+      "bytes": 7940,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_inputs.py",
+      "device": 2048,
+      "inode": 121276102,
+      "bytes": 4215,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_job.py",
+      "device": 2048,
+      "inode": 121276103,
+      "bytes": 18408,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_model.py",
+      "device": 2048,
+      "inode": 121276104,
+      "bytes": 2363,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_observation.py",
+      "device": 2048,
+      "inode": 121276105,
+      "bytes": 6453,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_runtime.py",
+      "device": 2048,
+      "inode": 121276106,
+      "bytes": 26840,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_worker.py",
+      "device": 2048,
+      "inode": 121276107,
+      "bytes": 35719,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/transport.py",
+      "device": 2048,
+      "inode": 121276108,
+      "bytes": 6999,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/worker.py",
+      "device": 2048,
+      "inode": 121276109,
+      "bytes": 17616,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023831972629
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/__init__.py",
+      "device": 2048,
+      "inode": 121372674,
+      "bytes": 52,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023842972825
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/checkpoint.py",
+      "device": 2048,
+      "inode": 121372675,
+      "bytes": 13463,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/control.py",
+      "device": 2048,
+      "inode": 121372676,
+      "bytes": 15661,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/criterion.py",
+      "device": 2048,
+      "inode": 121372677,
+      "bytes": 6763,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/engine.py",
+      "device": 2048,
+      "inode": 121372678,
+      "bytes": 11065,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/evaluation.py",
+      "device": 2048,
+      "inode": 121372679,
+      "bytes": 6933,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/evaluation_data.py",
+      "device": 2048,
+      "inode": 121372680,
+      "bytes": 2151,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/geometry.py",
+      "device": 2048,
+      "inode": 121372681,
+      "bytes": 737,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/model.py",
+      "device": 2048,
+      "inode": 121372682,
+      "bytes": 15569,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/roles.py",
+      "device": 2048,
+      "inode": 121372683,
+      "bytes": 2242,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/runio.py",
+      "device": 2048,
+      "inode": 121372684,
+      "bytes": 612,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/r0/worker.py",
+      "device": 2048,
+      "inode": 121372685,
+      "bytes": 13378,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/research/__init__.py",
+      "device": 2048,
+      "inode": 121372687,
+      "bytes": 84,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/research/sampling_span.py",
+      "device": 2048,
+      "inode": 121372688,
+      "bytes": 5343,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_admission.py",
+      "device": 2048,
+      "inode": 121276110,
+      "bytes": 1832,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_data.py",
+      "device": 2048,
+      "inode": 121276111,
+      "bytes": 7868,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_entry_check.py",
+      "device": 2048,
+      "inode": 121276112,
+      "bytes": 15040,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_gpu.py",
+      "device": 2048,
+      "inode": 121276113,
+      "bytes": 10611,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_job.py",
+      "device": 2048,
+      "inode": 121276114,
+      "bytes": 20807,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_launch.sh",
+      "device": 2048,
+      "inode": 121276115,
+      "bytes": 264,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_path_check.py",
+      "device": 2048,
+      "inode": 121276116,
+      "bytes": 4925,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_runtime.py",
+      "device": 2048,
+      "inode": 121276117,
+      "bytes": 8905,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/supplemental_zero_check.py",
+      "device": 2048,
+      "inode": 121276118,
+      "bytes": 8138,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/test_seed_protocol.py",
+      "device": 2048,
+      "inode": 121276119,
+      "bytes": 13355,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/test_seed_readout.py",
+      "device": 2048,
+      "inode": 121276120,
+      "bytes": 4144,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/test_slice_core.py",
+      "device": 2048,
+      "inode": 121276121,
+      "bytes": 10012,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_confirmation_prepare.py",
+      "device": 2048,
+      "inode": 121372690,
+      "bytes": 5177,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_localization_channel.py",
+      "device": 2048,
+      "inode": 121372691,
+      "bytes": 11420,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_localization_f0.py",
+      "device": 2048,
+      "inode": 121372692,
+      "bytes": 25043,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_localization_lifecycle.py",
+      "device": 2048,
+      "inode": 121372693,
+      "bytes": 26047,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_localization_recovery.py",
+      "device": 2048,
+      "inode": 121372694,
+      "bytes": 13659,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_localization_recovery_prep.py",
+      "device": 2048,
+      "inode": 121372695,
+      "bytes": 5020,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_localization_storage.py",
+      "device": 2048,
+      "inode": 121372696,
+      "bytes": 4405,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_protocol_r18.py",
+      "device": 2048,
+      "inode": 121372697,
+      "bytes": 11426,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_protocol_r18_execution.py",
+      "device": 2048,
+      "inode": 121372698,
+      "bytes": 4739,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_repo_management.py",
+      "device": 2048,
+      "inode": 121372699,
+      "bytes": 5455,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_repository_contract.py",
+      "device": 2048,
+      "inode": 121372700,
+      "bytes": 895,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_sampling_span.py",
+      "device": 2048,
+      "inode": 121372701,
+      "bytes": 8147,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_supplemental_plan.py",
+      "device": 2048,
+      "inode": 121372702,
+      "bytes": 7739,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tests/test_supplemental_zero_gt.py",
+      "device": 2048,
+      "inode": 121372703,
+      "bytes": 12609,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/author_supplemental_extension.py",
+      "device": 2048,
+      "inode": 121372705,
+      "bytes": 5780,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_confirmation_ci.py",
+      "device": 2048,
+      "inode": 121372706,
+      "bytes": 2332,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_acceptance_cpu.py",
+      "device": 2048,
+      "inode": 121372707,
+      "bytes": 12905,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_admission_cpu.py",
+      "device": 2048,
+      "inode": 121372708,
+      "bytes": 5128,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_cpu.py",
+      "device": 2048,
+      "inode": 121372709,
+      "bytes": 2901,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_formal_cpu.py",
+      "device": 2048,
+      "inode": 121372710,
+      "bytes": 12326,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_lab_inputs.py",
+      "device": 2048,
+      "inode": 121372711,
+      "bytes": 5684,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_production_cpu.py",
+      "device": 2048,
+      "inode": 121372712,
+      "bytes": 12351,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_sampling_span_resource_age.py",
+      "device": 2048,
+      "inode": 121372713,
+      "bytes": 5559,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/check_zero_gt_development_inputs.py",
+      "device": 2048,
+      "inode": 121372714,
+      "bytes": 3773,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/consolidate_abc_results.py",
+      "device": 2048,
+      "inode": 121372715,
+      "bytes": 13954,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/diagnose_sampling_span_resource_age.py",
+      "device": 2048,
+      "inode": 121372716,
+      "bytes": 3979,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023843972843
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/localization/deploy.py",
+      "device": 2048,
+      "inode": 121372718,
+      "bytes": 281,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/localization/transport/local_ops.py",
+      "device": 2048,
+      "inode": 121372720,
+      "bytes": 2745,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/localization/transport/parallel_transfer.py",
+      "device": 2048,
+      "inode": 121372721,
+      "bytes": 9004,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/localization/transport/streaming_transfer.py",
+      "device": 2048,
+      "inode": 121372722,
+      "bytes": 11258,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/localization_operator_check.py",
+      "device": 2048,
+      "inode": 121372723,
+      "bytes": 11206,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/prepare_sampling_span_lab.py",
+      "device": 2048,
+      "inode": 121372724,
+      "bytes": 5564,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/protocol_r18/deploy.py",
+      "device": 2048,
+      "inode": 121372726,
+      "bytes": 410,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/repo_manage.py",
+      "device": 2048,
+      "inode": 121372727,
+      "bytes": 8971,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/repository_contract_check.py",
+      "device": 2048,
+      "inode": 121372728,
+      "bytes": 5335,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/tools/zero_area_gt_review.py",
+      "device": 2048,
+      "inode": 121372729,
+      "bytes": 24215,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/LICENSE",
+      "device": 2048,
+      "inode": 121372732,
+      "bytes": 11357,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/dataset/coco_detection.yml",
+      "device": 2048,
+      "inode": 121372735,
+      "bytes": 933,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/dataset/voc_detection.yml",
+      "device": 2048,
+      "inode": 121372736,
+      "bytes": 702,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/include/dataloader.yml",
+      "device": 2048,
+      "inode": 121372739,
+      "bytes": 946,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/include/optimizer.yml",
+      "device": 2048,
+      "inode": 121372740,
+      "bytes": 611,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/include/rtdetr_r50vd.yml",
+      "device": 2048,
+      "inode": 121372741,
+      "bytes": 1224,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r101vd_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372742,
+      "bytes": 621,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r18vd_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372743,
+      "bytes": 772,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r34vd_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372744,
+      "bytes": 772,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r50vd_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372745,
+      "bytes": 211,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetr/rtdetr_r50vd_m_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372746,
+      "bytes": 579,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/dataloader.yml",
+      "device": 2048,
+      "inode": 121372749,
+      "bytes": 1185,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/optimizer.yml",
+      "device": 2048,
+      "inode": 121372750,
+      "bytes": 514,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml",
+      "device": 2048,
+      "inode": 121372751,
+      "bytes": 1370,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_hgnetv2_h_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372752,
+      "bytes": 761,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_hgnetv2_l_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372753,
+      "bytes": 611,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_hgnetv2_x_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372754,
+      "bytes": 738,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r101vd_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372755,
+      "bytes": 626,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+      "device": 2048,
+      "inode": 121372756,
+      "bytes": 643,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_voc.yml",
+      "device": 2048,
+      "inode": 121372757,
+      "bytes": 664,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_dsp_3x_coco.yml",
+      "device": 2048,
+      "inode": 121372758,
+      "bytes": 792,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_sp1_120e_coco.yml",
+      "device": 2048,
+      "inode": 121372759,
+      "bytes": 671,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_sp2_120e_coco.yml",
+      "device": 2048,
+      "inode": 121372760,
+      "bytes": 671,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_sp3_120e_coco.yml",
+      "device": 2048,
+      "inode": 121372761,
+      "bytes": 671,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r34vd_120e_coco.yml",
+      "device": 2048,
+      "inode": 121372762,
+      "bytes": 908,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r34vd_dsp_1x_coco.yml",
+      "device": 2048,
+      "inode": 121372763,
+      "bytes": 1037,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_6x_coco.yml",
+      "device": 2048,
+      "inode": 121372764,
+      "bytes": 473,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_dsp_1x_coco.yml",
+      "device": 2048,
+      "inode": 121372765,
+      "bytes": 494,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_m_7x_coco.yml",
+      "device": 2048,
+      "inode": 121372766,
+      "bytes": 702,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r50vd_m_dsp_3x_coco.yml",
+      "device": 2048,
+      "inode": 121372767,
+      "bytes": 835,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/configs/runtime.yml",
+      "device": 2048,
+      "inode": 121372768,
+      "bytes": 234,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/docker-compose.yml",
+      "device": 2048,
+      "inode": 121372769,
+      "bytes": 496,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_onnxruntime.py",
+      "device": 2048,
+      "inode": 121372772,
+      "bytes": 1549,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_openvino.py",
+      "device": 2048,
+      "inode": 121372773,
+      "bytes": 124,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_tensorrt.py",
+      "device": 2048,
+      "inode": 121372774,
+      "bytes": 10831,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/references/deploy/rtdetrv2_torch.py",
+      "device": 2048,
+      "inode": 121372775,
+      "bytes": 2412,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/__init__.py",
+      "device": 2048,
+      "inode": 121372777,
+      "bytes": 154,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/core/__init__.py",
+      "device": 2048,
+      "inode": 121372779,
+      "bytes": 206,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/core/_config.py",
+      "device": 2048,
+      "inode": 121372780,
+      "bytes": 9123,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/core/workspace.py",
+      "device": 2048,
+      "inode": 121372781,
+      "bytes": 5529,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/core/yaml_config.py",
+      "device": 2048,
+      "inode": 121372782,
+      "bytes": 6736,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/core/yaml_utils.py",
+      "device": 2048,
+      "inode": 121372783,
+      "bytes": 3085,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/__init__.py",
+      "device": 2048,
+      "inode": 121372785,
+      "bytes": 473,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023844972861
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/_misc.py",
+      "device": 2048,
+      "inode": 121372786,
+      "bytes": 1830,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataloader.py",
+      "device": 2048,
+      "inode": 121372787,
+      "bytes": 2937,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/__init__.py",
+      "device": 2048,
+      "inode": 121372789,
+      "bytes": 460,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/_dataset.py",
+      "device": 2048,
+      "inode": 121372790,
+      "bytes": 650,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/cifar_dataset.py",
+      "device": 2048,
+      "inode": 121372791,
+      "bytes": 507,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/coco_dataset.py",
+      "device": 2048,
+      "inode": 121372792,
+      "bytes": 7820,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/coco_eval.py",
+      "device": 2048,
+      "inode": 121372793,
+      "bytes": 618,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/coco_utils.py",
+      "device": 2048,
+      "inode": 121372794,
+      "bytes": 6803,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/voc_detection.py",
+      "device": 2048,
+      "inode": 121372795,
+      "bytes": 2855,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/dataset/voc_eval.py",
+      "device": 2048,
+      "inode": 121372796,
+      "bytes": 163,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/transforms/__init__.py",
+      "device": 2048,
+      "inode": 121372798,
+      "bytes": 384,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/transforms/_transforms.py",
+      "device": 2048,
+      "inode": 121372799,
+      "bytes": 4686,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/transforms/container.py",
+      "device": 2048,
+      "inode": 121372800,
+      "bytes": 2778,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/transforms/functional.py",
+      "device": 2048,
+      "inode": 121372801,
+      "bytes": 5792,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/transforms/mosaic.py",
+      "device": 2048,
+      "inode": 121372802,
+      "bytes": 2498,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/data/transforms/presets.py",
+      "device": 2048,
+      "inode": 121372803,
+      "bytes": 57,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/__init__.py",
+      "device": 2048,
+      "inode": 121372805,
+      "bytes": 187,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/box_ops.py",
+      "device": 2048,
+      "inode": 121372806,
+      "bytes": 2850,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/dist_utils.py",
+      "device": 2048,
+      "inode": 121372807,
+      "bytes": 7154,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/lazy_loader.py",
+      "device": 2048,
+      "inode": 121372808,
+      "bytes": 2211,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/logger.py",
+      "device": 2048,
+      "inode": 121372809,
+      "bytes": 7731,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/profiler_utils.py",
+      "device": 2048,
+      "inode": 121372810,
+      "bytes": 1780,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/misc/visualizer.py",
+      "device": 2048,
+      "inode": 121372811,
+      "bytes": 876,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/__init__.py",
+      "device": 2048,
+      "inode": 121372813,
+      "bytes": 256,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/arch/__init__.py",
+      "device": 2048,
+      "inode": 121372815,
+      "bytes": 134,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/arch/classification.py",
+      "device": 2048,
+      "inode": 121372816,
+      "bytes": 969,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/arch/yolo.py",
+      "device": 2048,
+      "inode": 121372817,
+      "bytes": 725,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/__init__.py",
+      "device": 2048,
+      "inode": 121372819,
+      "bytes": 403,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/common.py",
+      "device": 2048,
+      "inode": 121372820,
+      "bytes": 2940,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/csp_darknet.py",
+      "device": 2048,
+      "inode": 121372821,
+      "bytes": 6281,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/csp_resnet.py",
+      "device": 2048,
+      "inode": 121372822,
+      "bytes": 9120,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/hgnetv2.py",
+      "device": 2048,
+      "inode": 121372823,
+      "bytes": 13541,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/presnet.py",
+      "device": 2048,
+      "inode": 121372824,
+      "bytes": 7431,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/test_resnet.py",
+      "device": 2048,
+      "inode": 121372825,
+      "bytes": 2697,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/timm_model.py",
+      "device": 2048,
+      "inode": 121372826,
+      "bytes": 2112,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/torchvision_model.py",
+      "device": 2048,
+      "inode": 121372827,
+      "bytes": 1214,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/backbone/utils.py",
+      "device": 2048,
+      "inode": 121372828,
+      "bytes": 1786,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/criterion/__init__.py",
+      "device": 2048,
+      "inode": 121372830,
+      "bytes": 203,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/criterion/det_criterion.py",
+      "device": 2048,
+      "inode": 121372831,
+      "bytes": 7565,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/postprocessor/__init__.py",
+      "device": 2048,
+      "inode": 121372833,
+      "bytes": 108,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/postprocessor/box_revert.py",
+      "device": 2048,
+      "inode": 121372834,
+      "bytes": 1777,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/postprocessor/detr_postprocessor.py",
+      "device": 2048,
+      "inode": 121372835,
+      "bytes": 2613,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/nn/postprocessor/nms_postprocessor.py",
+      "device": 2048,
+      "inode": 121372836,
+      "bytes": 2386,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/optim/__init__.py",
+      "device": 2048,
+      "inode": 121372838,
+      "bytes": 137,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/optim/amp.py",
+      "device": 2048,
+      "inode": 121372839,
+      "bytes": 196,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/optim/ema.py",
+      "device": 2048,
+      "inode": 121372840,
+      "bytes": 3221,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/optim/optim.py",
+      "device": 2048,
+      "inode": 121372841,
+      "bytes": 565,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/optim/warmup.py",
+      "device": 2048,
+      "inode": 121372842,
+      "bytes": 1515,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/solver/__init__.py",
+      "device": 2048,
+      "inode": 121372844,
+      "bytes": 284,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/solver/_solver.py",
+      "device": 2048,
+      "inode": 121372845,
+      "bytes": 5797,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/solver/clas_engine.py",
+      "device": 2048,
+      "inode": 121372846,
+      "bytes": 2400,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/solver/clas_solver.py",
+      "device": 2048,
+      "inode": 121372847,
+      "bytes": 2608,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/solver/det_engine.py",
+      "device": 2048,
+      "inode": 121372848,
+      "bytes": 5825,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/solver/det_solver.py",
+      "device": 2048,
+      "inode": 121372849,
+      "bytes": 4880,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/__init__.py",
+      "device": 2048,
+      "inode": 121372851,
+      "bytes": 79,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/__init__.py",
+      "device": 2048,
+      "inode": 121372853,
+      "bytes": 416,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/box_ops.py",
+      "device": 2048,
+      "inode": 121372854,
+      "bytes": 2655,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/conver_params.py",
+      "device": 2048,
+      "inode": 121372855,
+      "bytes": 2659,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/denoising.py",
+      "device": 2048,
+      "inode": 121372856,
+      "bytes": 4625,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/hybrid_encoder.py",
+      "device": 2048,
+      "inode": 121372857,
+      "bytes": 12309,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/matcher.py",
+      "device": 2048,
+      "inode": 121372858,
+      "bytes": 5010,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023845972879
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr.py",
+      "device": 2048,
+      "inode": 121372859,
+      "bytes": 937,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr_criterion.py",
+      "device": 2048,
+      "inode": 121372860,
+      "bytes": 12791,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr_decoder.py",
+      "device": 2048,
+      "inode": 121372861,
+      "bytes": 23024,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetr_postprocessor.py",
+      "device": 2048,
+      "inode": 121372862,
+      "bytes": 3104,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_criterion.py",
+      "device": 2048,
+      "inode": 121372863,
+      "bytes": 12656,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py",
+      "device": 2048,
+      "inode": 121372864,
+      "bytes": 24521,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/utils.py",
+      "device": 2048,
+      "inode": 121372865,
+      "bytes": 5971,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/tools/export_onnx.py",
+      "device": 2048,
+      "inode": 121372867,
+      "bytes": 3340,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/tools/export_trt.py",
+      "device": 2048,
+      "inode": 121372868,
+      "bytes": 3567,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/tools/run_profile.py",
+      "device": 2048,
+      "inode": 121372869,
+      "bytes": 3323,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/vendor/rtdetrv2_pytorch/tools/train.py",
+      "device": 2048,
+      "inode": 121372870,
+      "bytes": 2140,
+      "mtime_ns": 0,
+      "ctime_ns": 1792541023846972897
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-001/contract.json",
+      "device": 2048,
+      "inode": 121372910,
+      "bytes": 21982,
+      "mtime_ns": 1792541833939244622,
+      "ctime_ns": 1792541834011246262
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/resource-age-repair-bundle-001/RUN_SOURCE_MANIFEST.json",
+      "device": 2048,
+      "inode": 121275797,
+      "bytes": 83131,
+      "mtime_ns": 1792541018148871268,
+      "ctime_ns": 1792541018148871268
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/STOP.json",
+      "device": 2048,
+      "inode": 121372990,
+      "bytes": 1007,
+      "mtime_ns": 1792601214813303524,
+      "ctime_ns": 1792601214863304469
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0-supervisor-process/PROCESS.json",
+      "device": 2048,
+      "inode": 121372998,
+      "bytes": 1191,
+      "mtime_ns": 1792601214611299706,
+      "ctime_ns": 1792601214611299706
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/RESULT.json",
+      "device": 2048,
+      "inode": 121372992,
+      "bytes": 4128,
+      "mtime_ns": 1792601102489247245,
+      "ctime_ns": 1792601102548248287
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/worker-exit.json",
+      "device": 2048,
+      "inode": 121372994,
+      "bytes": 693,
+      "mtime_ns": 1792601102661250284,
+      "ctime_ns": 1792601102716251255
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/endpoint.json",
+      "device": 2048,
+      "inode": 121372993,
+      "bytes": 1081,
+      "mtime_ns": 1792601102303243959,
+      "ctime_ns": 1792601102358244931
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/binding.json",
+      "device": 2048,
+      "inode": 121372986,
+      "bytes": 12351,
+      "mtime_ns": 1792601102229242652,
+      "ctime_ns": 1792601102280243553
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/checkpoint-e120.pth",
+      "device": 2048,
+      "inode": 121372989,
+      "bytes": 323457665,
+      "mtime_ns": 1792601099043186439,
+      "ctime_ns": 1792601101467229197
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/checkpoint-e120.pth.complete.json",
+      "device": 2048,
+      "inode": 121372987,
+      "bytes": 557,
+      "mtime_ns": 1792601101490229602,
+      "ctime_ns": 1792601101545230573
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/COST_LEDGER.json",
+      "device": 2048,
+      "inode": 121372999,
+      "bytes": 1507,
+      "mtime_ns": 1792601214726301880,
+      "ctime_ns": 1792601214763302579
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/admission/initialization.json",
+      "device": 2048,
+      "inode": 121372935,
+      "bytes": 3847,
+      "mtime_ns": 1792541957938026210,
+      "ctime_ns": 1792541957988027316
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/events.jsonl",
+      "device": 2048,
+      "inode": 121372968,
+      "bytes": 15509099568,
+      "mtime_ns": 1792601102571248694,
+      "ctime_ns": 1792601102571248694
+    }
+  ],
+  "changed_source_files": [
+    ".github/workflows/repository-checks.yml",
+    "configs/research/r18_sampling_span_formal_v1.json",
+    "src/sparse_rtdetr/protocol_r18/span_external_acceptance.py",
+    "src/sparse_rtdetr/protocol_r18/span_formal.py",
+    "src/sparse_rtdetr/protocol_r18/span_formal_admission.py",
+    "src/sparse_rtdetr/protocol_r18/span_job.py",
+    "src/sparse_rtdetr/protocol_r18/span_runtime.py",
+    "src/sparse_rtdetr/protocol_r18/span_worker.py"
+  ],
+  "state_health": {
+    "status": "PASS",
+    "tensor_count": 2057,
+    "native_anchor_caches": {
+      "model": {
+        "invalid_coordinates": 3232,
+        "valid_coordinates": 81440,
+        "invalid_values": "positive_infinity_only"
+      },
+      "ema": {
+        "invalid_coordinates": 3232,
+        "valid_coordinates": 81440,
+        "invalid_values": "positive_infinity_only"
+      }
+    },
+    "all_other_tensors_finite": true
+  },
+  "old_closure_created": false,
+  "checkpoint_copied": false,
+  "training_repeated": false,
+  "checkpoint_loaded_for_training": false
+}

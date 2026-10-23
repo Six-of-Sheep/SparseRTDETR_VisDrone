@@ -24,6 +24,10 @@ jobs:
       - run: python -B tools/repo_manage.py check
       - name: H2 actual source deployment CLI (stdlib, Python 3.10 and 3.12)
         run: python -B tools/check_h2_deploy_cli.py --output /tmp/h2-deploy-cpu
+      - name: H2 authenticated historical N actual admission CLI (no models)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_h2_history_cli.py --output /tmp/h2-history-cpu
       - run: python -B tools/repo_manage.py verify-import
       - run: python -B -m unittest discover -s tests -p test_repo_management.py
       - run: python -m pip install -r environment/requirements-ci.txt

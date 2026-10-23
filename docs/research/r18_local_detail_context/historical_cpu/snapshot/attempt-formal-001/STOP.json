@@ -1,0 +1,10 @@
+{
+  "status": "STOP_NO_RETRY",
+  "completed_stages": [
+    "admission"
+  ],
+  "error": "RuntimeError('formal supervised stage stopped: train-B0')",
+  "traceback": "Traceback (most recent call last):\n  File \"/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/protocol_r18/span_formal.py\", line 84, in run\n    rt.require(p.returncode==0,'formal supervised stage stopped: '+stage)\n  File \"/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/releases/ab88a9b3b2c8-formal-resource-age-001/src/sparse_rtdetr/localization/runio.py\", line 25, in require\n    if not ok: raise RuntimeError(reason)\nRuntimeError: formal supervised stage stopped: train-B0\n",
+  "contract_sha256": "44fcb7481f393b6c54169b30611b3ec83666d20d59a58997ea6923a65557cb29",
+  "elapsed_seconds": 59320.13109998999
+}
