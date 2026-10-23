@@ -1,0 +1,71 @@
+{
+  "status": "PASS",
+  "tests": 23,
+  "skips": 0,
+  "cases": [
+    "external_relative_reference_uses_original_release_root",
+    "actual_raw_prepare_bind_and_hidden_contract",
+    "actual_full_CLI_cross_epoch_train_endpoint_dual_score_cost_compare_export",
+    "inherited_18_forward_and_77_seconds_not_reset",
+    "U_D_independent_complete_update_clocks",
+    "actual_fullstate_restore_across_epochs_fresh_initial_and_EMA_endpoint_load",
+    "four_new_groups_eight_evaluator_calls_N_scores_exact_reuse",
+    "six_score_JSON_13_COCO_and_7_primary_metrics",
+    "same_forward_coarse_final_native_matching_small_GT_denominators",
+    "three_arm_two_warmup_six_all_permutations_FP32_E2E",
+    "all_fixed_gates_full_deltas_no_fixture_scientific_claim",
+    "slim_whitelist_SHA_no_state_or_prediction_export",
+    "duplicate_launch_run_no_budget_reset",
+    "changed_policy_actual_CLI_rejected",
+    "changed_resources_actual_CLI_rejected",
+    "changed_scope_actual_CLI_rejected",
+    "new_anomaly_actual_worker_exit_own_tree_cleanup_STOP_slim_no_retry",
+    "forward_overrun_actual_CLI_hard_refusal_and_exit",
+    "update_overrun_actual_CLI_hard_refusal_and_exit",
+    "time_overrun_actual_CLI_hard_refusal_and_exit",
+    "allocated_overrun_actual_CLI_hard_refusal_and_exit",
+    "bounded_full_event_stream_tamper_rejected",
+    "wrong_endpoint_SHA_rejected_before_weights_loaded"
+  ],
+  "actual_CLI_invocations": 21,
+  "CPU_only": true,
+  "bootstrap_fixture": false,
+  "CUDA_initialized": false,
+  "GPU_forward_calls": 0,
+  "normal_new_CPU_forwards": 36,
+  "fixture_not_science": true,
+  "source_files": [
+    {
+      "path": "h2_formal.py",
+      "bytes": 398,
+      "sha256": "6b539f14e4a53d166a6c9971e6293f27df7bd45200670cf6a7eff256074d7a09"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_formal.py",
+      "bytes": 24917,
+      "sha256": "e4c5c37fbf18c7a3152fcc7c10fc042d8e83b5581ef74d9228738bc45465ec45"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_formal_contract.py",
+      "bytes": 11983,
+      "sha256": "f20273e7c2ff03f4821b7c6be77b9e08f89c33d16a51a5b43ce03a0dab3f39a8"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_formal_resources.py",
+      "bytes": 5192,
+      "sha256": "16f527588dfd8e72e7b3da19ca8fd090bd180640a69ba31a392c43da10b3e90b"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_formal_worker.py",
+      "bytes": 23435,
+      "sha256": "b7badd86b0d6669f38239911c14dafafc6e3eae5ef907492f341219659d6b7e9"
+    },
+    {
+      "path": "tools/check_h2_formal_cli.py",
+      "bytes": 11388,
+      "sha256": "24a416aabc83f518f89de0a9b663ac329207146ec42b010589368bd41d719516"
+    }
+  ],
+  "python": "3.10.16",
+  "time_epoch": 1792774979.3366518
+}
