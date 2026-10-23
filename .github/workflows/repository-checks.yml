@@ -32,3 +32,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - name: Local-detail center design leaf (synthetic CPU only, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/local_detail_cpu.py --check-only

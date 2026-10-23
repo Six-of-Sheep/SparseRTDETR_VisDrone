@@ -1,0 +1,67 @@
+{
+  "time": "2026-10-23T20:58:36.487063+08:00",
+  "files": [
+    {
+      "id": "SD_DETR_ICCV2023",
+      "url": "https://openaccess.thecvf.com/content/ICCV2023/papers/Zhang_Decoupled_DETR_Spatially_Disentangling_Localization_and_Classification_for_Improved_End-to-End_ICCV_2023_paper.pdf",
+      "bytes": 2539181,
+      "sha256": "bd0b8a5134688a252c64cb6ac4602ee1c9a6f937a6f76c4cddb7501bfaa7179e",
+      "pages": 10,
+      "status": "FETCHED_PRIMARY_FULLTEXT",
+      "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/SD_DETR_ICCV2023.pdf",
+      "read_scope": [
+        "PDF3-4, sections3.1-3.2, Fig3, Eq3"
+      ]
+    },
+    {
+      "id": "CDCN_CVPR2020",
+      "url": "https://openaccess.thecvf.com/content_CVPR_2020/papers/Yu_Searching_Central_Difference_Convolutional_Networks_for_Face_Anti-Spoofing_CVPR_2020_paper.pdf",
+      "bytes": 1604888,
+      "sha256": "69c96e04eeef794a082cb8180dba8a320b55fbb6a2072211244c3e63194b9f54",
+      "pages": 11,
+      "status": "FETCHED_PRIMARY_FULLTEXT",
+      "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/CDCN_CVPR2020.pdf",
+      "read_scope": [
+        "PDF3-4, section3.1, Eq2-4"
+      ]
+    },
+    {
+      "id": "PiDiViT_ICCV2025",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/papers/Zhou_When_Pixel_Difference_Patterns_Meet_ViT_PiDiViT_for_Few-Shot_Object_ICCV_2025_paper.pdf",
+      "bytes": 3948822,
+      "sha256": "1e0b5c94052eb5daeab29ae8d9942edd029a32a036481b435e7f6a9003394e64",
+      "pages": 10,
+      "status": "FETCHED_PRIMARY_FULLTEXT",
+      "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/PiDiViT_ICCV2025.pdf",
+      "read_scope": [
+        "PDF3-5, section3.1-3.3, Eq1-7"
+      ]
+    },
+    {
+      "id": "SABL_ECCV2020",
+      "url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf",
+      "bytes": 927887,
+      "sha256": "cec13717d50f1a2cf527e8af63a223ed1f363b65ffeb378728e3f7656c2a344e",
+      "pages": 16,
+      "status": "FETCHED_PRIMARY_FULLTEXT",
+      "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/SABL_ECCV2020.pdf",
+      "read_scope": [
+        "PDF4-5, Fig2, section3.1-3.2"
+      ]
+    },
+    {
+      "id": "PiDiNet_ICCV2021",
+      "url": "https://openaccess.thecvf.com/content/ICCV2021/papers/Su_Pixel_Difference_Networks_for_Efficient_Edge_Detection_ICCV_2021_paper.pdf",
+      "bytes": 2742901,
+      "sha256": "7ac637512d852cee0ba6cf2d475c3bb06ded4c34431be4b1d93cea74e1da4e09",
+      "pages": 11,
+      "status": "FETCHED_PRIMARY_FULLTEXT",
+      "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/PiDiNet_ICCV2021.pdf",
+      "read_scope": [
+        "PDF3-4, section3, Eq2-3"
+      ]
+    }
+  ],
+  "scope": "Five direct primary fulltexts only; not a broad survey, no author code reproduction",
+  "novelty": "specific routing difference described, global originality UNKNOWN"
+}

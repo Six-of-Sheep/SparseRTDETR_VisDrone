@@ -1,0 +1,18 @@
+{
+  "source_commit": "45cac46b3b3b329d3c3ee12bcc0293c23e24ccc1",
+  "source_document": "docs/research/r18_target_support/RESULTS.md",
+  "P_quality": "FAIL",
+  "support_diagnostic": "CLOSED_PASS",
+  "matched_small_per_model": 1697,
+  "matched_P_trigger_layer_instances": 574,
+  "matched_P_trigger_unique_query": 214,
+  "delta_conditional_inside_mean_support_pp": [
+    -1.046586809,
+    -1.397261616,
+    -1.385340231
+  ],
+  "does_not_prove_training_cause": true,
+  "inside_mass_is_not_quality": true,
+  "P_and_diagnostic_ended_by_owner": true,
+  "no_P_diagnostic_extension": true
+}
