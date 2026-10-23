@@ -8,6 +8,7 @@
 - [实验导航](docs/EXPERIMENTS.md)与[机器可读登记](manifests/experiments.json)：科学状态和代码身份分别记录。
 - [源码导入说明](docs/SOURCE_IMPORT.md)：317文件的出处及复现限制。
 - [历史分支索引](docs/HISTORY_BRANCHES.md)：保留历史，不用旧分支充当默认入口。
+- [采样尺度研究中文正文 v0.1](docs/papers/r18_sampling_scale/MANUSCRIPT_v0.1.md)：工作标题下的引言、相关工作、方法及实验设置，正式结果待补。
 
 ## 已有结果
 

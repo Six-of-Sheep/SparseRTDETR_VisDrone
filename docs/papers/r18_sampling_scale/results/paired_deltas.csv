@@ -1,0 +1,121 @@
+pair,budget,evaluator,metric,delta_pp,origin
+P-B0,600,COCO_bridge,AP,0.3486384412187238,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AP50,0.5179088514187913,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AP75,0.06959582416564136,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,APS,0.03468461282550295,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,APM,0.6027139021210604,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,APL,-1.859021056114829,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AR1,0.25632813914017866,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AR10,0.38661374812558047,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AR100,0.4072062555536937,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AR_small,0.3762183322502055,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AR_medium,0.47972740298338756,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AR_large,-2.6876174602960767,frozen comparison.deltas_pp
+P-B0,600,COCO_bridge,AP75_small,-0.5521842588290526,frozen comparison.deltas_pp
+P-B0,600,primary,AP,0.29309074662493373,frozen comparison.quality_gates
+P-B0,600,primary,AP50,0.4615691539004132,descriptive subtraction of already-scored metrics
+P-B0,600,primary,AP75,0.0847281865028009,descriptive subtraction of already-scored metrics
+P-B0,600,primary,AR1,-0.04660582646496003,descriptive subtraction of already-scored metrics
+P-B0,600,primary,AR10,0.14770705467256118,descriptive subtraction of already-scored metrics
+P-B0,600,primary,AR100,0.1961888783357182,descriptive subtraction of already-scored metrics
+P-B0,600,primary,AR500,0.2082780060473013,descriptive subtraction of already-scored metrics
+P-B1,600,COCO_bridge,AP,0.2629046038070848,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AP50,0.3162983406318043,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AP75,0.14544002811902046,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,APS,0.2912067664612966,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,APM,0.36761458494287136,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,APL,-2.3972073582468276,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AR1,0.18642275443899875,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AR10,0.1865007516828776,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AR100,0.24316515206003753,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AR_small,0.39845423009630676,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AR_medium,0.2395380591255214,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AR_large,-1.1492995788461746,frozen comparison.deltas_pp
+P-B1,600,COCO_bridge,AP75_small,0.007046114963207839,frozen comparison.deltas_pp
+P-B1,600,primary,AP,0.20278479604068878,frozen comparison.quality_gates
+P-B1,600,primary,AP50,0.3399448937924845,descriptive subtraction of already-scored metrics
+P-B1,600,primary,AP75,0.045848095868429084,descriptive subtraction of already-scored metrics
+P-B1,600,primary,AR1,-0.0378990564096916,descriptive subtraction of already-scored metrics
+P-B1,600,primary,AR10,0.06725696383871416,descriptive subtraction of already-scored metrics
+P-B1,600,primary,AR100,0.06784873283539383,descriptive subtraction of already-scored metrics
+P-B1,600,primary,AR500,0.12120426036748455,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AP,0.08573383741163898,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AP50,0.201610510786987,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AP75,-0.0758442039533791,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,APS,-0.25652215363579367,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,APM,0.235099317178189,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,APL,0.5381863021319988,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AR1,0.0699053847011799,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AR10,0.20011299644270286,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AR100,0.1640411034936562,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AR_small,-0.02223589784610125,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AR_medium,0.24018934385786617,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AR_large,-1.5383178814499021,descriptive subtraction of already-scored metrics
+B1-B0,600,COCO_bridge,AP75_small,-0.5592303737922605,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AP,0.09030595058424495,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AP50,0.1216242601079287,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AP75,0.03888009063437181,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AR1,-0.008706770055268431,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AR10,0.08045009083384702,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AR100,0.12834014550032435,descriptive subtraction of already-scored metrics
+B1-B0,600,primary,AR500,0.08707374567981674,descriptive subtraction of already-scored metrics
+P-B0,300,COCO_bridge,AP,0.35861615796985435,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AP50,0.5468682928941204,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AP75,0.10151235186246499,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,APS,0.032327924008060394,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,APM,0.5875491453946502,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,APL,-1.7377274271748122,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AR1,0.22966483868981785,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AR10,0.2749842480676279,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AR100,0.41440157851014847,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AR_small,0.1735535860826365,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AR_medium,0.6191114379982654,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AR_large,-1.864039720466193,frozen comparison.deltas_pp
+P-B0,300,COCO_bridge,AP75_small,-0.5202781586793104,frozen comparison.deltas_pp
+P-B0,300,primary,AP,0.3208644100709108,frozen comparison.quality_gates
+P-B0,300,primary,AP50,0.49275838600947,descriptive subtraction of already-scored metrics
+P-B0,300,primary,AP75,0.13687358034422203,descriptive subtraction of already-scored metrics
+P-B0,300,primary,AR1,-0.04660582646496003,descriptive subtraction of already-scored metrics
+P-B0,300,primary,AR10,0.14770705467256118,descriptive subtraction of already-scored metrics
+P-B0,300,primary,AR100,0.1977747062755313,descriptive subtraction of already-scored metrics
+P-B0,300,primary,AR500,0.39484539448910283,descriptive subtraction of already-scored metrics
+P-B1,300,COCO_bridge,AP,0.2686288408827897,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AP50,0.3237410612215441,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AP75,0.1555641904463334,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,APS,0.2855892992287057,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,APM,0.32422053743317303,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,APL,-2.2641831995009962,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AR1,0.12918027680021704,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AR10,-0.07495637174289582,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AR100,0.15183795430643854,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AR_small,0.19368779857134033,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AR_medium,0.11737050909595981,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AR_large,0.579116065019003,frozen comparison.deltas_pp
+P-B1,300,COCO_bridge,AP75_small,0.02953961432122232,frozen comparison.deltas_pp
+P-B1,300,primary,AP,0.2221582403255944,frozen comparison.quality_gates
+P-B1,300,primary,AP50,0.34110942297254354,descriptive subtraction of already-scored metrics
+P-B1,300,primary,AP75,0.08942363432660017,descriptive subtraction of already-scored metrics
+P-B1,300,primary,AR1,-0.0378990564096916,descriptive subtraction of already-scored metrics
+P-B1,300,primary,AR10,0.06725696383871416,descriptive subtraction of already-scored metrics
+P-B1,300,primary,AR100,0.06814442795087672,descriptive subtraction of already-scored metrics
+P-B1,300,primary,AR500,0.19338462820964963,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AP,0.08998731708706464,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AP50,0.2231272316725763,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AP75,-0.05405183858386842,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,APS,-0.2532613752206453,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,APM,0.26332860796147717,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,APL,0.5264557723261842,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AR1,0.10048456188960081,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AR10,0.3499406198105237,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AR100,0.26256362420370993,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AR_small,-0.02013421248870384,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AR_medium,0.5017409289023056,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AR_large,-2.443155785485196,descriptive subtraction of already-scored metrics
+B1-B0,300,COCO_bridge,AP75_small,-0.5498177730005327,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AP,0.09870616974531643,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AP50,0.15164896303692643,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AP75,0.04744994601762187,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AR1,-0.008706770055268431,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AR10,0.08045009083384702,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AR100,0.12963027832465457,descriptive subtraction of already-scored metrics
+B1-B0,300,primary,AR500,0.2014607662794532,descriptive subtraction of already-scored metrics

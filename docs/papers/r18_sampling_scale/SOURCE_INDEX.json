@@ -1,0 +1,424 @@
+{
+  "schema": "r18-sampling-manuscript-source-index-v1",
+  "manuscript": "MANUSCRIPT_v0.1.md",
+  "document_version": "0.1",
+  "base_main": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "frozen_run_reference": {
+    "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+    "manifest_sha256": "bb073d33bdd4a935d30cf63bfc936dd9940ac85c6eed1a65a476f8f1a2af5197",
+    "attempt": "attempt-formal-001",
+    "read_only": true,
+    "source_entries": [
+      {
+        "path": "configs/research/r18_sampling_span_seed0.json",
+        "sha256": "984038ad03e4eb97b58c995caedf1866df12457ecb814899e4ab92b6037375cf",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/configs/research/r18_sampling_span_seed0.json"
+      },
+      {
+        "path": "configs/research/r18_sampling_span_execution_v1.json",
+        "sha256": "4c9494a074d8740eb68ca4801cadf54c9bb844dc8e3dd003e016d76f2047bef5",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/configs/research/r18_sampling_span_execution_v1.json"
+      },
+      {
+        "path": "src/sparse_rtdetr/research/sampling_span.py",
+        "sha256": "85f0728270b24dc6403d7258797541bf1d38dcc7f35ffbdfb46b8e03c332a706",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/research/sampling_span.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/span_worker.py",
+        "sha256": "1407050c0c385f4c3e69ddc41af800e6001920d90e937856f7ab186f5660e4e2",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_worker.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/span_observation.py",
+        "sha256": "2b8e0bc23b10cdfc039119811fc9fc1e21b048a59dcf509abf418ebfa4ab90f4",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_observation.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/engine.py",
+        "sha256": "1be4a1644f89bcbea771071f1d8492ddd7604bf4e3b58298c32e290ce2d7c7c1",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/engine.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/model.py",
+        "sha256": "102e4639b5f23a450c212c66235327d94bee2a6237770b0ec5501d5d297a03a0",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/model.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/r0/model.py",
+        "sha256": "66a6adcd418c020f39c421149b93ede4bb1672331607df02b56661c9ae4dfabe",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/r0/model.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/r0/evaluation.py",
+        "sha256": "66afa7c1f14b9d6d0c07a22567a50da33fe89c390e283954a23a9705aa87b89f",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/r0/evaluation.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/localization/data.py",
+        "sha256": "cfbb38888283bb20517ece97777114bb5dda43c29a388476677adb6b5759227e",
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/localization/data.py"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+        "sha256": "93182eb778c58346e31b947dec4cb7e673373d3d93210d271a10cc1c6043a1e9",
+        "bytes": 643,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/configs/dataset/coco_detection.yml",
+        "sha256": "bdf466fa99c3e3e3fcdecb7ba8eba0e61df9f713c1871a84f5fd1c81b0fd8794",
+        "bytes": 933,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/configs/dataset/coco_detection.yml"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/configs/runtime.yml",
+        "sha256": "1b7c050257197e06f69049e0a27b9ea734e175a998a1655c9ad83ed124876e2d",
+        "bytes": 234,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/configs/runtime.yml"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/dataloader.yml",
+        "sha256": "a3d5a204c8de2b05a29228422c4e865113ad6c87c0b4a7e6c1d21dccd884442b",
+        "bytes": 1185,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/dataloader.yml"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/optimizer.yml",
+        "sha256": "30bc23da028bf8c451ad46f1800c40864e364403f6eb0ea95394d7cce465fc3a",
+        "bytes": 514,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/optimizer.yml"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml",
+        "sha256": "57b7fe0920b8c3046f66981f503045023ec68cff0148c88caf7b1e40c9b117c4",
+        "bytes": 1370,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/configs/rtdetrv2/include/rtdetrv2_r50vd.yml"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/src/core/yaml_utils.py",
+        "sha256": "22c9808a52c1c19f8037442468d00cc289442a202368e740321b8b57063dd81a",
+        "bytes": 3085,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/src/core/yaml_utils.py"
+      },
+      {
+        "path": "vendor/rtdetrv2_pytorch/src/optim/ema.py",
+        "sha256": "5e3a9cf725adf2557992d5002083a354d0704dec91ab7ea06dde2b54189e3d7d",
+        "bytes": 3221,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/vendor/rtdetrv2_pytorch/src/optim/ema.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/data_protocol/protocol.py",
+        "sha256": "40810998357936448bc5cda32608d0ddaba2c085878b234f859b0421307943b3",
+        "bytes": 3829,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/data_protocol/protocol.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/data_protocol/split.py",
+        "sha256": "60a0299b033d0224dba4c7654e8c056c5ff474cd8b1c4a7cc52ddc032e813bf3",
+        "bytes": 15349,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/data_protocol/split.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/data_protocol/converter.py",
+        "sha256": "d36ef23290c984a136c22cda240bc2424c3b7cd285c460c305991921f657c9a0",
+        "bytes": 39001,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/data_protocol/converter.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/data_protocol/schema.py",
+        "sha256": "c6b544784ffa5d4929d76846e0c93ed22f437e4f8d8fb09f8af20ab4c2e36815",
+        "bytes": 2680,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/data_protocol/schema.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/localization/material_paths.py",
+        "sha256": "97da94497276a42deb06b5b9578188e5c52dc2ef8feb1e6adb95ba981c3e9cb8",
+        "bytes": 2701,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/localization/material_paths.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/r0/evaluation_data.py",
+        "sha256": "ec6f611696f9f4d04a7cc2d28793e3494e089970a58991e89c02aeccb1512393",
+        "bytes": 2151,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/r0/evaluation_data.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/criterion.py",
+        "sha256": "349edfab04d55d9a4d615f4b59a9490c33e30e2e4abd0e1f2652f692ba4d1b11",
+        "bytes": 5063,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/criterion.py"
+      },
+      {
+        "path": "src/sparse_rtdetr/protocol_r18/span_model.py",
+        "sha256": "e3f507265d5bffcf09ca6a7ecd159800c332cad1c47f2fe0efc677f2531de8c3",
+        "bytes": 2363,
+        "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+        "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_model.py"
+      }
+    ],
+    "role": "historical original design and B0 execution; current continuation identified in terminal_revision"
+  },
+  "paper_material_reference": {
+    "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2",
+    "PR": 17,
+    "entries": [
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/FORMULA_COMPARISON.md",
+        "local_bytes_sha256": "087c3ff96bd947a9d9ab7b912b6a64d8eb8aa499afae283f289799c3c9aa0651",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/REFERENCES.json",
+        "local_bytes_sha256": "484a07e43ce7d1300106ceb3fb15e1bb965976e917e5a5730b7f3d30a09ff24b",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/FIGURE_NOTES.md",
+        "local_bytes_sha256": "831462a0a2b2c42225d16440fbbff85c18d5a39d3e21a9566106419819ca7117",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/MECHANISM_FIELDS.md",
+        "local_bytes_sha256": "240fd02593699292a12a5e30ebfa5ec92d6a689c441e4b351812da03dc366659",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      {
+        "path": "docs/research/r18_sampling_paper_tools_20261021/FROZEN_OUTPUT_BINDING.json",
+        "local_bytes_sha256": "a175961d41b5a5fab0613d374ca7c574bd567594045a6e2ba9aebfab35cc5a0e",
+        "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      }
+    ]
+  },
+  "method_figure": {
+    "path": "figures/sampling_schematic.svg",
+    "sha256": "3d6622ed4a83d6385769481a339e6f061f4b4011e6e0c043971c16bfc402fef2",
+    "source": "D:\\Lzy_CV\\workspace_management\\delivery\\research\\r18-sampling-paper-tools-20261021-001\\figures\\sampling_schematic.svg",
+    "kind": "CONSTRUCTED_ILLUSTRATION_NOT_MODEL_OBSERVATIONS",
+    "copied_byte_exact": false,
+    "source_sha256": "07d2021672da1c5989877d61341a9016368a40a4f2f0aa9916a6f6ab480a32f2",
+    "normalization": "Included copy only: LF line endings and removal of trailing whitespace; XML tree identical after normalizing whitespace inside path d/points attributes. Original PR17 figure unchanged."
+  },
+  "history_context": {
+    "commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+    "path": "docs/research/abc_results_20261019/MASTER.md",
+    "role": "motivation_only_not_same_run_causal_control"
+  },
+  "bibliography": {
+    "source": "PR17 audited body reviews reused for references1-8; targeted primary-source bibliographic cross-check for VisDrone reference9.",
+    "entries": 9,
+    "new_broad_search": false,
+    "VisDrone_benchmark": {
+      "title": "Detection and Tracking Meet Drones Challenge",
+      "authors": [
+        "Pengfei Zhu",
+        "Longyin Wen",
+        "Dawei Du",
+        "Xiao Bian",
+        "Heng Fan",
+        "Qinghua Hu",
+        "Haibin Ling"
+      ],
+      "journal": "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+      "issue_year": 2022,
+      "volume": 44,
+      "issue": 11,
+      "pages": "7380-7399",
+      "DOI": "10.1109/TPAMI.2021.3119563",
+      "online_publication": "2021-10-14",
+      "arxiv": "2001.06303v3",
+      "sources": [
+        "https://github.com/VisDrone/VisDrone-Dataset",
+        "https://arxiv.org/abs/2001.06303",
+        "https://ieeexplore.ieee.org/abstract/document/9573394/references"
+      ],
+      "scope": "Official project citation, author-version identity, and accessible IEEE indexed bibliographic metadata; issue year2022 distinguished from online year2021.",
+      "access_limit": "Direct IEEE document page9573394 showed a JavaScript/robot-verification barrier. No bypass or repeated access; no claim of reading publisher full text.",
+      "not_equated_with": "The earlier2018 arXiv:1804.07437 Vision Meets Drones: A Challenge has a different title/author list and is not silently substituted."
+    }
+  },
+  "scientific_results": {
+    "status": "PENDING_TERMINAL_VERIFICATION",
+    "values_inserted": false,
+    "synthetic_results_used": false,
+    "acceptance_values_used": false
+  },
+  "writing_scope": {
+    "connected_lab_server": false,
+    "model_loaded": false,
+    "new_inference_or_evaluation": false,
+    "running_code_or_contract_changed": false,
+    "member_images_read": false,
+    "raw_annotations_read": false,
+    "new_split_created": false,
+    "new_report_created": false
+  },
+  "precedence": "Actual frozen code and final configuration take priority over superseded early PLAN prose; mechanism windows are fixed e001/040/080/117/118/120, window0, first microbatch",
+  "official_R18_configuration_comparison": {
+    "upstream_commit": "1c8ac3f7ba84f14bd5651ab7b1b70d69a5f55f47",
+    "entry": "rtdetrv2_pytorch/configs/rtdetrv2/rtdetrv2_r18vd_120e_coco.yml",
+    "scope": "Fixed source declarations after recursive dictionary merge and whole-list replacement; not an audit of an author training run or command-line overrides.",
+    "verified_caveats": [
+      "R18 optimizer.params replaces the base list: no inherited backbone learning rate of 1e-5 in this configuration.",
+      "R18 already declares collate scales=null: fixed input is not a newly removed multiscale option.",
+      "P differs from B0 only at the frozen finest-level sampling extent interface; B1 is a separate native 8/2/2 control."
+    ],
+    "author_actual_run_unknown": [
+      "command_line_overrides",
+      "GPU_count_and_seed",
+      "actual_checkpoint_selection"
+    ]
+  },
+  "data_provenance": {
+    "official_source": {
+      "dataset": "VisDrone2019-DET",
+      "train_images": 6471,
+      "val_images": 548,
+      "project_url": "https://github.com/VisDrone/VisDrone-Dataset"
+    },
+    "existing_split_only": true,
+    "new_split_executed": false,
+    "development": "All original official val548 members, repeatedly used for development.",
+    "train_core": "Original train6471 complement after an existing V2 plan removed1602 members; not full official train.",
+    "rule": {
+      "code": "src/sparse_rtdetr/data_protocol/split.py::plan_confirmatory_split_v2",
+      "atomic_group_keys": [
+        "filename_first_seven_character_sequence_key",
+        "exact_image_sha256"
+      ],
+      "eligible_removed_groups": "Identity-closed, non-abnormal and no development sequence-key overlap.",
+      "order": "SHA256(UTF8(salt + NUL + decimal_seed + NUL + group_id))",
+      "seed": 20260808,
+      "salt": "P3-confirmatory-v1",
+      "target_images": 647,
+      "target_ratio": 0.1,
+      "distribution_comparison": "Removed prefix versus remaining train_core; each class share and COCO-small target share use their respective target-count denominators.",
+      "absolute_share_tolerance": 0.05,
+      "selection": "Feasibility first, nearest hash prefix; see code for deterministic ties.",
+      "evaluated_prefixes": 184,
+      "feasible_prefixes": 64,
+      "selected_groups": 57,
+      "actual_removed_images": 1602,
+      "actual_train_core_images": 4869
+    },
+    "member_manifests": [
+      {
+        "role": "train_core",
+        "local_metadata_path": "D:/Lzy_CV/workspace_management/delivery/experiments/c2-local-refinement/local-preflight-001/assets/train_core_manifest.json",
+        "bytes": 2955809,
+        "sha256": "df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d",
+        "records": 4869,
+        "sequence_key_count": 151,
+        "runtime_reference": {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/train_core_manifest.json",
+          "sha256": "df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d",
+          "bytes": 2955809
+        },
+        "verification_scope": "Local manifest bytes, counts, member metadata and existing contract binding only; no member image/annotation reads and no fresh remote presence check."
+      },
+      {
+        "role": "development",
+        "local_metadata_path": "D:/Lzy_CV/workspace_management/delivery/experiments/c2-local-refinement/autodl-migration-001/cloud-formal-20261008-001/materials/legacy/SparseRTDETR_VisDrone/artifacts/data/visdrone_protocol_v2_conversion_r3/development_manifest.json",
+        "bytes": 329199,
+        "sha256": "5f4d788591b60bd2a6223c15e548248f4c0296656373d6d98c016d912a7537dd",
+        "records": 548,
+        "sequence_key_count": 76,
+        "runtime_reference": {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/f0-e026-labdiag-20261009-001/numerical-repair-001/materials/development_manifest.json",
+          "sha256": "5f4d788591b60bd2a6223c15e548248f4c0296656373d6d98c016d912a7537dd",
+          "bytes": 329199
+        },
+        "verification_scope": "Local manifest bytes, counts, member metadata and existing contract binding only; no member image/annotation reads and no fresh remote presence check."
+      }
+    ],
+    "local_metadata_overlap_check": {
+      "exact_image_sha_intersection": 0,
+      "shared_sequence_keys": 24,
+      "sequence_key_is_complete_flight_or_location_id": false
+    },
+    "completion_and_complement_evidence": [
+      {
+        "local_metadata_path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/sahi-independent-confirmation-20261018-001/METADATA_READONLY.jsonl",
+        "bytes": 14893,
+        "sha256": "1b84b9b32987a15ea4e4fbdd3efa3008e8e4654d2f55c5bf064ddda113cbfd96",
+        "scope": "Existing local evidence summary and its references; not a fresh remote audit."
+      },
+      {
+        "local_metadata_path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/sahi-independent-confirmation-20261018-001/DATA_QUALIFICATION.json",
+        "bytes": 12172,
+        "sha256": "4d92f48a8fd210adfda0a3517b28dfad8894f52dc5722ba95b074b37f0819ea9",
+        "scope": "Existing local evidence summary and its references; not a fresh remote audit."
+      }
+    ],
+    "original_evidence_references_only": [
+      {
+        "kind": "split_plan",
+        "bytes": 29982,
+        "sha256": "6e7c029cfc707f3eb28cd71496a39e3581aac266b85e827011d056d2cce9966f"
+      },
+      {
+        "kind": "source_identity",
+        "bytes": 1235,
+        "sha256": "f0f16ba4438b51a09a6203f78884b199f8e2a2d3fb46309c357368a47a552bb9"
+      }
+    ],
+    "reproduction": "Use the certified ordered records and original role/path/content checks; rule description alone does not authorize generating replacement membership.",
+    "unknown": [
+      "Historical rationale for10percent target and5pp tolerance.",
+      "Timing relative to all prior model-development decisions.",
+      "Perceptual near duplicates.",
+      "Complete flight and location relationships."
+    ],
+    "supplemental1602": "Original independent-qualification BLOCKED and historical unknowns preserved; contents not read or used in this revision."
+  },
+  "terminal_revision": {
+    "date": "2026-10-23",
+    "attempt": "attempt-formal-003",
+    "source_commit": "a97e1eaf750c69c4ee72af232d07632b1aced931",
+    "binding": "TERMINAL_BINDING.json",
+    "verification": "results/VERIFICATION.json",
+    "full_tables": "results/TABLES.md",
+    "quality_passed": false,
+    "cost_passed": true,
+    "B0_original_closure_missing_preserved": true,
+    "server_only_large_artifacts": true,
+    "data_association_limits_and_public_reproduction_todo_preserved": true,
+    "new_experimental_execution": false,
+    "display_sources": {
+      "paper_sampling_tables.py": {
+        "sha256": "0228573d1ac6f65a30abf4837134f8de71e1a0dae5d45aa24fad7197b10e9b61",
+        "PR17_commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      "paper_sampling_mechanism.py": {
+        "sha256": "9859889b26b10657257c4cbb8c6db07d9eec608432294db7941607cd22dbaf0f",
+        "PR17_commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      }
+    },
+    "formatter_source_sha256": "bd87b285839f0802c5670f2e1a1a84a10fa90ebecd9ada72117a135f8ecbfacc"
+  }
+}
