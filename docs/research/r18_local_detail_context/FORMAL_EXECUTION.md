@@ -44,3 +44,11 @@ U/D仅固定e120 EMA、单整图FP32、batch4；同一次预测按原规则生�
 实际命令依次为`prepare --spec --source --output`、`bind --spec --source --cpu-gate --prepare-gate --authorization --output`、`contract-check --contract`、`cuda-check --contract --output`、`launch --contract --session`。所有路径由冻结spec和引用回执绑定，不能手工更改合同来跳过准入。父进程隐藏CUDA，工作进程逻辑0绑定物理PCI和完整UUID；原环境、资源年龄25秒、温度/功率/时钟及存储保护不改。双层硬期限和PID/starttime绑定的子树清理来自已验收短入口；新生产异常STOP，保留现场，不自动修复或重试。
 
 每阶段完整事件按序号/身份/前项SHA链流式验证，内存不随完整日志长度增长；检查点完整SHA/状态与事件流分别验证。根闭合要求全部阶段、实际forward/更新、累计成本和导出索引一致。精简白名单≤20MiB，含六份评分JSON、完整比较、成本、中心摘要及必要合同/源/完成/退出回执。完整checkpoint、预测、逐更新事件和逐query中心留服务器；ROOT_CLOSED由收尾collector单独取回，避免索引循环引用。启动后仅一次即时快照，不建立本机持续轮询。
+
+## 部署兼容性修订
+
+85e9196外部安装器在系统Python3.10调用`hashlib.file_digest`，解包前STOP；原提交、metadata-001上传材料和STOP保留。用户限定授权后，实际入口改为Git中的`tools/deploy_h2_source.py`，只用Python3.10可用的stdlib及1MiB分块SHA-256，不升级训练环境，不加载模型或启动作业。
+
+安装器要求显式固定源码包、manifest及安装器自身SHA和commit。bootstrap脚本必须等于包内`tools/deploy_h2_source.py`的manifest条目；拒绝已有目标/回执、不规则成员、越界路径、缺项/额外项、大小或逐文件SHA不符。独占创建新release，不覆盖旧上传和STOP；失败回执及已解包部分保留，不自动清理/重试。新部署使用metadata-002及独立release。
+
+实际CLI测试`tools/check_h2_deploy_cli.py`在Python3.10/3.12分别覆盖正常包校验/解包/完整manifest、损坏包、缺包、缺成员、包内同大小损坏文件、重复目标、额外成员、越界、链接和错误commit。多块构造数据只验证SHA与拒绝行为；不代表真实材料准入。生产中先用该入口取得SOURCE_VERIFIED，再从正式prepare/绑定/隐藏CUDA检查/物理身份检查/唯一launch推进；短GPU验收和原成本仍仅只读复用。
