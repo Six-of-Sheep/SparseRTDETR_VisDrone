@@ -181,7 +181,8 @@
         "commit": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
         "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb/src/sparse_rtdetr/protocol_r18/span_model.py"
       }
-    ]
+    ],
+    "role": "historical original design and B0 execution; current continuation identified in terminal_revision"
   },
   "paper_material_reference": {
     "commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2",
@@ -394,5 +395,30 @@
       "Complete flight and location relationships."
     ],
     "supplemental1602": "Original independent-qualification BLOCKED and historical unknowns preserved; contents not read or used in this revision."
+  },
+  "terminal_revision": {
+    "date": "2026-10-23",
+    "attempt": "attempt-formal-003",
+    "source_commit": "a97e1eaf750c69c4ee72af232d07632b1aced931",
+    "binding": "TERMINAL_BINDING.json",
+    "verification": "results/VERIFICATION.json",
+    "full_tables": "results/TABLES.md",
+    "quality_passed": false,
+    "cost_passed": true,
+    "B0_original_closure_missing_preserved": true,
+    "server_only_large_artifacts": true,
+    "data_association_limits_and_public_reproduction_todo_preserved": true,
+    "new_experimental_execution": false,
+    "display_sources": {
+      "paper_sampling_tables.py": {
+        "sha256": "0228573d1ac6f65a30abf4837134f8de71e1a0dae5d45aa24fad7197b10e9b61",
+        "PR17_commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      },
+      "paper_sampling_mechanism.py": {
+        "sha256": "9859889b26b10657257c4cbb8c6db07d9eec608432294db7941607cd22dbaf0f",
+        "PR17_commit": "6611db33de381e561378c4e0ca848b5c5b5dc9d2"
+      }
+    },
+    "formatter_source_sha256": "bd87b285839f0802c5670f2e1a1a84a10fa90ebecd9ada72117a135f8ecbfacc"
   }
 }
