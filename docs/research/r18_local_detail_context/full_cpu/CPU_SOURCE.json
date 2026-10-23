@@ -1,0 +1,32 @@
+[
+  {
+    "path": "src/sparse_rtdetr/research/local_detail_model.py",
+    "bytes": 10813,
+    "sha256": "95ed25a0254e387652d04872951cc7e0777a054c7c46eab95731b4999b77a3fe"
+  },
+  {
+    "path": "src/sparse_rtdetr/research/local_detail_engine.py",
+    "bytes": 11357,
+    "sha256": "3512c5c4ee137379f9f86e2fd57ba7c018fa5d0260a4ec20504504e732bf94b0"
+  },
+  {
+    "path": "src/sparse_rtdetr/research/local_detail_checkpoint.py",
+    "bytes": 12196,
+    "sha256": "ae5de36ad64a29bb271926b8e55965de5352f967cf803f660621fc2c573b441d"
+  },
+  {
+    "path": "src/sparse_rtdetr/research/local_detail_reference.py",
+    "bytes": 3045,
+    "sha256": "ff4166d33e4824fc1797ceca9516ea6659393d8892f46e0c3473688e42c49b15"
+  },
+  {
+    "path": "tests/test_local_detail_model.py",
+    "bytes": 16198,
+    "sha256": "ec46f9309b29e4e6a3ccda58fc5c47b34c7d89efa57e08541be8f16ae3dadd6b"
+  },
+  {
+    "path": "tools/local_detail_model_cpu.py",
+    "bytes": 3481,
+    "sha256": "bcb9e20ec762538b52da09656bfb5771ea87a0838a3783e089a4b9ef2833462b"
+  }
+]

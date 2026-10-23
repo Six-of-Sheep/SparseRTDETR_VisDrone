@@ -1,0 +1,7 @@
+# Full synthetic R18 CPU tests only; never install into the experiment runtime.
+# Reuses the already checked sampling-span CPU dependency versions.
+PyYAML==6.0.2
+scipy==1.15.3
+faster-coco-eval==1.6.7
+pycocotools==2.0.10
+tensorboard==2.20.0

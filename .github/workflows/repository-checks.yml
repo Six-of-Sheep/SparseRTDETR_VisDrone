@@ -36,3 +36,8 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/local_detail_cpu.py --check-only
+      - run: python -m pip install -r environment/requirements-local-detail-cpu.txt
+      - name: H2 full N U D CPU acceptance and exact state replay (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/local_detail_model_cpu.py --check-only

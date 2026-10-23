@@ -1,0 +1,18 @@
+test_N_exact_native_training_outputs_DN_and_gradients (h2_full_tests.FullModelTests) ... ok
+test_UD_same_inputs_supervision_DN_aux_initial_outputs (h2_full_tests.FullModelTests) ... ok
+test_detached_sampling_but_native_aux_reference_gradient (h2_full_tests.FullModelTests) ... ok
+test_full_attention_coordinates_no_floor_and_mask (h2_full_tests.FullModelTests) ... ok
+test_full_state_save_replay_all_arms_both_CPU_dtypes (h2_full_tests.FullModelTests) ... ok
+test_historical_N_import_is_explicit_eval_only_and_not_a_resume (h2_full_tests.FullModelTests) ... ok
+test_identity_cache_nonfinite_scope_and_SHA_rejections (h2_full_tests.FullModelTests) ... ok
+test_initialization_inventory_and_shared_tensor_rows (h2_full_tests.FullModelTests) ... ok
+test_native_update_math_unchanged_and_legacy_guards_stay_strict (h2_full_tests.FullModelTests) ... ok
+test_nonzero_readout_formula_covers_actual_ordinary_and_DN_queries (h2_full_tests.FullModelTests) ... ok
+test_production_canvas_cache_and_invalid_anchor_exception_is_narrow (h2_full_tests.FullModelTests) ... ok
+test_shared_sampler_exact_context_and_single_fine_call (h2_full_tests.FullModelTests) ... ok
+test_zero_difference_and_U_direct_center_counterexample (h2_full_tests.FullModelTests) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 74.638s
+
+OK

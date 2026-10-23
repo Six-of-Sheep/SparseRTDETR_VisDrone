@@ -1,0 +1,212 @@
+{
+  "schema": "H2-full-model-CPU-v1",
+  "status": "PASS",
+  "tests": 13,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "time": "2026-10-23T15:04:54.947814+00:00",
+  "seconds": 75.06966550099969,
+  "python": "3.10.16",
+  "torch": "2.4.1+cpu",
+  "CUDA_initialized": false,
+  "GPU_forward_calls": 0,
+  "real_images_or_annotations_read": false,
+  "old_checkpoint_loaded": false,
+  "fixture": "CONSTRUCTED_128x160_PHYSICAL1_ACCUM2_NOT_PRODUCTION_DATA_OR_COST",
+  "full_state_replay_matrix": [
+    "N/FP32",
+    "U/FP32",
+    "D/FP32",
+    "N/CPU-BF16",
+    "U/CPU-BF16",
+    "D/CPU-BF16"
+  ],
+  "full_state_CPU_actual_updates": 18,
+  "full_state_CPU_training_batch_forwards": 36,
+  "actual_CPU_detector_batch_forwards": 45,
+  "CPU_forward_inventory": [
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "native_reference"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "N"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": true,
+      "arm": "U"
+    },
+    {
+      "training": true,
+      "arm": "D"
+    },
+    {
+      "training": false,
+      "arm": "U"
+    },
+    {
+      "training": false,
+      "arm": "D"
+    }
+  ],
+  "scientific_benefit": "UNKNOWN",
+  "production_GPU_BF16": "NOT_TESTED"
+}

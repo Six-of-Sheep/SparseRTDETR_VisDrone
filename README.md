@@ -56,3 +56,7 @@ python -B test_seed_readout.py
 
 Git保存代码、配置、测试、方法文档和小型索引；checkpoint、预测、数据、日志、审计、环境留在独立工作区。索引不是大文件备份。
 历史test划分曾在P1被观察，不能重新称为未见确认集。
+
+## H2差分中心残差约束（CPU已验收，GPU未执行）
+
+[方法和反例](docs/research/r18_local_detail_context/DESIGN.md)、[完整N/U/D接线与CPU检查](docs/research/r18_local_detail_context/CPU_ACCEPTANCE.md)、[B0作为历史N复用裁决](docs/research/r18_local_detail_context/B0_N_REUSE.md)、[独立短GPU验收范围及预算](docs/research/r18_local_detail_context/GPU_PROPOSAL.md)。仅检验第三层中心残差的通路限制，差分是已有PDC特例，原创性和收益未确认。GPU短验收、正式训练分别待后续授权，固定P不重开。
