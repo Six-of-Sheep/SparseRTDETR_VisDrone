@@ -145,6 +145,21 @@
         -0.0019060879541954456,
         -0.11774518943879486
       ]
+    },
+    {
+      "id": "r18-sampling-span-20261020-001",
+      "role": "single_whole_image_seed0_reference_extent_floor_exploration",
+      "result_status": "PRODUCTION_PREPARATION_ONLY_NOT_GPU_ACCEPTED",
+      "branch": "codex/r18-sampling-span",
+      "PR": 16,
+      "source_commit": null,
+      "plan": "docs/research/r18_sampling_span_20261020/PLAN.md",
+      "production_preparation": "docs/research/r18_sampling_span_20261020/PRODUCTION_PREPARATION.md",
+      "config": "configs/research/r18_sampling_span_seed0.json",
+      "execution": "configs/research/r18_sampling_span_execution_v1.json",
+      "GPU_authorized": false,
+      "train_updates_executed": 0,
+      "scientific_scoring_executed": false
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"
