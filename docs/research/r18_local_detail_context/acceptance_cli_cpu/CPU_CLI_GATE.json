@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "tests": 20,
+  "skips": 0,
+  "cases": [
+    "actual_raw_spec_prepare_bind_contract_resource_fields",
+    "actual_CLI_three_arm_full_model_closed_and_verified",
+    "exact_actual_update_forward_and_future_nonreset_ledger",
+    "independent_exit_no_formal_score_or_cost_dispatch",
+    "actual_BF16_fullstate_RNG_next_input_output_DN_gradient_replay",
+    "actual_whitelist_export_SHA_no_large_state",
+    "duplicate_launch_and_run_refused_without_budget_reset",
+    "missing_resource_actual_CLI_rejection",
+    "changed_resource_actual_CLI_rejection",
+    "expanded_scope_actual_CLI_rejection",
+    "expanded_forward_actual_CLI_rejection",
+    "parser_has_no_unauthorized_stage",
+    "bound_input_tamper_refused_before_consumption",
+    "worker_exception_actual_CLI_STOP_owned_exit_and_slim_export",
+    "forward_overrun_actual_CLI_STOP_owned_exit_and_slim_export",
+    "update_overrun_actual_CLI_STOP_owned_exit_and_slim_export",
+    "time_overrun_actual_CLI_STOP_owned_exit_and_slim_export",
+    "wall_overrun_actual_CLI_STOP_owned_exit_and_slim_export",
+    "allocated_overrun_actual_CLI_STOP_owned_exit_and_slim_export",
+    "watchdog_deadline_actual_CLI_STOP_owned_exit_and_slim_export"
+  ],
+  "actual_CLI_invocations": 30,
+  "CPU_only": true,
+  "production_GPU_validated": false,
+  "GPU_forward_calls": 0,
+  "bootstrap_fixture": false,
+  "source_files": [
+    {
+      "path": "h2_acceptance.py",
+      "bytes": 401,
+      "sha256": "fb2f0e4b530a26ce0c48118817b0659cfd48dead631f4d6117f821bbbbecab77"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_acceptance.py",
+      "bytes": 22741,
+      "sha256": "a11d4a7cb67ab8ca6491aba3559caca307fce4086b302cc32d00c558fb0a00b9"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_contract.py",
+      "bytes": 7916,
+      "sha256": "0505deb22bd7b6c30c6880fade0e93fc848539f863f76f08dd6b8b7a48281e9f"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_resources.py",
+      "bytes": 5180,
+      "sha256": "2ef8b8e91f96662cfd673ff0e0c131e9d5d4eb40c5f2c9a05805db8d0a4dc897"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_worker.py",
+      "bytes": 10722,
+      "sha256": "8305045286f64e7db1eb8e0d43f92e046eabda1b54b0b6c2887b6eafbea931b0"
+    },
+    {
+      "path": "src/sparse_rtdetr/research/h2_cuda_identity.py",
+      "bytes": 9840,
+      "sha256": "b445280929890487e5525ecb2b50123af90d2d358813e8e5bbe866d0c958f9ea"
+    },
+    {
+      "path": "tools/check_h2_acceptance_cli.py",
+      "bytes": 9311,
+      "sha256": "9b72948901596b1c5dd787f562e555637fbae2ed1511daa2e86c2dfe12af2e39"
+    }
+  ],
+  "no_real_images_or_old_checkpoint": true,
+  "normal_acceptance_actual_updates": 9,
+  "normal_acceptance_forwards": 18,
+  "time_epoch": 1792770500.3645775,
+  "python": "3.10.16"
+}

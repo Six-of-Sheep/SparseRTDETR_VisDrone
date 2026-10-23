@@ -41,3 +41,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/local_detail_model_cpu.py --check-only
+      - name: H2 actual acceptance CLI scope limits cleanup and slim export (no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+        run: python -B tools/check_h2_acceptance_cli.py --output /tmp/h2-cli-cpu
