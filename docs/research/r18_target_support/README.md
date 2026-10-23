@@ -11,3 +11,5 @@ CPU检查：`python -B tests/test_r18_support.py -v`，仅构造张量与原atte
 本地准备器`prepare_r18_support.py`只接收既有终态回执目录、development成员清单、已冻结提案及一个不存在的输出目录；生成独立合同和源码包，不连接服务器或启动。服务器执行步骤为独立source/material/resource准入、隐藏CUDA contract-check、真实CUDA身份precheck、唯一tmux启动、一次即时快照，随后按当前授权另做终态只读审计和精简回传。不得重放历史正式链。
 
 无有效配对/无触发/样本不足保持原状，不扩图。实际取数与不足之处在终态交付登记；CPU通过不构成真实机制或方法收益证据。后续方案只可提出审查，不自动训练。
+
+本次已完成的[终态结果](RESULTS.md)、[完整汇总](SUMMARY.json)和[配对方向表](TABLES.md)保留负向值与解释限制。`r18_support_analyze.py`只读取已有JSON生成展示，无模型、数据或AP依赖；3项独立构造展示检查与正式结果分开。
