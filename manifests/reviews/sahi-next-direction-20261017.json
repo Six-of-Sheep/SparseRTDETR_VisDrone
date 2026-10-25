@@ -1,0 +1,338 @@
+{
+  "schema": "sahi-next-direction-review-v1",
+  "review_date": "2026-10-17",
+  "status": "design_only_no_new_experiment_authorized",
+  "git_base": "cd3b8b788df3852070695db10edd199b1d412eda",
+  "local_root": "D:/Lzy_CV",
+  "delivery_relative_root": "workspace_management/delivery/experiments/localization-distribution",
+  "source_files": [
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/REPORT.md",
+      "bytes": 7070,
+      "sha256": "bccd38b0c5b434089a6f67d214825686ed8d4a7350b57f07fa2ecc6b27c6cc75",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/METHODS.md",
+      "bytes": 3216,
+      "sha256": "4820c2bb6ee37dcbf8fa560c5b0656dde3376f18de157c8575f76ad25f406b8a",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/returned-keys-001/evaluation/TABLE.csv",
+      "bytes": 2632,
+      "sha256": "35e6c6212edaeca5678a6b4fd391d6d2c766f7a886a6941f74e5a88b76e0dd75",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/returned-keys-001/evaluation/COMPARISON.json",
+      "bytes": 718876,
+      "sha256": "4420e519e59fd180d7a68f443eb91d356f86901b838dc9ea665cb1e0cec31dd1",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/returned-keys-001/accept-A/RESULT.json",
+      "bytes": 6785,
+      "sha256": "e44927e6dcffa8ff4a16ed2a178c03792de8c04b2d40fec6e34e3d689b725997",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/returned-keys-001/accept-C/RESULT.json",
+      "bytes": 6695,
+      "sha256": "7f9451a4fef8bbda369ac829c4e73a4c677c1111bbc1f6eac3d714fdd46b6812",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-fixed-20261016-001/returned-keys-001/SCIENTIFIC_SERVER_INDEX.json",
+      "bytes": 100735,
+      "sha256": "8bb69f4dbe455059fe7396ea26decb5c5b1db46482889e29741f8fdd541d8aff",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/SEED1_RESULT.md",
+      "bytes": 1412,
+      "sha256": "2733e612ce111af8a98452f0eb743389461d9076bcd4eb63a6d01878d1771406",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/returned-small/seed1/evaluation/TABLE.csv",
+      "bytes": 1876,
+      "sha256": "291d6469dbc940bac3c6509ee4b63f17ff68dcd760e6f423241251faab7b407e",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "r18-sahi-seed12-20261016-001/protocol-resume-20261017-001/returned-small/seed1/evaluation/COMPARISON.json",
+      "bytes": 718467,
+      "sha256": "ae1d1f425a36030c19f4cde8c90a5c16a54e7a462a60e49eeff59301328dc628",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    },
+    {
+      "relative_to_delivery_localization_distribution": "research-route-reselection-20261013-001/REPORT.md",
+      "bytes": 20076,
+      "sha256": "230702a2c651df3b0667764c7e381ae9dbd0587db3a1359002eaeefdfa8716af",
+      "verification": "local lightweight read only; not new remote artifact authentication"
+    }
+  ],
+  "metric_excerpt_units": "already pp; copied existing fields; no scoring or bootstrap",
+  "metric_excerpts": {
+    "0": [
+      {
+        "budget": "600",
+        "metric": "AP",
+        "B_minus_A_pp": "0.3325012126869309",
+        "C_minus_A_pp": "1.9751286781837019",
+        "C_minus_B_pp": "1.642627465496771"
+      },
+      {
+        "budget": "600",
+        "metric": "APS",
+        "B_minus_A_pp": "0.2684406547114354",
+        "C_minus_A_pp": "2.792956980888295",
+        "C_minus_B_pp": "2.5245163261768595"
+      },
+      {
+        "budget": "600",
+        "metric": "AP75_small",
+        "B_minus_A_pp": "-0.23152831102915827",
+        "C_minus_A_pp": "2.46577711984684",
+        "C_minus_B_pp": "2.6973054308759985"
+      },
+      {
+        "budget": "600",
+        "metric": "APM",
+        "B_minus_A_pp": "0.27295702441129666",
+        "C_minus_A_pp": "0.9284770993106761",
+        "C_minus_B_pp": "0.6555200748993795"
+      },
+      {
+        "budget": "600",
+        "metric": "APL",
+        "B_minus_A_pp": "1.0665640267607968",
+        "C_minus_A_pp": "0.6239504563194498",
+        "C_minus_B_pp": "-0.44261357044134697"
+      },
+      {
+        "budget": "300",
+        "metric": "AP",
+        "B_minus_A_pp": "0.6005512545921854",
+        "C_minus_A_pp": "1.9970826537500208",
+        "C_minus_B_pp": "1.3965313991578354"
+      },
+      {
+        "budget": "300",
+        "metric": "APS",
+        "B_minus_A_pp": "0.5045329449775149",
+        "C_minus_A_pp": "2.739715310398985",
+        "C_minus_B_pp": "2.2351823654214704"
+      },
+      {
+        "budget": "300",
+        "metric": "AP75_small",
+        "B_minus_A_pp": "-0.03185058432244314",
+        "C_minus_A_pp": "2.4464005046176767",
+        "C_minus_B_pp": "2.47825108894012"
+      },
+      {
+        "budget": "300",
+        "metric": "APM",
+        "B_minus_A_pp": "0.603728973493245",
+        "C_minus_A_pp": "1.0196302097205123",
+        "C_minus_B_pp": "0.4159012362272674"
+      },
+      {
+        "budget": "300",
+        "metric": "APL",
+        "B_minus_A_pp": "1.1397960701672205",
+        "C_minus_A_pp": "0.7752155552195938",
+        "C_minus_B_pp": "-0.36458051494762667"
+      }
+    ],
+    "1": [
+      {
+        "budget": "600",
+        "metric": "AP",
+        "B_minus_A_pp": "0.2249229574694589",
+        "C_minus_A_pp": "1.9536271952194484",
+        "C_minus_B_pp": "1.7287042377499895"
+      },
+      {
+        "budget": "600",
+        "metric": "APS",
+        "B_minus_A_pp": "0.17912045547983924",
+        "C_minus_A_pp": "2.3988066466779783",
+        "C_minus_B_pp": "2.2196861911981394"
+      },
+      {
+        "budget": "600",
+        "metric": "AP75_small",
+        "B_minus_A_pp": "-0.2176391286359214",
+        "C_minus_A_pp": "2.4242539915713985",
+        "C_minus_B_pp": "2.6418931202073197"
+      },
+      {
+        "budget": "600",
+        "metric": "APM",
+        "B_minus_A_pp": "0.34471114369498124",
+        "C_minus_A_pp": "1.4412049796768744",
+        "C_minus_B_pp": "1.0964938359818932"
+      },
+      {
+        "budget": "600",
+        "metric": "APL",
+        "B_minus_A_pp": "0.7544916738883689",
+        "C_minus_A_pp": "0.7500349412078056",
+        "C_minus_B_pp": "-0.004456732680563347"
+      },
+      {
+        "budget": "300",
+        "metric": "AP",
+        "B_minus_A_pp": "0.4431549916824762",
+        "C_minus_A_pp": "1.9684198464152647",
+        "C_minus_B_pp": "1.5252648547327885"
+      },
+      {
+        "budget": "300",
+        "metric": "APS",
+        "B_minus_A_pp": "0.4272159661821706",
+        "C_minus_A_pp": "2.3969694530352275",
+        "C_minus_B_pp": "1.9697534868530568"
+      },
+      {
+        "budget": "300",
+        "metric": "AP75_small",
+        "B_minus_A_pp": "-0.03933967084976675",
+        "C_minus_A_pp": "2.5013983862225198",
+        "C_minus_B_pp": "2.5407380570722866"
+      },
+      {
+        "budget": "300",
+        "metric": "APM",
+        "B_minus_A_pp": "0.5505067214257808",
+        "C_minus_A_pp": "1.5025365832179671",
+        "C_minus_B_pp": "0.9520298617921863"
+      },
+      {
+        "budget": "300",
+        "metric": "APL",
+        "B_minus_A_pp": "0.9171626986498982",
+        "C_minus_A_pp": "0.7795533985651804",
+        "C_minus_B_pp": "-0.13760930008471783"
+      }
+    ]
+  },
+  "seed2_status": "pending complete delivery; no SSH this review",
+  "literature": [
+    {
+      "work": "SAHI",
+      "paper": "https://arxiv.org/html/2202.06934v5",
+      "status": "ICIP 2022; arXiv v5; proceedings DOI 10.1109/ICIP46576.2022.9897990",
+      "read": "method and evaluation sections; official implementation selected functions",
+      "repository": "https://github.com/obss/sahi",
+      "commit": "b5a153ee7bcb1fd84a7b868575ff14131e7423ce"
+    },
+    {
+      "work": "AutoFocus",
+      "paper": "https://openaccess.thecvf.com/content_ICCV_2019/papers/Najibi_AutoFocus_Efficient_Multi-Scale_Inference_ICCV_2019_paper.pdf",
+      "status": "ICCV 2019",
+      "read": "full extracted text, focus on sections 4.1-4.3; chip generator and config, not full stacking call chain",
+      "repository": "https://github.com/mahyarnajibi/SNIPER",
+      "commit": "66d7d5bff7f2e1e45e7e299c570e43e8698311aa"
+    },
+    {
+      "work": "ROI-Gated SAHI",
+      "paper": "https://arxiv.org/html/2608.23923v1",
+      "status": "arXiv preprint; 2026-08-25; peer-reviewed publication not verified",
+      "read": "method, algorithm, table and limitations; code not confirmed",
+      "repository": null,
+      "commit": null
+    },
+    {
+      "work": "Soft-NMS",
+      "paper": "https://arxiv.org/html/1704.04503",
+      "status": "ICCV 2017 confirmed at CVF",
+      "read": "sections 4 and 6; full cpu_soft_nms static read",
+      "repository": "https://github.com/bharatsingh430/soft-nms",
+      "commit": "b8e69bdf8df2ad53025c9d198ded909b50471d4f"
+    },
+    {
+      "work": "Weighted Boxes Fusion",
+      "paper": "https://arxiv.org/html/1910.13302",
+      "status": "Image and Vision Computing 2021; DOI 10.1016/j.imavis.2021.104117",
+      "read": "algorithm and experimental setup; prefilter, weighted box and confidence branches",
+      "repository": "https://github.com/ZFTurbo/Weighted-Boxes-Fusion",
+      "commit": "796d4b1b6125ebef795cf14363dae00da78d5a1c"
+    }
+  ],
+  "official_text_fetches": [
+    {
+      "id": "autofocus-paper",
+      "url": "https://openaccess.thecvf.com/content_ICCV_2019/papers/Najibi_AutoFocus_Efficient_Multi-Scale_Inference_ICCV_2019_paper.pdf",
+      "bytes": 2669400,
+      "sha256": "2e5622cd8776cb8e2531176205cd77d21b730da7072bd20022130902fb4a6f7a"
+    },
+    {
+      "id": "wbf-code",
+      "url": "https://raw.githubusercontent.com/ZFTurbo/Weighted-Boxes-Fusion/796d4b1b6125ebef795cf14363dae00da78d5a1c/ensemble_boxes/ensemble_boxes_wbf.py",
+      "bytes": 9852,
+      "sha256": "a9663b421bc3adf4c42d74ccb572d1e2e149ee2a1c5aab2a6e88eec46c6b13b9"
+    },
+    {
+      "id": "sahi-combine",
+      "url": "https://raw.githubusercontent.com/obss/sahi/b5a153ee7bcb1fd84a7b868575ff14131e7423ce/sahi/postprocess/combine.py",
+      "bytes": 17891,
+      "sha256": "f9017441e788d62370e2ac3c647aa5572a5c106f8b61bfa93bb5cafd806a4f2c"
+    },
+    {
+      "id": "sahi-utils",
+      "url": "https://raw.githubusercontent.com/obss/sahi/b5a153ee7bcb1fd84a7b868575ff14131e7423ce/sahi/postprocess/utils.py",
+      "bytes": 17258,
+      "sha256": "a1294da90df35f540c9ca8d57939b08fddd2448661e38b06d8988a8984b461cf"
+    },
+    {
+      "id": "sahi-predict",
+      "url": "https://raw.githubusercontent.com/obss/sahi/b5a153ee7bcb1fd84a7b868575ff14131e7423ce/sahi/predict.py",
+      "bytes": 49166,
+      "sha256": "1e431b102c70af84545b3701531df1b56deba72b08989718d92631fe99f711aa"
+    },
+    {
+      "id": "autofocus-chips",
+      "url": "https://raw.githubusercontent.com/mahyarnajibi/SNIPER/66d7d5bff7f2e1e45e7e299c570e43e8698311aa/lib/chips/chips_inference.py",
+      "bytes": 5368,
+      "sha256": "94cc819013593b53c9e927b8e806d7c3793fdc60b030459ac01b36f38085770a"
+    },
+    {
+      "id": "autofocus-config",
+      "url": "https://raw.githubusercontent.com/mahyarnajibi/SNIPER/66d7d5bff7f2e1e45e7e299c570e43e8698311aa/configs/faster/sniper_res101_e2e_autofocus.yml",
+      "bytes": 7641,
+      "sha256": "55b887ff33b68e40f3c2baa8cc332f03d206207d7e8d2d3a78d1b04d9f9f2e63"
+    },
+    {
+      "id": "softnms-fixed",
+      "url": "https://raw.githubusercontent.com/bharatsingh430/soft-nms/b8e69bdf8df2ad53025c9d198ded909b50471d4f/lib/nms/cpu_nms.pyx",
+      "bytes": 5381,
+      "sha256": "8f48a6491bbea14ee71509badf309b66a78766edf2373095ad138c0534804ae4"
+    },
+    {
+      "id": "wbf-readme",
+      "url": "https://raw.githubusercontent.com/ZFTurbo/Weighted-Boxes-Fusion/796d4b1b6125ebef795cf14363dae00da78d5a1c/README.md",
+      "bytes": 5847,
+      "sha256": "6b7f31dd172804f2e1814c68aaad4ce8c41a910b4e9001aafa3f5b4041954201"
+    }
+  ],
+  "execution": {
+    "ssh_calls": 0,
+    "model_loads": 0,
+    "new_inference": 0,
+    "training_updates": 0,
+    "new_evaluation_calls": 0,
+    "holdout_reads": 0
+  },
+  "source_identity": {
+    "seed0_checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757",
+    "seed0_source_manifest_sha256": "2c9c37b6d9ed60c23401f4dd467dfcfa112a91b24d2df83be4fd937dc8d0ead4",
+    "seed1_checkpoint_sha256": "834cd4de9d4018ac9093f48c9ab459b88a19cb039bea1f780aa2d3ace11f9731",
+    "seed1_source_manifest_sha256": "eee776f2a8ac601f0134e6dc2f9d243280845e1279668369c7e755971cc506b8"
+  },
+  "recommendation": "fixed Gaussian Soft-NMS practical control; no independent novelty claim",
+  "backup": "whole-guided fixed two-of-four views; not activated"
+}
