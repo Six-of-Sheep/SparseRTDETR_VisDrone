@@ -1,0 +1,51 @@
+{
+  "schema": "h2-member-tsv-v1",
+  "date": "2026-10-25",
+  "scope": "Only previously certified train_core and development member metadata; no image, box coordinates or label payload; no supplemental 1602 access",
+  "original_serialization": "UTF-8 json.dumps(records object, ensure_ascii=False, sort_keys=True, separators=comma/colon), no trailing newline",
+  "integer_fields": [
+    "annotation_size_bytes",
+    "coco_image_id",
+    "filtered_rows",
+    "height",
+    "ignore_rows",
+    "image_size_bytes",
+    "keep_rows",
+    "raw_annotation_rows",
+    "width"
+  ],
+  "splits": {
+    "train_core": {
+      "members": 4869,
+      "original_bytes": 2955809,
+      "original_sha256": "df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d",
+      "tsv_bytes": 1617048,
+      "tsv_sha256": "7c4dd0c0dd5a80e1f51bf9e4c44fda4a63c6985cf214caff49ff3dd473e62be5"
+    },
+    "development": {
+      "members": 548,
+      "original_bytes": 329199,
+      "original_sha256": "5f4d788591b60bd2a6223c15e548248f4c0296656373d6d98c016d912a7537dd",
+      "tsv_bytes": 178713,
+      "tsv_sha256": "3ad63bde60ad19c80dedc2772c9a8da32c274383229adbaeb845e0b74ae82951"
+    }
+  },
+  "fields": [
+    "annotation_relative_path",
+    "annotation_sha256",
+    "annotation_size_bytes",
+    "coco_image_id",
+    "filtered_rows",
+    "height",
+    "ignore_rows",
+    "image_sha256",
+    "image_size_bytes",
+    "keep_rows",
+    "raw_annotation_rows",
+    "relative_path",
+    "sequence_key",
+    "split",
+    "stable_image_id",
+    "width"
+  ]
+}

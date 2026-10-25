@@ -8,6 +8,7 @@
 - [实验导航](docs/EXPERIMENTS.md)与[机器可读登记](manifests/experiments.json)：科学状态和代码身份分别记录。
 - [源码导入说明](docs/SOURCE_IMPORT.md)：317文件的出处及复现限制。
 - [历史分支索引](docs/HISTORY_BRANCHES.md)：保留历史，不用旧分支充当默认入口。
+- [H2论文准备与精确成员复现](docs/papers/r18_h2_center/REPRODUCIBILITY.md)：独立文稿分支的新增材料，含方法边界和条件验证方案；科学代码固定于PR21，H2终态结果尚未纳入，不能代替已冻结A/B/C结论。
 
 ## 已有结果
 

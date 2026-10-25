@@ -1,8 +1,8 @@
 # 基于局部成对差分的RT-DETRv2末层中心残差约束研究
 
-中文论文工作稿，2026-10-24。本文准备方法、理论边界与实验设置；**H2正式结果、摘要和结论尚未填写，本文不是已完成论文或投稿就绪声明**。研究实现绑定[PR21运行版本e50bedb](https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/tree/e50bedbe8e41bdfd3c47d09f7076d9644e438e26)，本文独立于实验分支，不改变正在执行的合同。
+中文论文工作稿，2026-10-24建立，2026-10-25补充直接先例与复现入口。本文准备方法、理论边界与实验设置；**H2正式结果、摘要和结论尚未填写，本文不是已完成论文或投稿就绪声明**。研究实现绑定[PR21运行版本e50bedb](https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/tree/e50bedbe8e41bdfd3c47d09f7076d9644e438e26)，本文独立于实验分支，不改变正在执行的合同。
 
-阅读顺序：正文 → [终态判读与填表规则](RESULT_INTERPRETATION.md) → [来源与SHA索引](SOURCE_INDEX.json)。当前只读现有本地材料，没有连接服务器或新增模型执行。本稿的待填状态不能作为实时训练状态。
+阅读顺序：正文 → [创新边界](NOVELTY_BOUNDARY.md) → [终态判读](RESULT_INTERPRETATION.md) → [条件验证方案](CONDITIONAL_VALIDATION.md)；[复现入口](REPRODUCIBILITY.md)提供成员恢复及版本说明，[原来源索引](SOURCE_INDEX.json)和[本次准备索引](PREPARATION_INDEX.json)记录证据范围。本轮读取本地材料并进行限定公开资料核查，没有连接服务器或新增模型执行。本稿的待填状态不能作为实时训练状态。
 
 ## 摘要
 
@@ -22,7 +22,7 @@
 
 ## 2 相关工作及本文边界
 
-RT-DETRv2提供了本文采用的检测器基础[1]。任务解耦、差分特征以及方向性定位均已有研究。表1依据此前已读原文的限定审查记录整理，本轮不新增文献检索或冒称重新核读全部原文。作者代码未复现，表中比较是方法路径比较，不是同协议性能比较。
+RT-DETRv2提供了本文采用的检测器基础[1]。任务解耦、差分特征以及方向性定位均已有研究。2026-10-25限定核查新增CF-DETR和BorderDet方法正文，既有五篇沿用原审读记录；VarifocalNet仅核官方摘要及返回片段，未完整审读。作者代码未复现，表中比较是方法路径比较，不是同协议性能比较。
 
 |表1：直接先例|已经涉及的操作或问题|本次检验的差异|
 |---|---|---|
@@ -30,8 +30,12 @@ RT-DETRv2提供了本文采用的检测器基础[1]。任务解耦、差分特�
 |CDC[3]、PiDiNet[4]|邻域或像素对差分、共有分量抵消、可折叠的线性读出|差分操作本身沿用已有思想；检验将它作为末层中心残差唯一直接输入的约束|
 |PiDiViT[5]|在检测中融合差分与普通特征，结合多尺度ROI信息|U保留融合式自由度，D排除直接上下文中心项；U不是PiDiViT的完整复现|
 |SABL[6]|利用轴向特征、分桶与精细回归进行边界定位|仍采用中心/宽高表示，不引入四边分桶标签或重新评分|
+|CF-DETR（AAAI 2022）[8]|全局上下文粗定位，框引导ROI局部细化；细层预测框，分类沿用粗层|粗到细与局部细化思路已有先例；本次仅检验第三层中心残差排除直接上下文项的限制|
+|BorderDet[9]|沿预测框边界采样/池化，与原点特征融合后细化框和分类|框相对局部信息不新；已读方法没有H2的反对称差分中心约束|
 
 这些差异说明实验比较什么，不证明全领域不存在等价方法。本文不使用“首次提出差分”“首次解耦分类与定位”或“恢复小目标原生细节”等表述。
+
+VarifocalNet的官方摘要也已包含星形框特征和框细化[10]，因此固定形状采样加轻量细化不能单独承担创新主张。D−U只检验直接中心项的删除，不能单独证明反对称性优于任意自由四点读出，或排除所有容量和优化作用。详细阅读范围与未读部分见[创新边界核查](NOVELTY_BOUNDARY.md)。
 
 ## 3 方法
 
@@ -156,6 +160,8 @@ d_x=a w/4,\qquad d_y=b h/4. \tag{7}
 
 研究沿用公开VisDrone2019-DET的既有固定成员：官方train的6,471张中，项目此前划出1,602张，剩余4,869张为train_core；548张官方val作为development。本轮只使用train_core训练与548张终点评价，不访问1,602张集合。成员来源、形成规则及既有缺证在[前稿数据说明](https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ccfb03578d21d950ee41fe0746f001aa80483c15/docs/papers/r18_sampling_scale/MANUSCRIPT_v0.1.md)留存。
 
+本分支已提供train_core与development的可逆成员TSV及标准库恢复工具，能够逐字节恢复原manifest，见[复现说明](REPRODUCIBILITY.md)。它补齐成员获取方式，不替代原始数据或改变数据关联限制。
+
 train_core与development精确图像SHA交集为零，但共有24个来自文件名的序列键；该键不是完整飞行或地点标识。近重复和场景关联未完全排除，548张也已被反复用于开发。因此，本轮定位为单seed development筛选，不宣称未见、序列独立或无泄漏验证。历史1,602张集合的独立资格仍为BLOCKED，不能通过重新命名改变。
 
 ### 4.2 三臂角色与训练
@@ -221,6 +227,12 @@ e_{\mathrm{final}}=\frac{\|c_{\mathrm{final}}-c^*\|_2}{\sqrt a},\qquad
 [6] Side-Aware Boundary Localization for More Precise Object Detection. ECCV 2020. [原文](https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf)。既有核对范围：PDF4–5页，图2、§3.1–3.2。
 
 [7] Detection and Tracking Meet Drones Challenge. IEEE TPAMI, 2022, 44(11): 7380–7399. [DOI](https://doi.org/10.1109/TPAMI.2021.3119563)。采用前稿已核题录；完整成员与评价实现仍以项目协议为准。
+
+[8] CF-DETR: Coarse-to-Fine Transformers for End-to-End Object Detection. AAAI 2022, 185–193. [官方题录](https://ojs.aaai.org/index.php/AAAI/article/view/19893)、[正文](https://cdn.aaai.org/ojs/19893/19893-13-23906-1-2-20220628.pdf)。本轮重点核对PDF3–5页、图2/4、式1–3及迭代预测段。
+
+[9] BorderDet: Border Feature for Dense Object Detection. ECCV 2020. [正文](https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123460528.pdf)。本轮重点核对PDF5–8页§3.2–3.4、图3、式1–2和相关消融。
+
+[10] VarifocalNet: An IoU-aware Dense Object Detector. CVPR 2021. [官方题录与摘要](https://openaccess.thecvf.com/content/CVPR2021/html/Zhang_VarifocalNet_An_IoU-Aware_Dense_Object_Detector_CVPR_2021_paper.html)。本轮PDF访问受限，只有摘要及检索片段，不作全文审读声明。
 
 ## 附录：复现身份与文稿状态
 

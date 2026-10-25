@@ -1,0 +1,150 @@
+{
+  "schema": "h2-publication-preparation-20261025-v1",
+  "date": "2026-10-25",
+  "previous_local_commit": "0347cfa1ef9459f1b5698df4c8cc63aafd89b7d1",
+  "running_source_commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+  "task_scope": [
+    "bounded_method_prior_art_review",
+    "reproduction_metadata_and_Git_delivery",
+    "conditional_validation_design_only"
+  ],
+  "new_GPU_forward": 0,
+  "new_training_updates": 0,
+  "new_scientific_scores": 0,
+  "server_connections": 0,
+  "checks": [
+    {
+      "case": "real_CLI_restore_both_original_manifests",
+      "status": "PASS"
+    },
+    {
+      "case": "existing_output_refused_originals_unchanged",
+      "status": "PASS"
+    },
+    {
+      "case": "corrupt_member_TSV_refused_before_output",
+      "status": "PASS"
+    },
+    {
+      "case": "contradictory_integer_fields_refused_before_output",
+      "status": "PASS"
+    },
+    {
+      "case": "document_links_formulas_tables_and_14_original_sources",
+      "status": "PASS"
+    },
+    {
+      "case": "PR21_local_HEAD_and_referenced_bytes_unchanged",
+      "status": "PASS"
+    }
+  ],
+  "preparation_check_history": [
+    {
+      "case": "first_existing_directory_refusal_check",
+      "outcome": "verification_assertion_failed",
+      "cause": "Check expected English exist in a Windows localized FileExistsError; actual refusal returned 2/WinError183. Tool message made explicit and locale-independent; all 3 CLI checks rerun.",
+      "scientific_execution": false
+    }
+  ],
+  "live_result_status": "NOT_CHECKED_DO_NOT_INFER_FROM_THIS_DOCUMENT",
+  "CI_status_at_generation": "PENDING_FINAL_HEAD_CHECK",
+  "literature_access": {
+    "date": "2026-10-25",
+    "new_fulltext_methods": [
+      "CF-DETR_AAAI2022_PDF3-5",
+      "BorderDet_ECCV2020_PDF5-8_related_ablations"
+    ],
+    "limited": [
+      "VarifocalNet_official_abstract_and_search_fragments_PDF403",
+      "AI-TOD_baseline_directory_robots_denied",
+      "DIOR_Drive_page_empty"
+    ],
+    "no_PDF_download_SHA_claim": true
+  },
+  "artifacts": [
+    {
+      "path": "docs/papers/r18_h2_center/CONDITIONAL_VALIDATION.md",
+      "local_bytes": 8155,
+      "local_sha256": "ef26323d65523c5936d7fcea5b97d65faf8eadf0313866ae92838e19d09e15e0",
+      "git_LF_bytes": 8155,
+      "git_LF_sha256": "ef26323d65523c5936d7fcea5b97d65faf8eadf0313866ae92838e19d09e15e0"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/MANUSCRIPT_PREPARATION.md",
+      "local_bytes": 21298,
+      "local_sha256": "619001cf0b7b717c0cf52b81452fb937154328c5e6923bf8ef0d3b6529d486d9",
+      "git_LF_bytes": 21057,
+      "git_LF_sha256": "cae47e2d2d350ac027c3e8fc7028adeaed052a96b4f85272dcb499673fda8085"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/NOVELTY_BOUNDARY.md",
+      "local_bytes": 5908,
+      "local_sha256": "2d9d159f9155f374093a6a1ecf8bf783d732e8656bfc39b55d2a2ab53ca4bf36",
+      "git_LF_bytes": 5908,
+      "git_LF_sha256": "2d9d159f9155f374093a6a1ecf8bf783d732e8656bfc39b55d2a2ab53ca4bf36"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/REPRODUCIBILITY.md",
+      "local_bytes": 6499,
+      "local_sha256": "0e6d15b54dddde5958f1b353cb8426de3f25ba0c44c603c0b7cc7cd7508a6cb9",
+      "git_LF_bytes": 6499,
+      "git_LF_sha256": "0e6d15b54dddde5958f1b353cb8426de3f25ba0c44c603c0b7cc7cd7508a6cb9"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/RESULT_INTERPRETATION.md",
+      "local_bytes": 6252,
+      "local_sha256": "dd8939d562d5e08c1180187b89653155ee2cc235a389dc73132e35a60db90dc4",
+      "git_LF_bytes": 6252,
+      "git_LF_sha256": "dd8939d562d5e08c1180187b89653155ee2cc235a389dc73132e35a60db90dc4"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/SOURCE_INDEX.json",
+      "local_bytes": 13707,
+      "local_sha256": "05acb63aad7dc14ce07c89e5e45d3b259b153631bb058dc6f2b8ea65c1a2926a",
+      "git_LF_bytes": 13441,
+      "git_LF_sha256": "7632a2637557011ca1532933a1b36f107af15bf30ba4d7c1481d8d103a81ea5d"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/splits/development.tsv",
+      "local_bytes": 178713,
+      "local_sha256": "3ad63bde60ad19c80dedc2772c9a8da32c274383229adbaeb845e0b74ae82951",
+      "git_LF_bytes": 178713,
+      "git_LF_sha256": "3ad63bde60ad19c80dedc2772c9a8da32c274383229adbaeb845e0b74ae82951"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/splits/SPLIT_INDEX.json",
+      "local_bytes": 1526,
+      "local_sha256": "385e597717945aed08b0dda66596cdd9ed28a3d0eeb0f643dec8e101ab2661a2",
+      "git_LF_bytes": 1526,
+      "git_LF_sha256": "385e597717945aed08b0dda66596cdd9ed28a3d0eeb0f643dec8e101ab2661a2"
+    },
+    {
+      "path": "docs/papers/r18_h2_center/splits/train_core.tsv",
+      "local_bytes": 1617048,
+      "local_sha256": "7c4dd0c0dd5a80e1f51bf9e4c44fda4a63c6985cf214caff49ff3dd473e62be5",
+      "git_LF_bytes": 1617048,
+      "git_LF_sha256": "7c4dd0c0dd5a80e1f51bf9e4c44fda4a63c6985cf214caff49ff3dd473e62be5"
+    },
+    {
+      "path": "tools/restore_h2_split_manifests.py",
+      "local_bytes": 5215,
+      "local_sha256": "020fc0a7e46857c868519a49fe88685a47390f93dee9502a4b1199d168b2ed7e",
+      "git_LF_bytes": 5215,
+      "git_LF_sha256": "020fc0a7e46857c868519a49fe88685a47390f93dee9502a4b1199d168b2ed7e"
+    },
+    {
+      "path": ".github/workflows/repository-checks.yml",
+      "local_bytes": 1312,
+      "local_sha256": "bdf24213137418f4d0a6da8655c0cd5f39153fb77cac22461036b0b18f035a88",
+      "git_LF_bytes": 1312,
+      "git_LF_sha256": "bdf24213137418f4d0a6da8655c0cd5f39153fb77cac22461036b0b18f035a88"
+    },
+    {
+      "path": "README.md",
+      "local_bytes": 4253,
+      "local_sha256": "7da4eeb1bef92b2e1656f7ee06362cd84216ea19d95f0a761b4f2f119126446b",
+      "git_LF_bytes": 4253,
+      "git_LF_sha256": "7da4eeb1bef92b2e1656f7ee06362cd84216ea19d95f0a761b4f2f119126446b"
+    }
+  ]
+}
