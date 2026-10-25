@@ -1,0 +1,2 @@
+# Offline scalar tables/figures only; not the model/training environment.
+matplotlib==3.10.8

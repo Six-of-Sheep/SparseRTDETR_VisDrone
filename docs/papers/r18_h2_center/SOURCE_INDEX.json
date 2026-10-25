@@ -1,0 +1,266 @@
+{
+  "schema": "h2-paper-preparation-sources-v1",
+  "date": "2026-10-24",
+  "scope": "LOCAL_DOCUMENT_PREPARATION_NO_NEW_SCIENTIFIC_EXECUTION",
+  "base_main": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "run_reference": {
+    "pr": 21,
+    "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+    "experiment": "r18-h2-formal-20261024-001",
+    "attempt": "attempt-formal-001",
+    "live_state_checked": false,
+    "new_forward": 0,
+    "new_updates": 0,
+    "new_scoring": 0,
+    "results_in_this_draft": "PENDING_TERMINAL"
+  },
+  "source_entries": [
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/DESIGN.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/DESIGN.md",
+      "git_bytes": 12439,
+      "git_sha256": "0e55b6e3427e535b7467be01756355c6224caf85c86404b9771c812322ec1403",
+      "local_bytes": 12439,
+      "local_sha256": "0e55b6e3427e535b7467be01756355c6224caf85c86404b9771c812322ec1403",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/GPU_PROPOSAL.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/GPU_PROPOSAL.md",
+      "git_bytes": 9720,
+      "git_sha256": "5edbbaed6edc010f8458b87202f5f054fa8e0f93337e971b9b00697d3c916d69",
+      "local_bytes": 9720,
+      "local_sha256": "5edbbaed6edc010f8458b87202f5f054fa8e0f93337e971b9b00697d3c916d69",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/CPU_ACCEPTANCE.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/CPU_ACCEPTANCE.md",
+      "git_bytes": 6121,
+      "git_sha256": "c5df49a7bd190e087f9f508cbbacf12f40fd65de40e330315be5fc54f6d47ee4",
+      "local_bytes": 6121,
+      "local_sha256": "c5df49a7bd190e087f9f508cbbacf12f40fd65de40e330315be5fc54f6d47ee4",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/B0_N_REUSE.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/B0_N_REUSE.md",
+      "git_bytes": 3874,
+      "git_sha256": "f5a7485e46392349bf5c374202aa961445cf4b0671761262b6e3ef1d9847fedb",
+      "local_bytes": 3874,
+      "local_sha256": "f5a7485e46392349bf5c374202aa961445cf4b0671761262b6e3ef1d9847fedb",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/FORMAL_EXECUTION.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/FORMAL_EXECUTION.md",
+      "git_bytes": 9172,
+      "git_sha256": "d37e3e493900fdaaea8bba01d2c1f6414917e6e73c0cf099afe6a9bf7862e750",
+      "local_bytes": 9172,
+      "local_sha256": "d37e3e493900fdaaea8bba01d2c1f6414917e6e73c0cf099afe6a9bf7862e750",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/REFERENCES.json",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/REFERENCES.json",
+      "git_bytes": 3170,
+      "git_sha256": "598ec9cd0416b0d79a5fe2b8d45a8ad12e61019a78f7bcb5ea345345ff54e559",
+      "local_bytes": 3237,
+      "local_sha256": "6fd9e20f1d356f85d2cb24d765c76a1bc9cdfcbbe4b631866e740ddb73280407",
+      "local_equals_git_bytes": false
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/research/local_detail_center.py",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/research/local_detail_center.py",
+      "git_bytes": 4332,
+      "git_sha256": "740e2808bf1aa47776866a3bb7acd870f50f7aa68955b024ef7d87973c8214ad",
+      "local_bytes": 4332,
+      "local_sha256": "740e2808bf1aa47776866a3bb7acd870f50f7aa68955b024ef7d87973c8214ad",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/research/local_detail_model.py",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/research/local_detail_model.py",
+      "git_bytes": 10813,
+      "git_sha256": "95ed25a0254e387652d04872951cc7e0777a054c7c46eab95731b4999b77a3fe",
+      "local_bytes": 10813,
+      "local_sha256": "95ed25a0254e387652d04872951cc7e0777a054c7c46eab95731b4999b77a3fe",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/research/local_detail_engine.py",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/research/local_detail_engine.py",
+      "git_bytes": 11357,
+      "git_sha256": "3512c5c4ee137379f9f86e2fd57ba7c018fa5d0260a4ec20504504e732bf94b0",
+      "local_bytes": 11357,
+      "local_sha256": "3512c5c4ee137379f9f86e2fd57ba7c018fa5d0260a4ec20504504e732bf94b0",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/protocol_r18/model.py",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/protocol_r18/model.py",
+      "git_bytes": 7838,
+      "git_sha256": "102e4639b5f23a450c212c66235327d94bee2a6237770b0ec5501d5d297a03a0",
+      "local_bytes": 7838,
+      "local_sha256": "102e4639b5f23a450c212c66235327d94bee2a6237770b0ec5501d5d297a03a0",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "H2 frozen method and execution record",
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "configs/research/r18_h2_nud_v1.json",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/configs/research/r18_h2_nud_v1.json",
+      "git_bytes": 3563,
+      "git_sha256": "f81aa916d9d8690ce65acdf6224415435cb449110a3b66494ca66dea699a6017",
+      "local_bytes": 3563,
+      "local_sha256": "f81aa916d9d8690ce65acdf6224415435cb449110a3b66494ca66dea699a6017",
+      "local_equals_git_bytes": true
+    },
+    {
+      "role": "Prior P result, data and evaluator limitations",
+      "commit": "ccfb03578d21d950ee41fe0746f001aa80483c15",
+      "path": "docs/papers/r18_sampling_scale/MANUSCRIPT_v0.1.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ccfb03578d21d950ee41fe0746f001aa80483c15/docs/papers/r18_sampling_scale/MANUSCRIPT_v0.1.md",
+      "git_bytes": 54017,
+      "git_sha256": "4362a9a83101ce66f0fc3895485794c9460c2e40466e20b36285f0300adbef57"
+    },
+    {
+      "role": "Prior audited sources and data lineage navigation",
+      "commit": "ccfb03578d21d950ee41fe0746f001aa80483c15",
+      "path": "docs/papers/r18_sampling_scale/SOURCE_INDEX.json",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ccfb03578d21d950ee41fe0746f001aa80483c15/docs/papers/r18_sampling_scale/SOURCE_INDEX.json",
+      "git_bytes": 23161,
+      "git_sha256": "afa588fcdf3843ba6144c52494aa7cea2db622d0244c3d11c108af864e8c49ec"
+    },
+    {
+      "role": "Separate historical A/B/C achievements",
+      "commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+      "path": "docs/research/abc_results_20261019/README.md",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/458d645f70839cda3d1ff35d67bf3ff812e68bd1/docs/research/abc_results_20261019/README.md",
+      "git_bytes": 2028,
+      "git_sha256": "3456bf43e350ea2573f81c41a50dc9068e25ffdecc71ed2fc6e0bc1d1a2740b3"
+    }
+  ],
+  "literature": {
+    "basis": "Existing audited REFERENCES.json; no new PDF read or literature search in this document task",
+    "files": [
+      {
+        "id": "SD_DETR_ICCV2023",
+        "url": "https://openaccess.thecvf.com/content/ICCV2023/papers/Zhang_Decoupled_DETR_Spatially_Disentangling_Localization_and_Classification_for_Improved_End-to-End_ICCV_2023_paper.pdf",
+        "bytes": 2539181,
+        "sha256": "bd0b8a5134688a252c64cb6ac4602ee1c9a6f937a6f76c4cddb7501bfaa7179e",
+        "pages": 10,
+        "status": "FETCHED_PRIMARY_FULLTEXT",
+        "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/SD_DETR_ICCV2023.pdf",
+        "read_scope": [
+          "PDF3-4, sections3.1-3.2, Fig3, Eq3"
+        ]
+      },
+      {
+        "id": "CDCN_CVPR2020",
+        "url": "https://openaccess.thecvf.com/content_CVPR_2020/papers/Yu_Searching_Central_Difference_Convolutional_Networks_for_Face_Anti-Spoofing_CVPR_2020_paper.pdf",
+        "bytes": 1604888,
+        "sha256": "69c96e04eeef794a082cb8180dba8a320b55fbb6a2072211244c3e63194b9f54",
+        "pages": 11,
+        "status": "FETCHED_PRIMARY_FULLTEXT",
+        "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/CDCN_CVPR2020.pdf",
+        "read_scope": [
+          "PDF3-4, section3.1, Eq2-4"
+        ]
+      },
+      {
+        "id": "PiDiViT_ICCV2025",
+        "url": "https://openaccess.thecvf.com/content/ICCV2025/papers/Zhou_When_Pixel_Difference_Patterns_Meet_ViT_PiDiViT_for_Few-Shot_Object_ICCV_2025_paper.pdf",
+        "bytes": 3948822,
+        "sha256": "1e0b5c94052eb5daeab29ae8d9942edd029a32a036481b435e7f6a9003394e64",
+        "pages": 10,
+        "status": "FETCHED_PRIMARY_FULLTEXT",
+        "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/PiDiViT_ICCV2025.pdf",
+        "read_scope": [
+          "PDF3-5, section3.1-3.3, Eq1-7"
+        ]
+      },
+      {
+        "id": "SABL_ECCV2020",
+        "url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf",
+        "bytes": 927887,
+        "sha256": "cec13717d50f1a2cf527e8af63a223ed1f363b65ffeb378728e3f7656c2a344e",
+        "pages": 16,
+        "status": "FETCHED_PRIMARY_FULLTEXT",
+        "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/SABL_ECCV2020.pdf",
+        "read_scope": [
+          "PDF4-5, Fig2, section3.1-3.2"
+        ]
+      },
+      {
+        "id": "PiDiNet_ICCV2021",
+        "url": "https://openaccess.thecvf.com/content/ICCV2021/papers/Su_Pixel_Difference_Networks_for_Efficient_Edge_Detection_ICCV_2021_paper.pdf",
+        "bytes": 2742901,
+        "sha256": "7ac637512d852cee0ba6cf2d475c3bb06ded4c34431be4b1d93cea74e1da4e09",
+        "pages": 11,
+        "status": "FETCHED_PRIMARY_FULLTEXT",
+        "reference_store_relative": "workspace_management/references/paper-journal-fit/incoming/r18-local-detail-context-20261023/PiDiNet_ICCV2021.pdf",
+        "read_scope": [
+          "PDF3-4, section3, Eq2-3"
+        ]
+      }
+    ],
+    "claim_boundary": "Known paired-difference operation; specific center-path constraint remains a hypothesis, originality unconfirmed"
+  },
+  "frozen_readable_values": {
+    "parameters": {
+      "N": 20094584,
+      "U": 20079160,
+      "D": 20078646
+    },
+    "gates_pp": {
+      "top600_AP75_small_min": 0.3,
+      "top600_APS_min": 0.2,
+      "top600_AP_min": 0,
+      "top600_APM_min": -0.2,
+      "top600_APL_min": -0.2,
+      "top600_AR_large_min": -0.2,
+      "top300_AP75_small_min": 0,
+      "top300_AP_min": -0.2,
+      "top300_APS_min": -0.2,
+      "primary_AP_both_budgets_min": -0.2
+    },
+    "cost_gates": {
+      "E2E_max": 1.05,
+      "peak_allocated_max": 1.05
+    },
+    "forward_budget": {
+      "acceptance": 18,
+      "formal_training": 145920,
+      "new_endpoint_inference": 274,
+      "same_session_cost": 384,
+      "total_new": 146596
+    }
+  },
+  "notes": [
+    "Git object hashes and current local hashes are distinct bases if line endings differ.",
+    "This index does not re-certify remote release bytes, weights, datasets or live progress.",
+    "The source config execution_authorized flag is an early preparation record, not the formal launch authorization.",
+    "Early design documents contain historical preparation-stage wording; FORMAL_EXECUTION and timestamped receipts govern lifecycle."
+  ]
+}

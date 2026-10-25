@@ -23,6 +23,12 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -B tools/repo_manage.py check
       - run: python -B tools/repo_manage.py verify-import
+      - name: Verify portable H2 member metadata (no images or models)
+        run: python -B tools/restore_h2_split_manifests.py
+      - name: Offline H2 paper results (synthetic receipts, no model or scoring)
+        run: |
+          python -m pip install -r environment/requirements-paper-results.txt
+          python -B -m unittest discover -s tests -p test_h2_paper_results.py -v
       - run: python -B -m unittest discover -s tests -p test_repo_management.py
       - run: python -m pip install -r environment/requirements-ci.txt
       - run: python -B test_slice_core.py
