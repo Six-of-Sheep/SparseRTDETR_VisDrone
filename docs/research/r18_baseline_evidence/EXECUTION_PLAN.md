@@ -1,4 +1,6 @@
-# 一次原N终点缓存诊断：执行方案（待授权）
+# 一次原N终点缓存诊断：执行方案
+
+2026-10-26更新：用户已授权CPU接线、验收后单次真实执行。以下原统计/资源上限保持；新增语义澄清见第7节。执行状态和三个收尾答案在DECISION.md更新，不自动恢复候选。
 
 对应[研究决定](DECISION.md)。**选择先补证，不保留可直接训练的候选。** 本轮完成的是本地源码/已交付JSON/索引审查、公开文献核对及合成CPU检查；以下真实缓存诊断尚未执行。CPU计数是新增诊断统计，不能借“非AP”绕过本轮不做科学评分的边界。
 
@@ -6,7 +8,7 @@
 
 授权完善并检验一个CPU-only缓存读取适配器；通过后，在实验室服务器单次读取原N/U/D的548 development终点缓存及对应原标注，运行下述固定诊断，回传≤5 MiB摘要/引用/SHA并退出。只读原件，输出到新独立目录，禁止覆盖。**GPU0、模型forward0、训练/反向0、AP/AR计算0、图像读取0、checkpoint加载0、1602访问0。** 不要求启动或重演H2正式入口。
 
-当前仓库只有合成数学内核，不冒称生产读取/资源入口已验收。下一次先完善实际适配器的CLI输入绑定、SHA/缺文件/重复ID/错误shape/非development/输出重复拒绝、退出与预算检查，再允许真实读取；这些检查包含于所请求的这一项授权，不另增实验。
+实际入口为`tools/r18_cache_diag.py check|execute --contract <path> --sha256 <SHA>`，依赖`r18_cache_worker.py`与`r18_cache_core.py`。真实执行前须完成`check_r18_cache_cli.py`实际CLI验收，并提交冻结运行字节；合成数学内核不替代这个入口。
 
 ## 2. 输入、身份与缓存能力
 
@@ -80,3 +82,12 @@ git diff --check
 ```
 
 脚本只内置构造框、分数和匹配标签，不接受生产文件参数。覆盖几何/预算/类别/ignore/密集竞争/稳定tie/空分母/排序充分性反例及B纸面hinge有限差分。输出`NOT_SCIENTIFIC`；通过不认定N存在该问题或B机制成立。生产CLI是下一次限定授权需完成的实际入口，不用本合成CLI替代。
+
+## 7. 按用户授权补全的语义、绑定和执行保护
+
+- **截断前证据：** `infer/RESULT.json`、CLOSED、原合同/source/endpoint/binding、物理checkpoint分块SHA，以及411份raw缓存的逐SHA/size/键/FP32 shape/548稳定ID均核验。仅raw缓存用CPU weights_only加载，完整300×10 logits和300×4 boxes必须存在；不是以topK预测推断几何缺失。原H2和N源码清单逐项核SHA，导入共同辅助函数前先验证冻结字节。
+- **类别支持：** 不添加置信阈值。每query的10个有限分数不等于10个语义正确候选。以argmax正确类作并列描述；原生多类topK可保留非argmax正确类项，故argmax不是后续预算统计的必经滤器。原几何→正确类项进预算→ignore后留存的嵌套图定义不变，argmax单列，不强行唯一归因。
+- **两个匹配口径：** 原方案的一query一GT最大容量和固定score/q/class顺序的诊断贪心匹配分列；后者按IoU最大再GT顺序选取，只是物理query竞争描述，不能冒充评价TP。另按用户要求核“最终匹配”：仅调用冻结主评价器`_match`，沿原raw-ignore、先全图maxDets500再分类、score0 ignore语义；只取.50/.75两档GT匹配标记和计数，并与六份原评分JSON中已保存的对应计数严格一致性检查。**不调用evaluate/accumulate/summarize、_voc_ap或AP/AR运算。** COCO逐GT匹配身份没有读取记录，本次不另跑COCO评价，保持UNKNOWN。两匹配口径不可混为一条严格嵌套链，因为主评价器可在不同类别使用同一物理query。
+- **分母与配对：** A为训练有效GT；B为raw-ignore后score1有效GT。B可包含clip后不属于A的原始GT，交/差集显式计数。覆盖使用原图raw框连续IoU；CPU原生Hungarian重建使用原resize-only FP32目标。U/D与既有CENTER_RECORDS比对匹配身份并披露CPU/GPU舍入差异；N原匹配未记录，只能记CPU重建，不能声称还原训练过程。跨模型仅用图像/GT原始ID配对。
+- **原冻结统计和资源：** 仍仅top600/300、IoU.50/.75、预定义互斥raw面积小中大；类别/序列必要汇总限定高IoU的小/大目标。执行进程CPU affinity限定两核、Torch/BLAS两线程；监督器监控自身+唯一worker RSS、累计wall及新任务目录字节，触界仅终止本次自有worker并保存STOP。真实execute以独占目录消费一次，旧输出拒绝，异常不重试。workers内禁止detector模块调用、反向、CUDA初始化和AP/AR入口，审计拒绝图像及禁用数据目录读取。正常返回后独立SHA核验小回执，不执行第二次诊断。
+- **部署：** 逐Git字节复用PR21的`tools/deploy_h2_source.py`及其10项实际CLI检查，安装独立新release；不使用临时安装器、不改旧release，不更改实验环境。源码小包、运行合同和诊断输出合计受20MiB保护；GT逐项CSV压缩原件只留服务器，精简摘要/合同/闭合/SHA回传≤5MiB。
