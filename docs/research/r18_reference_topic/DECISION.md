@@ -77,3 +77,25 @@ GPU仍未授权。未来先完成CPU目标编码/损失/保存恢复及实际入
 使用既有WSL PyTorch2.4.1+cpu，实际2计算线程/1interop、CPU亲和两核；RLIMIT_AS=4GiB及300秒alarm/外层timeout。两次含导入共2.344秒，峰RSS最大211.575MiB；CUDA未初始化、无网络/数据/检测器/优化器。命令：在Linux/WSL运行 python -B tools/r18_probability_transport_cpu.py <不存在的结果路径>；存在输出拒绝覆盖。完整模型调用、学习、AP/AR和GPU为零。预算是本轮合成计算上限，非未来学习耗时证据。
 
 **下一步准确授权边界：** 可另行授权实现并CPU验收上述冻结特征读取/三头学习入口；实际192图取件、48次冻结N前向和600次头更新仍需明确GPU授权。现有CPU通过不允许直接启动该学习实验，也没有自动进入e120的路径。
+
+## 2026-10-27：冻结特征学习CLI与CPU入口验收
+
+在原1ce86fd定义上新增独立读出入口[tools/r18_readout_cli.py](../../../tools/r18_readout_cli.py)、FP32数学实现及CLI验收脚本；旧合成原型/旧回执未改。C0/C1/M的公式、epsilon、detach、零初始化、损失、AdamW与门槛不变。[LEARNING_CONFIG.json](LEARNING_CONFIG.json)给出可审查配置；[CLI_ACCEPTANCE.json](CLI_ACCEPTANCE.json)记录CPU证据。FP32概率单位质量检查仅用2e-6数值容差，不重新归一化概率；原FP64参照保持原容差。
+
+**真实选择已核。** 只读本地train_core_manifest.json（4869条，2955809B，SHA df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d）；该SHA在既有B0_N_REUSE_AUDIT.json的train_core引用中一致，审查文件SHA为07dad6152bcbff3a485d175a37e3600f4467256ff7b6dc8e7cb8b92e999d2dba。本轮仅核清单字节和引用，不重新认证图像/checkpoint。实际CLI select使用stable_image_id原字符串及既定NUL哈希排序，生成[SELECTED_IDS.json](SELECTED_IDS.json)：128/64、交集0；文件SHA90c5b23f8d95550fdc33d4b088ecd529049a70c9b82d1c81fd9c067485973b65，ID内容SHA766fdf256258f945d2aff6e3020594a661060e4f44e7cd1444a3408519ed62cd。未打开图像/标注正文，不读取548/1602清单或材料，不按GT数重选。probe仍属原N训练数据。
+
+**入口与材料约定。** select只读清单；bind将既有特征SHA、固定ID、认证N checkpoint身份、提取阶段CLOSED回执及已用时间/48forward绑定为新合同；run使用新建attempt目录原子消费、源清单/科学定义/特征/匹配身份检查后执行，闭合退出。REAL模式还要求单独的合同SHA授权文件，合成模式无法直接转成真实执行。不能用slim中的工作完成状态代替根CLOSED；错误写STOP，重复目录拒绝且不覆盖原结果。无resume/自动重试/e120子命令。
+
+特征文件只含ids和CPU FP32 q[N,3,Q,256]、r[N,Q,4]、gt[N,Q,4]，以及固定mask、small、gt_ids、category[N,Q]；真实N=192/Q=300。q是每层原N普通query，r是共同初始参考，gt为按固定最终Hungarian映射到query的目标；坐标为归一化画布cxcywh，small须由提取阶段按原GT面积口径提供。原图GT身份、类别、ignore处理及初始reference捕获位置必须在未来提取阶段另行验收；**本次没有提取器，也未认证真实特征内容**。本包是可审核的GPU读出消费者，不是已验收的端到端提取链。未来不得用未经绑定的临时提取脚本绕过这个缺口。
+
+学习只把三个Linear层加入各自AdamW；特征和匹配detach，前后张量摘要/原文件SHA不变。固定fit顺序循环，probe只做初始与终点评价；没有早停/最佳权重选择。保存包含模型、优化器、CPU/CUDA/Python RNG、下一更新游标、臂/合同/特征身份、计数；恢复不退款，生产异常不自动恢复。终点从保存state重新载入后评价。M局部均匀先验替换复用已算格点/残差，数学验收以hook确认无额外head调用且不修改后续状态。
+
+**CPU结论。** 最终实际CLI 43项PASS；覆盖FP32三臂更新及相同初态、三臂完整恢复后下一步参数/优化器/loss/RNG一致、只改probe后最终参数/优化器逐项不变、空全体/空batch、无效框、非有限、N/源/ID/特征字节错误、重复启动、更新/检验/继承detector预算和回传预算拒绝、闭合与导出SHA。另做FP32向量实现对旧FP64标量定义比较及三臂反向，迁移最大差1.06e-8；首次比较夹具因旧参照全局dtype依赖报Float/Double错误，已保留说明，仅修夹具上下文。新科学公式未改。
+
+首个CLI烟测和五个工程修订验收累计：检测器forward **0**；head-update预算预占 **139**，实际optimizer.step **135**（4次空batch在预占后拒绝）；head-eval **198**。另有数学核6次head等价计算/3次反向、0次优化器更新。五轮CLI套件17.37/23.05/23.89/23.13/22.91秒，峰RSS最大265.04MiB，独立CPU子进程2线程、4GiB/300秒保护。全部是明确SYNTHETIC_NOT_SCIENTIFIC材料；不计入未来48/600/96预算。CI新增相同合成入口检查，每次CI另计28预占/27实际更新/40检验及数学核，均不计真实预算。
+
+**预算及闭合。** 读出入口自身不调用检测器；只接受提取回执精确48forward并继承其GPU/wall成本，拒绝超过48。真实读出600次更新/96次检验分别硬限制；预占后失败不返还。M替换不新增head调用。剩余GPU阶段=1800秒减提取成本，wall=3600秒减提取成本；allocated≤18GiB、新材料≤512MiB、slim≤5MiB，按步骤及alarm监控，异常STOP。逐GT指标gzip精简保存，匹配不足100只记不足；所有比较保留负值、不算AP/AR。导出只返slim与根CLOSED/STOP/ledger，不返特征或头checkpoint。
+
+**执行包和授权边界。** tools/package_r18_readout.py只从干净已提交HEAD导出五份运行源码/配置/实际ID清单、逐文件SHA manifest及命令模板，不执行任何任务。需要先另行完成真实N特征提取入口与材料语义验收，再由用户授权GPU；未来先bind既有材料，再用绑定合同SHA的独立授权运行唯一attempt。当前不含有效GPU授权文件，未连接服务器、未提取真实特征、未真实学习。PR25仍草稿，不合并；原P/H2/PR23/24裁决不变。
+
+文件字节收尾：初次Windows CRLF选择文件SHA90c5b23f…仍保留；实际select接口已固定LF并重新生成，Git内SELECTED_IDS.json与规范回执一致，SHA **f4a4ab877f9240c71a0c68e6eddb6b422b38dbe2f4c7a2e65831555b40c70c3a**。128/64内容及ID摘要不变。最终CLI第五轮按规范运行字节再次通过，前轮工程回执保留，不冒充真实实验。

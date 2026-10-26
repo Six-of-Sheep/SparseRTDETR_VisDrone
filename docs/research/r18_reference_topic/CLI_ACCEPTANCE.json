@@ -1,0 +1,209 @@
+{
+  "scope": "SYNTHETIC_CPU_ONLY",
+  "status": "PASS",
+  "checks": [
+    {
+      "name": "fixture-normal",
+      "pass": true
+    },
+    {
+      "name": "CLI-normal",
+      "pass": true
+    },
+    {
+      "name": "full-roundtrip-all-arms",
+      "pass": true
+    },
+    {
+      "name": "physical-CPU-budget-separated",
+      "pass": true
+    },
+    {
+      "name": "frozen-features-and-matching",
+      "pass": true
+    },
+    {
+      "name": "closed-export-SHA",
+      "pass": true
+    },
+    {
+      "name": "duplicate-start-rejected",
+      "pass": true
+    },
+    {
+      "name": "duplicate-preserves-closed",
+      "pass": true
+    },
+    {
+      "name": "fixture-empty",
+      "pass": true
+    },
+    {
+      "name": "CLI-empty",
+      "pass": true
+    },
+    {
+      "name": "STOP-empty",
+      "pass": true
+    },
+    {
+      "name": "fixture-empty_batch",
+      "pass": true
+    },
+    {
+      "name": "CLI-empty_batch",
+      "pass": true
+    },
+    {
+      "name": "STOP-empty_batch",
+      "pass": true
+    },
+    {
+      "name": "fixture-invalid",
+      "pass": true
+    },
+    {
+      "name": "CLI-invalid",
+      "pass": true
+    },
+    {
+      "name": "STOP-invalid",
+      "pass": true
+    },
+    {
+      "name": "fixture-nonfinite",
+      "pass": true
+    },
+    {
+      "name": "CLI-nonfinite",
+      "pass": true
+    },
+    {
+      "name": "STOP-nonfinite",
+      "pass": true
+    },
+    {
+      "name": "fixture-identity",
+      "pass": true
+    },
+    {
+      "name": "CLI-identity",
+      "pass": true
+    },
+    {
+      "name": "STOP-identity",
+      "pass": true
+    },
+    {
+      "name": "fixture-budget",
+      "pass": true
+    },
+    {
+      "name": "CLI-budget",
+      "pass": true
+    },
+    {
+      "name": "STOP-budget",
+      "pass": true
+    },
+    {
+      "name": "fixture-probe_changed",
+      "pass": true
+    },
+    {
+      "name": "CLI-probe_changed",
+      "pass": true
+    },
+    {
+      "name": "probe-never-updates-parameters-and-initial-predictions-equal",
+      "pass": true
+    },
+    {
+      "name": "CLI-source",
+      "pass": true
+    },
+    {
+      "name": "STOP-source",
+      "pass": true
+    },
+    {
+      "name": "CLI-ids",
+      "pass": true
+    },
+    {
+      "name": "STOP-ids",
+      "pass": true
+    },
+    {
+      "name": "CLI-eval-budget",
+      "pass": true
+    },
+    {
+      "name": "STOP-eval-budget",
+      "pass": true
+    },
+    {
+      "name": "CLI-detector-budget",
+      "pass": true
+    },
+    {
+      "name": "STOP-detector-budget",
+      "pass": true
+    },
+    {
+      "name": "CLI-export-budget",
+      "pass": true
+    },
+    {
+      "name": "STOP-export-budget",
+      "pass": true
+    },
+    {
+      "name": "CLI-real-authorization",
+      "pass": true
+    },
+    {
+      "name": "STOP-real-authorization",
+      "pass": true
+    },
+    {
+      "name": "feature-byte-tamper",
+      "pass": true
+    },
+    {
+      "name": "tamper-no-work",
+      "pass": true
+    }
+  ],
+  "source_sha256": {
+    "tools/r18_readout_cli.py": "b8eb3df7ab8b5542542cc0f1e8059eb869f1dc1886fb7732843b07ae38cada2c",
+    "tools/r18_readout_math.py": "d93b1e4c334abec936a3d1046ea7548b2a729a73e6fb62c9336e010887223fba",
+    "tools/check_r18_readout_cli.py": "47216c50d54bbf2030172a581044b4828522d438402867b860d3b7474b6e616e"
+  },
+  "local_cli_cpu_reserved_head_updates_including_first_smoke": 139,
+  "local_cli_cpu_optimizer_steps_completed": 135,
+  "local_cli_cpu_head_evaluations_including_first_smoke": 198,
+  "local_detector_forwards": 0,
+  "math_oracle_head_forward_equivalents": 6,
+  "math_oracle_backwards": 3,
+  "suite_seconds": [
+    17.369920453988016,
+    23.045393355947454,
+    23.885776923038065,
+    23.133106920984574,
+    22.907299697981216
+  ],
+  "peak_RSS_MiB": 265.0390625,
+  "preserved_test_failure": "Scalar oracle comparison initially mixed default FP32 matrix with FP64 vector. Corrected only test dtype context; frozen formulas unchanged.",
+  "selection_file_sha256": "f4a4ab877f9240c71a0c68e6eddb6b422b38dbe2f4c7a2e65831555b40c70c3a",
+  "real_learning_executed": false,
+  "CI_consumption": "separate synthetic runs, not included in local counts",
+  "tested_runtime_sources": {
+    "tools/r18_readout_cli.py": "b8eb3df7ab8b5542542cc0f1e8059eb869f1dc1886fb7732843b07ae38cada2c",
+    "tools/r18_readout_math.py": "d93b1e4c334abec936a3d1046ea7548b2a729a73e6fb62c9336e010887223fba",
+    "docs/research/r18_reference_topic/CPU_DEFINITION.json": "86e5503a8829e813747dc3e1e5723dc0fd3077ffead2acb8b582654b12f03425",
+    "docs/research/r18_reference_topic/LEARNING_CONFIG.json": "1239b1653ab7a9991b53685194b26cf5c1c70b2d14c32a43d97185a786eb55bc",
+    "docs/research/r18_reference_topic/SELECTED_IDS.json": "f4a4ab877f9240c71a0c68e6eddb6b422b38dbe2f4c7a2e65831555b40c70c3a"
+  },
+  "newline_note": "Canonical LF selection regenerated by actual select CLI; prior Windows CRLF file retained in delivery; IDs unchanged."
+}
