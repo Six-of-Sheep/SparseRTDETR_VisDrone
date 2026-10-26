@@ -41,5 +41,32 @@
       "git_blob_sha256": "2d9d159f9155f374093a6a1ecf8bf783d732e8656bfc39b55d2a2ab53ca4bf36",
       "bytes": 5908
     }
-  ]
+  ],
+  "joint_decision_review": {
+    "date": "2026-10-26",
+    "designs": 1,
+    "retained": 0,
+    "scope": "finite joint GT NLL plus finite-candidate expected IoU decision only",
+    "sources": [
+      {
+        "name": "Nowozin, Optimal Decisions from Probabilistic Models: the Intersection-over-Union Case, CVPR 2014",
+        "url": "https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/nowozin2014intersectionoverunion.pdf",
+        "read": "Author PDF Sections 1-2, Equation 1 and estimation/inference/decision distinction",
+        "limit": "segmentation approximation not claimed identical to exact finite-box enumeration; CVF direct PDF returned 403"
+      },
+      {
+        "name": "Premachandran, Tarlow, Batra, Empirical Minimum Bayes Risk Prediction, CVPR 2014",
+        "url": "https://mlp.cc.gatech.edu/papers/2014/ptb_cvpr14/ptb_cvpr14.pdf",
+        "official_url": "https://openaccess.thecvf.com/content_cvpr_2014/papers/Premachandran_Empirical_Minimum_Bayes_2014_CVPR_paper.pdf",
+        "read": "Author PDF Sections 1-2; official search returned Section 3 Equations 3-6, Algorithm 1 and loss-matrix computation",
+        "limit": "later author-PDF page request timed out; candidate generation and empirical tuning are not equivalent to proposed NLL learning"
+      },
+      {
+        "name": "Yoo et al., Training Multi-Object Detector by Estimating Bounding Box Distribution for Input Image, ICCV 2021",
+        "url": "https://openaccess.thecvf.com/content/ICCV2021/papers/Yoo_Training_Multi-Object_Detector_by_Estimating_Bounding_Box_Distribution_for_Input_ICCV_2021_paper.pdf",
+        "read": "official search returned method excerpt: mixture of Cauchy coordinates plus categorical class, GT likelihood",
+        "limit": "direct PDF 403; no full method read, arbitrary within-component covariance or MBR decoding not asserted"
+      }
+    ]
+  }
 }
