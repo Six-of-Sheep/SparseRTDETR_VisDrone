@@ -1,0 +1,34 @@
+{
+  "schema": "r18-boundary-design-cpu-v1",
+  "status": "PASS",
+  "evidence": "SYNTHETIC_NOT_SCIENTIFIC",
+  "checks": [
+    "joint_expectation_equals_marginal_readout",
+    "different_covariance_same_box_and_coordinate_loss",
+    "fixed_marginal_coupling_direction_is_null",
+    "analytic_logit_gradient_and_control_finite_difference_agree",
+    "rank_one_interaction_chain_rule",
+    "zero_interaction_recovers_independent_distribution_control",
+    "generic_joint_parameter_gradient_nonzero_counterexample",
+    "one_edge_correction_changes_center_and_width_positive_example",
+    "multimodal_average_can_be_worse_than_one_mode",
+    "finite_support_cannot_recover_out_of_support_boundary",
+    "joint_nll_is_not_covered_by_coordinate_loss_equivalence"
+  ],
+  "covariance_pair": [
+    0.6000000000000001,
+    -0.6000000000000001
+  ],
+  "same_expected_edges": [
+    1.0,
+    5.0
+  ],
+  "mode_counterexample_iou": 0.6,
+  "gradient_max_error": 1.811328864675943e-11,
+  "retained_candidate": null,
+  "gpu_calls": 0,
+  "model_forward_calls": 0,
+  "training_updates": 0,
+  "real_cache_reads": 0,
+  "source_sha256": "9e6564197024ecd4044941be7f9c57341d1f881ebe38339dbcadf6e5861bb02c"
+}

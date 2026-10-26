@@ -22,6 +22,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -B tools/repo_manage.py check
+      - name: Boundary design falsification (synthetic stdlib CPU only)
+        run: python -B tools/r18_boundary_design_cpu.py
       - run: python -B tools/repo_manage.py verify-import
       - run: python -B -m unittest discover -s tests -p test_repo_management.py
       - run: python -m pip install -r environment/requirements-ci.txt
