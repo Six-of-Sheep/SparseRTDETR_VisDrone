@@ -14,7 +14,7 @@ import io
 from r18_cache_diag import LIMITS, reference, publish, sha
 
 
-def fixture(root, native_root):
+def fixture(root, native_root, geometry_fixture=False):
     import torch
     from r18_cache_worker import native
     c = dict(schema='r18-cache-diagnostic-v1', profile='SYNTHETIC_FIXTURE', limits=LIMITS,
@@ -65,6 +65,8 @@ def fixture(root, native_root):
             logits[:,q,cat]=z
         if arm=='U':
             boxes[:,0,0] += 2/384
+        if geometry_fixture and arm=='N':
+            boxes[:,0,0] += 2/384  # constructed .50--.75 population, never real caches
         cache=dict(ids=[r['stable_image_id'] for r in rows],logits=logits,boxes=boxes)
         if arm!='N':
             cache['coarse']=boxes.clone()

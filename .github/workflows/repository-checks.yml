@@ -44,3 +44,5 @@ jobs:
           MKL_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '2'
         run: python -B tools/check_r18_cache_cli.py --output /tmp/r18-cache-cli
+      - name: Fixed-pair geometry actual CPU CLI and algebra (constructed only)
+        run: python -B tools/check_r18_geometry_cli.py --output /tmp/r18-geometry-cli
