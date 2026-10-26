@@ -22,6 +22,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -B tools/repo_manage.py check
+      - name: Baseline evidence-plan algebra (synthetic only; no models or data)
+        run: python -B tools/r18_evidence_cpu.py --synthetic-check
       - run: python -B tools/repo_manage.py verify-import
       - run: python -B -m unittest discover -s tests -p test_repo_management.py
       - run: python -m pip install -r environment/requirements-ci.txt
