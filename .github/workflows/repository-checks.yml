@@ -22,6 +22,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -B tools/repo_manage.py check
+      - name: Reused bounded-SHA deployment CLI (synthetic source only)
+        run: python -B tools/check_h2_deploy_cli.py --output /tmp/r18-cache-deploy-cli
+      - name: Baseline evidence-plan algebra (synthetic only; no models or data)
+        run: python -B tools/r18_evidence_cpu.py --synthetic-check
       - run: python -B tools/repo_manage.py verify-import
       - run: python -B -m unittest discover -s tests -p test_repo_management.py
       - run: python -m pip install -r environment/requirements-ci.txt
@@ -32,3 +36,13 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - run: python -m pip install -r environment/requirements-r18-cache-cpu.txt
+      - name: Actual guarded CPU cache CLI (constructed full-query caches; no models)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'
+        run: python -B tools/check_r18_cache_cli.py --output /tmp/r18-cache-cli
+      - name: Fixed-pair geometry actual CPU CLI and algebra (constructed only)
+        run: python -B tools/check_r18_geometry_cli.py --output /tmp/r18-geometry-cli

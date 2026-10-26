@@ -1,0 +1,15 @@
+{
+  "schema": "r18-cache-diagnostic-statistics-v1",
+  "arms_order": ["N", "U", "D"],
+  "images": 548,
+  "thresholds": [0.5, 0.75],
+  "budgets": [600, 300],
+  "size_groups_raw_area": {"small": "0<area<=1024", "medium": "1024<area<=9216", "large": "area>9216"},
+  "argmax_correct_is_parallel": true,
+  "native_primary_matching_only": "original _match at maxDets500; no AP/AR",
+  "COCO_per_GT_matching": "UNKNOWN",
+  "no_GPU_forward_training_AP_AR": true,
+  "supplemental1602": false,
+  "limits": {"wall_seconds": 1800, "cpu_threads": 2, "rss_bytes": 4294967296, "output_bytes": 20971520, "return_bytes": 5242880},
+  "on_anomaly": "STOP_NO_RETRY"
+}

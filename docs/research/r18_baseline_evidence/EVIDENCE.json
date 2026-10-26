@@ -1,0 +1,539 @@
+{
+  "schema": "r18-baseline-evidence-plan-v1",
+  "as_of": "2026-10-26",
+  "decision": "EVIDENCE_FIRST_NO_RETAINED_TRAINING_CANDIDATE",
+  "base_commit": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "production_computation_performed": false,
+  "server_connected": false,
+  "sources": [
+    {
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/research/h2_formal_worker.py",
+      "git_blob_bytes": 23435,
+      "sha256": "b7badd86b0d6669f38239911c14dafafc6e3eae5ef907492f341219659d6b7e9",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/research/h2_formal_worker.py"
+    },
+    {
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/protocol_r18/criterion.py",
+      "git_blob_bytes": 5063,
+      "sha256": "349edfab04d55d9a4d615f4b59a9490c33e30e2e4abd0e1f2652f692ba4d1b11",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/protocol_r18/criterion.py"
+    },
+    {
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "src/sparse_rtdetr/r0/evaluation.py",
+      "git_blob_bytes": 6933,
+      "sha256": "66afa7c1f14b9d6d0c07a22567a50da33fe89c390e283954a23a9705aa87b89f",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/src/sparse_rtdetr/r0/evaluation.py"
+    },
+    {
+      "commit": "a97e1eaf750c69c4ee72af232d07632b1aced931",
+      "path": "src/sparse_rtdetr/protocol_r18/span_worker.py",
+      "git_blob_bytes": 35719,
+      "sha256": "23d3954728a8a6505e1df098411c55139034e5cd3751b662daa20fd366cfd071",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/a97e1eaf750c69c4ee72af232d07632b1aced931/src/sparse_rtdetr/protocol_r18/span_worker.py"
+    },
+    {
+      "commit": "e50bedbe8e41bdfd3c47d09f7076d9644e438e26",
+      "path": "docs/research/r18_local_detail_context/DESIGN.md",
+      "git_blob_bytes": 12439,
+      "sha256": "0e55b6e3427e535b7467be01756355c6224caf85c86404b9771c812322ec1403",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/e50bedbe8e41bdfd3c47d09f7076d9644e438e26/docs/research/r18_local_detail_context/DESIGN.md"
+    },
+    {
+      "commit": "45cac46b3b3b329d3c3ee12bcc0293c23e24ccc1",
+      "path": "docs/research/r18_target_support/RESULTS.md",
+      "git_blob_bytes": 9097,
+      "sha256": "461b1a3efad268dc6022c19a7e57a552de2e7c2175ea6a955227001802920501",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/45cac46b3b3b329d3c3ee12bcc0293c23e24ccc1/docs/research/r18_target_support/RESULTS.md"
+    },
+    {
+      "commit": "ccacaf69840bbe31d31268b249880c08371ac820",
+      "path": "docs/papers/r18_h2_center/NOVELTY_BOUNDARY.md",
+      "git_blob_bytes": 5908,
+      "sha256": "2d9d159f9155f374093a6a1ecf8bf783d732e8656bfc39b55d2a2ab53ca4bf36",
+      "url": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/ccacaf69840bbe31d31268b249880c08371ac820/docs/papers/r18_h2_center/NOVELTY_BOUNDARY.md"
+    }
+  ],
+  "verified_local_evidence": [
+    {
+      "relative_to_delivery_research": "r18-h2-formal-20261024-001/terminal-delivery-001/REPORT.md",
+      "bytes": 7452,
+      "sha256": "c246eeea19a10d00d09ed6f469fadfaccb6efb025abdb77b3020c2440d149b75",
+      "local_original_index_match": true
+    },
+    {
+      "relative_to_delivery_research": "r18-h2-formal-20261024-001/terminal-delivery-001/formal-tables/absolute.csv",
+      "bytes": 7925,
+      "sha256": "32a246e6e03ebaafb8fde7c8b502bf18d5c85a3d1b309aef919f0e87672f4446",
+      "local_original_index_match": true
+    },
+    {
+      "relative_to_delivery_research": "r18-h2-formal-20261024-001/terminal-delivery-001/formal-tables/deltas.csv",
+      "bytes": 11927,
+      "sha256": "49062f12035d7d2458bbe1bf11ef8c08fe1647f63d675369055de318d718f84f",
+      "local_original_index_match": true
+    },
+    {
+      "relative_to_delivery_research": "r18-h2-formal-20261024-001/terminal-delivery-001/receipts/infer-U-RESULT.json",
+      "bytes": 42280,
+      "sha256": "e7621f66edc3c97650726794084bd7e45808a895f0e1b5c279334fbb338fcecd",
+      "local_original_index_match": true
+    },
+    {
+      "relative_to_delivery_research": "r18-h2-formal-20261024-001/terminal-delivery-001/receipts/infer-D-RESULT.json",
+      "bytes": 42280,
+      "sha256": "5b43acf5a7bcbc2140da53f729120c50f14cee5d0271cea4b60b3f5ab3f3d919",
+      "local_original_index_match": true
+    },
+    {
+      "relative_to_delivery_research": "r18-sampling-span-20261020-001/terminal-delivery-001/receipts/attempt-formal-003/infer-B0/RESULT.json",
+      "bytes": 43349,
+      "sha256": "99609528d93f60dc79572b005c3cd3a5dd4d453adb3ef9c5e328751ac55102a9",
+      "local_original_index_match": true
+    }
+  ],
+  "cache_inventory_from_existing_receipts": {
+    "U": {
+      "batches": 137,
+      "bytes": 12093812,
+      "payload_fields_from_source": [
+        "ids",
+        "logits",
+        "boxes",
+        "coarse"
+      ],
+      "physical_cache_reverified_this_turn": false,
+      "receipt_sha256": "e7621f66edc3c97650726794084bd7e45808a895f0e1b5c279334fbb338fcecd"
+    },
+    "D": {
+      "batches": 137,
+      "bytes": 12093812,
+      "payload_fields_from_source": [
+        "ids",
+        "logits",
+        "boxes",
+        "coarse"
+      ],
+      "physical_cache_reverified_this_turn": false,
+      "receipt_sha256": "5b43acf5a7bcbc2140da53f729120c50f14cee5d0271cea4b60b3f5ab3f3d919"
+    },
+    "N": {
+      "batches": 137,
+      "bytes": 9437656,
+      "payload_fields_from_source": [
+        "ids",
+        "logits",
+        "boxes"
+      ],
+      "physical_cache_reverified_this_turn": false,
+      "receipt_sha256": "99609528d93f60dc79572b005c3cd3a5dd4d453adb3ef9c5e328751ac55102a9"
+    }
+  },
+  "cache_bytes_total": 33625280,
+  "deltas_copied_not_recomputed": [
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AP",
+      "delta_pp": "0.014185631882535077",
+      "recorded_delta_pp": "0.014185631882535077",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APS",
+      "delta_pp": "0.14392296404324434",
+      "recorded_delta_pp": "0.14392296404324434",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APM",
+      "delta_pp": "-0.2902943850301487",
+      "recorded_delta_pp": "-0.2902943850301487",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APL",
+      "delta_pp": "-1.8881971040443868",
+      "recorded_delta_pp": "-1.8881971040443868",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AR_large",
+      "delta_pp": "-3.991976526865859",
+      "recorded_delta_pp": "-3.991976526865859",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AP75_small",
+      "delta_pp": "-0.4253587068108744",
+      "recorded_delta_pp": "-0.4253587068108744",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AP",
+      "delta_pp": "-0.1509045526956243",
+      "recorded_delta_pp": "-0.1509045526956243",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APS",
+      "delta_pp": "0.11250764607636798",
+      "recorded_delta_pp": "0.11250764607636798",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APM",
+      "delta_pp": "-0.08101298861561412",
+      "recorded_delta_pp": "-0.08101298861561412",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APL",
+      "delta_pp": "0.32854326639336073",
+      "recorded_delta_pp": "0.32854326639336073",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AR_large",
+      "delta_pp": "0.5621959570828894",
+      "recorded_delta_pp": "0.5621959570828894",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AP75_small",
+      "delta_pp": "0.41308996325463143",
+      "recorded_delta_pp": "0.41308996325463143",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AP",
+      "delta_pp": "0.16509018457815938",
+      "recorded_delta_pp": "0.16509018457815938",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APS",
+      "delta_pp": "0.031415317966876355",
+      "recorded_delta_pp": "0.031415317966876355",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APM",
+      "delta_pp": "-0.20928139641453458",
+      "recorded_delta_pp": "-0.20928139641453458",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "APL",
+      "delta_pp": "-2.2167403704377477",
+      "recorded_delta_pp": "-2.2167403704377477",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AR_large",
+      "delta_pp": "-4.554172483948749",
+      "recorded_delta_pp": "-4.554172483948749",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "600",
+      "evaluator": "COCO_bridge",
+      "metric": "AP75_small",
+      "delta_pp": "-0.8384486700655058",
+      "recorded_delta_pp": "-0.8384486700655058",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AP",
+      "delta_pp": "0.031396596554750245",
+      "recorded_delta_pp": "0.031396596554750245",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APS",
+      "delta_pp": "0.1839491311285496",
+      "recorded_delta_pp": "0.1839491311285496",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APM",
+      "delta_pp": "-0.3297733660351798",
+      "recorded_delta_pp": "-0.3297733660351798",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APL",
+      "delta_pp": "-1.934194120852556",
+      "recorded_delta_pp": "-1.934194120852556",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AR_large",
+      "delta_pp": "-5.024721951558597",
+      "recorded_delta_pp": "-5.024721951558597",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AP75_small",
+      "delta_pp": "-0.37177430666878175",
+      "recorded_delta_pp": "-0.37177430666878175",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AP",
+      "delta_pp": "-0.18937508427477323",
+      "recorded_delta_pp": "-0.18937508427477323",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APS",
+      "delta_pp": "0.09810958742574316",
+      "recorded_delta_pp": "0.09810958742574316",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APM",
+      "delta_pp": "-0.20714599305903247",
+      "recorded_delta_pp": "-0.20714599305903247",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APL",
+      "delta_pp": "0.212087282888912",
+      "recorded_delta_pp": "0.212087282888912",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AR_large",
+      "delta_pp": "-1.4065436226733508",
+      "recorded_delta_pp": "-1.4065436226733508",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "D-U",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AP75_small",
+      "delta_pp": "0.410892083875658",
+      "recorded_delta_pp": "0.410892083875658",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AP",
+      "delta_pp": "0.22077168082952348",
+      "recorded_delta_pp": "0.22077168082952348",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APS",
+      "delta_pp": "0.08583954370280644",
+      "recorded_delta_pp": "0.08583954370280644",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APM",
+      "delta_pp": "-0.12262737297614734",
+      "recorded_delta_pp": "-0.12262737297614734",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "APL",
+      "delta_pp": "-2.146281403741468",
+      "recorded_delta_pp": "-2.146281403741468",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AR_large",
+      "delta_pp": "-3.6181783288852465",
+      "recorded_delta_pp": "-3.6181783288852465",
+      "status": "RECORDED"
+    },
+    {
+      "﻿data_kind": "H2 seed0 development548",
+      "pair": "U-N",
+      "budget": "300",
+      "evaluator": "COCO_bridge",
+      "metric": "AP75_small",
+      "delta_pp": "-0.7826663905444398",
+      "recorded_delta_pp": "-0.7826663905444398",
+      "status": "RECORDED"
+    }
+  ],
+  "literature": [
+    {
+      "title": "Rank-DETR for High Quality Object Detection",
+      "url": "https://proceedings.neurips.cc/paper_files/paper/2023/file/34074479ee2186a9f236b8fd03635372-Paper-Conference.pdf",
+      "read_scope": "PDF section3.2-3.4 equations1-8; online text; no local PDF"
+    },
+    {
+      "title": "Cascade-DETR",
+      "url": "https://openaccess.thecvf.com/content/ICCV2023/html/Ye_Cascade-DETR_Delving_into_High-Quality_Universal_Object_Detection_ICCV_2023_paper.html",
+      "read_scope": "abstract and indexed expected-IoU method excerpts only; PDF403/arxiv PDF too large; not full text verified"
+    },
+    {
+      "title": "VarifocalNet",
+      "url": "https://openaccess.thecvf.com/content/CVPR2021/html/Zhang_VarifocalNet_An_IoU-Aware_Dense_Object_Detector_CVPR_2021_paper.html",
+      "read_scope": "official abstract and previously reviewed source; PDF403"
+    },
+    {
+      "title": "TIDE",
+      "url": "https://dbolya.github.io/tide/paper.pdf",
+      "read_scope": "author PDF section2; offline output diagnosis precedent; no TIDE execution"
+    },
+    {
+      "title": "RankDetNet: Delving Into Ranking Constraints for Object Detection",
+      "url": "https://openaccess.thecvf.com/content/CVPR2021/html/Liu_RankDetNet_Delving_Into_Ranking_Constraints_for_Object_Detection_CVPR_2021_paper.html",
+      "read_scope": "official abstract: same-class positive pair IoU-guided ranking; PDF403; no exact formula-equivalence claim"
+    },
+    {
+      "title": "Rank & Sort Loss",
+      "url": "https://openaccess.thecvf.com/content/ICCV2021/html/Oksuz_Rank__Sort_Loss_for_Object_Detection_and_Instance_Segmentation_ICCV_2021_paper.html",
+      "read_scope": "official abstract and indexed method excerpt: positives ordered by continuous quality; not full PDF verified"
+    }
+  ],
+  "search_scope": "Three query batches, five narrow queries; two candidate mechanisms only; retrieval scope and failures recorded; search ended.",
+  "N_H2_criterion_and_rank_source_equal": true,
+  "real_diagnostic_addendum": {
+    "date": "2026-10-26",
+    "result_index": "DIAGNOSTIC_RESULT.json",
+    "production_diagnostic_executed": true,
+    "new_detector_forward_GPU_training_AP_AR": 0,
+    "retained_method_candidates": 0,
+    "input_originals_changed": false
+  }
+}

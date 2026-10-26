@@ -1,0 +1,13 @@
+{
+  "schema": "r18-fixed-pair-geometry-v1",
+  "arm": "N", "images": 548, "expected_small_B": 26441, "expected_selected": 10503,
+  "selection": "max_original_float64_IoU_then_smallest_query_id_exact_tie",
+  "population": "B_small_raw_area_0_to_1024_best_IoU_ge_0.50_lt_0.75",
+  "coordinates": "native_FP32_cxcywh_to_xyxy_then_original_pixel_scale_no_clip; analysis_float64",
+  "replacement": "fixed_query_original_center_only_size_only_both",
+  "groups": ["center_only", "size_only", "both_individually", "neither_individually"],
+  "quantiles": [0, 0.05, 0.25, 0.5, 0.75, 0.95, 1],
+  "area_bins": [64, 256, 576, 1024],
+  "limits": {"wall_seconds": 1800, "cpu_threads": 2, "rss_bytes": 4294967296, "output_bytes": 20971520, "return_bytes": 5242880},
+  "GT_assisted_only": true, "AP_AR_calls": 0, "model_forward_calls": 0, "training_updates": 0
+}

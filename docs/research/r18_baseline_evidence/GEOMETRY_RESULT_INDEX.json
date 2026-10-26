@@ -1,0 +1,21 @@
+{
+  "schema": "r18-N-geometry-delivery-v1",
+  "executed_commit": "e48e3d0c39204ec84a26beee621f48ced5b15d32",
+  "task": "r18-N-geometry-20261026-001",
+  "attempt": "attempt-cpu-001",
+  "summary_sha256": "0d6b9d0f4706af9c55a0c1f6f49f02db334b8df789c50f7dbca6a2d4ded358fa",
+  "return_index_sha256": "380d44503d0cde7c8fdb6593bf62a86696e77e070a0939f04969bde17d965f78",
+  "return_files": 15,
+  "return_bytes": 468005,
+  "server_bytes": 3532878,
+  "pairs_server_only": true,
+  "selected_GT": 10503,
+  "images": 548,
+  "selected_images": 516,
+  "elapsed_seconds": 8.62350577302277,
+  "peak_total_rss_bytes": 636817408,
+  "quality_or_AP_claim": false,
+  "candidate_retained": false,
+  "cache_analysis_chain_closed": true,
+  "next_execution_authorized": false
+}
