@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-26",
+  "scope": "three direct precedents only; no author-code reproduction; no downloaded PDFs",
+  "papers": [
+    {
+      "name": "SABL",
+      "url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf",
+      "read": "Sections 3.1-3.2; PDF pages 5-6; Figure 2-3",
+      "supports": "directional side features, bucket classification and fine offset regression; nearest/second-nearest labels"
+    },
+    {
+      "name": "LocNet",
+      "url": "https://www.cv-foundation.org/openaccess/content_cvpr_2016/papers/Gidaris_LocNet_Improving_Localization_CVPR_2016_paper.pdf",
+      "read": "abstract, overview, returned Section 3.1 excerpt",
+      "limitation": "later page request timed out; no detailed inference or loss equivalence asserted"
+    },
+    {
+      "name": "D-FINE",
+      "url": "https://arxiv.org/html/2410.13842v1",
+      "read": "Section 4.1 equations 2-5",
+      "version": "v1",
+      "supports": "four separate edge distributions, expectation offsets scaled by box dimensions, residual distribution refinement; not joint opposite-edge equivalence"
+    }
+  ],
+  "local_references": [
+    {
+      "commit": "dca0f23760166f70653e574e77a6091a9ba77430",
+      "path": "docs/research/r18_baseline_evidence/DECISION.md",
+      "git_blob_sha256": "b4d5425a57b1135ff3e01c79e412704042a4547daab181762c44da8bccfc862a",
+      "bytes": 30511
+    },
+    {
+      "commit": "a97e1eaf750c69c4ee72af232d07632b1aced931",
+      "path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py",
+      "git_blob_sha256": "01c7b7ab8f070de09dd10e0b34cdd8332874cf63f48cae7e9a608a8574122b6a",
+      "bytes": 24521
+    },
+    {
+      "commit": "ccacaf69840bbe31d31268b249880c08371ac820",
+      "path": "docs/papers/r18_h2_center/NOVELTY_BOUNDARY.md",
+      "git_blob_sha256": "2d9d159f9155f374093a6a1ecf8bf783d732e8656bfc39b55d2a2ab53ca4bf36",
+      "bytes": 5908
+    }
+  ],
+  "joint_decision_review": {
+    "date": "2026-10-26",
+    "designs": 1,
+    "retained": 0,
+    "scope": "finite joint GT NLL plus finite-candidate expected IoU decision only",
+    "sources": [
+      {
+        "name": "Nowozin, Optimal Decisions from Probabilistic Models: the Intersection-over-Union Case, CVPR 2014",
+        "url": "https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/nowozin2014intersectionoverunion.pdf",
+        "read": "Author PDF Sections 1-2, Equation 1 and estimation/inference/decision distinction",
+        "limit": "segmentation approximation not claimed identical to exact finite-box enumeration; CVF direct PDF returned 403"
+      },
+      {
+        "name": "Premachandran, Tarlow, Batra, Empirical Minimum Bayes Risk Prediction, CVPR 2014",
+        "url": "https://mlp.cc.gatech.edu/papers/2014/ptb_cvpr14/ptb_cvpr14.pdf",
+        "official_url": "https://openaccess.thecvf.com/content_cvpr_2014/papers/Premachandran_Empirical_Minimum_Bayes_2014_CVPR_paper.pdf",
+        "read": "Author PDF Sections 1-2; official search returned Section 3 Equations 3-6, Algorithm 1 and loss-matrix computation",
+        "limit": "later author-PDF page request timed out; candidate generation and empirical tuning are not equivalent to proposed NLL learning"
+      },
+      {
+        "name": "Yoo et al., Training Multi-Object Detector by Estimating Bounding Box Distribution for Input Image, ICCV 2021",
+        "url": "https://openaccess.thecvf.com/content/ICCV2021/papers/Yoo_Training_Multi-Object_Detector_by_Estimating_Bounding_Box_Distribution_for_Input_ICCV_2021_paper.pdf",
+        "read": "official search returned method excerpt: mixture of Cauchy coordinates plus categorical class, GT likelihood",
+        "limit": "direct PDF 403; no full method read, arbitrary within-component covariance or MBR decoding not asserted"
+      }
+    ]
+  }
+}

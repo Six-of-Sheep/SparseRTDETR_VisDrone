@@ -1,0 +1,129 @@
+{
+  "schema": "r18-joint-decision-cpu-v1",
+  "evidence": "SYNTHETIC_NOT_SCIENTIFIC",
+  "checks": [
+    "same_four_marginals_distinct_unique_decisions",
+    "product_marginal_control_same_for_both",
+    "correlation_misleads_under_opposite_true_state",
+    "multimodal_mbr_not_map_and_not_always_more_accurate",
+    "ambiguous_boundary_tie_rule_and_small_change_instability",
+    "joint_gt_nll_gradient_no_argmax_backprop",
+    "joint_nll_distinguishes_equal_marginals",
+    "exact_equivalence_to_conventional_finite_candidate_mbr",
+    "support_limit_cannot_reach_high_iou",
+    "invalid_probability_rejection"
+  ],
+  "status": "PASS",
+  "p_decision": [
+    "2",
+    "-1",
+    "4",
+    "3"
+  ],
+  "q_decision": [
+    "2",
+    "-1",
+    "6",
+    "3"
+  ],
+  "independent_decision": [
+    "2",
+    "-1",
+    "6",
+    "3"
+  ],
+  "p": [
+    "40021/4000000",
+    "1/160000",
+    "359989/4000000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1959829/4000000",
+    "1/160000",
+    "1639861/4000000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000"
+  ],
+  "q": [
+    "359989/4000000",
+    "1/160000",
+    "40021/4000000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1639861/4000000",
+    "1/160000",
+    "1959829/4000000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000",
+    "1/160000"
+  ],
+  "p_utilities": [
+    "455275657/1008000000",
+    "17780647/56000000",
+    "5973221/11200000",
+    "40001/112500",
+    "1412933437/5040000000",
+    "919433993/5040000000",
+    "93942631/280000000",
+    "11481277/56000000",
+    "735805361/1008000000",
+    "145704121/280000000",
+    "724048777/1008000000",
+    "27113047/56000000",
+    "13139911/36000000",
+    "187346227/720000000",
+    "2017672957/5040000000",
+    "1303395593/5040000000"
+  ],
+  "q_utilities": [
+    "468714313/1008000000",
+    "18153943/56000000",
+    "5973221/11200000",
+    "40001/112500",
+    "1426372093/5040000000",
+    "929992937/5040000000",
+    "95062519/280000000",
+    "1655419/8000000",
+    "708928049/1008000000",
+    "142291129/280000000",
+    "737487433/1008000000",
+    "27486343/56000000",
+    "12659959/36000000",
+    "1280706661/5040000000",
+    "2031111613/5040000000",
+    "187707791/720000000"
+  ],
+  "multimodal_decision": [
+    "0",
+    "-1",
+    "6",
+    "3"
+  ],
+  "multimodal_map": [
+    "0",
+    "-1",
+    "4",
+    "3"
+  ],
+  "nll_gradient_max_error": 2.3435225982026964e-11,
+  "retained_candidate": null,
+  "learning_budget": 0,
+  "gpu_calls": 0,
+  "model_calls": 0,
+  "training_updates": 0,
+  "source_sha256": {
+    "tools/r18_joint_decision_cpu.py": "42f2b60b98ea753ab992f935434fe0bf2b31186ae2ad4a93b1c1737fcbd7ebcb",
+    "tools/r18_boundary_design_cpu.py": "9e6564197024ecd4044941be7f9c57341d1f881ebe38339dbcadf6e5861bb02c"
+  }
+}
