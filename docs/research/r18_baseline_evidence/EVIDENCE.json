@@ -527,5 +527,13 @@
     }
   ],
   "search_scope": "Three query batches, five narrow queries; two candidate mechanisms only; retrieval scope and failures recorded; search ended.",
-  "N_H2_criterion_and_rank_source_equal": true
+  "N_H2_criterion_and_rank_source_equal": true,
+  "real_diagnostic_addendum": {
+    "date": "2026-10-26",
+    "result_index": "DIAGNOSTIC_RESULT.json",
+    "production_diagnostic_executed": true,
+    "new_detector_forward_GPU_training_AP_AR": 0,
+    "retained_method_candidates": 0,
+    "input_originals_changed": false
+  }
 }

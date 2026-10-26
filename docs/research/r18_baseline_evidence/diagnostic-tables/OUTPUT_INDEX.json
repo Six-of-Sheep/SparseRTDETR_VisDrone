@@ -1,0 +1,21 @@
+{
+  "input_sha256": "11ec4c23612d857e7927ea73ebe9014e5877963c4fe905a1ab6f3ad5d5831ec4",
+  "files": [
+    {
+      "path": "DIAGNOSTIC_BREAKDOWNS.csv",
+      "bytes": 52436,
+      "sha256": "b87f6691d4a895e24717a075d815e8e37f06e7112f91ba2448b3a93c51c101cd"
+    },
+    {
+      "path": "DIAGNOSTIC_COUNTS.csv",
+      "bytes": 4838,
+      "sha256": "2b743fcf5bcaa695996a4b874a69935dc0768a1c082ca188ed87308a6aa7bdf9"
+    },
+    {
+      "path": "DIAGNOSTIC_TRANSITIONS.csv",
+      "bytes": 20172,
+      "sha256": "32cc1dc5ed0758cb6e01dc7b0164e9ddc7107ab66c415f23eb8afdf6989924ff"
+    }
+  ],
+  "scope": "existing diagnostic counts only; no AP/AR"
+}

@@ -1,12 +1,12 @@
 # 一次原N终点缓存诊断：执行方案
 
-2026-10-26更新：用户已授权CPU接线、验收后单次真实执行。以下原统计/资源上限保持；新增语义澄清见第7节。执行状态和三个收尾答案在DECISION.md更新，不自动恢复候选。
+2026-10-26更新：用户授权的CPU接线、验收和单次真实执行均已完成，CLOSED PASS；不再等待启动或重放。本文件保留受验统计/资源上限，语义澄清见第7节，实际闭合见第8节。三个收尾答案在DECISION.md，不自动恢复候选。
 
-对应[研究决定](DECISION.md)。**选择先补证，不保留可直接训练的候选。** 本轮完成的是本地源码/已交付JSON/索引审查、公开文献核对及合成CPU检查；以下真实缓存诊断尚未执行。CPU计数是新增诊断统计，不能借“非AP”绕过本轮不做科学评分的边界。
+对应[研究决定](DECISION.md)。**补证已完成，仍不保留可直接训练的候选。** 初次仅完成索引/源码/文献审查，随后依据单独授权执行了以下CPU诊断；没有AP/AR计算。
 
-## 1. 下一次请求授权的准确范围
+## 1. 本次已授权的准确范围
 
-授权完善并检验一个CPU-only缓存读取适配器；通过后，在实验室服务器单次读取原N/U/D的548 development终点缓存及对应原标注，运行下述固定诊断，回传≤5 MiB摘要/引用/SHA并退出。只读原件，输出到新独立目录，禁止覆盖。**GPU0、模型forward0、训练/反向0、AP/AR计算0、图像读取0、checkpoint加载0、1602访问0。** 不要求启动或重演H2正式入口。
+用户授权完善并检验CPU-only缓存读取适配器，通过后在实验室服务器单次读取原N/U/D的548 development终点缓存及对应原标注，运行下述固定诊断，回传≤5 MiB摘要/引用/SHA并退出。实际已完成。只读原件，输出到新独立目录，禁止覆盖。**GPU0、模型forward0、训练/反向0、AP/AR计算0、图像读取0、checkpoint加载0、1602访问0。** 不启动或重演H2正式入口。
 
 实际入口为`tools/r18_cache_diag.py check|execute --contract <path> --sha256 <SHA>`，依赖`r18_cache_worker.py`与`r18_cache_core.py`。真实执行前须完成`check_r18_cache_cli.py`实际CLI验收，并提交冻结运行字节；合成数学内核不替代这个入口。
 
@@ -19,7 +19,7 @@
 
 所有缓存都在服务器原task目录；完整路径、字节数、SHA已在本地原infer RESULT引用中，本目录EVIDENCE.json只存最小入口/哈希，不复制411条原索引。逐原始字节核SHA后才可CPU `torch.load(map_location='cpu', weights_only=True)`；严格只接受这些索引列出的预测缓存，禁止接收checkpoint或任意pickle。按137批顺序流式处理，每臂必须恰好548个原稳定ID，各批4图；原manifest SHA `5f4d788591b60bd2a6223c15e548248f4c0296656373d6d98c016d912a7537dd`，不得从目录自动发现样本。
 
-成员metadata/标注按该development清单的逐文件SHA核验；只访问其annotations，不打开images。既有N权重认证、原STOP及缺训练CLOSED仍沿原报告，本次不重复读大权重。原源文件/配置的固定Git字节与EVIDENCE.json核对。本轮不连接服务器，所以实物可读性/当前标注SHA状态仍待入场核验；失败STOP，不重推理补缓存。
+成员metadata/标注按该development清单的逐文件SHA核验；只访问其annotations，不打开images。既有N权重认证、原STOP及缺训练CLOSED仍沿原报告，本次对物理checkpoint只分块核SHA，不加载tensor。原源文件/配置的固定Git字节与EVIDENCE.json核对。原方案阶段远端状态未知，本次材料check和独立worker准入已通过；失败STOP规则保留，不能重推理补缓存。
 
 U/D的同一GT按`stable_image_id + raw_annotation_id`对应；**不同模型query ID绝不能直接配对。** 训练Hungarian和下文诊断最大匹配不同，分别命名输出。N/U/D历史/同轮身份原样记录；不把终点关联解释成训练因果。
 
@@ -59,10 +59,10 @@ N本来可覆盖而U/D不可覆盖的GT，是H2新增几何损失的终点线索
 
 |阶段|工作与终点|上限/准入|
 |---|---|---|
-|本轮已做|索引逐本地SHA、冻结源码字段和先例审查；合成数学/反例|0 GPU、0真实缓存/标注读取、0 AP；仅本地JSON和源文件|
-|下一次授权：CPU接线|实际CLI输入/输出保护、原FP32排序/ignore/matcher适配及合成对照；受测版本提交冻结|不构造detector；CPU检查不冒充真实分布|
-|下一次授权：单次真实诊断|N/U/D同548图缓存+清单标注；完整覆盖检查、固定统计、SHA导出、退出|最多2 CPU线程、RSS≤4 GiB、累计wall≤30分钟、GPU0、forward0；D回传≤5 MiB，服务器新输出≤20 MiB|
-|诊断后一次研究决定|按DECISION四条规则，结束B或送回一次方法审查|不自动GPU、不扩样本/阈值/候选；缺证不自动补推理|
+|初次方案阶段已做|索引逐本地SHA、冻结源码字段和先例审查；合成数学/反例|当时0真实缓存/标注读取|
+|本次CPU接线已完成|实际CLI输入/输出保护、原FP32排序/ignore/matcher适配及合成对照；受测版本提交冻结|不构造detector；CPU检查不冒充真实分布|
+|本次单次真实诊断已完成|N/U/D同548图缓存+清单标注；完整覆盖检查、固定统计、SHA导出、退出|最多2 CPU线程、RSS≤4 GiB、累计wall≤30分钟、GPU0、forward0；D回传≤5 MiB，服务器新输出≤20 MiB|
+|诊断后一次研究决定已完成|事件存在，但不足以保留B；当前无待执行候选|不自动GPU、不扩样本/阈值/候选；缺证不自动补推理|
 
 预算依据：缓存411文件约32.07 MiB（33625280B），并已有两档预测索引用于核对；预测JSON总量约0.4 GiB，仅服务器顺序读取并及时释放。GT矩阵逐图计算，远小于训练状态。30分钟/4GiB是保守工程硬上限，**不是已测速度承诺**；哈希/读取/匹配均计入wall，触界STOP，输出partial说明，不删旧材料、不自动重试。资源/路径/身份/计数/数值异常同样STOP。样本不足如实报告，不现场扩图。
 
@@ -81,7 +81,7 @@ python -B -m unittest discover -s tests -p test_repo_management.py
 git diff --check
 ```
 
-脚本只内置构造框、分数和匹配标签，不接受生产文件参数。覆盖几何/预算/类别/ignore/密集竞争/稳定tie/空分母/排序充分性反例及B纸面hinge有限差分。输出`NOT_SCIENTIFIC`；通过不认定N存在该问题或B机制成立。生产CLI是下一次限定授权需完成的实际入口，不用本合成CLI替代。
+脚本只内置构造框、分数和匹配标签，不接受生产文件参数。覆盖几何/预算/类别/ignore/密集竞争/稳定tie/空分母/排序充分性反例及B纸面hinge有限差分。输出`NOT_SCIENTIFIC`；通过不认定N存在该问题或B机制成立。生产CLI已经单独验收并执行，不用本合成CLI替代。
 
 ## 7. 按用户授权补全的语义、绑定和执行保护
 
@@ -91,3 +91,9 @@ git diff --check
 - **分母与配对：** A为训练有效GT；B为raw-ignore后score1有效GT。B可包含clip后不属于A的原始GT，交/差集显式计数。覆盖使用原图raw框连续IoU；CPU原生Hungarian重建使用原resize-only FP32目标。U/D与既有CENTER_RECORDS比对匹配身份并披露CPU/GPU舍入差异；N原匹配未记录，只能记CPU重建，不能声称还原训练过程。跨模型仅用图像/GT原始ID配对。
 - **原冻结统计和资源：** 仍仅top600/300、IoU.50/.75、预定义互斥raw面积小中大；类别/序列必要汇总限定高IoU的小/大目标。执行进程CPU affinity限定两核、Torch/BLAS两线程；监督器监控自身+唯一worker RSS、累计wall及新任务目录字节，触界仅终止本次自有worker并保存STOP。真实execute以独占目录消费一次，旧输出拒绝，异常不重试。workers内禁止detector模块调用、反向、CUDA初始化和AP/AR入口，审计拒绝图像及禁用数据目录读取。正常返回后独立SHA核验小回执，不执行第二次诊断。
 - **部署：** 逐Git字节复用PR21的`tools/deploy_h2_source.py`及其10项实际CLI检查，安装独立新release；不使用临时安装器、不改旧release，不更改实验环境。源码小包、运行合同和诊断输出合计受20MiB保护；GT逐项CSV压缩原件只留服务器，精简摘要/合同/闭合/SHA回传≤5MiB。
+
+## 8. 本次闭合与禁止重放
+
+执行commit09e5217edfd7e3cb8aed79c09a51d8f8a7c4a751；独立task `r18-baseline-cache-20261026-001/attempt-cpu-001`，14:07:49+08只启动一次。CLOSED/EXIT PASS，99.902062秒、峰总RSS1127411712B、affinity[0,1]，411原生CPU matcher调用、548×3完整覆盖；全部原生排序/坐标与预测一致，六评分的120个原计数向量一致，U/D保存的小GT匹配身份各26554项完全一致。没有训练、新detector forward、GPU、AP/AR或1602访问。约7.82MiB GT逐项压缩CSV仅服务器，15文件66206B必要回传逐SHA通过。
+
+材料索引、统计表、原始SHA及三个结论见[诊断结果索引](DIAGNOSTIC_RESULT.json)和[研究决定第5–6节](DECISION.md)。原H2/P FAIL、旧STOP及冻结门槛保留。任何后续诊断、训练或方法执行均不在当前已消费授权内，不能通过更换attempt目录重复运行。
