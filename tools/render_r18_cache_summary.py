@@ -17,7 +17,7 @@ def render(summary, expected, output):
     def table(name, records):
         fields=list(records[0])
         with (output/name).open('x',encoding='utf-8',newline='') as f:
-            w=csv.DictWriter(f,fieldnames=fields);w.writeheader();w.writerows(records)
+            w=csv.DictWriter(f,fieldnames=fields,lineterminator='\n');w.writeheader();w.writerows(records)
     rows=[]
     for key,v in d['stage_counts'].items():
         arm,scale,t,k=key.split('/')
