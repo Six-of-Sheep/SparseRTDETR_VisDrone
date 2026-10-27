@@ -23,6 +23,8 @@ def render(rows):
         differences[label]={}
         for budget in ('600','300'):
             differences[label][budget]={k:None if rows[left][budget][k] is None or rows[right][budget][k] is None else rows[left][budget][k]-rows[right][budget][k] for k in rows[left][budget]}
+    for label,values in differences.items():
+        for budget,metrics_row in values.items():table.append('|'+budget+'|'+label+'|'+'|'.join('UNKNOWN' if v is None else '%.8f'%v for v in metrics_row.values())+'|')
     checks={}
     thresholds={'600':{'COCO_AP75_small':.30,'COCO_APS':.20,'COCO_AP':0,'COCO_APM':-.20,'COCO_APL':-.20,'COCO_AR_large':-.20,'primary_AP':-.20},
                 '300':{'COCO_AP75_small':0,'COCO_AP':-.20,'COCO_APS':-.20,'primary_AP':-.20}}
@@ -49,6 +51,6 @@ def main(args):
             if not args.synthetic and (score['official']['evaluated_image_count']!=548 or score['COCO_bridge']['maxDets']!=[1,10,100]):raise ValueError('evaluation protocol conflict')
             rows[a][budget]=metrics(score)
     result,table=render(rows);result['scope']=expected
-    out=Path(args.out);out.mkdir();(out/'RESULT.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');(out/'TABLE.md').write_text(table)
+    out=Path(args.out);out.mkdir();(out/'RESULT.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');(out/'TABLE.md').write_text('# '+expected+'\n\n'+table,encoding='utf-8')
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--inputs',required=True);p.add_argument('--out',required=True);p.add_argument('--synthetic',action='store_true');main(p.parse_args())

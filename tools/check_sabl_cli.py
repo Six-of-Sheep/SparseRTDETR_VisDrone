@@ -52,7 +52,7 @@ def main(base):
             inp['scores'][arm][budget]={'path':str(score),'sha256':sha(score)}
     inputs=base/'table-inputs.json';write(inputs,inp)
     check('table_actual_CLI_original_N',call(release/'tools/sabl_results.py','--inputs',inputs,'--out',base/'table','--synthetic')==0)
-    table=read(base/'table/RESULT.json');check('below_original_N_interpretation',table['quality_controls_pass'] and table['interpretation']=='相对控制改善，尚未形成现有基线净收益' and not table['new_gate_added'])
+    table=read(base/'table/RESULT.json');check('below_original_N_interpretation',table['quality_controls_pass'] and table['interpretation']=='相对控制改善，尚未形成现有基线净收益' and not table['new_gate_added'] and all(token in (base/'table/TABLE.md').read_text(encoding='utf-8') for token in ('S-N24','S-A24','S-originalN','SYNTHETIC_NOT_SCIENTIFIC')))
     check('synthetic_cannot_be_formal',call(release/'tools/sabl_results.py','--inputs',inputs,'--out',base/'fake-formal-table')!=0)
     del inp['scores']['N_original'];write(inputs,inp)
     check('missing_original_N_refused',call(release/'tools/sabl_results.py','--inputs',inputs,'--out',base/'missing-N-table','--synthetic')!=0)
