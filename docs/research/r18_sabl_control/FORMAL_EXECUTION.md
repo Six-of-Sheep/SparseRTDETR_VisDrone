@@ -45,3 +45,11 @@ wall上限48小时、allocated18GiB、累计服务器新增30GiB、精简回传5
 CPU每子进程2线程/4GiB/5分钟，合成消耗单列，不计入未来真实forward预算。精确head CI还运行既有模型/状态/短CLI及Python3.10/3.12管理回归。最终CPU/CI和全commit/manifest以D盘精简交付回执为准。
 
 冻结：`python -B tools/package_sabl.py /ABS/UNIQUE_PACKAGE --formal`，只能从clean、已提交head导出；`COMMANDS.txt`包含完整部署、认证元数据路径、plan/run命令、唯一任务/attempt及GPU UUID。包**不含授权文件**。未来需单独授权该完整commit/manifest下的唯一正式合同，重新核当前材料/环境/无重复作业后仅启动一次。正常PASS可连续到收尾；本次CPU准备不消费正式启动授权，不连接服务器、不建立本机持续轮询，PR26保持草稿未合并。
+
+## 2026-10-27限定父N大小字段适配
+
+46aa版本的新鲜准入在读取父N引用`bytes`时STOP；认证历史引用实际使用`size_bytes=323457665`。旧commit、冻结包、合同提案、STOP与stderr全部保留。本修订只让父N物理准入显式读取`bytes`或`size_bytes`：必须为严格正整数（不接受bool、浮点、字符串、空值、零或负数），两字段同时出现时分别验证且必须相等。缺字段、非法值或冲突均拒绝；不修改认证引用、不改SHA、路径、文件大小或身份的严格校验。
+
+`python -B tools/check_sabl_formal_metadata.py /ABS/metadata-cpu.json`读取仓库内已回传认证历史checkpoint元数据快照，核实原字段值；随后以明确标记的本地构造payload和外部元数据/role IO夹具调用**原生产material_admission**完整路径，覆盖两格式、相同双字段及全部拒绝项。该检查不替换大小适配器、物理stat/SHA、原标注解析或图像reader，不加载检测器/真实权重，不连接实验室；外部认证回执与2/64构造图不能冒充4869/548真实成员或服务器准入。完整CPU CLI回归仍单独执行，合成消耗不进入真实预算。
+
+新的包命令先核对既有`preflight/STOP.json`的精确SHA，拒绝任何已有正式attempt、最终合同、authorization、一次性标记、同名tmux或目标release。未来如另获授权，仅部署新的commit命名release并绑定新合同；旧上传目录和preflight现场不覆盖。沿用原任务根目录可让旧失败上传与新release一同纳入原30GiB累计计数，不重置存储。此处仅生成启动命令，本轮没有执行部署、合同生成或GPU动作。

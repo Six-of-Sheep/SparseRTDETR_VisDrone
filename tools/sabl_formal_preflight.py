@@ -9,6 +9,19 @@ from sparse_rtdetr.research import sabl_formal_contract as ct
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def checkpoint_bytes(ref):
+    """Read registered size aliases without mutating the authenticated record."""
+    ct.need(isinstance(ref, dict), 'checkpoint reference must be a mapping')
+    fields = [key for key in ('bytes', 'size_bytes') if key in ref]
+    ct.need(bool(fields), 'checkpoint size field missing')
+    for key in fields:
+        ct.need(type(ref[key]) is int and ref[key] > 0,
+                'checkpoint size must be a positive integer: ' + key)
+    ct.need(len(fields) == 1 or ref['bytes'] == ref['size_bytes'],
+            'checkpoint size aliases conflict')
+    return ref[fields[0]]
+
+
 def material_admission(c, out):
     from sparse_rtdetr.localization.material_paths import MANIFESTS, metadata_path, SELECTION_SHA
     from sparse_rtdetr.localization.data import RawRoleDataset, read_bound, parse_raw, validate_role_roots
@@ -27,7 +40,8 @@ def material_admission(c, out):
         score = ct.exact(ref)
         ct.need(score['official']['evaluated_image_count'] == 548 and score['COCO_bridge']['maxDets'] == [1,10,100], 'historical score protocol')
     cp = Path(m['checkpoint']['path'])
-    ct.need(cp.is_absolute() and cp.is_file() and not cp.is_symlink() and cp.stat().st_size == m['checkpoint']['bytes'] and ct.sha(cp) == ct.N_SHA, 'physical certified N checkpoint')
+    expected_bytes = checkpoint_bytes(m['checkpoint'])
+    ct.need(cp.is_absolute() and cp.is_file() and not cp.is_symlink() and cp.stat().st_size == expected_bytes and ct.sha(cp) == ct.N_SHA, 'physical certified N checkpoint')
     ct.need(m['prior_storage_bytes'] == ct.accepted_storage(c['acceptance_cost']), 'prior storage inheritance')
     ct.need(shutil.disk_usage(out).free >= ct.CAPS['storage_bytes'] - m['prior_storage_bytes'], 'fresh free disk')
     seen = {}

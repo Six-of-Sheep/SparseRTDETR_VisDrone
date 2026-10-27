@@ -41,7 +41,12 @@ set -euo pipefail
 PY=/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python
 TASK=/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-formal24-20261027-001
 RELEASE=$TASK/releases/{head[:12]}-formal-001
-test ! -e "$TASK"
+# Prior metadata-only STOP is immutable. No formal attempt was launched there.
+# A new release may be prepared ONLY after separate authorization for this head.
+test -d "$TASK"
+test "$(sha256sum "$TASK/preflight/STOP.json" | cut -d' ' -f1)" = d042caa937755513ddca494cacac26d5da5c56562f6caf721261f687b4744178
+test ! -e "$RELEASE"
+for P in "$TASK/attempt-formal-001" "$TASK/contract.json" "$TASK/authorization.json" "$TASK/FORMAL_ONCE.json"; do test ! -e "$P"; done
 if tmux has-session -t r18-sabl-formal24-001 2>/dev/null; then exit 1; fi
 mkdir -p "$TASK/releases"
 $PY -B deploy.py --bundle source.tar.gz --manifest MANIFEST.json --sha256 {h} --out $RELEASE

@@ -1,0 +1,48 @@
+{
+  "status": "PASS_LOCAL_CPU_ONLY",
+  "as_of": "2026-10-27T20:41:00.420169+08:00",
+  "base_commit": "46aa06e6fc530fcb861f48d1bb3475d4328695a1",
+  "repair": "parent checkpoint positive int bytes/size_bytes; equal dual aliases only; no mutation",
+  "source_and_scientific_computation_changed": false,
+  "source_reuse_files": 300,
+  "local_receipts": {
+    "METADATA_CPU_310.json": {
+      "checks": 40,
+      "sha256": "d48b0262ad42f974751cd48cfd1f34a4b49bd045fab051557233843e38db0971",
+      "scope": "CPU_SYNTHETIC_PAYLOADS_REAL_HISTORICAL_SIZE_SCHEMA"
+    },
+    "POLICY_CPU_310.json": {
+      "checks": 29,
+      "sha256": "7e4614963f1d7deadcaa379afb4412740ec4c89c4e0389773c436c6046ec2194",
+      "scope": "STDLIB_CONSTRUCTED_RESOURCE_UNITS_NOT_REAL_ADMISSION"
+    },
+    "POLICY_CPU_314.json": {
+      "checks": 29,
+      "sha256": "4e7cd325ee58c95da87276fe6043d056db04af132eaa00473de47a093955e719",
+      "scope": "STDLIB_CONSTRUCTED_RESOURCE_UNITS_NOT_REAL_ADMISSION"
+    },
+    "COMMAND_GUARDS_CPU.json": {
+      "checks": 8,
+      "sha256": "a52bf321278f6e6f4e41d59ff40b78c504b8cceb5a8ca9a2c063af15f368fdb8",
+      "scope": true
+    },
+    "CLI_CPU_310.json": {
+      "checks": 27,
+      "sha256": "c57e0cb8977a3081111f327221a76225b4456a3b837481445be0072c9898b933",
+      "scope": "CPU_SYNTHETIC_NOT_SCIENTIFIC"
+    }
+  },
+  "CPU_forward_reserved": 109,
+  "CPU_optimizer_updates": 36,
+  "real_forward": 0,
+  "real_GPU_seconds": 0,
+  "laboratory_connections": 0,
+  "old_STOP_sha256": "d042caa937755513ddca494cacac26d5da5c56562f6caf721261f687b4744178",
+  "physical_N_checkpoint_currently_admitted": false,
+  "final_precise_head_CI": "separate final delivery receipt; not inferred from CPU",
+  "budget_remaining": {
+    "forward": 44571,
+    "GPU_stage_seconds": 86346.54610739998
+  },
+  "future_execution": "separate authorization for new commit/manifest and fresh admission required"
+}
