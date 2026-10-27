@@ -53,3 +53,11 @@ CPU每子进程2线程/4GiB/5分钟，合成消耗单列，不计入未来真实
 `python -B tools/check_sabl_formal_metadata.py /ABS/metadata-cpu.json`读取仓库内已回传认证历史checkpoint元数据快照，核实原字段值；随后以明确标记的本地构造payload和外部元数据/role IO夹具调用**原生产material_admission**完整路径，覆盖两格式、相同双字段及全部拒绝项。该检查不替换大小适配器、物理stat/SHA、原标注解析或图像reader，不加载检测器/真实权重，不连接实验室；外部认证回执与2/64构造图不能冒充4869/548真实成员或服务器准入。完整CPU CLI回归仍单独执行，合成消耗不进入真实预算。
 
 新的包命令先核对既有`preflight/STOP.json`的精确SHA，拒绝任何已有正式attempt、最终合同、authorization、一次性标记、同名tmux或目标release。未来如另获授权，仅部署新的commit命名release并绑定新合同；旧上传目录和preflight现场不覆盖。沿用原任务根目录可让旧失败上传与新release一同纳入原30GiB累计计数，不重置存储。此处仅生成启动命令，本轮没有执行部署、合同生成或GPU动作。
+
+## 最终绑定调用器的stdin环境修复
+
+b77bdb9执行在辅助绑定调用的首条导入前STOP：调用没有进入release工作目录，也没有设置tools/src导入路径。旧STOP、上传、proposal和原release保留。`tools/sabl_bind.py`现纳入Git：调用必须使用认证Python、先`cd "$RELEASE"`，再`"$PY" -B - ... < tools/sabl_bind.py`；脚本在导入前验证解释器与cwd，显式设置release/tools和release/src，并核对实际模块来源。无需外部PYTHONPATH。生产模型、准入与资源门槛、短GPU证据和预算不变。
+
+绑定首先核release/manifest/commit、原合同策略/累计预算、proposal canonical SHA及源码/材料/EMA/数据/资源回执。`--check-only`只读，不加载模型、探测GPU、执行生产准入或写文件；它不是执行授权或当前实物准入。`--bind`仅在另行正式授权和全新鲜准入后使用，保留短GPU证据/存储继承、无重复作业及GPU进程检查，独占创建正式合同与一次性授权；不创建attempt/启动标记、不启动tmux，不提供重试。原STOP原件不修改。
+
+`python -B tools/check_sabl_bind.py /ABS/bind-cpu.json`在临时release中复制真实Git模块，用当前实际CPU解释器`sys.executable -B -`、清除PYTHONPATH/PYTHONHOME后通过标准输入执行同一调用器。核模块真实来源、cwd/解释器、合同摘要，以及错版本/SHA/策略/回执/已有输出/STOP拒绝；每次子进程前后逐文件SHA确认只读。已认证STOP只有小型原字节快照，其他合同/准入回执明示构造；不冒充真实认证、服务器解释器实测或当前资源准入。CPU本地使用Python3.10.16，CI在3.10/3.12执行；实际实验室解释器路径仅作为未来命令绑定值，本轮不连接服务器核验该二进制。测试仅运行check-only，同一绑定校验在生产bind写出前复用，无生产合同/授权/marker/attempt写入，无forward/更新。
