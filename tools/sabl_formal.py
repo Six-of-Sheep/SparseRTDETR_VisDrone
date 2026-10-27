@@ -186,7 +186,11 @@ def train(c, arm, first, out, meter, device):
     if first:
         def observe(name):
             def f(g):
-                gradient_evidence[name] |= bool(g.isfinite().all() and (g != 0).any())
+                # One witnessed nonzero path is enough; native Engine.health
+                # still checks all gradients at every update. Avoid recurring
+                # per-parameter CUDA synchronizations from an observation hook.
+                if not gradient_evidence[name]:
+                    gradient_evidence[name] = bool(g.isfinite().all() and (g != 0).any())
             return f
         for p in e.model.backbone.parameters():
             if p.requires_grad:

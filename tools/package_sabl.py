@@ -37,16 +37,20 @@ python -B tools/sabl_acceptance.py run --contract /ABS/accept-contract.json --au
 if a.formal:
  commands=f"""# PR26 FORMAL24 ONLY. No authorization token included. Commit {head}
 # Execute from a new deployment on the laboratory host, only after separate formal authorization.
+set -euo pipefail
 PY=/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python
 TASK=/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-formal24-20261027-001
 RELEASE=$TASK/releases/{head[:12]}-formal-001
+test ! -e "$TASK"
+if tmux has-session -t r18-sabl-formal24-001 2>/dev/null; then exit 1; fi
+mkdir -p "$TASK/releases"
 $PY -B deploy.py --bundle source.tar.gz --manifest MANIFEST.json --sha256 {h} --out $RELEASE
 cd $RELEASE
 $PY -B tools/sabl_formal.py plan --manifest-sha {h} --metadata /media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-h2-formal-20261024-001/metadata-003/contract.json --acceptance-cost /media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-control-acceptance-20261027-001/metadata-001/CUMULATIVE_COST.json --gpu-uuid GPU-1faee6f0-1da7-4ede-2475-67a5a00274a8 --attempt-root $TASK/attempt-formal-001 --out $TASK/contract.json
 # After fresh admission and human authorization binding the canonical contract SHA:
 # authorization.json fields exactly: contract=<canonical SHA>, scope=PR26_FORMAL_NSA_24_V1, authorize_once=true.
 # This file does NOT create that authorization. Existing contracts, markers, or attempts must never be overwritten.
-$PY -B tools/sabl_formal.py run --contract $TASK/contract.json --authorization $TASK/authorization.json --out $TASK/attempt-formal-001 >$TASK/stdout.txt 2>$TASK/stderr.txt
+tmux new-session -d -s r18-sabl-formal24-001 -c "$RELEASE" "exec $PY -B tools/sabl_formal.py run --contract $TASK/contract.json --authorization $TASK/authorization.json --out $TASK/attempt-formal-001 >$TASK/stdout.txt 2>$TASK/stderr.txt"
 # One run only; e1-2 engineering -> e24 EMA -> 548 dual budgets/evaluators -> fixed64 cost -> compare/slim -> CLOSED/EXIT.
 # Inherit 18 forward / 53.45389260002412s. New <=44571 forward / 86346.54610739998s. No retries or acceptance-state training.
 """
