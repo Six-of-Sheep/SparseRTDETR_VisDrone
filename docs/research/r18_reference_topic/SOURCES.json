@@ -1,0 +1,87 @@
+{
+  "scope": "paper and source reading only; no execution",
+  "date": "2026-10-26",
+  "identity": "Pinned repository commit and path; no independent source-byte SHA certification claimed.",
+  "papers": [
+    {
+      "name": "SABL",
+      "url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf",
+      "sections": "3.1–3.2"
+    },
+    {
+      "name": "D-FINE v1",
+      "url": "https://arxiv.org/html/2410.13842v1#S4.SS1",
+      "sections": "4.1 equations 2–5"
+    }
+  ],
+  "files": [
+    {
+      "repository": "Peterande/D-FINE",
+      "commit": "956d1709314c2c6a4df6f34de232054578a7449f",
+      "path": "src/zoo/dfine/dfine_decoder.py",
+      "read_ranges": [
+        [
+          397,
+          447
+        ],
+        [
+          487,
+          521
+        ]
+      ],
+      "url": "https://github.com/Peterande/D-FINE/blob/956d1709314c2c6a4df6f34de232054578a7449f/src/zoo/dfine/dfine_decoder.py"
+    },
+    {
+      "repository": "Peterande/D-FINE",
+      "commit": "956d1709314c2c6a4df6f34de232054578a7449f",
+      "path": "src/zoo/dfine/dfine_utils.py",
+      "read_ranges": [
+        [
+          10,
+          169
+        ]
+      ],
+      "url": "https://github.com/Peterande/D-FINE/blob/956d1709314c2c6a4df6f34de232054578a7449f/src/zoo/dfine/dfine_utils.py"
+    },
+    {
+      "repository": "Peterande/D-FINE",
+      "commit": "956d1709314c2c6a4df6f34de232054578a7449f",
+      "path": "src/zoo/dfine/dfine_criterion.py",
+      "read_ranges": [
+        [
+          142,
+          185
+        ]
+      ],
+      "url": "https://github.com/Peterande/D-FINE/blob/956d1709314c2c6a4df6f34de232054578a7449f/src/zoo/dfine/dfine_criterion.py"
+    },
+    {
+      "repository": "open-mmlab/mmdetection",
+      "commit": "cfd5d3a985b0249de009b67d04f37263e11cdf3d",
+      "path": "mmdet/models/roi_heads/bbox_heads/sabl_head.py",
+      "read_ranges": [
+        [
+          236,
+          329
+        ]
+      ],
+      "url": "https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/mmdet/models/roi_heads/bbox_heads/sabl_head.py"
+    },
+    {
+      "repository": "open-mmlab/mmdetection",
+      "commit": "cfd5d3a985b0249de009b67d04f37263e11cdf3d",
+      "path": "mmdet/models/task_modules/coders/bucketing_bbox_coder.py",
+      "read_ranges": [
+        [
+          214,
+          280
+        ],
+        [
+          313,
+          366
+        ]
+      ],
+      "url": "https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/mmdet/models/task_modules/coders/bucketing_bbox_coder.py"
+    }
+  ]
+}

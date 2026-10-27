@@ -1,0 +1,42 @@
+{
+  "historical_N_source": "ab88a9b3b2c8fc1f3203269f4ae022d52b0dd8cb",
+  "files": [
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/model.py",
+      "sha256": "102e4639b5f23a450c212c66235327d94bee2a6237770b0ec5501d5d297a03a0",
+      "same_as_certified_N_source": true
+    },
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/criterion.py",
+      "sha256": "349edfab04d55d9a4d615f4b59a9490c33e30e2e4abd0e1f2652f692ba4d1b11",
+      "same_as_certified_N_source": true
+    },
+    {
+      "path": "src/sparse_rtdetr/localization/data.py",
+      "sha256": "cfbb38888283bb20517ece97777114bb5dda43c29a388476677adb6b5759227e",
+      "same_as_certified_N_source": true
+    },
+    {
+      "path": "src/sparse_rtdetr/localization/ignore.py",
+      "sha256": "4ef6ed913edfa29b869dc3a26f4541510fd890afb9cfb745311d23938846da65",
+      "same_as_certified_N_source": true
+    },
+    {
+      "path": "src/sparse_rtdetr/baseline/training_v2b_deterministic_sampling.py",
+      "sha256": "b53536a51f865459a0392230763ba055b60f21491fd6c7e4e3b04ae05c1b121b",
+      "same_as_certified_N_source": true
+    },
+    {
+      "path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py",
+      "sha256": "01c7b7ab8f070de09dd10e0b34cdd8332874cf63f48cae7e9a608a8574122b6a",
+      "same_as_certified_N_source": true
+    },
+    {
+      "path": "vendor/rtdetrv2_pytorch/src/zoo/rtdetr/matcher.py",
+      "sha256": "11a221ea7a2ad4e728a008ead7f73d1cba3649066f795b2076200c0d41738ad1",
+      "same_as_certified_N_source": true
+    }
+  ],
+  "real_checkpoint_loaded": false,
+  "real_images_read": false
+}

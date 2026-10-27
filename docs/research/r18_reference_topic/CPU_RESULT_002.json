@@ -1,0 +1,382 @@
+{
+  "scope": "SYNTHETIC_NOT_SCIENTIFIC",
+  "definition_sha256": "86e5503a8829e813747dc3e1e5723dc0fd3077ffead2acb8b582654b12f03425",
+  "script_sha256": "bd8b8ee0b3391154c16e5c7d1df5f83db792d231f2160f1eafcd63115fbcb52f",
+  "checks": [
+    {
+      "name": "nonuniform_33_and_four_directions",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "coordinates_detached",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_matrix_edge_0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_transport_edge_0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "epsilon_formula_edge_0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_matrix_edge_1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_transport_edge_1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "epsilon_formula_edge_1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_matrix_edge_2",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_transport_edge_2",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "epsilon_formula_edge_2",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_matrix_edge_3",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "identity_transport_edge_3",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "epsilon_formula_edge_3",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "epsilon_is_not_exact_identity",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "mass_moment_in_domain_0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "affine_covariance_0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reverse_index_covariance_0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "mass_moment_in_domain_1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "affine_covariance_1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reverse_index_covariance_1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "mass_moment_in_domain_2",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "affine_covariance_2",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reverse_index_covariance_2",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "mass_moment_in_domain_3",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "affine_covariance_3",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reverse_index_covariance_3",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "outside_mass_and_signed_bias",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "roundtrip_is_lossy_mean_preserved",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "multimodal_information_lost",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "repeated_clipping_drift",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "probability_and_residual_finite_difference",
+      "pass": true,
+      "details": [
+        1.656608183964181e-11,
+        8.25680079863389e-11
+      ]
+    },
+    {
+      "name": "geometry_detach_no_autograd_path",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "target_barycentric_and_detached",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "outside_target_endpoint",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "counterexample_constant_objective_zero_gradient",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "prior_help_and_harm",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "three_arm_zero_init_equal_boxes",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "same_parameter_count",
+      "pass": true,
+      "details": {
+        "per_arm": 101772,
+        "extra_transport_parameters": 0
+      }
+    },
+    {
+      "name": "reference_detach_C0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "old_logit_path_C0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reference_detach_C1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "old_logit_path_C1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reference_detach_M",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "old_logit_path_M",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "nonzero_reference_rule_C0",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "nonzero_reference_rule_C1",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "nonzero_reference_rule_M",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "nonzero_reference_changes_C1_M",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "current_reference_target_not_stale",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "selection_order_independent_disjoint",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reject_duplicate_ids",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reject_invalid_reference",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reject_duplicate_grid",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reject_invalid_probability",
+      "pass": true,
+      "details": null
+    },
+    {
+      "name": "reject_invalid_decoded_box",
+      "pass": true,
+      "details": null
+    }
+  ],
+  "counterexamples": {
+    "epsilon_not_identity": {
+      "max_change": 3.199998941383342e-07,
+      "new_zero_bin_mass": 9.999996700001066e-09
+    },
+    "outside": {
+      "outside_mass": 0.7,
+      "signed_moment_bias": -0.8
+    },
+    "roundtrip_diffusion": [
+      {
+        "p": [
+          0.25,
+          0.5,
+          0.25
+        ],
+        "mean": 1.0,
+        "variance": 0.5
+      },
+      {
+        "p": [
+          0.375,
+          0.25,
+          0.375
+        ],
+        "mean": 1.0,
+        "variance": 0.75
+      },
+      {
+        "p": [
+          0.4375,
+          0.125,
+          0.4375
+        ],
+        "mean": 1.0,
+        "variance": 0.875
+      },
+      {
+        "p": [
+          0.46875,
+          0.0625,
+          0.46875
+        ],
+        "mean": 1.0,
+        "variance": 0.9375
+      }
+    ],
+    "two_peaks_to_one": [
+      0.25,
+      0.5,
+      0.25
+    ],
+    "repeated_clipping_drift": [
+      {
+        "mean": 1.8,
+        "outside_mass": 1.0,
+        "signed_moment_bias": -0.19999999999999996
+      },
+      {
+        "mean": 1.6,
+        "outside_mass": 1.0,
+        "signed_moment_bias": -0.19999999999999996
+      },
+      {
+        "mean": 1.4,
+        "outside_mass": 1.0,
+        "signed_moment_bias": -0.20000000000000018
+      }
+    ],
+    "prior_help_or_harm": {
+      "prior_mean": 1.5999999820000004,
+      "uniform_mean": 1.0,
+      "gt_help": 2.0,
+      "gt_harm": 0.0
+    }
+  },
+  "status": "PASS",
+  "resources": {
+    "seconds_including_import": 0.8162186569534242,
+    "peak_RSS_MiB": 211.57421875,
+    "threads": 2,
+    "interop_threads": 1,
+    "affinity": [
+      0,
+      1
+    ],
+    "torch": "2.4.1+cpu",
+    "cuda_initialized": false
+  }
+}

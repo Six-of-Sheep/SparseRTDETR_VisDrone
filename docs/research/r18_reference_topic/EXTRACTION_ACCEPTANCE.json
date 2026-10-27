@@ -1,0 +1,147 @@
+{
+  "status": "PASS_CPU_ONLY",
+  "full_chain_checks": [
+    {
+      "name": "package",
+      "pass": true
+    },
+    {
+      "name": "deploy-actual-CLI",
+      "pass": true
+    },
+    {
+      "name": "deploy-repeat-refused",
+      "pass": true
+    },
+    {
+      "name": "deploy-corruption-refused",
+      "pass": true
+    },
+    {
+      "name": "deploy-missing-file-refused",
+      "pass": true
+    },
+    {
+      "name": "native-behavior-on-off",
+      "pass": true
+    },
+    {
+      "name": "plan-CLI",
+      "pass": true
+    },
+    {
+      "name": "full-chain-CLI",
+      "pass": true
+    },
+    {
+      "name": "budgets-inherited-once",
+      "pass": true
+    },
+    {
+      "name": "chain-repeat-refused",
+      "pass": true
+    },
+    {
+      "name": "extract-reject-layers",
+      "pass": true
+    },
+    {
+      "name": "extract-reject-IDs",
+      "pass": true
+    },
+    {
+      "name": "extract-reject-coordinates",
+      "pass": true
+    },
+    {
+      "name": "extract-reject-budget",
+      "pass": true
+    },
+    {
+      "name": "bind-corrupt-feature-refused",
+      "pass": true
+    },
+    {
+      "name": "bind-missing-closure-refused",
+      "pass": true
+    },
+    {
+      "name": "combined-export-SHA",
+      "pass": true
+    },
+    {
+      "name": "deployed-source-tamper-refused",
+      "pass": true
+    }
+  ],
+  "full_chain_runs": [
+    {
+      "status": "PASS",
+      "seconds": 13.598449632001575,
+      "CPU_detector_forward": 9,
+      "CPU_head_updates": 9,
+      "CPU_head_eval": 12
+    },
+    {
+      "status": "PASS",
+      "seconds": 11.723131101985928,
+      "CPU_detector_forward": 9,
+      "CPU_head_updates": 9,
+      "CPU_head_eval": 12
+    },
+    {
+      "status": "PASS",
+      "seconds": 11.970981230027974,
+      "CPU_detector_forward": 9,
+      "CPU_head_updates": 9,
+      "CPU_head_eval": 12
+    },
+    {
+      "status": "PASS",
+      "seconds": 11.643131831020582,
+      "CPU_detector_forward": 9,
+      "CPU_head_updates": 9,
+      "CPU_head_eval": 12
+    },
+    {
+      "status": "PASS",
+      "seconds": 11.71605940000154,
+      "CPU_detector_forward": 9,
+      "CPU_head_updates": 9,
+      "CPU_head_eval": 12
+    }
+  ],
+  "readout_checks": 43,
+  "readout_status": "PASS",
+  "current_turn_CPU": {
+    "detector_forward": 51,
+    "head_update_reserved": 73,
+    "optimizer_steps": 72,
+    "head_eval": 100,
+    "math_head_equivalent": 6,
+    "math_backward": 3
+  },
+  "real_experiment_consumption": {
+    "detector_forward": 0,
+    "head_update": 0,
+    "head_eval": 0
+  },
+  "failure_preserved": "full-001 Windows linked-worktree path failed before model; directory retained",
+  "tested_runtime_files": {
+    "tools/check_r18_capture_behavior.py": "ce3665c8207349d38fbea4fa7aa2d09b5f6ab7d74175e0fd3643bb495e6628b4",
+    "tools/check_r18_full_chain.py": "4a7ee7a300481e5567bee520a730e807072757edaeaf529370f4f64386496c86",
+    "tools/package_r18_readout.py": "e3a14a333ff261581bb19ac6a49868e09400a7ac102dee7cd813cafa1dee1923",
+    "tools/r18_deploy.py": "08786d42fe8a375d1b6ff462c71b0ed71d3ce1708654b88f279238147f5692cd",
+    "tools/r18_extract.py": "39ce066b436642489552bec9a353b90df3e403f70f3a8671f2e2c0033760cd98",
+    "tools/r18_full_chain.py": "6d43e230922e123455593f0390f0c617a6bc344b32e56e86b15cdee1c7086bc8",
+    "tools/r18_probability_transport_cpu.py": "bd8b8ee0b3391154c16e5c7d1df5f83db792d231f2160f1eafcd63115fbcb52f",
+    "tools/r18_readout_cli.py": "148dc7231f74ea561952f4eb4f26700558cb0b0da3141ce7c6eb7e8291616255",
+    "tools/r18_readout_math.py": "d93b1e4c334abec936a3d1046ea7548b2a729a73e6fb62c9336e010887223fba"
+  },
+  "real_weight_check": "NOT_EXECUTED",
+  "real_images_read": false,
+  "GPU_execution": "NOT_AUTHORIZED",
+  "CPU_readout_peak_RSS_MiB": 524.1015625,
+  "post_test_change": "Only failure diagnostic printing added to check_r18_full_chain; deployed runtime bytes match suite006. CUDA RNG restore converts loaded states to CPU; actual CUDA untested.",
+  "CI_77280de": "four management checks PASS; two full-chain checks FAIL with child stderr not printed. CI missing tensorboard dependency found by import audit; failure printing added; requires new CI."
+}
