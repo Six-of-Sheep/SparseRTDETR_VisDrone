@@ -26,7 +26,10 @@ def main(base):
     check('plan-CLI',call(entry,'plan','--synthetic','--manifest-sha',sha(manifest),'--out',plan)==0)
     run=base/'chain';check('full-chain-CLI',call(entry,'run','--contract',plan,'--out',run)==0)
     if not (run/'CLOSED.json').exists():
-        write(base/'ACCEPTANCE.json',{'status':'FAIL','checks':checks,'commands':commands});return 1
+        write(base/'ACCEPTANCE.json',{'status':'FAIL','checks':checks,'commands':commands})
+        print(json.dumps({'status':'FAIL','checks':checks,'command_errors':[c for c in commands if c['rc']]}))
+        for p in run.rglob('*.stderr'):print(str(p)+': '+p.read_text()[-8000:])
+        return 1
     closed=load(run/'CLOSED.json');check('budgets-inherited-once',closed['ledger']=={'detector_forward':6,'head_update':9,'head_eval':12})
     check('chain-repeat-refused',call(entry,'run','--contract',plan,'--out',run)!=0)
     ext=release/'tools/r18_extract.py'

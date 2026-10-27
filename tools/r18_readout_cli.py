@@ -201,7 +201,7 @@ def run(args):
             need(s['contract']==identity and s['features_sha256']==c['features_sha256'] and s['arm']==a,'checkpoint identity')
             models[a].load_state_dict(s['model']);opts[a].load_state_dict(s['optimizer'])
             t.set_rng_state(s['torch_rng'].cpu());random.setstate(s['python_rng'])
-            if not synthetic:t.cuda.set_rng_state_all(s['cuda_rng'])
+            if not synthetic:t.cuda.set_rng_state_all([state.cpu() for state in s['cuda_rng']])
             # Ledger intentionally never refunded by restored optimizer state.
             return s['next_update']
         evaluations={};roundtrips=[]

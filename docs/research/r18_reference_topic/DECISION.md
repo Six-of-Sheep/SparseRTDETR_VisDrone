@@ -131,3 +131,5 @@ GPU仍未授权。未来先完成CPU目标编码/损失/保存恢复及实际入
 package_r18_readout.py从干净提交导出完整受验Git源码、MANIFEST.json、deploy.py和COMMANDS.txt；候选测试包明确标记，真实总入口拒绝候选包。命令模板包含部署、plan和唯一run；将实际绝对路径、GPU UUID及唯一attempt填入plan生成合同，再由一次完整探索授权绑定合同canonical SHA。总入口内部生成读出阶段授权，正常PASS连续闭合退出，不需逐阶段再问。包内没有有效GPU授权。
 
 真实执行前仍须新鲜核验：完整包/部署manifest；登记N实物SHA与EMA结构；原train_core清单及192个成员的字节、尺寸、标注行数；128/64身份；torch2.4.1/torchvision0.19.1原环境、CUDA物理UUID/可用显存、磁盘；无重复任务及唯一attempt；用户一次完整探索授权。任何新生产异常STOP，不自动修复重试。只返回根状态/账本及slim，逐件核SHA，不回传特征或头状态。probe属于N训练数据，固定表征读出不能当作未见泛化或e120收益。本轮未连接服务器、未读真实图像、未加载真实N进行前向，548/1602未访问。
+
+收尾兼容修订：CUDA map_location加载后的RNG状态显式转CPU再恢复；未增加真实前向。77280de的四管理CI通过、两整链CI失败，原日志未输出子进程错误；导入审查发现CI漏装原生core依赖tensorboard，补齐CI依赖并增加失败输出，最终以新head CI为准。旧包和失败记录保留。
