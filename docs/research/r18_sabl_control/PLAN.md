@@ -112,3 +112,22 @@ S−N检验整个常规精修包，S−A检验在相同参数和监督包下真�
 复用原protocol_r18的数据/原matcher/损失/训练微批与EMA、原N生产状态/资源保护、PR21有限内存流式校验及导出经验、PR22/17结果展示接口。PR25的严格包/manifest/唯一目录/SHA模式可参考，但其r18_full_chain/readout入口硬绑定48/600/96与冻结特征，**不能用于本次端到端执行，也不能直接重放**。未来只引入需要的受测接口/许可依赖，不把整套旧实验和所有源码历史复制到新主链。
 
 [SABL原文](https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf) §3.1–3.2；[固定官方头](https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/mmdet/models/roi_heads/bbox_heads/sabl_head.py)；[固定编码器](https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/mmdet/models/task_modules/coders/bucketing_bbox_coder.py)。这里沿用其空间定位机制，同时显式登记R18普通匹配、stride8单层RoI、末端附加头及不重评分等适配；不把适配称新机制。完整版本、原证据与阅读范围见SOURCES.json。
+
+
+## 8. 本次接线前显式补充：原N终点与授权边界
+
+原N认证e120 EMA与其既有top600/top300两评价器评分作为第四行历史终点，只读复用、核SHA，不新增原N推理或评分。结果表必须含N原终点、N24、A24、S24全部指标及S−N24、S−A24、S−原N、N24−原N；差值使用相同评价器/预算，保留历史N原STOP/缺原训练CLOSED限制。同期比较保留原第6节所有门槛，本次**不新增科学准入门槛**。另设独立解释标签：若S通过同期控制条件但关键定位指标仍低于原N，则写“相对控制改善，尚未形成现有基线净收益”；不得以原门槛通过自动宣传净收益。AP75-small/APS/AP逐项展示原N差值，不用单项正向覆盖其他负向。
+
+CPU构造检验可做合成optimizer更新与结果表结构检查，明确NOT_SCIENTIFIC；不加载真实N或图像，不计算AP/AR。实际CLI必须自行设置入口路径/线程/确定性环境，不依赖调用者PYTHONPATH；构造模式不等于真实材料认证。
+
+短GPU验收独立合同/唯一目录/独立授权scope，仅N/S/A各[update1,update2-direct,restore-update2-replay]，9实际更新/18forward；≤900秒GPU阶段/1800秒wall、18GiB、30GiB任务新增和5MiB回传。计数在实际forward前落盘，失败不退款。只读原N EMA与认证train_core两个逻辑16窗口，不用548/1602，不科学评分/完整测速。结束必须写CLOSED/EXIT并退出，入口没有正式训练子命令/自动接续路径。验收state拒绝作为未来正式训练初态；U/D、PR25及旧state也不接受。未来N24/S24/A24正式链仍需单独授权、单独准备入口并重新建立optimizer/EMA/RNG。未来总预算44589不重置，短验收18继承进入总账。
+
+
+### CPU接线时对旧入口的必要核对（不改科学条件）
+
+已核原r0.evaluation.rank_candidates拒绝任何零/负宽高，不能直接称其会丢弃零面积精修框。新增sabl_evaluation.rank_refined适配：只给旧排名函数的私有坐标占位以计算同一score/query/class排序，随后在已截断预算内按refined_valid删除无效项，不补位；占位绝不输出为检测。全部有效时直接调用原函数。原score_budget和双评价器不改，未在本轮执行真实评分。
+
+真实短验收取原seed0/epoch1 WindowSampler的前两个逻辑16窗口（共32图），不按GT选取；构造模式独立标记，无法转成GPU授权。参考路径由既有历史N元数据读取；未来实物/源码/资源须新鲜核验。全部Q300一次RoI/卷积，未为节省开销抽query或改batch。
+
+
+F8精确入口：hook原模型encoder.forward返回的第0个二维特征，位于decoder.input_proj[0]的1×1卷积/BN之前；不会把它写成input_proj之后memory的相同字节。新头梯度不进入该decoder input_proj或q3，原N损失仍正常训练它们。这里澄清源码位置，不新增另一特征分支。

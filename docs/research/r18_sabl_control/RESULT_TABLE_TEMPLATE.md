@@ -1,0 +1,16 @@
+# 固定结果表位：原N认证终点与未来同期控制
+
+本表只引用已有N评分，不执行评价；新臂未运行，数值保持UNKNOWN。完整20指标/两预算与差值由tools/sabl_results.py从已生成、SHA绑定评分JSON读取。
+
+|预算|臂|COCO AP|COCO APS|COCO AP75-small|
+|---|---|---:|---:|---:|
+|600|N原e120 EMA|29.78928001|22.17618575|19.96810453|
+|600|N24|UNKNOWN|UNKNOWN|UNKNOWN|
+|600|A24|UNKNOWN|UNKNOWN|UNKNOWN|
+|600|S24|UNKNOWN|UNKNOWN|UNKNOWN|
+|300|N原e120 EMA|29.34766823|21.77929184|19.71287422|
+|300|N24|UNKNOWN|UNKNOWN|UNKNOWN|
+|300|A24|UNKNOWN|UNKNOWN|UNKNOWN|
+|300|S24|UNKNOWN|UNKNOWN|UNKNOWN|
+
+分别保留S−N24、S−A24、S−原N及N24−原N。若仅超过同期控制但低于原N，写“相对控制改善，尚未形成现有基线净收益”。原N为历史认证终点，原STOP/缺训练CLOSED不改；不与同期控制合并因果结论。

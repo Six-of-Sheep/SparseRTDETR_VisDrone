@@ -146,5 +146,17 @@
       "N",
       "A"
     ]
+  ],
+  "implementation_assets": [
+    {
+      "path": "tools/r18_deploy.py",
+      "origin_commit": "d4b36f010782ee9925f9e4612420b453c2699293",
+      "sha256": "08786d42fe8a375d1b6ff462c71b0ed71d3ce1708654b88f279238147f5692cd",
+      "change": "none; same bytes"
+    },
+    {
+      "path": "src/sparse_rtdetr/protocol_r18/engine.py",
+      "change": "default-compatible rate/health dispatch, new subclass reuses entire train_window"
+    }
   ]
 }

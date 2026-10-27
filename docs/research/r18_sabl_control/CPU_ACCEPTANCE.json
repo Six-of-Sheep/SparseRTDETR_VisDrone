@@ -1,0 +1,100 @@
+{
+  "status": "PASS_CPU_INTERFACES_NOT_GPU_CERTIFIED",
+  "scope": "CONSTRUCTED_NATIVE_MODELS_AND_SYNTHETIC_CLI_ONLY",
+  "model_checks": 39,
+  "actual_CLI_checks": 26,
+  "state_refusal_checks": 6,
+  "cpu_environment": {
+    "python": "3.10.16",
+    "torch": "2.4.1+cpu",
+    "torchvision": "0.19.1+cpu",
+    "threads": 2,
+    "RLIMIT_AS_bytes": 4294967296,
+    "child_deadline_seconds": 300,
+    "model_peak_RSS_MiB": 2307.05859375,
+    "final_model_peak_RSS_MiB": 2277.8828125
+  },
+  "cumulative_local_CPU": {
+    "detector_forward": 93,
+    "actual_optimizer_updates": 36,
+    "explanation": "4 complete synthetic 18-forward/9-update runs; first failed model fixture 5 forwards and two passing model fixtures 8+8 forwards. Final run followed native health reuse and fsynced pre-forward ledger.",
+    "additional": "head/ROI arithmetic and isolated backward checks; six bad-state checks have zero detector forward"
+  },
+  "GPU_and_real_training": {
+    "forward": 0,
+    "optimizer_updates": 0,
+    "scientific_scoring": 0,
+    "real_weights_loaded": false,
+    "real_images_read": false,
+    "server_contact": false
+  },
+  "local_failures": [
+    {
+      "kind": "fixture arithmetic tolerance",
+      "check": "non-square aligned RoI",
+      "observed_FP32_max_abs_error": 3.814697265625e-06,
+      "old_tolerance": 3e-06,
+      "final_tolerance": 1e-05,
+      "effect": "check-only three-ULP FP32 tolerance; coordinates/formulas unchanged; original failed tool trace retained"
+    },
+    {
+      "kind": "Windows default GBK during edit helper",
+      "effect": "explicit UTF-8 used; no model or production execution affected"
+    }
+  ],
+  "legacy_input_audit": "Native WindowSampler yields batches of 16 tuples; adapter explicitly flattens two windows; tested 32 IDs, not a 2-item fixture. Original ranker rejects zero area; adapter removes invalid after budget/no refill.",
+  "reused_assets": {
+    "training": "protocol_r18.Engine.train_window unchanged arithmetic; rate/health virtual dispatch defaults delegate original functions",
+    "state": "protocol checkpoint RNG and old full layout/optimizer validators plus task-specific scope adapter",
+    "evaluation": "original rank_candidates and score_budget; no evaluator fork",
+    "deployment": "r18_deploy.py exact PR25 bytes",
+    "packaging": "same tested Git export/strict manifest mechanics with PR26 commands"
+  },
+  "CI": "must confirm exact committed head after push; evidence in delivery FINAL_CI.json",
+  "receipt_index": {
+    "CLI_COMMANDS_002.json": {
+      "bytes": 9868,
+      "sha256": "f7ef508675e9dbf92252bdb8e3c93feb5347c5161cedede4b401c8ba84d28840"
+    },
+    "CLI_COMMANDS_003.json": {
+      "bytes": 9868,
+      "sha256": "86d1742047203b5b2c4f10760f4da55de5d5a1ce02230e4daea01685c5b2b3ad"
+    },
+    "CLI_COMMANDS_004.json": {
+      "bytes": 9868,
+      "sha256": "db8bd6a243d696ecae003e24b10bd51f486c92a619c84252fa9346f34e643f08"
+    },
+    "CLI_CPU_002.json": {
+      "bytes": 1618,
+      "sha256": "76e9aa4d233e7a3a01110826f9512776142a33640ffcea9c66b4ab3b76cddb51"
+    },
+    "CLI_CPU_003.json": {
+      "bytes": 1617,
+      "sha256": "0a02b96c807c569faa924352f99391135db52d45de580d881f37e355637589c4"
+    },
+    "CLI_CPU_004.json": {
+      "bytes": 1618,
+      "sha256": "cd3056065545ab89515457cfefba920b9db85eeca40d0f575166b166de76ec03"
+    },
+    "FIRST_CLI_RESULT.json": {
+      "bytes": 4115,
+      "sha256": "b0458c7ac69753152a5a419ff2b57a4479b58db6b4ad63a356f4b63b820309f0"
+    },
+    "MODEL_CPU_002.json": {
+      "bytes": 1600,
+      "sha256": "299ad0382c3c073b5052216bff306abb70a1aa9f4649d64770afcb7278441b17"
+    },
+    "MODEL_CPU_003.json": {
+      "bytes": 1599,
+      "sha256": "1428ac2f966dd65b1b98f49753fec6865db811caddc6a45575be4bf197fa5e8d"
+    },
+    "STATE_CPU_001.json": {
+      "bytes": 437,
+      "sha256": "ae088275083fbdaf77298c8356c4b853d4c35ec45c8e8bf187212e148d7420cd"
+    },
+    "TESTED_CANDIDATE_MANIFEST.json": {
+      "bytes": 78609,
+      "sha256": "f8a22ab3599cb071d5343f2147cdafbf7b979bb3133d536fb2a85989cfc5e086"
+    }
+  }
+}
