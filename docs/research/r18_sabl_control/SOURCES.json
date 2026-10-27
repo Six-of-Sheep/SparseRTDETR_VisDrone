@@ -93,8 +93,8 @@
     "acceptance_forward": 18,
     "training_forward": 43776,
     "endpoint_forward": 411,
-    "cost_forward": 288,
-    "total_forward": 44493,
+    "cost_forward": 384,
+    "total_forward": 44589,
     "formal_optimizer_updates": 21888,
     "gpu_seconds_cap": 86400,
     "wall_seconds_cap": 172800,
@@ -114,5 +114,37 @@
     "full-training benefit",
     "novel contribution"
   ],
-  "web_access_note": "Second web open was blocked by HTTP403; fixed official source URLs retrieved read-only via Python urllib to reference cache, full source inspected; no credentials or server access."
+  "web_access_note": "Second web open was blocked by HTTP403; fixed official source URLs retrieved read-only via Python urllib to reference cache, full source inspected; no credentials or server access.",
+  "cost_measured_orders": [
+    [
+      "N",
+      "S",
+      "A"
+    ],
+    [
+      "S",
+      "A",
+      "N"
+    ],
+    [
+      "A",
+      "N",
+      "S"
+    ],
+    [
+      "N",
+      "A",
+      "S"
+    ],
+    [
+      "A",
+      "S",
+      "N"
+    ],
+    [
+      "S",
+      "N",
+      "A"
+    ]
+  ]
 }
