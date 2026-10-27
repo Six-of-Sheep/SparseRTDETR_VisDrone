@@ -19,6 +19,38 @@ def sha(p):
     return h.hexdigest()
 
 
+class Telemetry:
+    """Observation only. Carry the all-chain high-water mark across arm resets."""
+    def __init__(self,cuda=None,clock=time.monotonic):
+        self.cuda=cuda;self.clock=clock;self.peak_all=0;self.arms={};self.current=None
+    def observe_peak(self):
+        if self.cuda is not None:self.peak_all=max(self.peak_all,self.cuda.max_memory_allocated())
+        return self.peak_all
+    def begin(self,arm):
+        if self.cuda is not None:
+            self.cuda.synchronize()
+            self.observe_peak()  # Include setup/cleanup allocations BEFORE resetting.
+            self.cuda.reset_peak_memory_stats()
+        self.current=arm
+        self.arms[arm]={'started_monotonic':self.clock(),'update_roles':[],
+                        'actual_update_seconds':[],'gradients_finite':[],
+                        'gradient_norm_before_clip':[],'complete':False,
+                        'peak_allocated_bytes':None}
+    def update(self,result,role):
+        row=self.arms[self.current]
+        row['update_roles'].append(role);row['actual_update_seconds'].append(result['elapsed_seconds'])
+        row['gradients_finite'].append(result['finite'])
+        row['gradient_norm_before_clip'].append(result['gradient_norm_before_clip'])
+    def finish(self,complete=True):
+        if self.current is None:return
+        if self.cuda is not None:
+            self.cuda.synchronize();self.observe_peak()
+        row=self.arms[self.current]
+        row['stage_seconds_including_init_and_checkpoint_IO']=self.clock()-row['started_monotonic']
+        row['peak_allocated_bytes']=None if self.cuda is None else self.cuda.max_memory_allocated()
+        row['complete']=complete;self.current=None
+
+
 def plan(a):
     c={'schema':'PR26_ACCEPTANCE_ONLY_V1','mode':'CPU_SYNTHETIC_SABL' if a.synthetic else 'GPU_SABL_ACCEPTANCE_ONLY',
        'arms':['N','S','A'],'updates':[1,2,2],'forward_cap':18,'actual_update_cap':9,
@@ -35,7 +67,7 @@ def plan(a):
 
 
 def run(a):
-    out=Path(a.out);out.mkdir();start=time.monotonic();ledger={'detector_forward':0,'actual_updates':0};engine=None
+    out=Path(a.out);out.mkdir();start=time.monotonic();ledger={'detector_forward':0,'actual_updates':0};engine=None;meter=None
     try:
         c=read(a.contract);synthetic=c['mode']=='CPU_SYNTHETIC_SABL'
         need(c['schema']=='PR26_ACCEPTANCE_ONLY_V1' and c['mode'] in ('CPU_SYNTHETIC_SABL','GPU_SABL_ACCEPTANCE_ONLY'),'unknown contract')
@@ -64,6 +96,7 @@ def run(a):
         need(torch.__version__.startswith('2.4.1') and torchvision.__version__.startswith('0.19.1'),'frozen runtime')
         if not synthetic:need(torch.cuda.is_available() and torch.cuda.device_count()==1 and torch.cuda.get_device_properties(0).total_memory>=18<<30,'CUDA identity/runtime')
         torch.backends.cudnn.benchmark=False
+        meter=Telemetry(None if synthetic else torch.cuda)
         from sparse_rtdetr.research.sabl_control import make_engine,VERSION
         from sparse_rtdetr.research import sabl_state as state
         from sparse_rtdetr.protocol_r18.engine import output_digest,tensor_digest
@@ -74,7 +107,7 @@ def run(a):
         def guard():
             need(time.monotonic()-start<timeout,'cumulative time cap')
             need(sum(p.stat().st_size for p in out.rglob('*') if p.is_file())<=c['storage_bytes'],'task storage')
-            if not synthetic:need(torch.cuda.max_memory_allocated()<=c['allocated_bytes'],'allocated cap')
+            if not synthetic:need(meter.observe_peak()<=c['allocated_bytes'],'allocated cap')
         def charge(module,args):
             guard();need(ledger['detector_forward']<18,'forward cap')
             ledger['detector_forward']+=1
@@ -110,6 +143,7 @@ def run(a):
         input_hash=[output_digest([images,targets]) for images,targets in windows]
         results={};common_initial=None;head_initial=None
         for arm in c['arms']:
+            meter.begin(arm)
             seed();engine=make_engine(arm,synthetic,None if synthetic else c['metadata']['checkpoint'],'cpu' if synthetic else 'cuda')
             shared=tensor_digest(engine.model.native.state_dict().items())
             if common_initial is None:common_initial=shared
@@ -121,19 +155,22 @@ def run(a):
             need(not engine.optimizer.state and engine.ema.updates==0,'fresh optimizer/EMA')
             binding={'scope':c['mode'],'arm':arm,'version':VERSION,'contract':digest(c),'release_manifest':c['manifest_sha256'],'N_SHA':c['N_checkpoint_SHA']}
             folder=out/arm;folder.mkdir();engine.model.register_forward_pre_hook(charge);seed()
-            engine.train_window(*windows[0],capture=True);ledger['actual_updates']+=1
+            first=engine.train_window(*windows[0],capture=True);ledger['actual_updates']+=1
+            meter.update(first,'update1')
             cp=state.save(engine,binding,folder/'C1.pt')
             direct=engine.train_window(*windows[1],capture=True);ledger['actual_updates']+=1
+            meter.update(direct,'update2_direct')
             expected=state.capture(engine,binding);audit=state.restore(engine,binding,folder/'C1.pt',cp['sha256'])
             replay=engine.train_window(*windows[1],capture=True);ledger['actual_updates']+=1
+            meter.update(replay,'update2_replay')
             actual=state.capture(engine,binding)
             need(_equal(expected,actual),'post-replay complete state')
             need(all(direct[k]==replay[k] for k in ('microbatch_losses','gradient_sha256_before_clip','output_sha256','dn_noise_sha256')),'replay input/DN/output/loss/gradient')
             boundary_dtype=engine.model.last_boundary_dtype
             need(boundary_dtype==(None if arm=='N' else 'torch.float32'),'boundary FP32 dtype')
             dtype=engine.model.last_dtype;need(dtype==('torch.float32' if synthetic else 'torch.bfloat16'),'real native logits dtype')
-            final=state.save(engine,binding,folder/'C2.pt');guard()
-            results[arm]={'restore':audit,'replay_full_state_exact':True,'logits_dtype':dtype,'boundary_logits_dtype':boundary_dtype,'updates':3,'checkpoint':final,'shared_initial_SHA':shared,'head_initial_SHA':None if arm=='N' else hd,'input_SHA':input_hash,'new_losses':engine.criterion.recipe()['new_losses']}
+            final=state.save(engine,binding,folder/'C2.pt');guard();meter.finish()
+            results[arm]={'restore':audit,'replay_full_state_exact':True,'logits_dtype':dtype,'boundary_logits_dtype':boundary_dtype,'updates':3,'telemetry':meter.arms[arm],'checkpoint':final,'shared_initial_SHA':shared,'head_initial_SHA':None if arm=='N' else hd,'input_SHA':input_hash,'new_losses':engine.criterion.recipe()['new_losses']}
             need(input_hash==[output_digest([images,targets]) for images,targets in windows],'input tensors/matching data mutated')
             del engine,expected,actual;engine=None
             import gc;gc.collect()
@@ -143,7 +180,7 @@ def run(a):
         (out/'ledger.json').write_text(json.dumps(ledger))
         slim=out/'slim';slim.mkdir();guard()
         result={'status':'PASS_ENGINEERING','scope':c['mode'],'arms':results,'ledger':ledger,'seconds':time.monotonic()-start,
-                'peak_allocated_bytes':None if synthetic else torch.cuda.max_memory_allocated(),'formal_training_started':False,'scientific_quality':'NOT_SCIENTIFIC','used_acceptance_state_for_formal':False,'must_exit':True}
+                'peak_allocated_bytes':None if synthetic else meter.observe_peak(),'formal_training_started':False,'scientific_quality':'NOT_SCIENTIFIC','used_acceptance_state_for_formal':False,'must_exit':True}
         write(slim/'RESULT.json',result);write(slim/'CONTRACT.json',c)
         write(slim/'SHA_INDEX.json',{p.name:sha(p) for p in slim.iterdir()})
         need(sum(p.stat().st_size for p in slim.iterdir())<=c['return_bytes'],'return cap')
@@ -151,7 +188,10 @@ def run(a):
         return 0
     except Exception as e:
         if engine:ledger['failed_engine_updates']=engine.completed_updates
-        write(out/'STOP.json',{'error':repr(e),'ledger':ledger,'seconds':time.monotonic()-start,'no_retry':True})
+        if meter is not None:
+            try:meter.finish(complete=False)
+            except Exception:pass
+        write(out/'STOP.json',{'error':repr(e),'ledger':ledger,'seconds':time.monotonic()-start,'no_retry':True,'telemetry':{} if meter is None else meter.arms,'peak_allocated_bytes':None if meter is None or meter.cuda is None else meter.peak_all})
         write(out/'EXIT.json',{'returncode':1});print(repr(e),file=sys.stderr);return 1
     finally:signal.alarm(0)
 

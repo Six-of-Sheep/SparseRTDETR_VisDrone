@@ -29,6 +29,7 @@ def main(base):
     closed=read(run/'CLOSED.json');result=read(run/'slim/RESULT.json')
     check('18_forwards_9_updates_closed_exit',closed['ledger']=={'detector_forward':18,'actual_updates':9} and read(run/'EXIT.json')['returncode']==0)
     check('all_three_full_state_replays',all(a['replay_full_state_exact'] and a['restore']['full_state_exact'] for a in result['arms'].values()))
+    check('per_arm_update_and_stage_telemetry',all(len(v['telemetry']['actual_update_seconds'])==3 and min(v['telemetry']['actual_update_seconds'])>=0 and v['telemetry']['stage_seconds_including_init_and_checkpoint_IO']>=sum(v['telemetry']['actual_update_seconds']) and v['telemetry']['update_roles']==['update1','update2_direct','update2_replay'] and v['telemetry']['gradients_finite']==[True]*3 and v['telemetry']['complete'] and v['telemetry']['peak_allocated_bytes'] is None for v in result['arms'].values()))
     check('no_formal_or_science',not result['formal_training_started'] and result['scientific_quality']=='NOT_SCIENTIFIC' and closed['no_followup'])
     index=read(run/'slim/SHA_INDEX.json');check('export_SHA',all(sha(run/'slim'/k)==v for k,v in index.items()))
     before=sha(run/'CLOSED.json');check('run_repeat_no_overwrite',call(entry,'run','--contract',contract,'--out',run)!=0 and sha(run/'CLOSED.json')==before)
@@ -43,6 +44,16 @@ def main(base):
     check('real_plan_legacy_metadata',call(entry,'plan','--metadata',meta,'--gpu-uuid','GPU-SYNTHETIC','--manifest-sha',h,'--attempt-root',base/'not-started','--out',base/'real-plan.json')==0)
     e=read(ep);e['checkpoint']['sha256']='0'*64;write(ep,e);md=read(meta);md['historical_N']['endpoint']['sha256']=sha(ep);write(meta,md)
     check('real_plan_wrong_N_refused',call(entry,'plan','--metadata',meta,'--gpu-uuid','GPU-SYNTHETIC','--manifest-sha',h,'--attempt-root',base/'not-started2','--out',base/'wrong-N.json')!=0)
+    ts=importlib.util.spec_from_file_location('acceptance_meter',entry);tm=importlib.util.module_from_spec(ts);ts.loader.exec_module(tm)
+    class Memory:
+        def __init__(self):self.peak=7;self.syncs=0;self.resets=0
+        def synchronize(self):self.syncs+=1
+        def max_memory_allocated(self):return self.peak
+        def reset_peak_memory_stats(self):self.resets+=1;self.peak=0
+    mem=Memory();meter=tm.Telemetry(mem);meter.begin('N');mem.peak=12;meter.finish();meter.begin('S');mem.peak=5;meter.finish();meter.begin('A');mem.peak=9;meter.finish()
+    check('all_chain_peak_survives_per_arm_reset',meter.peak_all==12 and [meter.arms[a]['peak_allocated_bytes'] for a in ('N','S','A')]==[12,5,9] and mem.resets==3 and mem.syncs==6)
+    meter.begin('partial');mem.peak=15;meter.finish(False)
+    check('partial_STOP_peak_and_status_preserved',meter.peak_all==15 and meter.arms['partial']['peak_allocated_bytes']==15 and not meter.arms['partial']['complete'])
     spec=importlib.util.spec_from_file_location('tables',release/'tools/sabl_results.py');tables=importlib.util.module_from_spec(spec);spec.loader.exec_module(tables)
     inp={'scope':'SYNTHETIC_NOT_SCIENTIFIC','N_checkpoint_sha256':c['N_checkpoint_SHA'],'scores':{}}
     for arm,value in [('N_original',.32),('N24',.30),('A24',.30),('S24',.31)]:
