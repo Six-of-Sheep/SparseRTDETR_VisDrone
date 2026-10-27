@@ -90,7 +90,8 @@ class Meter:
         need(elapsed < (300 if self.c['mode'] == ct.CPU else ct.CAPS['GPU_stage_seconds'] - ct.PRIOR['GPU_stage_seconds']), 'cumulative GPU/CPU time cap')
         need(elapsed < ct.CAPS['wall_seconds'], 'cumulative wall cap')
         prior_storage = 0 if self.c['mode'] == ct.CPU else self.c['metadata']['prior_storage_bytes']
-        need(prior_storage + sum(p.stat().st_size for p in self.out.rglob('*') if p.is_file()) <= ct.CAPS['storage_bytes'], 'cumulative task storage cap')
+        task_root = Path(self.c['attempt_root']).parent
+        need(prior_storage + sum(p.stat().st_size for p in task_root.rglob('*') if p.is_file()) <= ct.CAPS['storage_bytes'], 'cumulative task storage cap')
         if self.cuda:
             need(self.telemetry.observe_peak() <= ct.CAPS['allocated_bytes'], 'cumulative allocated cap')
 
