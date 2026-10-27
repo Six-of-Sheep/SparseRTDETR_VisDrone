@@ -1,10 +1,13 @@
 """CPU admission regression: real size schema, synthetic local payloads only.
 
-External historical receipts/role allowlists are explicit IO fixtures. The
+External historical receipts/role allowlists and free-disk readings are explicit
+IO fixtures. The unmodified production 30GiB disk gate is tested at its boundary
+and one byte below, including inherited storage. The
 production material_admission, size reader, file stat/SHA, raw parser and image
 reader are not replaced. No checkpoint model, CUDA, scoring, or remote access.
 """
 import copy
+from collections import namedtuple
 from contextlib import ExitStack
 import hashlib
 import io
@@ -29,6 +32,9 @@ from PIL import Image
 
 def main(output):
     checks=[]
+    disk_usage_result=namedtuple('DiskUsage',('total','used','free'))
+    original_disk_usage=admission.shutil.disk_usage
+    storage_cap=30<<30
     def check(name,ok):
         checks.append({'name':name,'pass':bool(ok)})
         if not ok:raise AssertionError(name)
@@ -36,6 +42,7 @@ def main(output):
         try:fn()
         except ValueError as error:check(name,expected in str(error))
         else:check(name,False)
+    check('production_storage_cap_is_30GiB',ct.CAPS['storage_bytes']==storage_cap)
     snapshot=ct.read(ROOT/'tests/fixtures/pr26_historical_N_checkpoint.json')
     original=snapshot['checkpoint'];before=copy.deepcopy(original)
     check('real_historical_size_bytes_snapshot',admission.checkpoint_bytes(original)==323457665 and 'bytes' not in original)
@@ -90,6 +97,9 @@ def main(output):
             assert str(path)==ref['path'] and expected==ref['sha256']
             return Path(path)
         with ExitStack() as stack:
+            # Replace only the OS reading in this CPU process, never the gate.
+            disk_probe=stack.enter_context(patch.object(admission.shutil,'disk_usage',
+                return_value=disk_usage_result(2*storage_cap,storage_cap,storage_cap)))
             stack.enter_context(patch.object(ct,'N_SHA',cp_sha))
             stack.enter_context(patch.object(ct,'exact',side_effect=external_exact))
             stack.enter_context(patch.object(ct,'read',side_effect=external_read))
@@ -103,6 +113,22 @@ def main(output):
             def material(fields):
                 m['checkpoint']=ref(fields)
                 return admission.material_admission(c,root)
+            for prior in (0,4096):
+                required=storage_cap-prior
+                m['prior_storage_bytes']=prior
+                with patch.object(ct,'accepted_storage',return_value=prior):
+                    for delta in (0,1,-1):
+                        disk_probe.return_value=disk_usage_result(2*storage_cap,2*storage_cap-required-delta,required+delta)
+                        disk_probe.reset_mock()
+                        label='disk_prior_%d_free_delta_%d'%(prior,delta)
+                        if delta<0:
+                            rejects(label+'_refused',lambda:material({'size_bytes':size}),'fresh free disk')
+                        else:
+                            result=material({'size_bytes':size})
+                            check(label+'_complete_admission',result['all_member_bytes_verified']=={'train_core':2,'development':64})
+                        check(label+'_actual_probe_path',disk_probe.call_args_list==[((root,),{})])
+            m['prior_storage_bytes']=0
+            disk_probe.return_value=disk_usage_result(2*storage_cap,storage_cap,storage_cap)
             for label,fields in [('current_bytes',{'bytes':size}),('historical_size_bytes',{'size_bytes':size}),('equal_dual_fields',{'bytes':size,'size_bytes':size})]:
                 result=material(fields)
                 check(label+'_complete_material_admission',result['all_member_bytes_verified']=={'train_core':2,'development':64} and result['checkpoint_SHA']==cp_sha)
@@ -119,10 +145,12 @@ def main(output):
             rejects('same_size_SHA_tamper_actual_admission',lambda:material({'size_bytes':size}),'physical certified N checkpoint')
             cp.unlink()
             rejects('missing_checkpoint_actual_admission',lambda:material({'size_bytes':size}),'physical certified N checkpoint')
+    check('disk_probe_restored',admission.shutil.disk_usage is original_disk_usage)
+    check('production_storage_cap_unchanged',ct.CAPS['storage_bytes']==storage_cap)
     check('real_snapshot_remains_unchanged',original==before)
     import torch
     check('CUDA_never_initialized',not torch.cuda.is_initialized())
-    report={'status':'PASS','checks':checks,'scope':'CPU_SYNTHETIC_PAYLOADS_REAL_HISTORICAL_SIZE_SCHEMA','external_receipt_and_role_IO_are_fixtures':True,'production_material_admission_called':True,'physical_checkpoint_model_verified':False,'model_forward':0,'optimizer_updates':0,'GPU_seconds':0}
+    report={'status':'PASS','checks':checks,'scope':'CPU_SYNTHETIC_PAYLOADS_REAL_HISTORICAL_SIZE_SCHEMA','external_receipt_and_role_IO_are_fixtures':True,'disk_probe_IO_is_fixture':True,'production_disk_gate_replaced':False,'storage_cap_bytes':storage_cap,'disk_cases':{'prior_storage_bytes':[0,4096],'free_minus_required_bytes':[0,1,-1]},'production_material_admission_called':True,'physical_checkpoint_model_verified':False,'model_forward':0,'optimizer_updates':0,'GPU_seconds':0}
     Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))
 
 
