@@ -99,3 +99,35 @@ GPU仍未授权。未来先完成CPU目标编码/损失/保存恢复及实际入
 **执行包和授权边界。** tools/package_r18_readout.py只从干净已提交HEAD导出五份运行源码/配置/实际ID清单、逐文件SHA manifest及命令模板，不执行任何任务。需要先另行完成真实N特征提取入口与材料语义验收，再由用户授权GPU；未来先bind既有材料，再用绑定合同SHA的独立授权运行唯一attempt。当前不含有效GPU授权文件，未连接服务器、未提取真实特征、未真实学习。PR25仍草稿，不合并；原P/H2/PR23/24裁决不变。
 
 文件字节收尾：初次Windows CRLF选择文件SHA90c5b23f…仍保留；实际select接口已固定LF并重新生成，Git内SELECTED_IDS.json与规范回执一致，SHA **f4a4ab877f9240c71a0c68e6eddb6b422b38dbe2f4c7a2e65831555b40c70c3a**。128/64内容及ID摘要不变。最终CLI第五轮按规范运行字节再次通过，前轮工程回执保留，不冒充真实实验。
+
+## 2026-10-27：N提取器和完整执行包（仅CPU验收）
+
+本节接续并取代上一节“尚无提取器”的当前状态；63c368f消费者包保留。新增实际入口为[提取器](../../../tools/r18_extract.py)、[整链](../../../tools/r18_full_chain.py)和[部署器](../../../tools/r18_deploy.py)。科学定义、三臂、初始化、监督、detach与门槛均未修改。关键N源码与原ab88a9b冻结源码逐Git字节相同，见[来源绑定](EXTRACTION_SOURCE_BINDING.json)；这是源码证据，不是本轮真实权重前向认证。
+
+### 提取的确定语义
+
+|对象|源码与规则|
+|---|---|
+|权重|严格核验登记B0 checkpoint SHA、fullstate格式、B0身份、120轮/36480更新及EMA更新数，只加载ema.module。CPU夹具使用随机初始化原生模型；本轮没有加载真实权重。|
+|共同初始参考|原生rtdetrv2_decoder.py的TransformerDecoder.forward入口ref_points_unact.sigmoid()，在任何decoder层/框头更新前捕获；第一层实际接收的reference须逐位一致。不是最终框或后续更新reference。|
+|三层普通query|原生TransformerDecoder的layers[0,1,2]各自返回output后、框回归头前，保留原300个query顺序，每层256维；eval_idx=2，eval无DN，hook仅复制，不替换计算。|
+|输入与坐标|认证train_core所选192个ID，逐文件大小/SHA读取；原RawAugmentation(training=False)裁剪GT至原图后双线性拉伸至768×1344、像素/255；不增强。框为归一化画布cxcywh，无letterbox坐标混用。|
+|配对|原N最终pred_logits/pred_boxes经原Hungarian matcher，class/L1/GIoU代价2/5/2，focal alpha=.25、gamma=2；一次固定一对一配对供三臂所有层使用，不按改后框重匹配。|
+|raw-ignore|沿原parse_raw与negative_keep_mask。score=1且类别1–10为正GT，类别0空间ignore、score=0分类ignore、类别11非空间ignore；ignore只抑制未匹配负分类，不删已匹配正GT。读出不优化分类损失。|
+|small与未匹配|原始标注w×h，0<area≤1024，保留裁剪/缩放前面积；未匹配mask=false、gt_id/category=-1、small=false，填充有效框仅为张量计算，不计监督/指标。GT_identity_table保留原稳定GT标识与图像身份。|
+
+使用原生CPU构造图像及真实解析/变换代码，验证类别、非方形坐标、1024面积边界、ignore与正匹配重叠；启用/关闭hook两次前向的最终logits/boxes逐位相同，参数、注册buffer及未注册位置编码摘要不变，eval且无梯度。此检查只认证构造输入；真实N权重on/off双前向未执行，也不偷增未来48次预算。未来真实提取只做一次带hook前向，仍核验参数/buffer前后摘要。
+
+### 完整CLI、资源及证据
+
+实际CPU路径是源码包SHA→严格解包→逐文件manifest→原生模型提取→features SHA/CLOSED→bind→三臂读出→根CLOSED和精简SHA。错误层、ID、坐标、缺CLOSED、损坏特征、源码篡改、缺包成员、重复目录和预算耗尽均拒绝。完整保存恢复及空匹配/无效框/非有限等继续由原43项实际读出CLI覆盖。[EXTRACTION_ACCEPTANCE.json](EXTRACTION_ACCEPTANCE.json)保存最终检查和本轮CPU消耗；历史失败保留，CPU合成数据不充当科学结果。
+
+初次整链包装在WSL读取Windows linked-worktree的.git路径失败，尚未启动模型；包装器增加明确Windows路径转换后继续本地工程检查。未改生产环境、科学计算或旧冻结包。部署验证不再仅信任回执中的文件列表：保留原manifest字节，运行前重核其SHA及回执一致性。
+
+未来整链仍为48次检测器forward、600次头更新、96次头检验；无额外真实验收forward。提取计数在调用前持久写入，失败不退款；根STOP汇总已有阶段账本。统一GPU阶段1800秒、wall3600秒、allocated18GiB、新增512MiB、总精简5MiB。总入口保守地将设置/提取/读出全部纳入1800秒单调时钟截止，不把阶段切换重新计时；各子进程和父入口均限制时间。原匹配与特征在三臂间冻结，探针不用于选模。没有正式检测器训练或e120入口。
+
+### 下一次完整授权与启动
+
+package_r18_readout.py从干净提交导出完整受验Git源码、MANIFEST.json、deploy.py和COMMANDS.txt；候选测试包明确标记，真实总入口拒绝候选包。命令模板包含部署、plan和唯一run；将实际绝对路径、GPU UUID及唯一attempt填入plan生成合同，再由一次完整探索授权绑定合同canonical SHA。总入口内部生成读出阶段授权，正常PASS连续闭合退出，不需逐阶段再问。包内没有有效GPU授权。
+
+真实执行前仍须新鲜核验：完整包/部署manifest；登记N实物SHA与EMA结构；原train_core清单及192个成员的字节、尺寸、标注行数；128/64身份；torch2.4.1/torchvision0.19.1原环境、CUDA物理UUID/可用显存、磁盘；无重复任务及唯一attempt；用户一次完整探索授权。任何新生产异常STOP，不自动修复重试。只返回根状态/账本及slim，逐件核SHA，不回传特征或头状态。probe属于N训练数据，固定表征读出不能当作未见泛化或e120收益。本轮未连接服务器、未读真实图像、未加载真实N进行前向，548/1602未访问。

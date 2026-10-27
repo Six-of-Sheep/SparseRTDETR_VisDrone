@@ -14,7 +14,7 @@ DOC=ROOT/'docs/research/r18_reference_topic'
 MEMBER_SHA='df87e6a377a5546d3d3fe0cd0e860d15c2fe5e8003ea87d887153579999a4e9d'
 N_SHA='be5e9e1fb7a514eceaf2a1343dc29d2f512115bdd85b7fcc26dc11d3a66c9a83'
 DEFINITION_SHA='86e5503a8829e813747dc3e1e5723dc0fd3077ffead2acb8b582654b12f03425'
-SOURCE_FILES=['tools/r18_readout_cli.py','tools/r18_readout_math.py','docs/research/r18_reference_topic/CPU_DEFINITION.json','docs/research/r18_reference_topic/LEARNING_CONFIG.json','docs/research/r18_reference_topic/SELECTED_IDS.json']
+SOURCE_FILES=['tools/r18_readout_cli.py','tools/r18_readout_math.py','tools/r18_extract.py','tools/r18_full_chain.py','tools/r18_deploy.py','docs/research/r18_reference_topic/CPU_DEFINITION.json','docs/research/r18_reference_topic/LEARNING_CONFIG.json','docs/research/r18_reference_topic/SELECTED_IDS.json']
 
 
 def sha(p):
@@ -47,6 +47,7 @@ def select(path,out):
 
 def torch_setup(cpu):
     for k in ('OMP_NUM_THREADS','MKL_NUM_THREADS','OPENBLAS_NUM_THREADS'): os.environ[k]='2'
+    os.environ['CUBLAS_WORKSPACE_CONFIG']=':4096:8'
     if cpu:
         import resource
         resource.setrlimit(resource.RLIMIT_AS,(4<<30,4<<30))
@@ -84,9 +85,21 @@ def fixture(out,variant):
     write(out/'contract.json',c)
 
 
-def bind(selection,features,receipt,out):
+def bind(selection,features,receipt,out,synthetic=False):
     """Bind already-extracted material; does not authorize/extract any features."""
     s=read(selection);r=read(receipt)
+    need(r['status']=='CLOSED' and r['features_sha256']==sha(features),'missing closure or feature SHA')
+    need(r.get('semantics')=='pr25-native-N-EMA-layer012-initial-v1','capture semantics')
+    if synthetic:
+        need(r['mode']=='SYNTHETIC_NOT_SCIENTIFIC' and r['detector_forward']==6 and s['fit']==['SYNTHETIC-%03d'%i for i in range(16)] and s['probe']==['SYNTHETIC-%03d'%i for i in range(16,24)],'synthetic capture binding')
+        c={'schema':'pr25-readout-v1','mode':'SYNTHETIC_NOT_SCIENTIFIC','definition_sha256':DEFINITION_SHA,
+           'sources':sources(),'features_sha256':sha(features),'ids':s['fit']+s['probe'],'fit_count':16,'probe_count':8,
+           'queries':300,'updates_per_arm':2,'detector_forward_used':6,'limits':{'detector_forward':48,'head_update':9,'head_eval':12},
+           'wall_seconds':min(300,3600-r['wall_seconds']),'gpu_seconds':0,'peak_allocated_bytes':18<<30,'storage_bytes':512<<20,'export_bytes':5<<20,
+           'coordinate':'normalized_canvas_cxcywh','matching':'fixed_N_final_Hungarian_ordinary','N_checkpoint_sha256':N_SHA,
+           'roundtrip_check':True,'extraction_receipt_sha256':sha(receipt)}
+        write(out,c);return
+    need(r['mode']=='REAL_N_EMA','synthetic receipt cannot authorize real execution')
     need(s==read(DOC/'SELECTED_IDS.json'),'selection differs from frozen actual IDs')
     need(s['member_sha256']==MEMBER_SHA and s['ids_sha256']==digest({'fit':s['fit'],'probe':s['probe']}),'selection')
     need(len(s['fit'])==128 and len(s['probe'])==64 and len(set(s['fit']+s['probe']))==192,'selection sizes')
@@ -119,8 +132,8 @@ def run(args):
         synthetic=c['mode']=='SYNTHETIC_NOT_SCIENTIFIC'
         need(synthetic or c['mode']=='REAL_REQUIRES_SEPARATE_AUTHORIZATION','mode')
         if synthetic:
-            need((c['fit_count'],c['probe_count'],c['queries'],c['updates_per_arm'])==(16,8,2,2),'fixed synthetic schedule')
-            need(c['limits']['head_update']<=9 and c['limits']['head_eval']<=12 and c['detector_forward_used']==0,'synthetic budget')
+            need((c['fit_count'],c['probe_count'],c['updates_per_arm'])==(16,8,2) and c['queries'] in (2,300),'fixed synthetic schedule')
+            need(c['limits']['head_update']<=9 and c['limits']['head_eval']<=12 and c['detector_forward_used']==(6 if c['queries']==300 else 0),'synthetic budget')
         if not synthetic:
             need(args.authorization is not None,'separate GPU authorization required')
             auth=read(args.authorization)
@@ -133,12 +146,14 @@ def run(args):
         need(c['peak_allocated_bytes']<=18<<30 and c['storage_bytes']<=512<<20 and c['export_bytes']<=5<<20,'resource limit')
         signal.signal(signal.SIGALRM,lambda *_: (_ for _ in ()).throw(TimeoutError('wall limit')))
         signal.signal(signal.SIGTERM,lambda *_: (_ for _ in ()).throw(RuntimeError('termination requested')))
-        signal.alarm(max(1,int(c['wall_seconds'])))
+        signal.alarm(max(1,int(c['wall_seconds'] if synthetic else min(c['wall_seconds'],c['gpu_seconds']))))
         need(sha(args.features)==c['features_sha256'],'features SHA')
         t=torch_setup(synthetic);from r18_readout_math import Readout,loss,overlaps,xyxy,local_uniform
         device='cpu' if synthetic else 'cuda'
         if not synthetic:need(t.cuda.is_available(),'CUDA unavailable')
         data=t.load(args.features,map_location='cpu',weights_only=True)
+        if c['queries']==300:
+            need(data['layer_order']==[0,1,2] and t.equal(data['query_ids'],t.arange(300)) and data['coordinate']==c['coordinate'],'captured layer/query/coordinate identity')
         need(data['ids']==c['ids'] and len(set(data['ids']))==len(data['ids']),'feature IDs/order')
         n=c['fit_count']+c['probe_count'];q=c['queries']
         for key,shape in [('q',(n,3,q,256)),('r',(n,q,4)),('gt',(n,q,4)),('mask',(n,q)),('small',(n,q)),('gt_ids',(n,q)),('category',(n,q))]:
@@ -260,12 +275,12 @@ def main():
     p=argparse.ArgumentParser();s=p.add_subparsers(dest='cmd',required=True)
     a=s.add_parser('select');a.add_argument('--members',required=True);a.add_argument('--out',required=True)
     a=s.add_parser('fixture');a.add_argument('--out',required=True);a.add_argument('--variant',choices=['normal','empty','invalid','nonfinite','identity','budget','probe_changed','empty_batch'],default='normal')
-    a=s.add_parser('bind');a.add_argument('--selection',required=True);a.add_argument('--features',required=True);a.add_argument('--receipt',required=True);a.add_argument('--out',required=True)
+    a=s.add_parser('bind');a.add_argument('--selection',required=True);a.add_argument('--features',required=True);a.add_argument('--receipt',required=True);a.add_argument('--out',required=True);a.add_argument('--synthetic',action='store_true')
     a=s.add_parser('run');a.add_argument('--contract',required=True);a.add_argument('--features',required=True);a.add_argument('--out',required=True);a.add_argument('--authorization')
     a=p.parse_args()
     if a.cmd=='select':select(a.members,a.out)
     elif a.cmd=='fixture':fixture(a.out,a.variant)
-    elif a.cmd=='bind':bind(a.selection,a.features,a.receipt,a.out)
+    elif a.cmd=='bind':bind(a.selection,a.features,a.receipt,a.out,a.synthetic)
     else:return run(a)
     return 0
 
