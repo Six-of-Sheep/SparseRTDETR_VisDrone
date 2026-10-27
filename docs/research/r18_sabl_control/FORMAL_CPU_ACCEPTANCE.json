@@ -1,0 +1,330 @@
+{
+  "status": "PASS",
+  "scope": "LOCAL_CONSTRUCTED_CPU_ONLY; final precise head CI is separate",
+  "checks": {
+    "actual_CLI": [
+      {
+        "name": "package_formal_actual_entry",
+        "pass": true
+      },
+      {
+        "name": "deploy_actual_entry",
+        "pass": true
+      },
+      {
+        "name": "plan_actual_entry",
+        "pass": true
+      },
+      {
+        "name": "full_formal_CLI_constructed_only",
+        "pass": true
+      },
+      {
+        "name": "cross_phase_three_epochs_all_arms",
+        "pass": true
+      },
+      {
+        "name": "exact_48_forward_9_updates_synthetic",
+        "pass": true
+      },
+      {
+        "name": "prior_budget_not_reset",
+        "pass": true
+      },
+      {
+        "name": "dual_evaluators_two_budgets",
+        "pass": true
+      },
+      {
+        "name": "six_images_partial_batch_coverage",
+        "pass": true
+      },
+      {
+        "name": "balanced_same_session_cost",
+        "pass": true
+      },
+      {
+        "name": "all_comparisons_and_original_N",
+        "pass": true
+      },
+      {
+        "name": "not_scientific_no_followup",
+        "pass": true
+      },
+      {
+        "name": "closed_and_exit",
+        "pass": true
+      },
+      {
+        "name": "slim_SHA_and_cap",
+        "pass": true
+      },
+      {
+        "name": "duplicate_attempt_no_overwrite",
+        "pass": true
+      },
+      {
+        "name": "scope_actual_CLI_refusal",
+        "pass": true
+      },
+      {
+        "name": "parent_actual_CLI_refusal",
+        "pass": true
+      },
+      {
+        "name": "arms_actual_CLI_refusal",
+        "pass": true
+      },
+      {
+        "name": "prior_actual_CLI_refusal",
+        "pass": true
+      },
+      {
+        "name": "cap_actual_CLI_refusal",
+        "pass": true
+      },
+      {
+        "name": "policy_actual_CLI_refusal",
+        "pass": true
+      },
+      {
+        "name": "worker_exception_actual_CLI_STOP",
+        "pass": true
+      },
+      {
+        "name": "forward_exhausted_actual_CLI_STOP",
+        "pass": true
+      },
+      {
+        "name": "nonfinite_actual_CLI_STOP",
+        "pass": true
+      },
+      {
+        "name": "bad_endpoint_actual_CLI_STOP",
+        "pass": true
+      },
+      {
+        "name": "missing_close_actual_CLI_STOP",
+        "pass": true
+      },
+      {
+        "name": "bad_input_actual_CLI_STOP",
+        "pass": true
+      }
+    ],
+    "boundary_state_and_augmentation": [
+      {
+        "name": "N_native_epoch_boundary",
+        "pass": true
+      },
+      {
+        "name": "N_305_exact_full_state_replay",
+        "pass": true
+      },
+      {
+        "name": "N_native_next_epoch_cursor",
+        "pass": true
+      },
+      {
+        "name": "N_formal_rejects_short_acceptance_format",
+        "pass": true
+      },
+      {
+        "name": "N_short_scope_rejects_formal_state",
+        "pass": true
+      },
+      {
+        "name": "S_native_epoch_boundary",
+        "pass": true
+      },
+      {
+        "name": "S_305_exact_full_state_replay",
+        "pass": true
+      },
+      {
+        "name": "S_native_next_epoch_cursor",
+        "pass": true
+      },
+      {
+        "name": "S_formal_rejects_short_acceptance_format",
+        "pass": true
+      },
+      {
+        "name": "S_short_scope_rejects_formal_state",
+        "pass": true
+      },
+      {
+        "name": "A_native_epoch_boundary",
+        "pass": true
+      },
+      {
+        "name": "A_305_exact_full_state_replay",
+        "pass": true
+      },
+      {
+        "name": "A_native_next_epoch_cursor",
+        "pass": true
+      },
+      {
+        "name": "A_formal_rejects_short_acceptance_format",
+        "pass": true
+      },
+      {
+        "name": "A_short_scope_rejects_formal_state",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e1_p0_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e1_p1_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e1_p2_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e21_p0_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e21_p1_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e21_p2_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e22_p0_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e22_p1_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e22_p2_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e24_p0_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e24_p1_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "augmentation_e24_p2_bytes_RNG",
+        "pass": true
+      },
+      {
+        "name": "CPU_no_CUDA",
+        "pass": true
+      }
+    ],
+    "policy_and_resource_units": [
+      {
+        "name": "CPU_exact_count",
+        "pass": true
+      },
+      {
+        "name": "frozen_forward_arithmetic",
+        "pass": true
+      },
+      {
+        "name": "inherited_seconds",
+        "pass": true
+      },
+      {
+        "name": "typed_policy_refusal",
+        "pass": true
+      },
+      {
+        "name": "stage_no_reset",
+        "pass": true
+      },
+      {
+        "name": "forward_cap_guard",
+        "pass": true
+      },
+      {
+        "name": "CPU_deadline_guard",
+        "pass": true
+      },
+      {
+        "name": "storage_stat_guard_unit",
+        "pass": true
+      },
+      {
+        "name": "allocated_cap_guard",
+        "pass": true
+      },
+      {
+        "name": "peak_cannot_be_erased_by_reset",
+        "pass": true
+      },
+      {
+        "name": "bound_stage_result",
+        "pass": true
+      },
+      {
+        "name": "stage_SHA_conflict_refusal",
+        "pass": true
+      },
+      {
+        "name": "missing_stage_closure_refusal",
+        "pass": true
+      },
+      {
+        "name": "resource_unit",
+        "pass": true
+      },
+      {
+        "name": "busy_unit",
+        "pass": true
+      },
+      {
+        "name": "wrong_GPU_unit",
+        "pass": true
+      },
+      {
+        "name": "parent_once_marker_refusal",
+        "pass": true
+      },
+      {
+        "name": "accepted_worktree_source_equivalence_EOL",
+        "pass": true
+      },
+      {
+        "name": "native_sources_not_replaced",
+        "pass": true
+      },
+      {
+        "name": "no_torch_or_CUDA_import",
+        "pass": true
+      }
+    ]
+  },
+  "final_check_count": 75,
+  "all_this_turn_local_CPU_reserved_forward": 266,
+  "all_this_turn_local_CPU_optimizer_updates": 96,
+  "breakdown": "two CLI runs each109 forward/36 optimizer updates; two boundary runs each24/12; policy/management zero model calls",
+  "final_CLI_seconds": 167.40669197500006,
+  "final_boundary_seconds": 49.572661286000084,
+  "fixture_epoch_clock": {
+    "injected_completed_updates": 303,
+    "is_actual_training": false
+  },
+  "real_GPU_forward": 0,
+  "real_scientific_scoring": false,
+  "server_connected": false,
+  "CPU_cost_does_not_change_future_budget": true,
+  "prior_real_forward": 18,
+  "prior_real_GPU_seconds": 53.45389260002412,
+  "remaining_real_forward": 44571,
+  "remaining_real_GPU_seconds": 86346.54610739998
+}
