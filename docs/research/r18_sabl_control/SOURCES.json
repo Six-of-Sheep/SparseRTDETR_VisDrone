@@ -1,0 +1,118 @@
+{
+  "scope": "design and read-only source inspection; no CPU model or GPU execution",
+  "date": "2026-10-27",
+  "baseline_main": "458d645f70839cda3d1ff35d67bf3ff812e68bd1",
+  "papers": [
+    {
+      "name": "SABL ECCV2020",
+      "url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123490392.pdf",
+      "reuse": "Previously read sections 3.1-3.2; official PDF opening reconfirmed, no broad search or new PDF copy"
+    }
+  ],
+  "official_files": [
+    {
+      "repository": "open-mmlab/mmdetection",
+      "commit": "cfd5d3a985b0249de009b67d04f37263e11cdf3d",
+      "path": "mmdet/models/roi_heads/bbox_heads/sabl_head.py",
+      "url": "https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/mmdet/models/roi_heads/bbox_heads/sabl_head.py",
+      "local_reference_cache": "D:\\Lzy_CV\\workspace_management\\references\\paper-journal-fit\\source-cache\\sabl-cfd5d3a\\sabl_head.py",
+      "bytes": 30500,
+      "sha256": "2b5d7e4537931bf690f4b8769a5b4bb332d2dc2ee6c8f67eadb1b7c882083d2b"
+    },
+    {
+      "repository": "open-mmlab/mmdetection",
+      "commit": "cfd5d3a985b0249de009b67d04f37263e11cdf3d",
+      "path": "mmdet/models/task_modules/coders/bucketing_bbox_coder.py",
+      "url": "https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/mmdet/models/task_modules/coders/bucketing_bbox_coder.py",
+      "local_reference_cache": "D:\\Lzy_CV\\workspace_management\\references\\paper-journal-fit\\source-cache\\sabl-cfd5d3a\\bucketing_bbox_coder.py",
+      "bytes": 15197,
+      "sha256": "6567f747c27734f7a7b15459a2b592525309a628b5b726b70833392c00f93d5e"
+    },
+    {
+      "repository": "open-mmlab/mmdetection",
+      "commit": "cfd5d3a985b0249de009b67d04f37263e11cdf3d",
+      "path": "configs/sabl/sabl-faster-rcnn_r50_fpn_1x_coco.py",
+      "url": "https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/configs/sabl/sabl-faster-rcnn_r50_fpn_1x_coco.py",
+      "local_reference_cache": "D:\\Lzy_CV\\workspace_management\\references\\paper-journal-fit\\source-cache\\sabl-cfd5d3a\\sabl-faster-rcnn_r50_fpn_1x_coco.py",
+      "bytes": 1228,
+      "sha256": "09b29978889f301b3ed4a21296112f5348c325c121a310576f58ddaa3a69381f"
+    }
+  ],
+  "existing_evidence": [
+    {
+      "id": "H2_model",
+      "local_read_only_path": "D:/Lzy_CV/development/worktrees/r18-local-detail-context/src/sparse_rtdetr/research/local_detail_model.py",
+      "bytes": 10813,
+      "sha256_at_review": "95ed25a0254e387652d04872951cc7e0777a054c7c46eab95731b4999b77a3fe"
+    },
+    {
+      "id": "H2_results",
+      "local_read_only_path": "D:/Lzy_CV/workspace_management/delivery/research/r18-h2-formal-20261024-001/terminal-delivery-001/REPORT.md",
+      "bytes": 7452,
+      "sha256_at_review": "c246eeea19a10d00d09ed6f469fadfaccb6efb025abdb77b3020c2440d149b75"
+    },
+    {
+      "id": "OR_model",
+      "local_read_only_path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/or-seed0-e120-20261011-001/release-001/source/src/sparse_rtdetr/ordered_reset/model.py",
+      "bytes": 12763,
+      "sha256_at_review": "0f1eec66f6a82ad122bd2340a0d6b881ca63f66296adddc0ef0213e5ecd21ec2"
+    },
+    {
+      "id": "OR_distribution",
+      "local_read_only_path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/or-seed0-e120-20261011-001/release-001/source/src/sparse_rtdetr/ordered_reset/distribution.py",
+      "bytes": 6668,
+      "sha256_at_review": "82aea82b3236c6e0f5102681829ff1fe91e60eb7c9f24fed16a1402ca988cd7b"
+    },
+    {
+      "id": "OR_results",
+      "local_read_only_path": "D:/Lzy_CV/workspace_management/delivery/experiments/localization-distribution/or-seed0-e120-20261011-001/REPORT.md",
+      "bytes": 6601,
+      "sha256_at_review": "f82390bda03a27a2922c5c80b4bb9b63095659499e2c825c27f1563ad65ebc09"
+    },
+    {
+      "id": "PR24_unexecuted_SABL",
+      "local_read_only_path": "D:/Lzy_CV/development/worktrees/r18-boundary-design/docs/research/r18_boundary_design/DECISION.md",
+      "bytes": 25494,
+      "sha256_at_review": "7f287154b0870f457a4d00d8aaa715c10e9a13f45994762745696ec7d56c591a"
+    },
+    {
+      "id": "PR25_results",
+      "local_read_only_path": "D:/Lzy_CV/workspace_management/delivery/research/r18-reference-topic-gpu-20261027-001/REPORT.md",
+      "bytes": 3791,
+      "sha256_at_review": "d7725aa27ece419b75c81a20e9baa0a43415d109c592067401fc2960e3da238c"
+    },
+    {
+      "id": "N_decoder",
+      "local_read_only_path": "D:/Lzy_CV/development/worktrees/r18-reference-topic/vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py",
+      "bytes": 24521,
+      "sha256_at_review": "01c7b7ab8f070de09dd10e0b34cdd8332874cf63f48cae7e9a608a8574122b6a"
+    }
+  ],
+  "verified_main_N_compatibility": "git diff origin/main a97e1ea -- protocol_r18/model.py protocol_r18/criterion.py native_decoder.py empty; not full production byte certification",
+  "budgets": {
+    "acceptance_forward": 18,
+    "training_forward": 43776,
+    "endpoint_forward": 411,
+    "cost_forward": 288,
+    "total_forward": 44493,
+    "formal_optimizer_updates": 21888,
+    "gpu_seconds_cap": 86400,
+    "wall_seconds_cap": 172800,
+    "allocated_bytes_cap": 19327352832,
+    "new_storage_bytes_cap": 32212254720,
+    "return_bytes_cap": 5242880
+  },
+  "parameter_analytic_count": {
+    "N": 20094584,
+    "new_head": 1837572,
+    "S_A": 21932156
+  },
+  "unknowns": [
+    "actual full model parameter validation",
+    "RoIAlign determinism and runtime resources",
+    "end-to-end scientific effect",
+    "full-training benefit",
+    "novel contribution"
+  ],
+  "web_access_note": "Second web open was blocked by HTTP403; fixed official source URLs retrieved read-only via Python urllib to reference cache, full source inspected; no credentials or server access."
+}
