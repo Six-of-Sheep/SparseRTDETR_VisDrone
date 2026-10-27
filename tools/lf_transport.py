@@ -1,7 +1,7 @@
 """Strict one-shot binary stdin transport, outside the frozen experiment release."""
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shlex
 import subprocess
 import time
@@ -26,7 +26,7 @@ def encode(text):
 
 def shell(cwd, argv, stdin_file=None):
     """Generate LF bytes directly, never via platform text-mode output."""
-    if not Path(cwd).is_absolute() or not argv or not all(isinstance(v, str) for v in argv):
+    if not PurePosixPath(cwd).is_absolute() or not argv or not all(isinstance(v, str) for v in argv):
         raise ValueError('absolute cwd and nonempty string argv required')
     command = shlex.join(argv)
     if stdin_file is not None:
