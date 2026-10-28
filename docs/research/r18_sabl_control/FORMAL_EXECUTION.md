@@ -61,3 +61,33 @@ b77bdb9执行在辅助绑定调用的首条导入前STOP：调用没有进入rel
 绑定首先核release/manifest/commit、原合同策略/累计预算、proposal canonical SHA及源码/材料/EMA/数据/资源回执。`--check-only`只读，不加载模型、探测GPU、执行生产准入或写文件；它不是执行授权或当前实物准入。`--bind`仅在另行正式授权和全新鲜准入后使用，保留短GPU证据/存储继承、无重复作业及GPU进程检查，独占创建正式合同与一次性授权；不创建attempt/启动标记、不启动tmux，不提供重试。原STOP原件不修改。
 
 `python -B tools/check_sabl_bind.py /ABS/bind-cpu.json`在临时release中复制真实Git模块，用当前实际CPU解释器`sys.executable -B -`、清除PYTHONPATH/PYTHONHOME后通过标准输入执行同一调用器。核模块真实来源、cwd/解释器、合同摘要，以及错版本/SHA/策略/回执/已有输出/STOP拒绝；每次子进程前后逐文件SHA确认只读。已认证STOP只有小型原字节快照，其他合同/准入回执明示构造；不冒充真实认证、服务器解释器实测或当前资源准入。CPU本地使用Python3.10.16，CI在3.10/3.12执行；实际实验室解释器路径仅作为未来命令绑定值，本轮不连接服务器核验该二进制。测试仅运行check-only，同一绑定校验在生产bind写出前复用，无生产合同/授权/marker/attempt写入，无forward/更新。
+
+## 2026-10-28：原v1 N/S e24限定评价（仅准备，待独立执行授权）
+
+原链因A数值异常STOP；N与S各自的训练RESULT/CLOSED及e24 checkpoint完整，均为24轮、7296更新。原N24权重SHA为`fbf798c33649253a410c2feeac01bb62757089221709726a02493117469de921`，S24为`deb67cf4bfc7e1a25998fb8490309a0ee812471859bacfbe8a42d8be4673f21f`。这里的N24是同期继续训练控制；“原N”专指共同父模型的认证B0 e120 EMA，SHA `be5e9e1fb7a514eceaf2a1343dc29d2f512115bdd85b7fcc26dc11d3a66c9a83`。CPU准入严格核对各臂完整layout/cache、配置/监督、EMA时钟、训练输入顺序摘要及endpoint/complete/RESULT/CLOSED；只复制`ema.module`，不恢复optimizer、engine、RNG，不使用raw model或PR27验证state。
+
+科学计算固定为`79ba59371c21ecfd4fa76885c413941403797214`、manifest `1af3d80bc0b28aa384da0511715ea81083e709849bc076abb226f2e2ff82c1ab`的`r18-sabl-control-v1`；新分支只增加任务限定入口/CPU检查和本文。全部src/configs/vendor字节须与原release相同。**不得替换为logsigmoid-v2，即使旧S评价出现数值异常也STOP。** 原STOP、N/S终点、A938、历史成本及两个PR均保留；此限定评价不修改或恢复原formal attempt。
+
+原N两档评分可直接复用：`r18-sampling-span-20261020-001/attempt-formal-003/score/B0-{600,300}.json`，SHA分别为`86be4fcc1478442bd4bb6f3b6e5b0c421e29f854e6977c54ba906814e79dfc7e`、`5a829d1ed3c68022053605ab5f143d3dd988eb277960918b898ffcaacd7e3129`。原N inference/score回执、源清单与评价合同绑定同一548成员manifest，且五个评价/数据/ignore实现的SHA相同。保留`AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE`及原train-B0缺CLOSED的限制；指标复用不是补造历史工程闭合。该核对不重新评分原N。
+
+评价继续使用固定548 development成员（manifest SHA `5f4d788591b60bd2a6223c15e548248f4c0296656373d6d98c016d912a7537dd`），原图坐标/类别、raw-ignore、768×1344、FP32 batch4、Q300、无NMS/阈值/TTA；先top600/top300截断再执行原ignore，不补位。两档共享一次检测器前向。复用`sabl_formal.predictions`和原`r0.evaluation.score_budget`：官方风格Python主评价器及COCO bridge（maxDets[1,10,100]），未运行MATLAB；COCO small使用原图面积<1024，主评价器APS不提供时仍为UNKNOWN。不得访问1602。
+
+仅输出两种差值：S24−N24和S24−原N；两档绝对指标及全部负向项均保留，负哨兵/缺字段为UNKNOWN。原收益/保护阈值从`sabl_results.render`原字面定义读取，不新设净收益门槛：top600 AP75-small≥+0.30pp、APS≥+0.20pp、AP≥0，APM/APL/AR-large/主AP≥−0.20pp；top300 AP75-small≥0，AP/APS/主AP≥−0.20pp。同期N条件可以单列，但S−A24、完整三臂质量裁决及空间排列机制为UNKNOWN；不能宣称三臂完成。原成本门槛E2E比≤1.30、allocated比≤1.20保留，**本次不测速，因此其状态UNKNOWN**。若只超过同期N而AP/APS/AP75-small仍低于原N，明确写“相对控制改善，尚未形成现有基线净收益”，不把子条件通过写作原配方成功。
+
+|新增评价预算|固定范围/依据|
+|---|---|
+|检测器forward|274=2×ceil(548/4)，N/S各137；原N0；预热0、训练/反向/optimizer/EMA更新0|
+|评分|4份新评分JSON、8次评价器调用（两臂×两预算×双评价器）；原N两JSON只读引用|
+|阶段/总wall上限|保守1800秒阶段（包括评价CPU/I/O），3600秒wall；不是新增总额度|
+|显存/存储/回传|allocated18GiB；该任务新增512MiB（含预测、源码包、日志、独立编译cache）；旧SABL任务合计仍≤30GiB，磁盘free仍≥30GiB；全回传≤5MiB（stdout/stderr预留256KiB，白名单不含大预测/权重）|
+|余额继承|已用31743 forward / 36543.70207419119秒；当前余12846 / 49856.29792580881秒。若用满本次上限则余12572 / 48056.29792580881秒；失败不退款|
+
+时间依据是历史B0 FP32137次forward约63.14秒、原六组双评分合计351.08秒；S EMA实际速度未知。估计实际约10–20分钟，30分钟阶段上限留足加载/I/O/评分空间，但不保证完成，触及上限STOP。N/S两档预测依历史B0文件大小约290MB，不额外保存raw-query缓存；精简回传只含四评分、比较表、终态/成本/来源回执。
+
+入口`tools/sabl_ns_eval.py`仅为以上任务作适配：`prepare`在CPU核真实材料；`launch --check-only`用最终解释器/cwd/包检查且不创建授权或attempt；未来唯一`launch`在独立新准入目录核新鲜材料/版本/环境/硬件/无重复作业，再独占绑定、运行、白名单导出并退出。命令和准确commit/manifest来自冻结包COMMANDS，不使用旧启动标记。编译cache放该任务根内并计量，首次异常STOP，无自动修复/重试、评分后续训练或自动测速。CPU构造入口验收不调用真实评价器，输出均标记SYNTHETIC，不能算新增科学结果；真实CUDA编译/资源/数值与实际评分仍待独立授权验证。
+
+### 后续修复版S/A公平比较：仅预算说明，不实现恢复/训练
+
+若未来另行决定公平比较，S/A应使用同一个修复版本，从共同父N e120 EMA独立建立optimizer/EMA/RNG各训练24轮；不能把旧v1 S与修复A拼接，也不能将A938续训视作同初始化双臂。当前两次raw前向通过只证明指定输入下数值/输出有限，未证明训练反向和完整训练稳定；是否需新训练验收应在未来实现差异审查后决定。
+
+两臂24轮共14592更新/29184训练forward；双终点274 forward；若沿原三臂同会话成本比较再加384，共29842。若另行授权9更新/18forward短验收，总29860；本轮两项都不执行。有限评价完成后预期余12572，分别缺17270或17288 forward，**现有余额不足，不可自动启动**。按原S24耗时20214.014秒和原A前两轮较慢865.142秒推算，乘1.25余量并加1800秒收尾，约53021.8秒；大于有限评价上限扣除后余48056.3秒，且修复版真实训练耗时未知，必须另审总时间预算。存储仍须纳入旧30GiB，不能删除旧state或重置账本腾出“新额度”。此说明不是重训提案获批、启动命令或新增验收授权。
