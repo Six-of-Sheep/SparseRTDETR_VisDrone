@@ -28,6 +28,7 @@ jobs:
           python -B tools/check_sabl_formal_state.py /tmp/pr26-formal-state
           python -B tools/check_sabl_formal_cli.py /tmp/pr26-formal-cli
           python -B tools/check_sabl_diagnostic.py /tmp/pr26-diagnostic.json
+          python -B tools/check_sabl_ns_eval.py /tmp/ns-eval-cli
   source-and-management:
     runs-on: ubuntu-latest
     strategy:
