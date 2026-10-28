@@ -42,7 +42,7 @@ def main(output):
             task=root/name;task.mkdir();c=task/'CONTRACT.json'
             cli(name+'-plan',['plan','--synthetic','--manifest',str(mf),'--attempt-root',str(task/'attempt'),'--out',str(c),'--fault',fault]);return task,c
         def launch(name,task,c,ok=True,extra=None):
-            return cli(name,['launch','--contract',str(c),'--manifest',str(mf),'--approve-commit','c'*40,'--approve-manifest',sha(mf),'--authorize-cpu',*(extra or [])],ok)
+            return cli(name,['launch','--contract',str(c),'--manifest',str(mf),'--approve-commit','c'*40,'--approve-manifest',sha(mf),'--approve-contract-sha',sha(c),'--authorize-cpu',*(extra or [])],ok)
         def retire(task):
             nonlocal total_cpu_forward,total_cpu_updates
             p=task/'attempt/ledger.json'
@@ -77,6 +77,7 @@ def main(output):
             check(fault+' exact intended rejection',(want in stop['error_message']) if fault!='nonfinite' else ('training images' in stop['error'] and 'finite' in stop['error']))
             (out/(fault+'-STOP.json')).write_text(json.dumps(stop,indent=2));retire(t)
         t,d=plan('wrong-policy');v=read(d);v['policy']['epochs']=25;d.write_text(json.dumps(v));launch('wrong-policy-run',t,d,False);check('bad policy no attempt',not (t/'attempt').exists())
+        t,d=plan('wrong-contract-bytes');launch('wrong-contract-bytes-run',t,d,False,['--approve-contract-sha','0'*64]);check('wrong contract bytes no attempt/authority',not (t/'attempt').exists() and not (t/'authorization.json').exists())
         t,d=plan('wrong-authority');launch('wrong-authority-run',t,d,False,['--authorize-gpu']);check('mixed authority no attempt',not (t/'attempt').exists())
         current={'arm':'r18-sabl-control-lrtb-logsigmoid-v3','epochs':24,'learning_rate':1e-5}
         saved=dict(current,arm='r18-sabl-control-v1')

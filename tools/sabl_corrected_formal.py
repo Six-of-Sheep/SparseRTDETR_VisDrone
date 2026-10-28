@@ -182,7 +182,7 @@ def plan(a):
         proof=short_evidence();cost=proof['COST_ADDITION.json'];prior={'forward':cost['cumulative']['forward'],'GPU_seconds':cost['cumulative']['GPU_stage_seconds']}
         original=exact(f['original_contract']);definition=exact(f['original_definition']);metadata=copy.deepcopy(original['metadata']);metadata['gpu_uuid']=definition['gpu_uuid']
         need(exact(f['N24_closed'])['result']['sha256']==f['N24_result']['sha256'],'N24 original closure')
-        nresult=exact(f['N24_result']);reuse={'endpoint':exact(f['N24_endpoint']),'scores':f['N24_scores'],'ordered_training_input_SHA':nresult['training_input_SHA'],'history_status':'AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE'}
+        nresult=exact(f['N24_result']);reuse={'endpoint':exact(f['N24_endpoint']),'scores':f['N24_scores'],'ordered_training_input_SHA':nresult['training_input_SHA'],'N24_stage_closed':True,'original_N_history_status':'AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE'}
         short=f['short_proofs'];wall=wall_account()
     cumulative={'forward':prior['forward']+29842,'GPU_seconds':str(D(str(prior['GPU_seconds']))+D(57600))}
     request={'forward':max(0,cumulative['forward']-44589),'GPU_seconds':str(max(D(0),D(cumulative['GPU_seconds'])-D(86400)))}
@@ -257,7 +257,7 @@ def score(c,out,meter):
 def run(a):
     out=Path(a.out);out.mkdir();start=time.monotonic();meter=None
     try:
-        c=validate(read(a.contract));m=computation(a.manifest);need(c['manifest_sha256']==sha(a.manifest) and c['commit']==m['commit'] and str(out.resolve())==c['attempt_root'],'run binding')
+        need(sha(a.contract)==a.contract_sha,'child contract bytes binding');c=validate(read(a.contract));m=computation(a.manifest);need(c['manifest_sha256']==sha(a.manifest) and c['commit']==m['commit'] and str(out.resolve())==c['attempt_root'],'run binding')
         need(read(a.authorization)==authority(c),'separate execution/budget authority absent');synthetic=c['mode']==CPU
         need(synthetic or not m['candidate_not_for_real_execution'],'candidate no GPU')
         if synthetic:os.environ['CUDA_VISIBLE_DEVICES']=''
@@ -329,7 +329,7 @@ def cost_record(c,ledger,elapsed):
       'approved_expansion':c['requested_addition'],'approved_cumulative_limits':c['requested_cumulative'],'old_cost_overwritten':False,'failed_cost_refunded':False}
 
 def launch(a):
-    c=validate(read(a.contract));m=computation(a.manifest);task=Path(c['attempt_root']).parent
+    need(sha(a.contract)==a.approve_contract_sha,'approved contract bytes binding');c=validate(read(a.contract));m=computation(a.manifest);task=Path(c['attempt_root']).parent
     need(a.approve_commit==m['commit']==c['commit'] and a.approve_manifest==sha(a.manifest)==c['manifest_sha256'],'explicit version approval')
     need(not Path(c['attempt_root']).exists() and not (task/'FORMAL_ONCE.json').exists() and not (task/'authorization.json').exists(),'duplicate formal attempt');synthetic=c['mode']==CPU
     if synthetic:need(a.authorize_cpu and not a.authorize_gpu,'CPU-only authority')
@@ -338,7 +338,7 @@ def launch(a):
         need(a.grant_forward==c['requested_addition']['forward'] and D(a.grant_GPU_seconds)==D(c['requested_addition']['GPU_seconds']),'explicit exact budget grant')
         fresh=task/'fresh-launch-admission';fresh.mkdir();write(fresh/'MATERIALS.json',material(c));write(fresh/'RESOURCES.json',resources(c,task));short_evidence()
     write(task/'authorization.json',authority(c))
-    argv=[sys.executable,'-B',str(ROOT/'tools/sabl_corrected_formal.py'),'run','--contract',str(Path(a.contract).resolve()),'--manifest',str(Path(a.manifest).resolve()),'--authorization',str(task/'authorization.json'),'--out',c['attempt_root']]
+    argv=[sys.executable,'-B',str(ROOT/'tools/sabl_corrected_formal.py'),'run','--contract',str(Path(a.contract).resolve()),'--contract-sha',sha(a.contract),'--manifest',str(Path(a.manifest).resolve()),'--authorization',str(task/'authorization.json'),'--out',c['attempt_root']]
     write(task/'FORMAL_ONCE.json',{'contract':digest(c),'argv':argv,'no_retry':True,'epoch':time.time()});begin=time.monotonic();proc=subprocess.Popen(argv,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
     try:stdout,stderr=proc.communicate(timeout=600 if synthetic else 57600)
     except subprocess.TimeoutExpired:
@@ -357,10 +357,10 @@ def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
     q=sub.add_parser('plan');q.add_argument('--manifest',required=True);q.add_argument('--attempt-root',required=True);q.add_argument('--out',required=True);q.add_argument('--synthetic',action='store_true');q.add_argument('--fault',choices=FAULTS,default='none')
     q=sub.add_parser('launch')
-    for n in ['contract','manifest','approve-commit','approve-manifest']:q.add_argument('--'+n,required=True)
+    for n in ['contract','manifest','approve-commit','approve-manifest','approve-contract-sha']:q.add_argument('--'+n,required=True)
     q.add_argument('--authorize-cpu',action='store_true');q.add_argument('--authorize-gpu',action='store_true');q.add_argument('--grant-forward',type=int,default=0);q.add_argument('--grant-GPU-seconds',default='0',dest='grant_GPU_seconds')
     q=sub.add_parser('run')
-    for n in ['contract','manifest','authorization','out']:q.add_argument('--'+n,required=True)
+    for n in ['contract','contract-sha','manifest','authorization','out']:q.add_argument('--'+n,required=True)
     a=p.parse_args();return globals()[a.command](a)
 
 if __name__=='__main__':raise SystemExit(main())
