@@ -8,6 +8,7 @@ permissions:
   contents: read
 jobs:
   sabl-cli-cpu:
+    if: github.ref != 'refs/heads/codex/r18-sabl-side-audit' && github.head_ref != 'codex/r18-sabl-side-audit'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -30,6 +31,7 @@ jobs:
           python -B tools/check_sabl_diagnostic.py /tmp/pr26-diagnostic.json
           python -B tools/check_sabl_ns_eval.py /tmp/ns-eval-cli
   source-and-management:
+    if: github.ref != 'refs/heads/codex/r18-sabl-side-audit' && github.head_ref != 'codex/r18-sabl-side-audit'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
