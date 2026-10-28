@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install numpy==1.26.4
-      - run: python -m pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install torch==2.4.1+cpu torchvision==0.19.1+cpu --index-url https://download.pytorch.org/whl/cpu
       - name: Operator and local-head autodiff only (optimizer steps forbidden)
         env:
           CUDA_VISIBLE_DEVICES: ''
@@ -32,5 +32,12 @@ jobs:
           MKL_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '2'
         run: python -B tools/check_sabl_axis_norm.py /tmp/axis-normalization.json
+      - name: Two-forward CLI CPU fixtures (no optimizer or GPU)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'
+        run: python -B tools/check_sabl_forward.py /tmp/forward-cli.json
       - run: python -B tools/repo_manage.py check
       - run: python -B tools/repo_manage.py verify-import
