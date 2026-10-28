@@ -209,3 +209,32 @@ GPU PASS须同时满足：
 本轮只实现并授权该短入口；正式S/A各24轮/548评价/三臂同会话测速仍仅提案29842forward、57600 GPU秒（无扩额授权）。短验收消耗实际追加后重新计算正式缺口，不将预留未用部分当成已花成本。正式入口未接线，不自动续接。
 
 开发失败留痕：初始工具import把research模块误当tools顶层模块，真实CLI立即拒绝；已统一为完整包导入。夹具结束前保留大量临时state可能使缺导出测试先触发存储拒绝，现逐项清理自有synthetic state并断言确切拒绝原因，不将别的错误冒充目标故障通过。未修改科学源码或放宽数值/资源判据。
+
+## 2026-10-28：修正版S/A正式24轮链（CPU准备，未授权启动）
+
+计算基准为已短GPU PASS的2c85c22d5738f8dc84c7527c3408602561baae09、manifest 5f9e5a2b977ad3e5b2881324eadf670f4e2b2ef82bb1e0ef79aa2e74047fd69d。302份src/configs/vendor依赖及5个复用执行文件逐SHA固定。新增tools/sabl_corrected_formal.py只做执行接线：复用现有sabl_formal.py的train、endpoint、predictions、infer、cost、compare，以及原make_engine和sabl_formal_state；不改变模型、初始化、训练目标、优化器/日程、采样、精度或原门槛。短GPU证据严格核其commit/manifest/CLOSED/12forward6更新和恢复结果，只读复用，不重跑验收；它不冒充全正式链GPU认证。
+
+训练仅S/A，各从原共同父N e120 EMA fresh创建新头、optimizer、EMA、RNGseed0。保留两臂前两轮工程检查，随后从各自本次e2完整状态在同一链严格恢复到e24；训练输入/GT/增强顺序还须与认证N24登记一致。旧错误S/A、A938以及短验收state不能进入本次正式训练。N24终点与已有两档评分只读复用，不重训或重算N质量；N仅进入新同会话测速。
+
+新增N-only只读EMA桥接不跳过版本检查：明确要求原N24 v1完整checkpoint SHA fbf798c33649253a410c2feeac01bb62757089221709726a02493117469de921、原binding/manifest/父N、e24/7296、runtime/config/criterion、EMA clock、完整raw/EMA layout及不可变cache；将EMA tensor严格加载到计算路径未变的N wrapper，核原认证EMA module SHA 46de3cb580a54421e8f77c699487d7a12bfa0ea188986369b4b31040894a0a93。仅为eval/测速，不恢复optimizer、engine或RNG，不把旧state伪称v3训练恢复。S/A终点继续使用本次新v3完整state严格读取EMA。
+
+完整次序为新鲜源码/材料/环境/资源/防重复准入→S/A各e1–2工程检查→各自恢复本链e2并训练到e24→两臂548图e24 EMA FP32整图推理（top600/300共享）→每档原双评价器→N24/S/A同会话固定64图FP32 batch4成本（各2暖机+6实测，原平衡顺序）→原sabl_results.render全部绝对指标/差值/保护与成本门槛→slim/CLOSED/EXIT退出。科学FAIL仍完成固定后链；工程/数值/资源/完整性新异常STOP，不自动重试。没有中途AP/选模/调参/扩seed/1602访问。
+
+|阶段|新增forward|实际更新|
+|---|---:|---:|
+|S/A各24轮训练|29184|14592|
+|两臂548图e24 EMA|274|0|
+|N24/S/A固定64成本|384|0|
+|合计|29842|14592|
+
+新GPU阶段拟上限57600秒、整链wall86400秒、allocated18GiB、正式task新增12GiB、回传4MiB；家族累计存储仍30GiB，原新鲜空闲磁盘30GiB下限保持。编译/driver/Triton/TMP cache绑定本task且计入存储，全链显存峰值不因阶段重置漏计。累计原forward44589/GPU86400秒限制没有被本次修改。
+
+权威短验收后成本32029forward/36872.36945352436秒，余额12560/49527.63054647564秒。正式链若未来批准，应另批17282forward、8072.36945352436 GPU秒；届时请求累计61871forward/94472.36945352436 GPU秒。本次合同只列请求，不创建真实authorization、FORMAL_ONCE或attempt；真实launch必须同时收到显式版本和上述精确扩额参数，否则在启动前拒绝。合同/命令文件不是执行授权。
+
+wall已改为逐运行的可核保守上界：除原正式链外六次已完成调用各计其完整允许wall（1800+1800+600+600+3600+1800秒）；原正式链用其真实authorization文件至EXIT文件的同服务器时间包络35582.6703秒，覆盖原entry monotonic35530.649秒，再向上取整并加60秒保护。合计上界45843秒，原48h可保证余额126957秒，能覆盖本次拟86400秒而无需wall扩额。精确active总和仍UNKNOWN；这是证据更细的上界收紧，不是重置额度或用GPU秒替代wall。后续准入重新核原回执SHA/时间与最新成本不变，任何新运行或材料变化要求重新核账。
+
+CPU实际CLI使用明确合成图/GT/随机模型：三压缩epoch×每epoch一window，S/A合计6更新/12训练forward，2臂6合成评价图共4forward，N/S/A合成4图成本24forward，总40。真实scorer产生4评分组/8双评价器调用；用于测试表语义的历史N/N24行明确为S合成评分别名，绝非N质量证据。用实际完整state接口跨工程阶段保存恢复、真实EMA读出、原门槛比较和slim闭合；CPU只验证压缩流程与FP32接口，不能冒充真实304-window跨epoch CUDA验证。已知无收益的合成门槛也必须闭合，不因阴性中止后链。
+
+CPU负例覆盖错误合同/预算、重复启动、worker异常、非有限输入、forward耗尽、语义错误终点、缺闭合和未知预测ID。语义错误fixture会重算其自有摘要/引用SHA，使拒绝确实达到epoch/成员语义层，而不是只因文件SHA不同；完整旧科学材料不修改。所有合成state为测试临时文件，结束移除但保留索引/日志；开发错误可留痕修复复测，不计GPU实验预算。冻结后唯一COMMANDS仅调用Git内新入口，真实新鲜准入/绑定/授权均在受验CLI内，无外部临时绑定脚本。本轮未执行该命令。
+
+N24桥接补充：真实CPU准入发现唯一配置差异为engine.config.arm的版本身份标签v1→v3；桥接显式要求旧标签v1、当前标签v3，且其余全部字段与完整key集合严格相同。不允许删除未知字段、忽略数值差异或将其称为完整训练恢复；CPU补数值漂移/未知key拒绝检查。初次拒绝日志及旧candidate包保留。正式成本出口沿用GPU_stage_seconds标准键并显式记录已批准累计额度，旧成本不覆盖/不退款。
