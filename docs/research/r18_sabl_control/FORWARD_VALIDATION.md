@@ -1,27 +1,115 @@
-# S/A专用两前向工程验证
+# S/A raw-model forward validation
 
-基于992b6b13f0b866700a9bd631ec1a557da96e025e，仅新增入口、显式raw-model桥接及CPU验证。数值公式、科学配置、原轴和误差判据保持。原release、STOP、N/S e24和独立u938状态只读。
+Scope: engineering convergence of the dedicated PR27 entry. The numerical repair
+base is `992b6b13f0b866700a9bd631ec1a557da96e025e`. No source under `src/`,
+`configs/` or `vendor/` changes here. Historical STOPs, releases, N/S endpoints,
+the separate A-u938 state and all incurred costs remain immutable. This CPU
+preparation does not authorize a GPU invocation.
 
-## 权重与输入
+## Fixed computation and state bridge
 
-A来自独立checkpoint-u938.pt（b9e7a005…），S来自原e24 checkpoint（deb67cf4…）。入口核完整旧schema、旧版本/原合同、旧manifest/父N、各自938/7296更新、运行时、全部model layout、参数/缓冲区/不可变cache、dtype、shape、训练mode和源RNG。严格load_state_dict后逐tensor字节核对。只桥接raw model并单独恢复本臂RNG；不调用fullstate.restore，不装载optimizer/EMA/engine，不将v1伪装为v2全状态恢复。
+A reads the independent raw model at update 938 (SHA b9e7a005...); S reads the
+original raw model at e24/update 7296 (SHA deb67cf4...). These are not EMA weights.
+The registered full-state v1 schema, original contract/manifest, parent N, runtime,
+clock/config, criterion identity, full model layout and training modes are checked.
+Each arm has 558 state tensors (346 parameters and 212 buffers). Raw tensors are
+strictly copied and compared byte for byte; only its own saved RNG is restored.
+Optimizer, EMA and engine are neither restored nor constructed by this entry.
+This explicit v1-to-v2 raw bridge is not a complete training-state recovery.
 
-共同固定输入是原e4/window26 logical16，原loader从精确cursor生成一次。先核input_record完整identity、GT/ignore、16ID及像素SHA，再仅用前8张。只访问train_core，不读取548/1602图像。固定A flat-RoI352（b1/q52）在roi-before、A-mean后、pre.3、att_x、att_y逐块与保存FP32原字节一致；首次不一致立即停止。
+The frozen input remains e4/window26, first microbatch of the original logical16.
+The original loader/input_record identity, all 16 IDs, pixels, GT and ignore SHA
+must match before using its first 8 images. A's flat RoI352 (b1/q52, zero-based)
+retains exact comparisons of roi_before_A_mean, roi_after_A_mean, pre.3, att_x and
+att_y against the saved FP32 tensors. The first mismatch stops execution.
 
-## 前向与观测
+Keep training mode, native BN-layout context, DN/aux and original guards, enabled
+autograd, BF16 native detector and FP32 local head, deterministic algorithms and
+CUDA compilation. The repaired operator remains logsigmoid plus softmax along
+the original height/width axes 2/3. We retain the original finite-output and <=1e-6
+axis-normalization checks and the specified A zero old denominator check.
+No warm-up, extra detector forward, loss evaluation, objective backward or update
+exists in the dedicated call path.
 
-保持train/enable_grad、原BN-layout context、原DN capture/guards、detector BF16和boundary FP32。不计算loss，不创建optimizer，禁止backward/autograd.grad和EMA.update。A/S各一次batch8 detector forward，无暖机。两轴新计算调用原修复函数一次；局部旧计算用相同x/logits，在no_grad下记录零分母、非有限数量、有限池化配对差异。局部比较计入同一计时/显存。新权重/池化及完整后续训练输出必须有限，原轴sum最大绝对误差<=1e-6。A指定旧dx须仍为0。
+## Update prevention and observation
 
-前后参数hash保持；BN内存变化仅允许running_mean/running_var/num_batches_tracked，逐项记录dtype、前后SHA、maxabs及改变元素数；不写回checkpoint。输出仅工程证据，不给S/A质量排序。
+No global torch.autograd.grad/backward/Tensor.backward patch and no broad
+function-name blacklist is used. hashlib.update and compiler-internal autodiff
+remain available. The entry builds the raw model, computes its two forwards and
+releases it. It never instantiates an optimizer/EMA updater or computes a training
+objective. Parameter hashes and each parameter's gradient state are checked before
+and after the call; all gradients must remain None. Partial failure observations
+also attempt the same audit. BN running means/variances/counters may change in
+memory; their before/after SHA, dtype, changed elements and maximum absolute
+change are recorded. Other buffer changes reject the run. Nothing is written back
+to a checkpoint.
 
-## 生命周期与资源
+Saved logits/features are reused for local old/new normalization and pooling
+comparisons under no_grad, without an additional detector call. These observations
+cannot establish long-term stability or detection benefit.
 
-原准备STOP保留，保护清单读取显式提取protected_files，拒绝平铺、空、错格式或SHA冲突。prepare命令CUDA隐藏，真实两臂模型仅CPU构建和权重桥接，无完整detector forward。fixture实际CLI只使用标记的构造输入、真实BoundaryHead，不能代替真实GPU路径。
+## One registered caller and closure
 
-冻结Git归档逐文件SHA与受验字节一致；新manifest、definition和一次性authorization相互绑定。正式run仅允许独立attempt-forward-001，FORWARD_ONCE独占创建，拒绝重复。原科学/旧成本不覆盖。异常STOP无修复/重发，PASS写CLOSED立即退出。
+`tools/sabl_forward_check.py run` is the actual caller. It validates the immutable
+source manifest, physical material/protection indexes, exact interpreter, release
+cwd, module origin, original runtime metadata and inherited cost. An exact typed
+JSON authorization binds commit, manifest SHA, definition SHA and attempt. Only
+then is the exclusive FORWARD_ONCE marker consumed. Existing targets reject a
+second invocation. A CPU `run --check-only` traverses the same admission code,
+never creates authorization/attempt/once markers, and never calls the detector.
 
-硬上限2 forward，0 backward/optimizer/EMA；GPU300s（从首个CUDA资源操作之前计入）、wall600s；allocated18GiB，allocator同额保护；新增128MiB（实际task加32MiB开发/Git预留），全部SSH stdout/stderr/附件合计1MiB。无训练、评分或测速。若通过只证明两个固定模型/批次的前向数值路径，长期训练稳定性与检测收益均UNKNOWN。
+`prepare` performs real hidden-CUDA checkpoint loading and strict raw bridges on
+CPU and writes a fresh definition. It accepts only registered bytes/size_bytes
+physical reference forms, rejects missing/invalid/conflicting sizes and SHA errors,
+and explicitly extracts nested protected_files. Empty files are allowed only for
+source-manifest members; checkpoint and protection records require positive sizes.
+Source paths, duplicates and release/source identity are checked.
 
-## CPU检查范围
+Success writes RESULT and SHA-bound CLOSED and exits. Failure samples allocator
+peak and storage/cache best-effort, retains the primary traceback and any secondary
+receipt error, writes STOP and exits. Failed allocator sampling remains UNKNOWN
+with a separately labelled last-known peak. A failed or reserved forward is charged
+and is never refunded. No path resumes training, scoring or speed measurements.
 
-实际解释器、release cwd与脚本CLI下检查两臂构造forward/桥接/输出/CLOSED、参数不变及BN变化，拒绝错version、缺tensor、错dtype、错mode、非有限权重、重复输出、预算耗尽；验证原保护清单层级及损坏拒绝、首RoI精确不一致停止、禁止optimizer与backward。原109项/288比较另行复用回归。真实A/S558tensor CPU桥接单列，不冒充GPU前向通过。旧含optimizer的CLI job仍显式跳过，不记PASS。
+The same stop_receipt and whitelist exporter are exercised by the labelled synthetic
+CPU CLI. `export` requires exactly one terminal marker, verifies CLOSED/result SHA,
+and checks prior return bytes plus its JSON wire size and decoded attachments
+against 1MiB. It never includes checkpoints, images or the full cache index.
+
+## Resources and caches
+
+The limits remain 2 batch8 detector forwards, zero training-objective backward,
+zero optimizer/EMA updates, 300 GPU-stage seconds, 600 wall seconds, 18GiB allocated,
+128MiB added storage, and 1MiB total SSH/attachment return. Wall timing starts before
+admission and GPU timing before any CUDA resource call. The original 1 failed
+forward and conservative 9.326126370113343 seconds remain charged: inherited total
+31741 forwards / 36528.27560652013 seconds. No experiment cost is spent by this CPU
+preparation; CPU operator autodiff is recorded separately from detector updates.
+
+Inductor, Triton, extensions, CUDA and XDG cache paths are bound inside the task
+before imports and must start fresh for GPU execution. They are included once in
+task storage; positive growth in explicit default cache roots is additionally
+charged. Full cache indexes stay server-side, while compact summaries and their
+SHA enter the return. Task bytes plus 32MiB development/Git reserve plus external
+cache growth must stay within 128MiB. This is the declared cache scope, not a
+claim of whole-filesystem allocation measurement. Peak allocation is cumulative
+across A/S and is never reset between arms.
+
+## Acceptance and remaining unknowns
+
+| Check | CPU evidence | Still requires the two authorized GPU forwards |
+|---|---|---|
+| Historical materials / raw state | Physical SHA, native v1 full schema, 558-tensor bridges, exact interpreter/cwd/origin | Actual CUDA state use and saved input reproduction |
+| Dedicated entry / no updates | Actual CLI, parameter/gradient/BN audits, rejection tests; no global API patches | Full-model post-forward state and BN observations |
+| RoIAlign / compilation | Native CPU RoIAlign and CPU aot_eager tracing only | Deterministic CUDA RoIAlign / Inductor compilation |
+| Local numerical repair | Unchanged operator tests and constructed FP32 cases | A saved local exactness, repaired weights and downstream outputs; S full outputs |
+| Failure / export | Same failure handler, simulated allocator failure => UNKNOWN, bounded SHA whitelist | Real exception peak, real cache growth and actual GPU-stage cost |
+| Science | No detector learning, images or scientific evaluation | Long training stability and detection quality remain outside this validation |
+
+Server-only CPU acceptance uses the final interpreter and actual caller. CI on
+Python3.10/3.12 supplements it. The inherited optimizer-containing jobs remain
+explicitly skipped, never counted as passed. Development code/test/checker errors
+may be corrected and rerun under the current authorization while old failures are
+preserved. Scientific changes, a real GPU invocation, expanded resources or edits
+to historical materials require separate authorization. PR27 remains draft and
+unmerged.
