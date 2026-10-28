@@ -122,7 +122,9 @@ def main():
    v=cli(['bind',*common,*approvals,'--authorize-two-forwards','--check-only']);check(v.returncode==0 and json.loads(v.stdout)['authorization_created'] is False,'actual registered binder check-only')
    check(cli(['bind',*common,*approvals,'--check-only']).returncode!=0,'binder rejects missing explicit scope approval')
    check(cli(['bind',*common,'--approve-commit','0'*40,*approvals[2:],'--authorize-two-forwards','--check-only']).returncode!=0,'binder rejects version conflict')
-   check(cli(['bind',*common,*approvals,'--authorize-two-forwards']).returncode!=0,'CPU candidate cannot create production authorization')
+   cpu_candidate=tmp/'never-executable-binding-candidate.json';cpu_candidate.write_text(json.dumps({**m,'candidate_not_for_real_execution':True}))
+   candidate_common=[*common[:2],'--manifest',str(cpu_candidate),*common[4:]];candidate_approvals=['--approve-commit',m['commit'],'--approve-manifest-sha256',f.sha(cpu_candidate)]
+   check(cli(['bind',*candidate_common,*candidate_approvals,'--authorize-two-forwards']).returncode!=0,'CPU candidate cannot create production authorization')
    edits=[('caps',lambda x:x['caps'].__setitem__('forward',3)),('checkpoint',lambda x:x['refs']['A'].__setitem__('sha256','0'*64)),('release',lambda x:x.__setitem__('release',str(tmp))),('python',lambda x:x.__setitem__('python','/usr/bin/false')),('GPU',lambda x:x.__setitem__('GPU','unknown')),('target',lambda x:x['target'].__setitem__('update',940)),('prior',lambda x:x['prior'].__setitem__('forward',31740))]
    for name,edit in edits:
     bad=copy.deepcopy(d);edit(bad);path=tmp/(name+'-definition.json');path.write_text(json.dumps(bad))
