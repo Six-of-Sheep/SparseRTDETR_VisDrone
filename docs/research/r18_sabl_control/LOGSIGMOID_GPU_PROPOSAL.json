@@ -1,0 +1,57 @@
+{
+  "status": "PROPOSAL_ONLY_GPU_NOT_AUTHORIZED",
+  "question": "修复后的S/A共用算子能否在原失败batch的完整模型路径上保持有限，且A到达同一pre-pooling局部状态？",
+  "new_scientific_version": "r18-sabl-control-logsigmoid-v2",
+  "required_new_entry": "单独的forward-only工程验证入口，先做CPU准入/模型权重兼容验证；不得重放旧正式训练CLI",
+  "data": "仅原epoch4/window26逻辑16的前8张train_core，稳定ID与TARGET_INPUT及原reader/增强/GT/ignore规则绑定，不接触548/1602图像",
+  "states": {
+    "A": "诊断checkpoint-u938.pt原raw model；SHA b9e7a005d356ab67ffd4004d568e8eca222c1198c6e2e00d9af167be34100878",
+    "S": "原S e24 raw model；SHA deb67cf4bfc7e1a25998fb8490309a0ee812471859bacfbe8a42d8be4673f21f"
+  },
+  "state_import": "显式且逐tensor严格的只读模型权重桥接，核旧schema/版本/来源与新参数形状；不调用新版本全训练state.restore，不加载optimizer到运行，不更新EMA。A单独恢复原938 RNG以到达已认证失败位置；S使用自身已保存RNG，仅作各自算子兼容性验证，不进行S/A质量比较",
+  "forwards": [
+    {
+      "arm": "A",
+      "batch": 8,
+      "count": 1
+    },
+    {
+      "arm": "S",
+      "batch": 8,
+      "count": 1
+    }
+  ],
+  "execution_mode": "保持原train-mode及enable_grad前向路径；不反向，不构造/更新optimizer。只为确认原分支计算，内存BN变化不写回任何状态文件。",
+  "local_controls": "每个模型复用本次同一组pre-pooling x/lx/ly，分别计算旧/新两轴权重与池化；这些是额外局部算子调用，不增加检测器forward，完整计入时间/显存",
+  "budgets": {
+    "detector_forward_max": 2,
+    "backward": 0,
+    "optimizer_updates": 0,
+    "EMA_updates": 0,
+    "GPU_stage_seconds_max": 300,
+    "wall_seconds_max": 600,
+    "allocated_GiB": 18,
+    "new_server_MiB": 128,
+    "return_total_MiB": 1
+  },
+  "predeclared_gates": [
+    "A目标16图输入/GT哈希先匹配原TARGET_INPUT，再仅使用前8张",
+    "A选中query的RoI/pre.3/att logits与原保存float32字节精确一致；首次不一致STOP，不放宽",
+    "S/A各自新权重及完整输出有限、沿原轴归一化误差<=1e-6；保持检测器BF16与局部头FP32",
+    "旧局部算子若遇零分母仅记录已有故障，禁止额外旧完整模型forward以追求复现",
+    "源身份、资源或数值异常STOP，不修复重试；通过也闭合退出"
+  ],
+  "interpretation": "最多确认这两个固定batch/model-state的完整前向数值路径；不证明长期训练稳定，不比较AP，不证明收益。S/A来自不同历史时点，输出差异不是受控质量证据。",
+  "after_PASS": "如需质量验证，另行制定S/A都采用v2、共同父N/初始化/日程的受控方案；不把修复A续跑后与旧S拼成原三臂。不默认完整训练轮数。",
+  "after_FAIL": "保留证据并结束此工程验证，不能追加forward、调参或放宽门槛",
+  "cost_basis": {
+    "existing_cumulative_forward": 31740,
+    "existing_cumulative_GPU_seconds": 36518.94948015002,
+    "current_remaining_forward": 12849,
+    "current_remaining_GPU_seconds": 49881.05051984998,
+    "at_future_cap_remaining_forward": 12847,
+    "at_future_cap_remaining_GPU_seconds": 49581.05051984998,
+    "basis": "原诊断前向/状态装载已在同RTX4090D完成；这里只提议2次batch8前向及局部重复算子，以5分钟保守工程上限，不承诺实测速度或推理成本。"
+  },
+  "execution_performed_this_round": false
+}
