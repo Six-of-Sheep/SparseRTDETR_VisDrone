@@ -9,6 +9,16 @@ from torch import nn
 from torch.nn import functional as F
 torch.set_num_threads(2);torch.set_num_interop_threads(1)
 ROOT=Path(__file__).resolve().parents[1]
+def ast_fingerprint(node):
+ # Keep native ast.dump handling of optional fields; omit only the newly added
+ # EMPTY type_params field. Never ignore actual generic/type parameters.
+ import copy
+ clone=copy.deepcopy(node)
+ for child in ast.walk(clone):
+  if 'type_params' in child._fields:
+   if getattr(child,'type_params',None):raise ValueError('unreviewed nonempty AST type parameters')
+   child._fields=tuple(name for name in child._fields if name!='type_params')
+ return hashlib.sha256(ast.dump(clone,include_attributes=False).encode()).hexdigest()
 def load(path,name):
  spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 stable=load(ROOT/'src/sparse_rtdetr/research/sabl_axis_norm.py','axis_norm').normalized_sigmoid_axis
@@ -93,7 +103,14 @@ def main():
    except ValueError:check('unexpected dtype rejected '+str(dtype),True)
    else:check('unexpected dtype rejected '+str(dtype),False)
   # Extract the actual new Head/guard definitions without importing a detector.
-  source=(ROOT/'src/sparse_rtdetr/research/sabl_control.py').read_text();tree=ast.parse(source);nodes={n.name:n for n in tree.body if isinstance(n,(ast.ClassDef,ast.FunctionDef))};impact=json.loads((ROOT/'tests/fixtures/sabl_axis_source_impact.json').read_text());finger=lambda n:hashlib.sha256(ast.dump(n,include_attributes=False).encode()).hexdigest()
+  source=(ROOT/'src/sparse_rtdetr/research/sabl_control.py').read_text();tree=ast.parse(source);nodes={n.name:n for n in tree.body if isinstance(n,(ast.ClassDef,ast.FunctionDef))};impact=json.loads((ROOT/'tests/fixtures/sabl_axis_source_impact.json').read_text());finger=ast_fingerprint
+  probe=ast.parse('class C: pass').body[0];original_fingerprint=ast_fingerprint(probe)
+  if 'type_params' not in probe._fields:probe._fields=(*probe._fields,'type_params')
+  probe.type_params=[];check('empty Python3.12 type_params has same fingerprint',ast_fingerprint(probe)==original_fingerprint)
+  probe.type_params=[ast.Name(id='T',ctx=ast.Load())]
+  try:ast_fingerprint(probe)
+  except ValueError:check('nonempty type_params not ignored',True)
+  else:check('nonempty type_params not ignored',False)
   for name,h in impact['unchanged_AST'].items():check('unchanged source '+name,finger(nodes[name])==h)
   init=next(n for n in nodes['BoundaryHead'].body if isinstance(n,ast.FunctionDef) and n.name=='__init__');check('unchanged Head initialization',finger(init)==impact['BoundaryHead_init_AST'])
   check('new science version rejects silent v1 reuse',"VERSION = 'r18-sabl-control-logsigmoid-v2'" in source)
