@@ -82,6 +82,12 @@ def assert_healthy(model, optimizer=None, ema=None, *, gradients=False):
 
 
 class Engine:
+    def rate(self, update):
+        return learning_rate(update)
+
+    def health(self, model, optimizer=None, ema=None, *, gradients=False):
+        return assert_healthy(model, optimizer, ema, gradients=gradients)
+
     def __init__(self, model, criterion, optimizer, ema, config):
         self.model, self.criterion, self.optimizer, self.ema = model, criterion, optimizer, ema
         self.config = config
@@ -141,7 +147,7 @@ class Engine:
         self.model.train(); self.criterion.train()
         if getattr(self.model.decoder, "trace_enabled", False):
             raise RuntimeError("training must not enable trace collection")
-        lr = learning_rate(self.completed_updates+1)
+        lr = self.rate(self.completed_updates+1)
         for group in self.optimizer.param_groups: group["lr"] = lr
         self.optimizer.zero_grad(set_to_none=True)
         if self.device.type == "cuda": torch.cuda.synchronize(self.device)
@@ -162,7 +168,7 @@ class Engine:
                     require_finite(objective, "equal microbatch objective")
                     objective.backward()
                     self.phase += 1
-                    assert_healthy(self.model, gradients=True)
+                    self.health(self.model, gradients=True)
                     values.append({k: float(v.detach()) for k,v in losses.items()})
                     diagnostics.append(copy.deepcopy(self.criterion.last_diagnostics))
                     if capture:
@@ -171,7 +177,7 @@ class Engine:
                     del out, losses, objective, subset, batch
             before_clip = tensor_digest((name, p.grad) for name,p in self.model.named_parameters()) if capture else None
             norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.clip_max_norm, error_if_nonfinite=True)
-            assert_healthy(self.model, gradients=True)
+            self.health(self.model, gradients=True)
             used={n for n,p in self.model.named_parameters() if p.grad is not None}
             self.optimizer.step()
             for n,p in self.model.named_parameters():
@@ -180,7 +186,7 @@ class Engine:
                 if actual!=self.parameter_steps[n]:raise RuntimeError("common R18 parameter optimizer clock mismatch: "+n)
             self.ema.update(self.model)
             self.completed_updates += 1
-            assert_healthy(self.model, self.optimizer, self.ema)
+            self.health(self.model, self.optimizer, self.ema)
             self.optimizer.zero_grad(set_to_none=True)
             self.phase = 0
             if self.device.type == "cuda": torch.cuda.synchronize(self.device)

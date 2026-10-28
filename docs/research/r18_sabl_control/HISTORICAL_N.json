@@ -1,0 +1,51 @@
+{
+  "N_checkpoint_sha256": "be5e9e1fb7a514eceaf2a1343dc29d2f512115bdd85b7fcc26dc11d3a66c9a83",
+  "N_identity_status": "AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE",
+  "historical_N": {
+    "endpoint": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/endpoint.json",
+      "bytes": 1081,
+      "sha256": "7ad40e93db6ae028b0c97f7da69eba8a40908a8e03258a45ab97633d6d6276ab"
+    },
+    "authentication": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/formal-execution-003/COMPLETED_B0_AUTHENTICATED.json",
+      "sha256": "3e0da19564a8b52cf5ab8156ff39bd08cdc843cea0202216a2c7238efa9898d7",
+      "bytes": 184139
+    },
+    "source": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/stream-continuation-bundle-003/RUN_SOURCE_MANIFEST.json",
+      "sha256": "c91451b3db676122b9f705ed3e4647f2318c4f4c1437e35107f856e383c7ecf1",
+      "bytes": 84232
+    },
+    "original_STOP": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/STOP.json",
+      "bytes": 1007,
+      "sha256": "b501b494728af6b55cd8fd88aebaa84874ba6d8433e4f01a2f906e791e92c40d"
+    },
+    "original_CLOSED_path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/CLOSED.json",
+    "status": "AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE",
+    "scores": {
+      "600": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B0-600.json",
+        "sha256": "86be4fcc1478442bd4bb6f3b6e5b0c421e29f854e6977c54ba906814e79dfc7e",
+        "bytes": 91375
+      },
+      "300": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/B0-300.json",
+        "sha256": "5a829d1ed3c68022053605ab5f143d3dd988eb277960918b898ffcaacd7e3129",
+        "bytes": 91341
+      }
+    },
+    "score_result": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/score/RESULT.json",
+      "bytes": 2762,
+      "sha256": "27b42d824615062757a714b4e415c78a467ee9918089421490b8e0b1cfe5b1b7"
+    },
+    "infer_result": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-003/infer-B0/RESULT.json",
+      "bytes": 43349,
+      "sha256": "99609528d93f60dc79572b005c3cd3a5dd4d453adb3ef9c5e328751ac55102a9"
+    }
+  },
+  "use": "read-only original endpoint and scores; no repeat original-N inference or scoring"
+}

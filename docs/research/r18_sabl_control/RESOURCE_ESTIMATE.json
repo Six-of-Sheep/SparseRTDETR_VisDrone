@@ -1,0 +1,36 @@
+{
+  "scope": "ANALYTIC_NOT_MEASURED",
+  "B": 8,
+  "Q": 300,
+  "RoI_count": 2400,
+  "selected_tensor_bytes": {
+    "roi_FP32": 120422400,
+    "two_preconv_outputs_FP32": 240844800,
+    "two_axis_features_FP32": 34406400,
+    "two_up_features_FP32": 68812800,
+    "two_attention_maps_FP32": 940800,
+    "two_prediction_tensors_FP32": 537600,
+    "F8_original_BF16": 66060288,
+    "F8_FP32_cast": 132120576,
+    "roi_align_python_fallback_sample_tensor_FP32": 481689600
+  },
+  "selected_tensor_sum_bytes_NOT_peak": 1145835264,
+  "MAC_by_layer": {
+    "two_preconv": 138726604800,
+    "two_postconv": 6606028800,
+    "two_transposeconv": 4404019200,
+    "two_attention": 60211200,
+    "two_shared_linear_on_two_axes": 34406400
+  },
+  "head_forward_MAC": 149831270400,
+  "head_forward_FLOPs_2_per_MAC": 299662540800,
+  "per_image_head_MAC": 18728908800.0,
+  "head_parameter_count": 1837572,
+  "S_A_parameter_count": 21932156,
+  "head_FP32_parameter_grad_AdamW_EMA_bytes": 36751440,
+  "S_A_FP32_parameter_grad_AdamW_EMA_bytes": 438643120,
+  "six_acceptance_checkpoints_state_lower_bound_bytes": 2046684672,
+  "live_peak": "UNKNOWN: saved tensors, gradient liveness, convolution workspace, allocator, native/DN activations and deterministic RoIAlign backend require actual CUDA measurement",
+  "time": "UNKNOWN: analytic MACs are not measured throughput or elapsed time",
+  "storage": "No persistent RoI/features; keep 2 complete acceptance checkpoints per arm. 30GiB cap includes states, logs and temporary writes; estimate not a storage admission."
+}

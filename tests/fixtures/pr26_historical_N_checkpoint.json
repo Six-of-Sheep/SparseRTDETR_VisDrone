@@ -1,0 +1,15 @@
+{
+  "scope": "AUTHENTICATED_METADATA_SNAPSHOT_NOT_PHYSICAL_CHECKPOINT",
+  "source_returned_proposal_sha256": "0a631f6dd24e5369a09b7675c319f760db3edc13a7573d18b38b401fb40e3848",
+  "parent_metadata_sha256": "cbf9fab7c6a9de54293716091064715e27bff5b5905b624fade5cc1fe0f12d88",
+  "checkpoint": {
+    "schema": "sparse_rtdetr.sampling_span_fullstate_v1",
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sampling-span-20261020-001/attempt-formal-001/train-B0/checkpoint-e120.pth",
+    "sha256": "be5e9e1fb7a514eceaf2a1343dc29d2f512115bdd85b7fcc26dc11d3a66c9a83",
+    "size_bytes": 323457665,
+    "binding_sha256": "db0dcb7308de738a60b2e05202d985a1b008e8391d9a053d054047f25b814711",
+    "scope": "span_formal_e120",
+    "completed_updates": 36480,
+    "written_at": "2026-10-21T16:45:01.490618+00:00"
+  }
+}
