@@ -1,0 +1,294 @@
+{
+  "schema": "independent_GT_cases_for_SABL_v3",
+  "provenance": "first 11 copied as coordinates only from original audit; no encoded target or decoder result in oracle",
+  "cases": [
+    {
+      "name": "square_centered",
+      "reference": [
+        0.5,
+        0.5,
+        0.2,
+        0.2
+      ],
+      "GT": [
+        0.5,
+        0.5,
+        0.2,
+        0.2
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "non_square",
+      "reference": [
+        0.4,
+        0.6,
+        0.3,
+        0.2
+      ],
+      "GT": [
+        0.4,
+        0.6,
+        0.2,
+        0.1
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "asymmetric_centers_valid_wrong_output",
+      "reference": [
+        0.4,
+        0.6,
+        0.2,
+        0.1
+      ],
+      "GT": [
+        0.4,
+        0.6,
+        0.2,
+        0.1
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "one_pixel",
+      "reference": [
+        0.6,
+        0.3,
+        0.02,
+        0.03
+      ],
+      "GT": [
+        0.6,
+        0.3,
+        0.000744047619047619,
+        0.0013020833333333333
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "thin",
+      "reference": [
+        0.7,
+        0.2,
+        0.5,
+        0.1
+      ],
+      "GT": [
+        0.7,
+        0.2,
+        0.4,
+        0.002
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "top_left_edge",
+      "reference": [
+        0.03,
+        0.04,
+        0.1,
+        0.08
+      ],
+      "GT": [
+        0.01,
+        0.02,
+        0.02,
+        0.04
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "bottom_right_edge",
+      "reference": [
+        0.96,
+        0.95,
+        0.1,
+        0.12
+      ],
+      "GT": [
+        0.98,
+        0.97,
+        0.04,
+        0.06
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "accidental_top_equals_right",
+      "reference": [
+        0.2,
+        0.4,
+        0.2,
+        0.2
+      ],
+      "GT": [
+        0.2,
+        0.4,
+        0.2,
+        0.2
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "bucket_centers",
+      "reference": [
+        0.5,
+        0.5,
+        0.5147058823529412,
+        0.2573529411764706
+      ],
+      "GT": [
+        0.5,
+        0.5,
+        0.8125,
+        0.40625
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "bucket_midpoint_ties",
+      "reference": [
+        0.5,
+        0.5,
+        0.5147058823529412,
+        0.2573529411764706
+      ],
+      "GT": [
+        0.5,
+        0.5,
+        0.5,
+        0.25
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "expanded_domain_boundary",
+      "reference": [
+        0.5,
+        0.5,
+        0.5147058823529412,
+        0.2573529411764706
+      ],
+      "GT": [
+        0.5,
+        0.5,
+        0.875,
+        0.4375
+      ],
+      "from_original_11": true
+    },
+    {
+      "name": "asym_different_ref",
+      "reference": [
+        0.25,
+        0.7,
+        0.5,
+        0.18
+      ],
+      "GT": [
+        0.42,
+        0.6,
+        0.13,
+        0.21
+      ],
+      "from_original_11": false
+    },
+    {
+      "name": "far_GT_outside_bucket_domain",
+      "reference": [
+        0.1,
+        0.15,
+        0.03,
+        0.04
+      ],
+      "GT": [
+        0.65,
+        0.7,
+        0.2,
+        0.3
+      ],
+      "from_original_11": false
+    },
+    {
+      "name": "narrow_reference_large_GT",
+      "reference": [
+        0.5,
+        0.5,
+        0.001,
+        0.002
+      ],
+      "GT": [
+        0.48,
+        0.54,
+        0.3,
+        0.4
+      ],
+      "from_original_11": false
+    },
+    {
+      "name": "wide_ref_tiny_GT",
+      "reference": [
+        0.55,
+        0.4,
+        0.8,
+        0.7
+      ],
+      "GT": [
+        0.43,
+        0.52,
+        0.002,
+        0.004
+      ],
+      "from_original_11": false
+    },
+    {
+      "name": "right_edge_asym",
+      "reference": [
+        0.95,
+        0.5,
+        0.2,
+        0.4
+      ],
+      "GT": [
+        0.99,
+        0.72,
+        0.02,
+        0.12
+      ],
+      "from_original_11": false
+    },
+    {
+      "name": "top_edge_different_ref",
+      "reference": [
+        0.2,
+        0.1,
+        0.3,
+        0.4
+      ],
+      "GT": [
+        0.31,
+        0.015,
+        0.1,
+        0.03
+      ],
+      "from_original_11": false
+    },
+    {
+      "name": "off_diagonal_square",
+      "reference": [
+        0.3,
+        0.7,
+        0.3,
+        0.3
+      ],
+      "GT": [
+        0.28,
+        0.66,
+        0.1,
+        0.1
+      ],
+      "from_original_11": false
+    }
+  ]
+}

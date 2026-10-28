@@ -1,0 +1,86 @@
+{
+  "schema": "SABL_LOGSIGMOID_CPU_CRITERIA_V1",
+  "frozen_before_tests": true,
+  "normal_domain_logits": [
+    -12,
+    12
+  ],
+  "normal_domain_features": [
+    -4,
+    4
+  ],
+  "axes": [
+    2,
+    3
+  ],
+  "FP32_normal_old_new_weights_and_output": {
+    "atol": 2e-06,
+    "rtol": 2e-05
+  },
+  "FP32_normal_old_new_gradients": {
+    "atol": 5e-06,
+    "rtol": 5e-05
+  },
+  "FP32_vs_FP64_saved_and_extreme_output": {
+    "atol": 0.0002,
+    "rtol": 2e-05
+  },
+  "FP32_vs_FP64_saved_and_extreme_gradients": {
+    "atol": 2e-05,
+    "rtol": 0.0002
+  },
+  "FP64_reference_forward_and_analytic_gradient": {
+    "atol": 1e-12,
+    "rtol": 1e-10
+  },
+  "normalization_axis_sum_FP32_atol": 1e-06,
+  "normalization_axis_sum_FP64_atol": 1e-12,
+  "gradient_upstream_abs_bound": "1/channel_count",
+  "absolute_near_zero_policy": "allclose uses atol+rtol*abs(reference); record max_abs, RMS and relative error where abs(reference)>=1e-5; never assert bitwise equivalence",
+  "extreme_vectors": [
+    [
+      -1000,
+      -1001,
+      -1002,
+      -1003,
+      -1004,
+      -1005,
+      -1006
+    ],
+    [
+      -10000,
+      -10000,
+      -10000,
+      -10000,
+      -10000,
+      -10000,
+      -10000
+    ],
+    [
+      1000,
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006
+    ],
+    [
+      -1000,
+      -100,
+      0,
+      1,
+      10,
+      100,
+      1000
+    ]
+  ],
+  "finite_limit_case": "float32 min/max values, equal and mixed; bounded features only",
+  "nonfinite_input": "NaN,+Inf,-Inf explicitly rejected, no sanitization",
+  "independent_forward_reference": "Python math piecewise log1p/exp FP64 normalized after max shift; direct FP64 sigmoid/sum cross-check where its denominator remains positive",
+  "analytic_gradient_reference": "w*g for features; w*sigmoid(-logit)*sum_channels(g*(x-pooled)) for logits",
+  "no_optimizer_updates": true,
+  "GPU": false,
+  "failure_fixture_sha256": "51f994b7f665881a86cbf6552de8fd2d3027e19c102b7a16191d650c3dd8428a",
+  "threshold_changes_after_results": false
+}
