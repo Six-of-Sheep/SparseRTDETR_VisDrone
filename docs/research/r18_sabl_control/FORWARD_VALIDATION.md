@@ -50,6 +50,11 @@ cannot establish long-term stability or detection benefit.
 
 ## One registered caller and closure
 
+`tools/sabl_forward_check.py bind` is the registered authorization binder: it requires
+the explicitly approved commit/manifest and two-forward scope, passes the same CPU
+admission, and exclusively creates the authorization. Its check-only mode creates
+nothing. No temporary stdin binding script is needed.
+
 `tools/sabl_forward_check.py run` is the actual caller. It validates the immutable
 source manifest, physical material/protection indexes, exact interpreter, release
 cwd, module origin, original runtime metadata and inherited cost. An exact typed

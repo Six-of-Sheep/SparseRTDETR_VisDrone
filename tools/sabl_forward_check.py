@@ -339,6 +339,18 @@ def prepare(a):
  definition={'schema':'SABL_TWO_FORWARD_ONLY_V1','refs':refs,'protected':protected,'target':target,'raw_bridge_CPU':audits,'caps':CAPS,'root':str(TASK),'release':str(ROOT),'python':c['metadata']['python'],'GPU':c['gpu_uuid'],'environment':c['metadata']['environment'],'prior':{'forward':prior['forward'],'GPU_seconds':prior['GPU_stage_seconds']},'no_retry':True}
  write(out/'DEFINITION.json',definition);print(json.dumps({'status':'PASS_CPU_PREPARE','definition_sha256':sha(out/'DEFINITION.json'),'raw_bridge_CPU':audits,'CUDA_initialized':False}))
 
+def bind(a):
+ # Same admission as run --check-only. Only future explicit GPU authorization may write.
+ definition,manifest,expected=admit(a,True)
+ need(a.authorize_two_forwards is True and a.approve_commit==manifest['commit'] and a.approve_manifest_sha256==sha(a.manifest),'explicit two-forward version approval')
+ need(Path(a.authorization)==TASK/'FORWARD_AUTHORIZATION.json' and not Path(a.authorization).exists(),'fresh authorization target')
+ if not a.check_only:
+  need(manifest.get('candidate_not_for_real_execution') is False,'CPU candidate cannot bind')
+  write(Path(a.authorization),expected)
+ print(json.dumps({'status':'PASS_BIND_CHECK_ONLY_NO_WRITE' if a.check_only else 'BOUND_TWO_FORWARD_AUTHORIZATION','commit':manifest['commit'],'manifest_sha256':sha(a.manifest),'definition_sha256':sha(a.definition),'authorization_created':not a.check_only,'attempt_created':False,'GPU_started':False}))
+ return 0
+
+
 def run(a):
  started=time.monotonic()
  if not a.check_only:
@@ -479,10 +491,11 @@ def main():
  p=argparse.ArgumentParser();s=p.add_subparsers(dest='command',required=True)
  q=s.add_parser('prepare');q.add_argument('--out',required=True)
  q=s.add_parser('run');q.add_argument('--definition',required=True);q.add_argument('--manifest',required=True);q.add_argument('--authorization',required=True);q.add_argument('--out',required=True);q.add_argument('--check-only',action='store_true')
+ q=s.add_parser('bind');q.add_argument('--definition',required=True);q.add_argument('--manifest',required=True);q.add_argument('--authorization',required=True);q.add_argument('--out',required=True);q.add_argument('--approve-commit',required=True);q.add_argument('--approve-manifest-sha256',required=True);q.add_argument('--authorize-two-forwards',action='store_true');q.add_argument('--check-only',action='store_true')
  q=s.add_parser('fixture');q.add_argument('--spec',required=True);q.add_argument('--out',required=True)
  q=s.add_parser('export');q.add_argument('--attempt',required=True);q.add_argument('--already-returned-bytes',required=True,type=int)
  a=p.parse_args();target=Path(a.out) if hasattr(a,'out') else None;existed=target.exists() if target is not None else False
- try:return {'prepare':prepare,'run':run,'fixture':fixture,'export':export}[a.command](a)
+ try:return {'prepare':prepare,'bind':bind,'run':run,'fixture':fixture,'export':export}[a.command](a)
  except BaseException as e:
   tb=traceback.format_exc()
   if a.command=='prepare' and target is not None and not existed and target.is_dir():return stop_receipt(target,Meter(target,TASK,'cpu'),e,tb,phase='prepare')
