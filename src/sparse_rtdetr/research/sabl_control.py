@@ -9,8 +9,9 @@ from ..protocol_r18 import model as common
 from ..protocol_r18 import engine as training
 from ..protocol_r18.geometry import validate_geometry
 from ..baseline.training_v2b import _optimizer
+from .sabl_axis_norm import normalized_sigmoid_axis
 
-VERSION = 'r18-sabl-control-v1'
+VERSION = 'r18-sabl-control-logsigmoid-v2'
 PARAMETERS = {'N':20094584, 'S':21932156, 'A':21932156}
 N_SHA = 'be5e9e1fb7a514eceaf2a1343dc29d2f512115bdd85b7fcc26dc11d3a66c9a83'
 
@@ -110,10 +111,10 @@ class BoundaryHead(nn.Module):
         finite(roi)
         if arm=='A':roi=roi.mean((-2,-1),keepdim=True).expand_as(roi)
         x=self.pre(roi)
-        ax=self.att_x(x).sigmoid();ay=self.att_y(x).sigmoid()
-        dx=ax.sum(2,keepdim=True);dy=ay.sum(3,keepdim=True)
-        need(bool((dx>0).all() and (dy>0).all()),'zero attention denominator')
-        fx=(x*(ax/dx)).sum(2);fy=(x*(ay/dy)).sum(3)
+        # Same real-valued normalized sigmoid; stable evaluation, same axes.
+        wx=normalized_sigmoid_axis(self.att_x(x),2)
+        wy=normalized_sigmoid_axis(self.att_y(x),3)
+        fx=(x*wx).sum(2);fy=(x*wy).sum(3)
         fx=F.relu(self.up_x(F.relu(self.post_x(fx)))).transpose(1,2)
         fy=F.relu(self.up_y(F.relu(self.post_y(fy)))).transpose(1,2)
         features=torch.stack((fx[:,:7],fx[:,7:].flip(1),fy[:,:7],fy[:,7:].flip(1)),1)

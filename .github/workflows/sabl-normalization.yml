@@ -1,0 +1,36 @@
+name: SABL normalization operator checks
+on:
+  push:
+    branches: ['codex/r18-sabl-logsigmoid-fix']
+  pull_request:
+    branches: [main, 'codex/r18-sabl-control']
+permissions:
+  contents: read
+jobs:
+  operator-cpu-no-optimizer:
+    if: github.ref == 'refs/heads/codex/r18-sabl-logsigmoid-fix' || github.head_ref == 'codex/r18-sabl-logsigmoid-fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install numpy==1.26.4
+      - run: python -m pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+      - name: Operator and local-head autodiff only (optimizer steps forbidden)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'
+        run: python -B tools/check_sabl_axis_norm.py /tmp/axis-normalization.json
+      - run: python -B tools/repo_manage.py check
+      - run: python -B tools/repo_manage.py verify-import
