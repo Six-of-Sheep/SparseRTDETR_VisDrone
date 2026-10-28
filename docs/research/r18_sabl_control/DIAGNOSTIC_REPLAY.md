@@ -1,0 +1,9 @@
+# PR26 A failure reproduction, fixed scope
+
+This entry imports scientific source from the original 79ba593 release, never edits it. Start at authenticated A e2/608 full state. Exact canonical JSON comparison of every original input identity and all diagnostic RESULT_KEYS except elapsed time; zero tolerance and first mismatch stops. Replay 330 updates to938, save a separate complete state, then only one target microbatch forward. Success -> NOT_REPRODUCED, original exception -> REPRODUCED_ORIGINAL_CHECK_FAILURE, either closes without loss/backward/second microbatch.
+
+Caps:661 forward,660 backward,330 updates;1200 GPU-stage seconds,1800 wall seconds,18GiB allocated,512MiB new server storage including a conservative64MiB development/freeze reserve. Entire SSH stdout/stderr/attachments cumulatively5MiB, with size checks before transmission; prior20.57MiB error remains. All replay cost is additional, not progress toward formal continuation. Original release, attempt, N/S and STOP protected. No repair/epsilon/normalization/dtype/gradient-path changes.
+
+Observations only on the target forward: F8/RoI, before/after A spatial mean, native pre convolutions/ReLU, attention logits/sigmoid and denominators. Read-only hooks plus Python frame tracing preserve original function bodies; CPU compares exact outputs, gradients and RNG. Tensor extraction is bounded to the first offending flattened query, <=2MiB, retained on server by default.
+
+CPU synthetic actual CLI validates the same restore/train/compare/save/single-target/close path, finite/zero observation, exact replay, mismatch/cap rejection and duplicate launch/output rejection. CPU costs reported separately. Fixture-only zero injection is never accepted by the production parser. A snapshot/CLI PASS is not proof of reproducing the historical failure or scientific benefit.

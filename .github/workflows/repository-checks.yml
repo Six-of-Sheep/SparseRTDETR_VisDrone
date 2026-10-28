@@ -27,6 +27,7 @@ jobs:
           python -B tools/check_sabl_cli.py /tmp/pr26-cli
           python -B tools/check_sabl_formal_state.py /tmp/pr26-formal-state
           python -B tools/check_sabl_formal_cli.py /tmp/pr26-formal-cli
+          python -B tools/check_sabl_diagnostic.py /tmp/pr26-diagnostic.json
   source-and-management:
     runs-on: ubuntu-latest
     strategy:
