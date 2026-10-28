@@ -30,6 +30,7 @@ jobs:
       - run: python -B tools/check_sabl_gt_correction.py /tmp/gt-correction
       - run: python -B tools/check_sabl_axis_norm.py /tmp/axis-norm.json
       - run: python -B tools/check_sabl_corrected_model.py /tmp/corrected-model
+      - run: python -B tools/check_sabl_corrected_short.py /tmp/corrected-short-cli
       - run: python -B tools/repo_manage.py check
       - run: python -B tools/repo_manage.py verify-import
       - run: python -B -m unittest discover -s tests -p test_repo_management.py

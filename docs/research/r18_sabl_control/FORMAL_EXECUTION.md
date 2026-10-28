@@ -186,3 +186,26 @@ S/A从共同父N e120 EMA独立重新建立native/附加头、optimizer、EMA及
 历史累计active wall未有统一已核账本；原48h累计wall约束不重置，GPU秒不能冒充wall。未来任何正式合同必须先用既有EXIT/PROCESS回执闭合wall余额及新鲜存储/资源准入，不能将表中的24h当成已批准新余额。
 
 本轮冻结的是**两项模型修正、状态版本保护、CPU测试与修订方案**。旧三臂/旧v1正式命令不得用于本包；本包只交付CPU命令，不生成GPU合同、授权、attempt或启动标记。新的两臂短验收/正式执行入口及其生产CLI闭合、合同与预算批准另行完成；当前不声称GPU执行链已受验或可以直接启动。工程CPU PASS不等于CUDA/完整训练稳定，更不等于质量改善。
+
+## 2026-10-28：v3两臂短训练入口与单次验收
+
+科学基准固定f25b74488f0082cf835b844b89fc8a1f3205b365、manifest 54529a9faccecde599753b03b42095f6d7b8d83f7259cf5e3aadae0109cf7d9b；新增tools/sabl_corrected_short.py只连接现有make_engine、sabl_state和Telemetry，不调用旧三臂命令。302份src/configs/vendor依赖逐字节固定，科学定义/初始化/数据/损失/精度/确定性/门槛不变。原proposal配置继续保留其历史“未授权”状态；当前执行授权绑定新入口commit/manifest及独立合同，不重写历史配置。
+
+限定范围为S/A各u1、u2-direct、恢复u1后u2-replay：6实际更新、12 detector forward；无预热、额外验证forward、评分、测速或完整训练。两臂各自从认证原父N e120 EMA fresh初始化native/附加头、optimizer、EMA与RNG，不能读原S/A状态或用本验收state接正式训练。fixed seed0/e1首两个logical16窗口，32图逐成员原始字节SHA与两窗张量/GT哈希和原短验收相同，不按目标筛图。ordinary final匹配和原aux/DN保持。
+
+CPU验收经最终CLI的prepare→launch→run→slim/CLOSED和实际解释器/release cwd，无预设PYTHONPATH；临时夹具manifest明确synthetic，GPU授权不能用于夹具。覆盖完整FP32训练与全状态重放、原真实历史bytes/size_bytes接口、错误身份/双字段冲突、无效资源合同、forward/update耗尽、非有限输入、错输入、重复启动及缺导出不闭合。夹具状态只在owned临时目录产生，结束自动移除，保留回执/失败stderr；CPU工作不计真实GPU预算。CPU通过不能代替CUDA编译、BF16反向或真实恢复验证。
+
+GPU PASS须同时满足：
+1. 实际loss调用的encode目标与独立GT直接给出的L/R/T/B一致，reference/GT detach；两个microbatch均有匹配与两项新增监督。
+2. 真实native BF16、boundary FP32；所有原损失/新增损失、梯度和健康检查有限。
+3. native及pre、att_x/y、post_x/y、up_x/y、cls、offset预定组确有非零有限梯度和参数更新。钩子只观察原目标的既有反向，不新增autograd调用/拦截器。
+4. u1完整model/optimizer/EMA/RNG/engine/下一窗口恢复一致，u2 direct/replay全状态、输出、DN、损失、梯度哈希严格相同。
+5. 逐臂与整链peak allocated/阶段/更新耗时、编译cache与存储、12forward/6更新硬计数及slim/CLOSED/EXIT通过。异常尽力采集最后峰值，采集失败UNKNOWN；新GPU异常STOP不自动重试。
+
+上限900秒GPU阶段、1800秒wall、allocated18GiB、全任务新存储2GiB、全部回传1MiB。每个forward先记账，失败不退款；实际optimizer更新与预留次数分列。编译器、Triton、CUDA driver、extensions及TMP cache绑定新task，计入2GiB；所有旧SABL现场加入原30GiB累计门槛。全子进程wall保守计GPU秒，原成本账本不覆盖。
+
+历史wall采取有证据的保守上界而非虚构精确active时长：六次已知GPU执行的forward数18+31061+661+1+2+274=32017，与最新账本一致；认证首个短验收合同的UTC当日零点早于这六次串行执行，向当前准入时刻的整个日历包络（含停机/开发间隔）均算占用wall。合同保留exact active wall UNKNOWN，但用该更大的上界计算可保证的48h余额；若上界余额不足1800秒则拒绝。启动时重新核算，不以GPU秒代替wall。即使新GPU验收PASS，也只证明这个短窗的工程条件，不证明24轮稳定或检测收益。
+
+本轮只实现并授权该短入口；正式S/A各24轮/548评价/三臂同会话测速仍仅提案29842forward、57600 GPU秒（无扩额授权）。短验收消耗实际追加后重新计算正式缺口，不将预留未用部分当成已花成本。正式入口未接线，不自动续接。
+
+开发失败留痕：初始工具import把research模块误当tools顶层模块，真实CLI立即拒绝；已统一为完整包导入。夹具结束前保留大量临时state可能使缺导出测试先触发存储拒绝，现逐项清理自有synthetic state并断言确切拒绝原因，不将别的错误冒充目标故障通过。未修改科学源码或放宽数值/资源判据。
