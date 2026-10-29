@@ -266,3 +266,21 @@ wall另以原tmux创建至PROCESS_EXIT的原生时间包络核对，并加60秒�
 所有独占短临时目录按OWNER归入家族存储，运行guard同时计任务目录与自身IPC目录；资源准入保留30GiB家族/30GiB磁盘floor/新12GiB。
 源码src/configs/vendor和受验train/endpoint/infer/cost/compare字节不变，复用2c85c22短GPU证据，不复跑模型验收。
 旧release、原attempt、STOP、e000、N/S终点和成本不修改；新合同和唯一命令仅准备，真实GPU执行需另授权。
+
+
+## 2026-10-29 u52 OOM：独立工程诊断，不正式重启
+
+原6ab入口在CUDA初始化后、make_engine前用`set_per_process_memory_fraction((18<<30)/total_memory)`设置allocator限额。
+PyTorch2.4.1 native CUDACachingAllocator在新增segment时检查已获取segment总量+本次segment申请与fraction限额；reserved、活跃tensor allocated及全卡free不是同一指标。
+公开核对源码：https://github.com/pytorch/pytorch/blob/v2.4.1/c10/cuda/CUDACachingAllocator.cpp#L2241-L2244 。
+原错误allocated14.93GiB、cached未使用1.78GiB、申请1.83GiB、全卡free6.30GiB，允许“18GiB限额可能参与”这一工程假设；没有原始OOM allocator快照，不把碎片或唯一原因写成事实。
+当前allocator配置未设置、backend native；旧进程allocator环境未保存，保持UNKNOWN。第一次重放不设置allocator策略变量。
+
+新tools/sabl_oom_replay.py只读原e000完整训练状态，严格原binding/源依赖及model/optimizer/EMA/RNG/数据位置恢复；无u51 checkpoint。
+从u0重放至u60，前51条记录的完整input与RESULT_KEYS（排除耗时）规范SHA精确比较，首次差异STOP；原日志未保存逐tensor梯度/中途state，不能声称已逐tensor验证整条轨迹。
+新scope的独立工程预算为最多2尝试、合计240forward/120更新/1200GPU秒/2400wall秒，回传5MiB。第一尝试固定120forward/60更新/600秒，唯一干预为allocator18→21GiB；fresh GPU须空闲且free≥22GiB。
+仍用相同模型、batch8×2、BF16/FP32分工、确定性、原GT/损失/优化器/数据顺序；科学源码0修改，原工程梯度见证hook保留。
+只在u52启用allocator内存历史，记录allocated/reserved/free、重试/分裂块、前向/反向边界和大分配事件；观测不保留GPU tensor，不empty_cache，不预热或额外forward。
+u52前不新增checkpoint操作，以免观测序列化改变目标前的allocator布局；通过u60后才保存独立完整诊断状态。诊断state不得自动计入/接入正式24轮训练。
+第二次没有自动启动路径：必须先审查第一结果，有具体修复依据才另提交冻结；不得盲重试。正式账本余29738forward/57131.83263277169GPU秒保留；独立调试实际成本追加，不借用或补回正式余额。
+训练运行限额变化不修改论文E2E≤1.30或推理显存比≤1.20的成本门槛。完整24轮、评价、测速和科学收益仍未授权/未知。
