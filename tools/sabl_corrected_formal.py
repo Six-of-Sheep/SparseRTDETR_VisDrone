@@ -12,10 +12,10 @@ need,read,sha,digest,reference=oldct.need,oldct.read,oldct.sha,oldct.digest,oldc
 write,atomic,closed,stage_close=old.write,old.atomic,old.closed,old.stage_close
 BASE='2c85c22d5738f8dc84c7527c3408602561baae09'
 BASE_MANIFEST='5f9e5a2b977ad3e5b2881324eadf670f4e2b2ef82bb1e0ef79aa2e74047fd69d'
-SCHEMA='SABL_CORRECTED_SA_FORMAL24_V3_IPC2'
+SCHEMA='SABL_CORRECTED_SA_FORMAL24_V3_IPC21'
 CPU=oldct.CPU;GPU=oldct.GPU;D=decimal.Decimal
 POLICY={**oldct.POLICY,'training_arms':['S','A'],'cost_arms':['N','S','A'],'N24_train_reused':True,'new_forwards':29842,'train_forwards':29184,'endpoint_forwards':274,'cost_forwards':384,'actual_updates':14592}
-CAPS={'new_forward':29842,'new_GPU_seconds':'57293.438176989785','new_wall_seconds':86400,'allocated_bytes':18<<30,'new_storage_bytes':12<<30,'family_storage_bytes':30<<30,'return_bytes':4<<20}
+CAPS={'new_forward':29842,'new_GPU_seconds':'57131.83263277169','new_wall_seconds':86400,'allocated_bytes':21<<30,'new_storage_bytes':12<<30,'family_storage_bytes':30<<30,'return_bytes':4<<20}
 EXISTING={'forward':61871,'GPU_seconds':'94472.36945352436','wall_seconds':172800,'family_storage_bytes':30<<30}
 FAULTS=['none','worker_exception','forward_exhausted','nonfinite','bad_endpoint','missing_close','bad_input']
 FIXTURE=ROOT/'tests/fixtures/sabl_corrected_formal_base.json'
@@ -40,9 +40,10 @@ def forwards(c):
     p=profile(c);return 2*p['epochs']*p['windows']*2+2*((p['images']+3)//4)+3*8*(p['fixed']//4)
 
 def validate(c):
-    need(set(c)=={'schema','mode','policy','caps','existing_limits','prior','requested_addition','requested_cumulative','planned_new_forwards','arms','N_checkpoint_SHA','manifest_sha256','commit','attempt_root','metadata','reuse_N24','short_proofs','wall','fixture','authorization_required','ipc'},'contract fields')
+    need(set(c)=={'schema','mode','policy','caps','existing_limits','prior','requested_addition','requested_cumulative','planned_new_forwards','arms','N_checkpoint_SHA','manifest_sha256','commit','attempt_root','metadata','reuse_N24','short_proofs','wall','fixture','authorization_required','ipc','runtime','independent_debug'},'contract fields')
     need(c['schema']==SCHEMA and c['mode'] in (CPU,GPU),'corrected formal scope')
     need(digest(c['policy'])==digest(POLICY) and digest(c['caps'])==digest(CAPS) and digest(c['existing_limits'])==digest(EXISTING),'policy/caps changed')
+    need(c['runtime']==RUNTIME,'runtime allocator configuration')
     need(c['arms']==['S','A'] and c['N_checkpoint_SHA']==oldct.N_SHA and c['authorization_required'] is True,'fresh S/A only')
     need(c['planned_new_forwards']==forwards(c),'forward budget')
     need(c['fixture']['fault'] in FAULTS and (c['mode']==CPU or c['fixture']['fault']=='none'),'production fixture forbidden')
@@ -57,7 +58,9 @@ def validate(c):
         need(prior=={'forward':actual['forward'],'GPU_seconds':actual['GPU_stage_seconds']},'authenticated prior accounting')
         need(c['metadata'] is not None and c['reuse_N24'] is not None and c['wall']==wall_account(),'real bindings/wall')
         need(c['short_proofs']==f['short_proofs'] and c['reuse_N24']['scores']==f['N24_scores'],'accepted proof/reuse bindings')
-        need(prior['forward']==32029 and c['requested_addition']=={'forward':0,'GPU_seconds':'0'},'latest family ledger identity')
+        need(prior['forward']==32133 and c['requested_addition']=={'forward':104,'GPU_seconds':'0'},'latest formal family ledger identity')
+        need(c['independent_debug']==debug_binding(),'independent diagnostic identity/budget isolation')
+    else:need(c['independent_debug'] is None,'CPU not real diagnostic')
     return c
 
 def wall_account():
@@ -70,8 +73,18 @@ def wall_account():
     formal=w['rows'][1];ref_exact(formal['authorization']);ref_exact(formal['exit'])
     dt=Path(formal['exit']['path']).stat().st_mtime-Path(formal['authorization']['path']).stat().st_mtime
     need(0<dt<=formal['upper_seconds'] and formal['recorded_entry_seconds']<=dt,'old formal wall interval changed')
-    need(sum(w['forward_counts_reconciled'])==32029 and w['historical_wall_upper_bound_seconds']+CAPS['new_wall_seconds']<=172800,'cumulative wall insufficiency')
+    need(sum(w['forward_counts_reconciled'])==32253 and w['formal_cumulative_forward']==32133 and w['independent_debug_forward']==120 and w['historical_wall_upper_bound_seconds']+CAPS['new_wall_seconds']<=172800,'cumulative wall insufficiency')
+    proof=exact(f['latest_OOM_whole_wall_proof']);need(proof['old_latest_OOM_whole_call_seconds']+60<600 and w['remaining_wall_lower_bound_seconds']==123357,'latest complete wall envelope')
     return w
+
+def debug_binding():
+    f=read(FIXTURE);v={k:exact(r) for k,r in f['independent_debug'].items()};cost=v['COST_ADDITION.json'];r=v['attempt-001/RESULT.json'];done=v['DEBUG_CLOSED.json']
+    need(cost['scope']=='INDEPENDENT_ENGINEERING_DIAGNOSTIC_NOT_FORMAL' and cost['debug_unused_budget_for_formal'] is False,'debug distinct scope')
+    need(r['status']=='PASS_U52_THROUGH_U60' and r['matched_prior_updates']==51 and r['counts']=={'forward':120,'backward':120,'actual_updates':60,'reserved_updates':60} and r['diagnostic_state_for_formal'] is False,'bounded replay evidence')
+    need(done['status']=='CLOSED_ENGINEERING_DIAGNOSTIC_NO_FOLLOWUP' and not done['second_attempt_executed'] and done['unused_debug_allowance_not_for_formal'],'debug closed')
+    need(cost['previous_all_research']['forward']==32133 and cost['new']['forward']==120 and cost['new']['actual_updates']==60,'debug lineage')
+    need(cost['formal_remaining_reserved_unchanged']=={'forward':29738,'GPU_stage_seconds':57131.83263277169},'debug did not spend formal reserve')
+    return {'references':f['independent_debug'],'spent':cost['new'],'unused_allowance_for_formal':False,'state_for_formal':False}
 
 def short_evidence():
     f=read(FIXTURE)
@@ -84,12 +97,41 @@ def short_evidence():
     need(proof['attempt-short-001/CLOSED.json']['result_sha256']==f['short_proofs']['attempt-short-001/slim/RESULT.json']['sha256'],'short closure')
     need(c['cumulative']['forward']==32029 and c['remaining']['forward']==12560,'short cumulative')
     for arm in ['S','A']:need(r['arms'][arm]['replay_full_state_exact'] and r['arms'][arm]['loss_output_gradient_DN_exact'],'accepted compute/replay')
+    ipc=exact(f['previous_IPC_latest_cost']);stop=exact(f['previous_IPC_latest_STOP']);exit=exact(f['previous_IPC_latest_exit'])
+    need(ipc['previous']['forward']==c['cumulative']['forward'] and ipc['previous']['GPU_stage_seconds']==c['cumulative']['GPU_stage_seconds'],'prior IPC lineage')
+    need(ipc['new']['forward']==ipc['new']['actual_updates']==0 and stop['stage']=='engineering-S' and exit['returncode']==1,'IPC STOP preserved')
     latest=exact(f['latest_cost']);stop=exact(f['latest_STOP']);exit=exact(f['latest_exit'])
-    need(latest['previous']['forward']==c['cumulative']['forward'] and latest['previous']['GPU_stage_seconds']==c['cumulative']['GPU_stage_seconds'],'prior failure lineage')
-    need(latest['new']['forward']==latest['new']['actual_updates']==0 and stop['stage']=='engineering-S' and exit['returncode']==1,'IPC STOP preserved')
-    need(latest['cumulative']['forward']==32029 and latest['remaining']['forward']==29842,'latest remaining forward')
+    need(latest['previous']==ipc['cumulative'],'OOM lineage')
+    need(latest['new']['forward']==104 and latest['new']['actual_updates']==51 and stop['error_type']=='OutOfMemoryError' and exit['returncode']==1,'original OOM STOP preserved')
+    need(latest['cumulative']['forward']==32133 and latest['remaining']['forward']==29738,'latest formal remaining forward')
     need(D(str(latest['cumulative']['GPU_stage_seconds']))+D(CAPS['new_GPU_seconds'])<=D(EXISTING['GPU_seconds']),'latest precise GPU balance')
+    debug_binding()
     return proof
+
+RUNTIME={'allocator_backend':'native','allocator_configuration':'default_unset','preinit_free_min_bytes':22<<30,'postinit_free_min_bytes':(21<<30)+(512<<20),'allocator_fraction_bytes':21<<30,'paper_cost_gates_unchanged':True}
+
+def allocator_policy(torch):
+    env={k:os.environ.get(k) for k in ['PYTORCH_CUDA_ALLOC_CONF','PYTORCH_ALLOC_CONF']}
+    need(all(v in [None,''] for v in env.values()),'nondefault allocator environment')
+    backend=torch.cuda.memory.get_allocator_backend();need(backend=='native','default native allocator required')
+    return {'backend':backend,'environment':env}
+
+def GPU_memory_gate(total,used,free,postinit=False):
+    need(all(type(x) is int and x>=0 for x in [total,used,free]) and 0<total and used+free<=total+(16<<20),'GPU memory fields')
+    need(free>=RUNTIME['postinit_free_min_bytes' if postinit else 'preinit_free_min_bytes'],'GPU runtime headroom')
+    return {'total_bytes':total,'used_bytes':used,'free_bytes':free,'postinit':postinit,'minimum_free_bytes':RUNTIME['postinit_free_min_bytes' if postinit else 'preinit_free_min_bytes']}
+
+def compute_processes(allow_self=False):
+    text=subprocess.check_output(['nvidia-smi','--query-compute-apps=pid,process_name,used_gpu_memory','--format=csv,noheader,nounits'],text=True).strip()
+    rows=[x.strip() for x in text.splitlines() if x.strip()]
+    for row in rows:
+        need(allow_self and int(row.split(',')[0].strip())==os.getpid(),'other GPU compute process '+row)
+    return rows
+
+def initialized_resources(torch):
+    policy=allocator_policy(torch);rows=compute_processes(True);free,total=map(int,torch.cuda.mem_get_info())
+    memory=GPU_memory_gate(total,total-free,free,True)
+    return {'allocator':policy,'memory':memory,'compute_processes':rows,'allocated_bytes':torch.cuda.memory_allocated(),'reserved_bytes':torch.cuda.memory_reserved(),'before_model_construction':True,'extra_model_forward':0,'used_includes_CUDA_context_and_system_usage':True}
 
 def size(p):return sum(x.stat().st_size for x in Path(p).rglob('*') if x.is_file())
 
@@ -103,15 +145,17 @@ def resources(c,out):
         if len(s)==3 and int(s[0]) not in [os.getpid(),os.getppid()] and any(x in s[2] for x in ['sabl_corrected_formal.py run','sabl_corrected_formal.py launch']):raise ValueError('related formal job')
     need(Path(sys.executable).resolve()==Path(c['metadata']['python']).resolve(),'runtime interpreter')
     env=c['metadata']['environment'];need(str(torch.__version__)==env['torch'] and str(torchvision.__version__)==env['torchvision'] and torch.version.cuda==env['cuda_build'] and torch.backends.cudnn.version()==env['cudnn'],'runtime versions')
-    lines=subprocess.check_output(['nvidia-smi','--query-gpu=uuid,name,pci.bus_id,memory.free','--format=csv,noheader,nounits'],text=True).strip().splitlines()
-    need(len(lines)==1,'one physical GPU');uuid,name,pci,free=[x.strip() for x in lines[0].split(',')]
-    need(uuid==c['metadata']['gpu_uuid'] and name=='NVIDIA GeForce RTX 4090 D' and pci=='00000000:01:00.0' and int(free)>=18432,'GPU identity/free')
+    policy=allocator_policy(torch);processes=compute_processes()
+    lines=subprocess.check_output(['nvidia-smi','--query-gpu=uuid,name,pci.bus_id,memory.total,memory.used,memory.free','--format=csv,noheader,nounits'],text=True).strip().splitlines()
+    need(len(lines)==1,'one physical GPU');uuid,name,pci,total,used,free=[x.strip() for x in lines[0].split(',')]
+    need(uuid==c['metadata']['gpu_uuid'] and name=='NVIDIA GeForce RTX 4090 D' and pci=='00000000:01:00.0'  ,'GPU identity')
+    memory=GPU_memory_gate(int(total)*(1<<20),int(used)*(1<<20),int(free)*(1<<20))
     family=sum(size(p) for p in EX.glob('r18-sabl-*') if p.is_dir())
     external=sum(size(Path(p)) for p in ['/tmp/torchinductor_lyy','/home/lyy/.triton/cache','/home/lyy/.nv/ComputeCache','/home/lyy/.cache/torch/inductor','/home/lyy/.cache/triton'] if Path(p).exists())
     private,private_rows=owned_family_bytes(EX);external+=private
     need(family+external+(12<<30)<=30<<30,'family storage balance')
     need(shutil.disk_usage(out).free>=30<<30,'original fresh free disk floor30GiB')
-    return {'family_bytes':family,'known_external_cache_all_bytes':external,'private_IPC_roots':private_rows,'family_available_lower_bound':(30<<30)-family-external,'new_storage_requested':12<<30,'disk_free_bytes':shutil.disk_usage(out).free,'wall':wall_account(),'GPU_uuid':uuid,'CUDA_initialized':torch.cuda.is_initialized()}
+    return {'family_bytes':family,'known_external_cache_all_bytes':external,'private_IPC_roots':private_rows,'family_available_lower_bound':(30<<30)-family-external,'new_storage_requested':12<<30,'disk_free_bytes':shutil.disk_usage(out).free,'wall':wall_account(),'allocator':policy,'GPU_memory':memory,'GPU_compute_processes':processes,'GPU_used_scope':'system/non-PyTorch baseline; CUDA not initialized by this process','GPU_uuid':uuid,'CUDA_initialized':torch.cuda.is_initialized()}
 
 def material(c):
     from sparse_rtdetr.localization.material_paths import MANIFESTS,metadata_path,SELECTION_SHA
@@ -194,7 +238,7 @@ def plan(a):
         short=f['short_proofs'];wall=wall_account()
     cumulative={'forward':prior['forward']+29842,'GPU_seconds':str(D(str(prior['GPU_seconds']))+D(CAPS['new_GPU_seconds']))}
     request={'forward':max(0,cumulative['forward']-EXISTING['forward']),'GPU_seconds':str(max(D(0),D(cumulative['GPU_seconds'])-D(EXISTING['GPU_seconds'])))}
-    c={'schema':SCHEMA,'mode':CPU if synthetic else GPU,'policy':POLICY,'caps':CAPS,'existing_limits':EXISTING,'prior':prior,'requested_addition':request,'requested_cumulative':cumulative,'planned_new_forwards':0,'arms':['S','A'],'N_checkpoint_SHA':oldct.N_SHA,'manifest_sha256':sha(a.manifest),'commit':m['commit'],'attempt_root':str(Path(a.attempt_root).resolve()),'metadata':metadata,'reuse_N24':reuse,'short_proofs':short,'wall':wall,'fixture':{'fault':a.fault},'authorization_required':True,'ipc':{'root':str(root_for(Path(a.attempt_root).resolve().parent)),'before_new_Python':True,'owner':'task_exclusive'}}
+    c={'schema':SCHEMA,'mode':CPU if synthetic else GPU,'policy':POLICY,'caps':CAPS,'existing_limits':EXISTING,'prior':prior,'requested_addition':request,'requested_cumulative':cumulative,'planned_new_forwards':0,'arms':['S','A'],'N_checkpoint_SHA':oldct.N_SHA,'manifest_sha256':sha(a.manifest),'commit':m['commit'],'attempt_root':str(Path(a.attempt_root).resolve()),'metadata':metadata,'reuse_N24':reuse,'short_proofs':short,'wall':wall,'fixture':{'fault':a.fault},'authorization_required':True,'ipc':{'root':str(root_for(Path(a.attempt_root).resolve().parent)),'before_new_Python':True,'owner':'task_exclusive'},'runtime':RUNTIME,'independent_debug':None if synthetic else debug_binding()}
     c['planned_new_forwards']=forwards(c);validate(c)
     if not synthetic:
         need(a.fault=='none','no production fixture')
@@ -234,7 +278,7 @@ class Meter:
             need(self.c['wall']['historical_wall_upper_bound_seconds']+self.elapsed()<=172800,'cumulative wall')
             baseline=read(root/'fresh-launch-admission/RESOURCES.json')
             need(baseline['family_bytes']+baseline['known_external_cache_all_bytes']+size(root)+private<=30<<30,'family storage')
-        if self.cuda:need(self.telemetry.observe_peak()<=18<<30,'allocated cap')
+        if self.cuda:need(self.telemetry.observe_peak()<=self.c['caps']['allocated_bytes'],'allocated cap')
     def begin(self,stage):self.guard();self.stage=stage;self.stage_count=self.ledger['new_forward'];self.telemetry.begin(stage)
     def finish(self):self.guard();self.telemetry.finish();self.ledger['stage_forwards'][self.stage]=self.ledger['new_forward']-self.stage_count;self.publish()
     def forward(self,*_):
@@ -279,7 +323,8 @@ def run(a):
         torch.set_num_threads(2);torch.set_num_interop_threads(1);torch.use_deterministic_algorithms(True);torch.backends.cudnn.benchmark=False
         need(torch.__version__.split('+')[0]=='2.4.1' and torchvision.__version__.split('+')[0]=='0.19.1','runtime');device='cpu' if synthetic else 'cuda'
         if not synthetic:
-            need(torch.cuda.is_available() and torch.cuda.device_count()==1 and torch.cuda.is_bf16_supported(),'CUDA/BF16');torch.cuda.set_per_process_memory_fraction((18<<30)/torch.cuda.get_device_properties(0).total_memory,0)
+            need(torch.cuda.is_available() and torch.cuda.device_count()==1 and torch.cuda.is_bf16_supported(),'CUDA/BF16');allocator_policy(torch);torch.cuda.set_per_process_memory_fraction(c['caps']['allocated_bytes']/torch.cuda.get_device_properties(0).total_memory,0)
+            write(out/'RUNTIME_RESOURCES.json',initialized_resources(torch))
         signal.signal(signal.SIGALRM,lambda *_:(_ for _ in ()).throw(TimeoutError('formal deadline')))
         for sig in [signal.SIGTERM,signal.SIGINT]:signal.signal(sig,lambda *_:(_ for _ in ()).throw(RuntimeError('external termination; STOP')))
         signal.alarm(600 if synthetic else math.ceil(float(c['caps']['new_GPU_seconds'])));adapter=wire(c);meter=Meter(c,out,start,None if synthetic else torch.cuda)
@@ -312,7 +357,7 @@ def run(a):
         old.compare(c,out,meter);need(meter.ledger['new_forward']==forwards(c) and meter.ledger['actual_updates']==meter.ledger['reserved_updates']==2*profile(c)['epochs']*profile(c)['windows'],'terminal counts')
         slim=out/'slim';slim.mkdir();wanted=['ENGINEERING_ALL_PASS.json','score/RESULT.json','cost/RESULT.json','compare/COMPARISON.json','compare/TABLE.md']+['score/'+arm+'-'+b+'.json' for arm in ['S','A'] for b in ['600','300']]
         for arm in ['S','A']:wanted+=['train-'+arm+'/'+x for x in ['INITIAL.json','ENGINEERING_PASS.json','endpoint.json','RESULT.json','CLOSED.json']]+['infer-'+arm+'/'+x for x in ['RESULT.json','CLOSED.json']]
-        if not synthetic:wanted+=['N24_EMA_BRIDGE.json','BUDGET_PROJECTION.json']
+        if not synthetic:wanted+=['N24_EMA_BRIDGE.json','BUDGET_PROJECTION.json','RUNTIME_RESOURCES.json']
         for n in wanted:
             p=slim/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((out/n).read_bytes())
         result={'status':'PASS_ENGINEERING_CORRECTED_FORMAL','scientific_status':read(out/'compare/COMPARISON.json')['scientific_status'],'CPU_synthetic':synthetic,'ledger':meter.ledger,'telemetry':meter.telemetry.arms,'peak_allocated_bytes':None if synthetic else meter.telemetry.observe_peak(),'short_GPU_evidence_reused':True,'short_state_for_formal':False,'N24_retrained':False,'must_exit':True,'no_followup':True}
@@ -334,7 +379,11 @@ def cost_record(c,ledger,elapsed):
       'new':{'forward':ledger['new_forward'],'actual_updates':ledger['actual_updates'],'GPU_stage_seconds_conservative_process_wall':elapsed},
       'cumulative':{'forward':prior['forward']+ledger['new_forward'],'GPU_stage_seconds':float(total)},
       'remaining':{'forward':c['requested_cumulative']['forward']-prior['forward']-ledger['new_forward'],'GPU_stage_seconds':float(D(c['requested_cumulative']['GPU_seconds'])-total)},
-      'approved_expansion':c['requested_addition'],'approved_cumulative_limits':c['requested_cumulative'],'old_cost_overwritten':False,'failed_cost_refunded':False}
+      'approved_expansion':c['requested_addition'],'approved_cumulative_limits':c['requested_cumulative'],'old_cost_overwritten':False,'failed_cost_refunded':False,
+      'scope':'FORMAL_ONLY_INDEPENDENT_DEBUG_SEPARATE',
+      'independent_debug':c['independent_debug'],
+      'cumulative_all_research':{'forward':prior['forward']+ledger['new_forward']+(0 if c['independent_debug'] is None else c['independent_debug']['spent']['forward']),'GPU_stage_seconds':float(total+(D(0) if c['independent_debug'] is None else D(str(c['independent_debug']['spent']['GPU_stage_seconds_conservative_process_wall']))))},
+      'debug_unused_budget_for_formal':False}
 
 def data_check(a):
     from check_sabl_ipc import real_check

@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path[:0]=[str(ROOT/'tools'),str(ROOT/'src')]
 os.environ['CUDA_VISIBLE_DEVICES']=''
 for k in ['OMP_NUM_THREADS','MKL_NUM_THREADS','OPENBLAS_NUM_THREADS']:os.environ[k]='2'
-from sabl_corrected_formal import BASE,BASE_MANIFEST,sha,read,write,validate,forwards,N_config_matches,cost_record
+from sabl_corrected_formal import BASE,BASE_MANIFEST,sha,read,write,validate,forwards,N_config_matches,cost_record,GPU_memory_gate,allocator_policy,RUNTIME
 
 def main(output):
     out=Path(output);out.mkdir();start=time.monotonic();checks=[];calls=[];peak=0;total_cpu_forward=0;total_cpu_updates=0
@@ -84,9 +84,26 @@ def main(output):
         check('N-only registered identity mapping',N_config_matches(saved,current))
         check('N bridge rejects numerical config drift',not N_config_matches(dict(saved,learning_rate=2e-5),current))
         check('N bridge rejects unknown field',not N_config_matches(dict(saved,unknown=1),current))
-        fake=json.loads(json.dumps(contract));fake['prior']={'forward':32029,'GPU_seconds':36872.36945352436};fake['requested_cumulative']={'forward':61871,'GPU_seconds':'94472.36945352436'}
+        fake=json.loads(json.dumps(contract));fake['prior']={'forward':32133,'GPU_seconds':37340.53682075267};fake['requested_cumulative']={'forward':61975,'GPU_seconds':'94472.36945352436'}
         cost_recorded=cost_record(fake,{'new_forward':29842,'actual_updates':14592},50.0)
-        check('cost schema inherits consumed failures',cost_recorded['cumulative']['forward']==61871 and cost_recorded['remaining']['forward']==0 and cost_recorded['previous']['GPU_stage_seconds']==36872.36945352436 and cost_recorded['failed_cost_refunded'] is False)
+        check('cost schema inherits consumed failures',cost_recorded['cumulative']['forward']==61975 and cost_recorded['remaining']['forward']==0 and cost_recorded['previous']['GPU_stage_seconds']==37340.53682075267 and cost_recorded['failed_cost_refunded'] is False)
+        check('21GiB allocator only runtime; native',contract['caps']['allocated_bytes']==21<<30 and contract['runtime']==RUNTIME and contract['policy']['new_forwards']==29842)
+        check('fresh resource memory gate positive',GPU_memory_gate(24<<30,2<<30,22<<30)['free_bytes']==22<<30)
+        for postinit,free in [(False,(22<<30)-1),(True,(21<<30)+(512<<20)-1)]:
+            try:GPU_memory_gate(24<<30,(24<<30)-free,free,postinit)
+            except ValueError:check('low free rejected '+str(postinit),True)
+            else:check('low free rejected '+str(postinit),False)
+        from unittest.mock import patch
+        import types
+        for env,backend,ok in [({},'native',True),({'PYTORCH_CUDA_ALLOC_CONF':'expandable_segments:True'},'native',False),({},'cudaMallocAsync',False)]:
+            fake_torch=types.SimpleNamespace(cuda=types.SimpleNamespace(memory=types.SimpleNamespace(get_allocator_backend=lambda:backend)))
+            with patch.dict(os.environ,env,clear=True):
+                try:allocator_policy(fake_torch);passed=True
+                except ValueError:passed=False
+            check('allocator policy '+str(env)+backend,passed==ok)
+        fake['independent_debug']={'spent':{'forward':120,'GPU_stage_seconds_conservative_process_wall':199.9896325499285},'unused_allowance_for_formal':False}
+        separated=cost_record(fake,{'new_forward':29842,'actual_updates':14592},50.0)
+        check('independent debug not borrowed or refunded',separated['cumulative']['forward']==61975 and separated['cumulative_all_research']['forward']==62095 and separated['remaining']['forward']==0 and separated['debug_unused_budget_for_formal'] is False)
         for key in CAPS_KEYS:
             v=json.loads(json.dumps(contract));v['caps'][key]=float(v['caps'][key])+1
             try:validate(v)

@@ -1619,7 +1619,7 @@
   "N24_expected_EMA_module_SHA": "46de3cb580a54421e8f77c699487d7a12bfa0ea188986369b4b31040894a0a93",
   "wall_reconciliation": {
     "status": "PASS_CONSERVATIVE_ACTIVE_WALL_RECONCILIATION",
-    "method": "sum full declared wall limits for six completed runs; old formal measured authorization-to-exit envelope plus60s; no GPU-seconds substitution; add600s conservative complete IPC failure envelope including parent preflight, native tmux-to-exit measured plus60s fits within600s",
+    "method": "sum full declared wall limits for six completed runs; old formal measured authorization-to-exit envelope plus60s; no GPU-seconds substitution; add600s conservative complete IPC failure envelope including parent preflight, native tmux-to-exit measured plus60s fits within600s; charge newest OOM complete call600s plus independent diagnostic full2400s; unused debug not transferred",
     "rows": [
       {
         "run": "original short",
@@ -1675,12 +1675,20 @@
           "bytes": 708,
           "sha256": "606cc758af8b62383eab4bd5eb06497ce327b2628e172bc0b80f1f7d208d87c2"
         }
+      },
+      {
+        "run": "corrected IPC2 OOM formal",
+        "upper_seconds": 600
+      },
+      {
+        "run": "independent allocator diagnostic",
+        "upper_seconds": 2400
       }
     ],
     "historical_exact_active_seconds": "UNKNOWN",
-    "historical_wall_upper_bound_seconds": 46443,
+    "historical_wall_upper_bound_seconds": 49443,
     "original_cumulative_wall_cap_seconds": 172800,
-    "remaining_wall_lower_bound_seconds": 126357,
+    "remaining_wall_lower_bound_seconds": 123357,
     "formal_requested_wall_seconds": 86400,
     "fits_without_wall_expansion": true,
     "forward_counts_reconciled": [
@@ -1691,9 +1699,13 @@
       2,
       274,
       12,
-      0
+      0,
+      104,
+      120
     ],
-    "expected_cumulative_forward": 32029
+    "expected_cumulative_forward": 32253,
+    "formal_cumulative_forward": 32133,
+    "independent_debug_forward": 120
   },
   "wall_terminal_refs": [
     {
@@ -1775,6 +1787,26 @@
       },
       "seconds_key": "observed_upper_seconds",
       "full_wall_allowance": 601
+    },
+    {
+      "name": "latest OOM process",
+      "reference": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/PROCESS_EXIT.json",
+        "bytes": 432,
+        "sha256": "ee4b40decc6ad1dcc83d62ebbaebdda36501abb5e96624cadfb89849b8d7f40b"
+      },
+      "seconds_key": "process_wall_seconds",
+      "full_wall_allowance": 600
+    },
+    {
+      "name": "independent diagnostic all stages",
+      "reference": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/DEBUG_CLOSED.json",
+        "bytes": 464,
+        "sha256": "5974349c46ea12434fb37fe222825b87d6c49a4b371dd268082399886716bc97"
+      },
+      "seconds_key": "wall_from_first_call_including_review_seconds",
+      "full_wall_allowance": 2400
     }
   ],
   "known_family_cost_files": [
@@ -1782,6 +1814,11 @@
       "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/COST_ADDITION.json",
       "bytes": 650,
       "sha256": "728a8c3666dcf81c5a440a3e933ae7491e027d430c2ccd1eb84a303569aeeb6a"
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/COST_ADDITION.json",
+      "bytes": 636,
+      "sha256": "cdcea87bb54623c3f4c7b22e4c9d7e3796db918aa0b0f6fe9670d301b56d8a4a"
     },
     {
       "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-short-20261028-001/COST_ADDITION.json",
@@ -1802,22 +1839,27 @@
       "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-ns-e24-evaluation-20261028-001/COST_ADDITION.json",
       "bytes": 909,
       "sha256": "122e6b0c0ad1f54964051ec264c5c03e5368bc628eb80c3301686751b45b1475"
+    },
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/COST_ADDITION.json",
+      "bytes": 1093,
+      "sha256": "3dcbf4a3ca04b834f9af5a1c42a3a464043e4da5fa8abcbf3d3a15594b4bbc7a"
     }
   ],
   "latest_cost": {
-    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/COST_ADDITION.json",
-    "bytes": 650,
-    "sha256": "728a8c3666dcf81c5a440a3e933ae7491e027d430c2ccd1eb84a303569aeeb6a"
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/COST_ADDITION.json",
+    "bytes": 636,
+    "sha256": "cdcea87bb54623c3f4c7b22e4c9d7e3796db918aa0b0f6fe9670d301b56d8a4a"
   },
   "latest_STOP": {
-    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/attempt-formal-001/STOP.json",
-    "bytes": 625,
-    "sha256": "719b34bb20e5de96d7c4ac6d227676c47cc56d1cbbed03e52f3a0da217c27b94"
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/attempt-formal-001/STOP.json",
+    "bytes": 1648,
+    "sha256": "6683fa092e327dad8cb3c02dc90c961957f12880a710864603c40aca9d3085a2"
   },
   "latest_exit": {
-    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/PROCESS_EXIT.json",
-    "bytes": 424,
-    "sha256": "3af4358a341cffa9bfda113d167f6e778c9322d103b99d9e59ba7a6161bb02c9"
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/PROCESS_EXIT.json",
+    "bytes": 432,
+    "sha256": "ee4b40decc6ad1dcc83d62ebbaebdda36501abb5e96624cadfb89849b8d7f40b"
   },
   "short_input_reference": {
     "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-short-20261028-001/attempt-short-001/INPUT.json",
@@ -1833,5 +1875,47 @@
     "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/N24_BRIDGE_CPU_AUDIT.json",
     "bytes": 959,
     "sha256": "6e59f954437e5ad9ea413bf0c6937493a123f13c41c327de74af8f69da46d1a9"
+  },
+  "previous_IPC_latest_cost": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/COST_ADDITION.json",
+    "bytes": 650,
+    "sha256": "728a8c3666dcf81c5a440a3e933ae7491e027d430c2ccd1eb84a303569aeeb6a"
+  },
+  "previous_IPC_latest_STOP": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/attempt-formal-001/STOP.json",
+    "bytes": 625,
+    "sha256": "719b34bb20e5de96d7c4ac6d227676c47cc56d1cbbed03e52f3a0da217c27b94"
+  },
+  "previous_IPC_latest_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/PROCESS_EXIT.json",
+    "bytes": 424,
+    "sha256": "3af4358a341cffa9bfda113d167f6e778c9322d103b99d9e59ba7a6161bb02c9"
+  },
+  "independent_debug": {
+    "COST_ADDITION.json": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/COST_ADDITION.json",
+      "bytes": 1093,
+      "sha256": "3dcbf4a3ca04b834f9af5a1c42a3a464043e4da5fa8abcbf3d3a15594b4bbc7a"
+    },
+    "DEBUG_CLOSED.json": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/DEBUG_CLOSED.json",
+      "bytes": 464,
+      "sha256": "5974349c46ea12434fb37fe222825b87d6c49a4b371dd268082399886716bc97"
+    },
+    "attempt-001/RESULT.json": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/attempt-001/RESULT.json",
+      "bytes": 1505,
+      "sha256": "4d31189ecd1a6d5fc7d8fb255076f5d580e244174689a2ac59ba8240d517172b"
+    },
+    "attempt-001/CLOSED.json": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/attempt-001/CLOSED.json",
+      "bytes": 324,
+      "sha256": "ecb3b37db77091662a44f6911d75cb8fc8e77d23151a538367027d4719cd66fb"
+    }
+  },
+  "latest_OOM_whole_wall_proof": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-oom-diagnostic-20261029-001/FORMAL_READINESS.json",
+    "bytes": 1387,
+    "sha256": "767049cddacd59330a2df143acfd7ab24946a4da7f8ab52332867c9e4a51fd62"
   }
 }
