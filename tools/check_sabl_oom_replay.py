@@ -45,7 +45,7 @@ def main(output):
         write(target/'RETIRED_CPU_TENSORS.json',states)
     p=subprocess.run(argv,cwd=ROOT,env=env,capture_output=True,timeout=30);(out/'duplicate.stderr').write_bytes(p.stderr);check('duplicate refuses',p.returncode!=0 and b'FileExistsError' in p.stderr)
     # Fixed-scope validation is meaningful without real paths or model construction.
-    good={'schema':'SABL_OOM_U52_REPLAY_V1','caps':CAPS,'target_update':52,'end_update':60,'allocator_bytes':21<<30,'first_attempt_forward_cap':120,'first_attempt_update_cap':60,'first_attempt_GPU_seconds':600,'comparison':'exact input and RESULT_KEYS canonical SHA; elapsed excluded; first difference STOP; no tolerance','result_keys':list(__import__('sabl_diagnostic').RESULT_KEYS),'diagnostic_state_for_formal':False}
+    good={'mode':'GPU_DIAGNOSTIC_ONLY','schema':'SABL_OOM_U52_REPLAY_V1','caps':CAPS,'target_update':52,'end_update':60,'allocator_bytes':21<<30,'first_attempt_forward_cap':120,'first_attempt_update_cap':60,'first_attempt_GPU_seconds':600,'comparison':'exact input and RESULT_KEYS canonical SHA; elapsed excluded; first difference STOP; no tolerance','result_keys':list(__import__('sabl_diagnostic').RESULT_KEYS),'diagnostic_state_for_formal':False}
     validate(good)
     for key,value in [('allocator_bytes',22<<30),('end_update',61),('first_attempt_forward_cap',121),('comparison','loose'),('diagnostic_state_for_formal',True)]:
         bad=json.loads(json.dumps(good));bad[key]=value

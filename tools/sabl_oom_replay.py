@@ -34,10 +34,12 @@ def prepare(a):
     need(len(rows)==51,'only 51 completed updates exist');write(out/'EXPECTED.json',rows)
     cost=exact(ev['old_cost']);need(cost['cumulative']['forward']==32133 and cost['remaining']['forward']==29738,'prior cost identity')
     c={'schema':SCOPE,'mode':'GPU_DIAGNOSTIC_ONLY','caps':CAPS,'commit':m['commit'],'manifest_SHA':sha(a.manifest),'task':str(out.parent.resolve()),'original':ev,'expected':reference(out/'EXPECTED.json'),'comparison':'exact input and RESULT_KEYS canonical SHA; elapsed excluded; first difference STOP; no tolerance','result_keys':list(RESULT_KEYS),'target_update':52,'end_update':60,'allocator_bytes':21<<30,'allocator_policy':'unchanged inherited environment; native backend required','allocator_env_now':{k:os.environ.get(k) for k in ['PYTORCH_CUDA_ALLOC_CONF','PYTORCH_ALLOC_CONF']},'formal_remaining_reserved':cost['remaining'],'formal_cumulative_before':cost['cumulative'],'first_attempt_forward_cap':120,'first_attempt_update_cap':60,'first_attempt_GPU_seconds':600,'old_failure_preserved':True,'diagnostic_state_for_formal':False}
-    write(out/'DEFINITION.json',c);write(out.parent/'DEBUG_BUDGET.json',{'scope':SCOPE,'approved':CAPS,'formal_balance_not_spendable_by_debug':cost['remaining'],'historical_costs_reset':False,'formal_training_authorized':False})
+    write(out/'DEFINITION.json',c);budget={'scope':SCOPE,'approved':CAPS,'formal_balance_not_spendable_by_debug':cost['remaining'],'historical_costs_reset':False,'formal_training_authorized':False};budget_path=out.parent/'DEBUG_BUDGET.json'
+    if budget_path.exists():need(read(budget_path)==budget,'existing independent budget conflict; never overwrite')
+    else:write(budget_path,budget)
     print(json.dumps({'status':'PREPARED_INDEPENDENT_DIAGNOSTIC','definition_SHA':sha(out/'DEFINITION.json'),'expected_updates':51,'first_attempt_updates':60,'GPU_forward':0}))
 def validate(c):
-    need(c['schema']==SCOPE and c['caps']==CAPS and c['target_update']==52 and c['end_update']==60 and c['allocator_bytes']==21<<30,'diagnostic scope/caps')
+    need(c['mode']=='GPU_DIAGNOSTIC_ONLY' and c['schema']==SCOPE and c['caps']==CAPS and c['target_update']==52 and c['end_update']==60 and c['allocator_bytes']==21<<30,'diagnostic scope/caps')
     need(c['first_attempt_forward_cap']==120 and c['first_attempt_update_cap']==60 and c['first_attempt_GPU_seconds']==600,'fixed first attempt')
     need(c['comparison']=='exact input and RESULT_KEYS canonical SHA; elapsed excluded; first difference STOP; no tolerance' and c['result_keys']==list(RESULT_KEYS),'fixed comparison')
     need(c['diagnostic_state_for_formal'] is False,'debug not formal')
@@ -155,7 +157,7 @@ def replay(out,engine,binding,data_iter,expected_rows,cuda,start,end=60):
     else:write(out/'STOP.json',{'result':reference(out/'RESULT.json'),'no_blind_retry':True})
     return r
 def run(a):
-    out=Path(a.out);out.mkdir();start=time.monotonic();c=validate(read(a.definition));source(a.manifest);need(sha(a.definition)==a.definition_sha,'child definition binding');need(read(a.authorization)=={'scope':SCOPE,'definition_SHA':sha(a.definition),'execution_manifest_SHA':sha(a.manifest),'attempt':1,'authorize_once':True},'debug authority')
+    out=Path(a.out);out.mkdir();start=time.monotonic();c=validate(read(a.definition));m=source(a.manifest);need(c['commit']==m['commit'] and c['manifest_SHA']==sha(a.manifest),'definition/source binding');need(sha(a.definition)==a.definition_sha,'child definition binding');need(read(a.authorization)=={'scope':SCOPE,'definition_SHA':sha(a.definition),'execution_manifest_SHA':sha(a.manifest),'attempt':1,'authorize_once':True},'debug authority')
     task=Path(c['task']);verify_ipc(task);original=exact(c['original']['original_contract']);os.environ['CUDA_VISIBLE_DEVICES']=original['metadata']['gpu_uuid']
     cache=out/'compiler-cache'
     for k,s in [('TORCHINDUCTOR_CACHE_DIR','inductor'),('TRITON_CACHE_DIR','triton'),('CUDA_CACHE_PATH','cuda'),('TORCH_EXTENSIONS_DIR','extensions'),('XDG_CACHE_HOME','xdg')]:
@@ -173,7 +175,7 @@ def run(a):
     finally:signal.alarm(0)
     print(json.dumps({'status':r['status'],'counts':r['counts'],'matched_prior_updates':r['matched_prior_updates'],'seconds':r['seconds']}));return 0 if r['status'].startswith('PASS') else 1
 def launch(a):
-    c=validate(read(a.definition));m=source(a.manifest);need(sha(a.definition)==a.approve_definition_SHA and sha(a.manifest)==a.approve_manifest_SHA and m['commit']==a.approve_commit,'explicit frozen identity')
+    c=validate(read(a.definition));m=source(a.manifest);need(c['commit']==m['commit'] and c['manifest_SHA']==sha(a.manifest),'definition/source binding');need(sha(a.definition)==a.approve_definition_SHA and sha(a.manifest)==a.approve_manifest_SHA and m['commit']==a.approve_commit,'explicit frozen identity')
     need(a.authorize_debug,'separate debug authority');need(not m['candidate_not_for_real_execution'],'candidate cannot execute GPU');task=Path(c['task']);verify_ipc(task);need(not (task/'ATTEMPT_001_ONCE.json').exists() and not (task/'attempt-001').exists(),'duplicate debug attempt')
     res=resources(c);write(task/'FRESH_RESOURCE_001.json',res)
     for name in ['checkpoint','sidecar','original_contract','old_manifest','old_STOP','old_cost','old_log']:ref_exact(c['original'][name])
