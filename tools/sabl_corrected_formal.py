@@ -7,15 +7,16 @@ for k,v in {'CUBLAS_WORKSPACE_CONFIG':':4096:8','OMP_NUM_THREADS':'2','MKL_NUM_T
 import sabl_formal as old
 from sparse_rtdetr.research import sabl_formal_contract as oldct
 from sabl_corrected_short import ref_exact
+from sabl_ipc import root_for,verify as verify_ipc,owned_family_bytes
 need,read,sha,digest,reference=oldct.need,oldct.read,oldct.sha,oldct.digest,oldct.reference
 write,atomic,closed,stage_close=old.write,old.atomic,old.closed,old.stage_close
 BASE='2c85c22d5738f8dc84c7527c3408602561baae09'
 BASE_MANIFEST='5f9e5a2b977ad3e5b2881324eadf670f4e2b2ef82bb1e0ef79aa2e74047fd69d'
-SCHEMA='SABL_CORRECTED_SA_FORMAL24_V3'
+SCHEMA='SABL_CORRECTED_SA_FORMAL24_V3_IPC2'
 CPU=oldct.CPU;GPU=oldct.GPU;D=decimal.Decimal
 POLICY={**oldct.POLICY,'training_arms':['S','A'],'cost_arms':['N','S','A'],'N24_train_reused':True,'new_forwards':29842,'train_forwards':29184,'endpoint_forwards':274,'cost_forwards':384,'actual_updates':14592}
-CAPS={'new_forward':29842,'new_GPU_seconds':57600,'new_wall_seconds':86400,'allocated_bytes':18<<30,'new_storage_bytes':12<<30,'family_storage_bytes':30<<30,'return_bytes':4<<20}
-EXISTING={'forward':44589,'GPU_seconds':86400,'wall_seconds':172800,'family_storage_bytes':30<<30}
+CAPS={'new_forward':29842,'new_GPU_seconds':'57293.438176989785','new_wall_seconds':86400,'allocated_bytes':18<<30,'new_storage_bytes':12<<30,'family_storage_bytes':30<<30,'return_bytes':4<<20}
+EXISTING={'forward':61871,'GPU_seconds':'94472.36945352436','wall_seconds':172800,'family_storage_bytes':30<<30}
 FAULTS=['none','worker_exception','forward_exhausted','nonfinite','bad_endpoint','missing_close','bad_input']
 FIXTURE=ROOT/'tests/fixtures/sabl_corrected_formal_base.json'
 WS=Path('/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace');EX=WS/'experiments/localization-distribution'
@@ -39,7 +40,7 @@ def forwards(c):
     p=profile(c);return 2*p['epochs']*p['windows']*2+2*((p['images']+3)//4)+3*8*(p['fixed']//4)
 
 def validate(c):
-    need(set(c)=={'schema','mode','policy','caps','existing_limits','prior','requested_addition','requested_cumulative','planned_new_forwards','arms','N_checkpoint_SHA','manifest_sha256','commit','attempt_root','metadata','reuse_N24','short_proofs','wall','fixture','authorization_required'},'contract fields')
+    need(set(c)=={'schema','mode','policy','caps','existing_limits','prior','requested_addition','requested_cumulative','planned_new_forwards','arms','N_checkpoint_SHA','manifest_sha256','commit','attempt_root','metadata','reuse_N24','short_proofs','wall','fixture','authorization_required','ipc'},'contract fields')
     need(c['schema']==SCHEMA and c['mode'] in (CPU,GPU),'corrected formal scope')
     need(digest(c['policy'])==digest(POLICY) and digest(c['caps'])==digest(CAPS) and digest(c['existing_limits'])==digest(EXISTING),'policy/caps changed')
     need(c['arms']==['S','A'] and c['N_checkpoint_SHA']==oldct.N_SHA and c['authorization_required'] is True,'fresh S/A only')
@@ -50,12 +51,13 @@ def validate(c):
     request={'forward':max(0,cumulative['forward']-EXISTING['forward']),'GPU_seconds':str(max(D(0),D(cumulative['GPU_seconds'])-D(EXISTING['GPU_seconds'])))}
     need(c['requested_addition']==request and c['requested_cumulative']==cumulative,'exact expansion calculation')
     need(Path(c['attempt_root']).is_absolute(),'absolute attempt')
+    need(c['ipc']=={'root':str(root_for(Path(c['attempt_root']).parent)),'before_new_Python':True,'owner':'task_exclusive'},'private IPC contract')
     if c['mode']==GPU:
-        f=read(FIXTURE);actual=exact(f['short_proofs']['COST_ADDITION.json'])['cumulative']
+        f=read(FIXTURE);actual=exact(f['latest_cost'])['cumulative']
         need(prior=={'forward':actual['forward'],'GPU_seconds':actual['GPU_stage_seconds']},'authenticated prior accounting')
         need(c['metadata'] is not None and c['reuse_N24'] is not None and c['wall']==wall_account(),'real bindings/wall')
         need(c['short_proofs']==f['short_proofs'] and c['reuse_N24']['scores']==f['N24_scores'],'accepted proof/reuse bindings')
-        need(prior['forward']==32029 and c['requested_addition']['forward']==17282,'latest family ledger identity')
+        need(prior['forward']==32029 and c['requested_addition']=={'forward':0,'GPU_seconds':'0'},'latest family ledger identity')
     return c
 
 def wall_account():
@@ -82,6 +84,11 @@ def short_evidence():
     need(proof['attempt-short-001/CLOSED.json']['result_sha256']==f['short_proofs']['attempt-short-001/slim/RESULT.json']['sha256'],'short closure')
     need(c['cumulative']['forward']==32029 and c['remaining']['forward']==12560,'short cumulative')
     for arm in ['S','A']:need(r['arms'][arm]['replay_full_state_exact'] and r['arms'][arm]['loss_output_gradient_DN_exact'],'accepted compute/replay')
+    latest=exact(f['latest_cost']);stop=exact(f['latest_STOP']);exit=exact(f['latest_exit'])
+    need(latest['previous']['forward']==c['cumulative']['forward'] and latest['previous']['GPU_stage_seconds']==c['cumulative']['GPU_stage_seconds'],'prior failure lineage')
+    need(latest['new']['forward']==latest['new']['actual_updates']==0 and stop['stage']=='engineering-S' and exit['returncode']==1,'IPC STOP preserved')
+    need(latest['cumulative']['forward']==32029 and latest['remaining']['forward']==29842,'latest remaining forward')
+    need(D(str(latest['cumulative']['GPU_stage_seconds']))+D(CAPS['new_GPU_seconds'])<=D(EXISTING['GPU_seconds']),'latest precise GPU balance')
     return proof
 
 def size(p):return sum(x.stat().st_size for x in Path(p).rglob('*') if x.is_file())
@@ -101,9 +108,10 @@ def resources(c,out):
     need(uuid==c['metadata']['gpu_uuid'] and name=='NVIDIA GeForce RTX 4090 D' and pci=='00000000:01:00.0' and int(free)>=18432,'GPU identity/free')
     family=sum(size(p) for p in EX.glob('r18-sabl-*') if p.is_dir())
     external=sum(size(Path(p)) for p in ['/tmp/torchinductor_lyy','/home/lyy/.triton/cache','/home/lyy/.nv/ComputeCache','/home/lyy/.cache/torch/inductor','/home/lyy/.cache/triton'] if Path(p).exists())
+    private,private_rows=owned_family_bytes(EX);external+=private
     need(family+external+(12<<30)<=30<<30,'family storage balance')
     need(shutil.disk_usage(out).free>=30<<30,'original fresh free disk floor30GiB')
-    return {'family_bytes':family,'known_external_cache_all_bytes':external,'family_available_lower_bound':(30<<30)-family-external,'new_storage_requested':12<<30,'disk_free_bytes':shutil.disk_usage(out).free,'wall':wall_account(),'GPU_uuid':uuid,'CUDA_initialized':torch.cuda.is_initialized()}
+    return {'family_bytes':family,'known_external_cache_all_bytes':external,'private_IPC_roots':private_rows,'family_available_lower_bound':(30<<30)-family-external,'new_storage_requested':12<<30,'disk_free_bytes':shutil.disk_usage(out).free,'wall':wall_account(),'GPU_uuid':uuid,'CUDA_initialized':torch.cuda.is_initialized()}
 
 def material(c):
     from sparse_rtdetr.localization.material_paths import MANIFESTS,metadata_path,SELECTION_SHA
@@ -179,20 +187,20 @@ def plan(a):
     out=Path(a.out);out.parent.mkdir(parents=True,exist_ok=True);m=computation(a.manifest);synthetic=a.synthetic;f=read(FIXTURE)
     prior={'forward':17,'GPU_seconds':2.0};metadata=None;reuse=None;short=None;wall=None
     if not synthetic:
-        proof=short_evidence();cost=proof['COST_ADDITION.json'];prior={'forward':cost['cumulative']['forward'],'GPU_seconds':cost['cumulative']['GPU_stage_seconds']}
+        proof=short_evidence();cost=exact(f['latest_cost']);prior={'forward':cost['cumulative']['forward'],'GPU_seconds':cost['cumulative']['GPU_stage_seconds']}
         original=exact(f['original_contract']);definition=exact(f['original_definition']);metadata=copy.deepcopy(original['metadata']);metadata['gpu_uuid']=definition['gpu_uuid']
         need(exact(f['N24_closed'])['result']['sha256']==f['N24_result']['sha256'],'N24 original closure')
         nresult=exact(f['N24_result']);reuse={'endpoint':exact(f['N24_endpoint']),'scores':f['N24_scores'],'ordered_training_input_SHA':nresult['training_input_SHA'],'N24_stage_closed':True,'original_N_history_status':'AUTHENTICATED_OUTPUT_NOT_ORIGINAL_STAGE_CLOSURE'}
         short=f['short_proofs'];wall=wall_account()
-    cumulative={'forward':prior['forward']+29842,'GPU_seconds':str(D(str(prior['GPU_seconds']))+D(57600))}
-    request={'forward':max(0,cumulative['forward']-44589),'GPU_seconds':str(max(D(0),D(cumulative['GPU_seconds'])-D(86400)))}
-    c={'schema':SCHEMA,'mode':CPU if synthetic else GPU,'policy':POLICY,'caps':CAPS,'existing_limits':EXISTING,'prior':prior,'requested_addition':request,'requested_cumulative':cumulative,'planned_new_forwards':0,'arms':['S','A'],'N_checkpoint_SHA':oldct.N_SHA,'manifest_sha256':sha(a.manifest),'commit':m['commit'],'attempt_root':str(Path(a.attempt_root).resolve()),'metadata':metadata,'reuse_N24':reuse,'short_proofs':short,'wall':wall,'fixture':{'fault':a.fault},'authorization_required':True}
+    cumulative={'forward':prior['forward']+29842,'GPU_seconds':str(D(str(prior['GPU_seconds']))+D(CAPS['new_GPU_seconds']))}
+    request={'forward':max(0,cumulative['forward']-EXISTING['forward']),'GPU_seconds':str(max(D(0),D(cumulative['GPU_seconds'])-D(EXISTING['GPU_seconds'])))}
+    c={'schema':SCHEMA,'mode':CPU if synthetic else GPU,'policy':POLICY,'caps':CAPS,'existing_limits':EXISTING,'prior':prior,'requested_addition':request,'requested_cumulative':cumulative,'planned_new_forwards':0,'arms':['S','A'],'N_checkpoint_SHA':oldct.N_SHA,'manifest_sha256':sha(a.manifest),'commit':m['commit'],'attempt_root':str(Path(a.attempt_root).resolve()),'metadata':metadata,'reuse_N24':reuse,'short_proofs':short,'wall':wall,'fixture':{'fault':a.fault},'authorization_required':True,'ipc':{'root':str(root_for(Path(a.attempt_root).resolve().parent)),'before_new_Python':True,'owner':'task_exclusive'}}
     c['planned_new_forwards']=forwards(c);validate(c)
     if not synthetic:
         need(a.fault=='none','no production fixture')
         report=material(c);resource=resources(c,out.parent)
         import torch;need(not torch.cuda.is_initialized(),'CPU review must not initialize CUDA')
-        model,bridge=N_model(c,None,'cpu');del model;gc.collect()
+        bridge=exact(f['N24_bridge_proof']);need(bridge['checkpoint']['sha256']==reuse['endpoint']['checkpoint']['sha256'] and bridge['EMA_module_SHA']==f['N24_expected_EMA_module_SHA'] and bridge['model_forward']==0 and not bridge['CUDA_initialized_after_loader'],'authenticated N24 bridge reused without detector loading')
         write(out.parent/'REVIEW.json',{'status':'PASS_CPU_FORMAL_CONTRACT_REVIEW','materials':report,'resources':resource,'N24_bridge':bridge,'execution_authorized':False,'extra_required':request,'no_GPU_forward':True})
     write(out,c);return 0
 
@@ -219,13 +227,13 @@ class Meter:
         self.ledger['GPU_stage_seconds']=self.c['prior']['GPU_seconds']+(self.elapsed() if self.c['mode']==GPU else 0)
         self.ledger['CPU_fixture_seconds']=self.elapsed() if self.c['mode']==CPU else None;atomic(self.out/'ledger.json',self.ledger)
     def guard(self):
-        need(self.elapsed()<(600 if self.c['mode']==CPU else 57600),'new stage deadline')
+        need(self.elapsed()<(600 if self.c['mode']==CPU else float(self.c['caps']['new_GPU_seconds'])),'new stage deadline')
         need(self.elapsed()<86400,'new wall deadline')
-        root=Path(self.c['attempt_root']).parent;need(size(root)<12<<30,'new formal storage')
+        root=Path(self.c['attempt_root']).parent;private=size(root_for(root));need(size(root)+private<12<<30,'new formal storage including IPC')
         if self.c['mode']==GPU:
             need(self.c['wall']['historical_wall_upper_bound_seconds']+self.elapsed()<=172800,'cumulative wall')
             baseline=read(root/'fresh-launch-admission/RESOURCES.json')
-            need(baseline['family_bytes']+baseline['known_external_cache_all_bytes']+size(root)<=30<<30,'family storage')
+            need(baseline['family_bytes']+baseline['known_external_cache_all_bytes']+size(root)+private<=30<<30,'family storage')
         if self.cuda:need(self.telemetry.observe_peak()<=18<<30,'allocated cap')
     def begin(self,stage):self.guard();self.stage=stage;self.stage_count=self.ledger['new_forward'];self.telemetry.begin(stage)
     def finish(self):self.guard();self.telemetry.finish();self.ledger['stage_forwards'][self.stage]=self.ledger['new_forward']-self.stage_count;self.publish()
@@ -263,10 +271,10 @@ def run(a):
         if synthetic:os.environ['CUDA_VISIBLE_DEVICES']=''
         else:
             short_evidence();need((out.parent/'fresh-launch-admission/RESOURCES.json').exists(),'fresh admission receipt');os.environ['CUDA_VISIBLE_DEVICES']=c['metadata']['gpu_uuid']
+        ipc=verify_ipc(out.parent);write(out/'IPC_ENVIRONMENT.json',ipc)
         cache=out.parent/'compiler-cache'
-        for k,s in [('TORCHINDUCTOR_CACHE_DIR','inductor'),('TRITON_CACHE_DIR','triton'),('CUDA_CACHE_PATH','cuda'),('TMPDIR','tmp'),('TORCH_EXTENSIONS_DIR','extensions'),('XDG_CACHE_HOME','xdg')]:
+        for k,s in [('TORCHINDUCTOR_CACHE_DIR','inductor'),('TRITON_CACHE_DIR','triton'),('CUDA_CACHE_PATH','cuda'),('TORCH_EXTENSIONS_DIR','extensions'),('XDG_CACHE_HOME','xdg')]:
             p=cache/s;p.mkdir(parents=True,exist_ok=True);os.environ[k]=str(p)
-        import tempfile;tempfile.tempdir=os.environ['TMPDIR']
         import torch,torchvision
         torch.set_num_threads(2);torch.set_num_interop_threads(1);torch.use_deterministic_algorithms(True);torch.backends.cudnn.benchmark=False
         need(torch.__version__.split('+')[0]=='2.4.1' and torchvision.__version__.split('+')[0]=='0.19.1','runtime');device='cpu' if synthetic else 'cuda'
@@ -274,7 +282,7 @@ def run(a):
             need(torch.cuda.is_available() and torch.cuda.device_count()==1 and torch.cuda.is_bf16_supported(),'CUDA/BF16');torch.cuda.set_per_process_memory_fraction((18<<30)/torch.cuda.get_device_properties(0).total_memory,0)
         signal.signal(signal.SIGALRM,lambda *_:(_ for _ in ()).throw(TimeoutError('formal deadline')))
         for sig in [signal.SIGTERM,signal.SIGINT]:signal.signal(sig,lambda *_:(_ for _ in ()).throw(RuntimeError('external termination; STOP')))
-        signal.alarm(600 if synthetic else 57600);adapter=wire(c);meter=Meter(c,out,start,None if synthetic else torch.cuda)
+        signal.alarm(600 if synthetic else math.ceil(float(c['caps']['new_GPU_seconds'])));adapter=wire(c);meter=Meter(c,out,start,None if synthetic else torch.cuda)
         write(out/'CONSUMED.json',{'scope':SCHEMA,'contract':digest(c),'CPU_synthetic':synthetic,'no_retry':True})
         if c['fixture']['fault']=='worker_exception':raise RuntimeError('SYNTHETIC_WORKER_EXCEPTION')
         for arm in ['S','A']:old.train(c,arm,True,out,meter,device)
@@ -283,7 +291,7 @@ def run(a):
             accepted=exact(read(FIXTURE)['short_proofs']['attempt-short-001/slim/RESULT.json'])['arms']['S']['initial'];need(initial[0]['native_SHA']==accepted['native'] and initial[0]['head_SHA']==accepted['head'],'accepted fresh initial bytes')
             values={arm:[read(out/('train-'+arm)/('epoch-%03d.json'%e)) for e in [1,2]] for arm in ['S','A']}
             projected=1.25*sum(max(x['stage_seconds']/x['updates'] for x in rows)*22*304 for rows in values.values())+1800
-            write(out/'BUDGET_PROJECTION.json',{'remaining_projected_seconds':projected,'remaining_cap_seconds':57600-meter.elapsed(),'not_quality_prediction':True});need(projected<=57600-meter.elapsed(),'engineering budget feasibility')
+            write(out/'BUDGET_PROJECTION.json',{'remaining_projected_seconds':projected,'remaining_cap_seconds':float(c['caps']['new_GPU_seconds'])-meter.elapsed(),'not_quality_prediction':True});need(projected<=float(c['caps']['new_GPU_seconds'])-meter.elapsed(),'engineering budget feasibility')
         write(out/'ENGINEERING_ALL_PASS.json',{'same_initial':True,'same_heads':True,'epochs_per_arm':2,'no_AP':True})
         for arm in ['S','A']:old.train(c,arm,False,out,meter,device)
         if c['fixture']['fault']=='bad_endpoint':
@@ -328,8 +336,13 @@ def cost_record(c,ledger,elapsed):
       'remaining':{'forward':c['requested_cumulative']['forward']-prior['forward']-ledger['new_forward'],'GPU_stage_seconds':float(D(c['requested_cumulative']['GPU_seconds'])-total)},
       'approved_expansion':c['requested_addition'],'approved_cumulative_limits':c['requested_cumulative'],'old_cost_overwritten':False,'failed_cost_refunded':False}
 
+def data_check(a):
+    from check_sabl_ipc import real_check
+    real_check(a);return 0
+
 def launch(a):
     need(sha(a.contract)==a.approve_contract_sha,'approved contract bytes binding');c=validate(read(a.contract));m=computation(a.manifest);task=Path(c['attempt_root']).parent
+    verify_ipc(task)
     need(a.approve_commit==m['commit']==c['commit'] and a.approve_manifest==sha(a.manifest)==c['manifest_sha256'],'explicit version approval')
     need(not Path(c['attempt_root']).exists() and not (task/'FORMAL_ONCE.json').exists() and not (task/'authorization.json').exists(),'duplicate formal attempt');synthetic=c['mode']==CPU
     if synthetic:need(a.authorize_cpu and not a.authorize_gpu,'CPU-only authority')
@@ -340,7 +353,7 @@ def launch(a):
     write(task/'authorization.json',authority(c))
     argv=[sys.executable,'-B',str(ROOT/'tools/sabl_corrected_formal.py'),'run','--contract',str(Path(a.contract).resolve()),'--contract-sha',sha(a.contract),'--manifest',str(Path(a.manifest).resolve()),'--authorization',str(task/'authorization.json'),'--out',c['attempt_root']]
     write(task/'FORMAL_ONCE.json',{'contract':digest(c),'argv':argv,'no_retry':True,'epoch':time.time()});begin=time.monotonic();proc=subprocess.Popen(argv,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
-    try:stdout,stderr=proc.communicate(timeout=600 if synthetic else 57600)
+    try:stdout,stderr=proc.communicate(timeout=600 if synthetic else float(c['caps']['new_GPU_seconds']))
     except subprocess.TimeoutExpired:
         os.killpg(proc.pid,signal.SIGTERM)
         try:stdout,stderr=proc.communicate(timeout=5)
@@ -356,11 +369,13 @@ def main():
     import argparse
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
     q=sub.add_parser('plan');q.add_argument('--manifest',required=True);q.add_argument('--attempt-root',required=True);q.add_argument('--out',required=True);q.add_argument('--synthetic',action='store_true');q.add_argument('--fault',choices=FAULTS,default='none')
+    q=sub.add_parser('data-check')
+    for n in ['contract','manifest','out']:q.add_argument('--'+n,required=True)
     q=sub.add_parser('launch')
     for n in ['contract','manifest','approve-commit','approve-manifest','approve-contract-sha']:q.add_argument('--'+n,required=True)
     q.add_argument('--authorize-cpu',action='store_true');q.add_argument('--authorize-gpu',action='store_true');q.add_argument('--grant-forward',type=int,default=0);q.add_argument('--grant-GPU-seconds',default='0',dest='grant_GPU_seconds')
     q=sub.add_parser('run')
     for n in ['contract','contract-sha','manifest','authorization','out']:q.add_argument('--'+n,required=True)
-    a=p.parse_args();return globals()[a.command](a)
+    a=p.parse_args();return globals()[a.command.replace('-','_')](a)
 
 if __name__=='__main__':raise SystemExit(main())

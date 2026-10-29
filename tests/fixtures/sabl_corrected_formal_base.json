@@ -1619,7 +1619,7 @@
   "N24_expected_EMA_module_SHA": "46de3cb580a54421e8f77c699487d7a12bfa0ea188986369b4b31040894a0a93",
   "wall_reconciliation": {
     "status": "PASS_CONSERVATIVE_ACTIVE_WALL_RECONCILIATION",
-    "method": "sum full declared wall limits for six completed runs; old formal measured authorization-to-exit envelope plus60s; no GPU-seconds substitution",
+    "method": "sum full declared wall limits for six completed runs; old formal measured authorization-to-exit envelope plus60s; no GPU-seconds substitution; add ceiling307s of preserved failed corrected formal process wall",
     "rows": [
       {
         "run": "original short",
@@ -1661,12 +1661,21 @@
       {
         "run": "v3 short",
         "upper_seconds": 1800
+      },
+      {
+        "run": "corrected formal IPC STOP",
+        "upper_seconds": 307,
+        "terminal": {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/PROCESS_EXIT.json",
+          "bytes": 424,
+          "sha256": "3af4358a341cffa9bfda113d167f6e778c9322d103b99d9e59ba7a6161bb02c9"
+        }
       }
     ],
     "historical_exact_active_seconds": "UNKNOWN",
-    "historical_wall_upper_bound_seconds": 45843,
+    "historical_wall_upper_bound_seconds": 46150,
     "original_cumulative_wall_cap_seconds": 172800,
-    "remaining_wall_lower_bound_seconds": 126957,
+    "remaining_wall_lower_bound_seconds": 126650,
     "formal_requested_wall_seconds": 86400,
     "fits_without_wall_expansion": true,
     "forward_counts_reconciled": [
@@ -1676,7 +1685,8 @@
       1,
       2,
       274,
-      12
+      12,
+      0
     ],
     "expected_cumulative_forward": 32029
   },
@@ -1740,9 +1750,24 @@
       },
       "seconds_key": "outer_command_wall_seconds",
       "full_wall_allowance": 1800
+    },
+    {
+      "name": "IPC failed formal",
+      "reference": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/PROCESS_EXIT.json",
+        "bytes": 424,
+        "sha256": "3af4358a341cffa9bfda113d167f6e778c9322d103b99d9e59ba7a6161bb02c9"
+      },
+      "seconds_key": "process_wall_seconds",
+      "full_wall_allowance": 307
     }
   ],
   "known_family_cost_files": [
+    {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/COST_ADDITION.json",
+      "bytes": 650,
+      "sha256": "728a8c3666dcf81c5a440a3e933ae7491e027d430c2ccd1eb84a303569aeeb6a"
+    },
     {
       "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-short-20261028-001/COST_ADDITION.json",
       "bytes": 832,
@@ -1763,5 +1788,35 @@
       "bytes": 909,
       "sha256": "122e6b0c0ad1f54964051ec264c5c03e5368bc628eb80c3301686751b45b1475"
     }
-  ]
+  ],
+  "latest_cost": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/COST_ADDITION.json",
+    "bytes": 650,
+    "sha256": "728a8c3666dcf81c5a440a3e933ae7491e027d430c2ccd1eb84a303569aeeb6a"
+  },
+  "latest_STOP": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/attempt-formal-001/STOP.json",
+    "bytes": 625,
+    "sha256": "719b34bb20e5de96d7c4ac6d227676c47cc56d1cbbed03e52f3a0da217c27b94"
+  },
+  "latest_exit": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/PROCESS_EXIT.json",
+    "bytes": 424,
+    "sha256": "3af4358a341cffa9bfda113d167f6e778c9322d103b99d9e59ba7a6161bb02c9"
+  },
+  "short_input_reference": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-short-20261028-001/attempt-short-001/INPUT.json",
+    "bytes": 16611,
+    "sha256": "000de80a6b83cf74af61ad60945a1c5a2af4ad564423b9139e5acf8c06fd5b54"
+  },
+  "N24_first_inputs": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-formal24-20261027-001/attempt-formal-001/train-N/engineering-events.jsonl",
+    "bytes": 256791243,
+    "sha256": "5d140071375d5f6879584b3dcfc875c5b9fb79192d459c219789a304a16fc7c8"
+  },
+  "N24_bridge_proof": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/N24_BRIDGE_CPU_AUDIT.json",
+    "bytes": 959,
+    "sha256": "6e59f954437e5ad9ea413bf0c6937493a123f13c41c327de74af8f69da46d1a9"
+  }
 }

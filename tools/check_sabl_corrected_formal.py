@@ -19,7 +19,7 @@ def main(output):
     with tempfile.TemporaryDirectory(prefix='corrected-formal-CPU-',dir=out) as temp:
         root=Path(temp);release=root/'release';release.mkdir()
         names=set(subprocess.check_output(['git','ls-files'],cwd=ROOT,text=True).splitlines()) if (ROOT/'.git').exists() else {x['path'] for x in read(ROOT/'RELEASE_MANIFEST.json')['files']}
-        names|={'tools/sabl_corrected_formal.py','tools/check_sabl_corrected_formal.py','tests/fixtures/sabl_corrected_formal_base.json'}
+        names|={'tools/sabl_corrected_formal.py','tools/check_sabl_corrected_formal.py','tests/fixtures/sabl_corrected_formal_base.json','tools/sabl_ipc.py','tools/check_sabl_ipc.py'}
         rows=[]
         for n in sorted(names):
             p=ROOT/n;q=release/n;q.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,q);rows.append({'path':n,'bytes':q.stat().st_size,'sha256':sha(q)})
@@ -28,7 +28,7 @@ def main(output):
         entry=release/'tools/sabl_corrected_formal.py';env=dict(os.environ);env.pop('PYTHONPATH',None);env.pop('PYTHONHOME',None)
         def cli(name,args,ok=True):
             nonlocal peak
-            begin=time.monotonic();p=subprocess.Popen([sys.executable,'-B',str(entry),*args],cwd=release,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+            begin=time.monotonic();p=subprocess.Popen([sys.executable,'-B',str(release/'tools/sabl_ipc.py'),'exec','--task',str(Path(args[args.index('--contract')+1]).parent),'--',sys.executable,'-B',str(entry),*args] if args[0]=='launch' else [sys.executable,'-B',str(entry),*args],cwd=release,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
             while p.poll() is None:
                 peak=max(peak,rss(os.getpid()))
                 if peak>4<<30 or time.monotonic()-start>590:
@@ -88,7 +88,7 @@ def main(output):
         cost_recorded=cost_record(fake,{'new_forward':29842,'actual_updates':14592},50.0)
         check('cost schema inherits consumed failures',cost_recorded['cumulative']['forward']==61871 and cost_recorded['remaining']['forward']==0 and cost_recorded['previous']['GPU_stage_seconds']==36872.36945352436 and cost_recorded['failed_cost_refunded'] is False)
         for key in CAPS_KEYS:
-            v=json.loads(json.dumps(contract));v['caps'][key]+=1
+            v=json.loads(json.dumps(contract));v['caps'][key]=float(v['caps'][key])+1
             try:validate(v)
             except ValueError:check('tamper '+key,True)
             else:check('tamper '+key,False)

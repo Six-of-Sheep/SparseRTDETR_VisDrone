@@ -240,3 +240,29 @@ CPU负例覆盖错误合同/预算、重复启动、worker异常、非有限输�
 N24桥接补充：真实CPU准入发现唯一配置差异为engine.config.arm的版本身份标签v1→v3；桥接显式要求旧标签v1、当前标签v3，且其余全部字段与完整key集合严格相同。不允许删除未知字段、忽略数值差异或将其称为完整训练恢复；CPU补数值漂移/未知key拒绝检查。初次拒绝日志及旧candidate包保留。正式成本出口沿用GPU_stage_seconds标准键并显式记录已批准累计额度，旧成本不覆盖/不退款。
 
 最终调用器另要求显式已批准CONTRACT.json SHA：launch在授权前核对原始字节，子run再次核对传入的同一SHA；CPU增加错误合同SHA拒绝且不创建attempt/authorization检查。最终命令同时绑定commit、manifest和合同字节，不借外部脚本临时生成绑定。
+
+
+## 2026-10-29 IPC修订：原正式链STOP后重新准备（不授权GPU）
+
+旧3d69171正式入口将TMPDIR设在任务compiler-cache/tmp，并在解释器已导入后修改tempfile缓存。
+旧日志只保存`AF_UNIX path too long`及300秒DataLoader超时，没有保存实际旧地址，故旧地址仍UNKNOWN。
+隔离进程采用与旧配置同为156字节的目录前缀，标准`multiprocessing.connection.arbitrary_address`生成188字节地址并在Listener.bind复现同错误。
+新`tools/sabl_ipc.py exec`用任务绝对路径的SHA前16位建立0700独占`/tmp/sabl-<16hex>`，以OWNER绑定任务/uid。
+它在execve启动新Python前统一TMPDIR/TEMP/TMP；正式launch、run和CPU取数复用此入口。
+不再在run内迟设TMPDIR或重写tempfile缓存；进程核对环境、tempfile缓存及已存在的multiprocessing缓存，冲突拒绝。
+编译缓存和实验产物继续留原任务目录；不改变worker=2、spawn、file_descriptor共享、prefetch=2、300秒超时、确定性或任何采样/增强。
+
+CPU `data-check`仅读前两个逻辑16训练窗口，有限采样器停在两窗，使用真实Dataset/LocalAugmentation/collate/seed_worker及DataLoader。
+观测放在spawn_observer内，生产input_record排除它；核原N24前两条科学input摘要及已认证短GPU的两窗input+GT SHA。
+记录真实socket地址/字节长度、主/worker临时环境、worker正常退出；CUDA隐藏，不加载检测器、权重或做模型前向。
+CPU状态/游标/RNG不供正式训练；下一正式进程重新seed并从父N独立fresh初始化S/A。
+CI增加同一exec入口的真实spawn tensor跨进程传输、长路径拒绝、所有者冲突和旧缓存拒绝；CI构造模型检查不作真实CUDA证明。
+
+原STOP成本306.5618230102118秒继续继承：累计32029 forward/37178.931276534575 GPU秒。
+已批准累计上限保持61871 forward/94472.36945352436 GPU秒，不再次扩额。
+本次拟新29842 forward，GPU精确余额57293.438176989785秒（普通浮点显示57293.43817698979）；合同以十进制字符串保持精度。
+新的requested_addition为0，不再沿用旧17282/8072扩额申请；GPU时限、总进程超时和两轮投影均读取新的余额。
+wall历史上界追加ceil306.561823=307秒，剩余下界126650秒，仍覆盖拟86400秒；精确activewall仍UNKNOWN。
+所有独占短临时目录按OWNER归入家族存储，运行guard同时计任务目录与自身IPC目录；资源准入保留30GiB家族/30GiB磁盘floor/新12GiB。
+源码src/configs/vendor和受验train/endpoint/infer/cost/compare字节不变，复用2c85c22短GPU证据，不复跑模型验收。
+旧release、原attempt、STOP、e000、N/S终点和成本不修改；新合同和唯一命令仅准备，真实GPU执行需另授权。

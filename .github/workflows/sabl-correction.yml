@@ -31,6 +31,7 @@ jobs:
       - run: python -B tools/check_sabl_axis_norm.py /tmp/axis-norm.json
       - run: python -B tools/check_sabl_corrected_model.py /tmp/corrected-model
       - run: python -B tools/check_sabl_corrected_short.py /tmp/corrected-short-cli
+      - run: python -B tools/check_sabl_ipc.py suite --out /tmp/sabl-ipc-cli
       - run: python -B tools/check_sabl_corrected_formal.py /tmp/corrected-formal-cli
       - run: python -B tools/repo_manage.py check
       - run: python -B tools/repo_manage.py verify-import
