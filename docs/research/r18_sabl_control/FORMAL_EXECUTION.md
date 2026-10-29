@@ -262,7 +262,7 @@ CI增加同一exec入口的真实spawn tensor跨进程传输、长路径拒绝�
 已批准累计上限保持61871 forward/94472.36945352436 GPU秒，不再次扩额。
 本次拟新29842 forward，GPU精确余额57293.438176989785秒（普通浮点显示57293.43817698979）；合同以十进制字符串保持精度。
 新的requested_addition为0，不再沿用旧17282/8072扩额申请；GPU时限、总进程超时和两轮投影均读取新的余额。
-wall历史上界追加ceil306.561823=307秒，剩余下界126650秒，仍覆盖拟86400秒；精确activewall仍UNKNOWN。
+wall另以原tmux创建至PROCESS_EXIT的原生时间包络核对，并加60秒余量，完整调用（包含父进程准入）小于600秒；保守追加600秒而非仅GPU计账306.561823秒，剩余下界126357秒，仍覆盖拟86400秒；精确activewall仍UNKNOWN。
 所有独占短临时目录按OWNER归入家族存储，运行guard同时计任务目录与自身IPC目录；资源准入保留30GiB家族/30GiB磁盘floor/新12GiB。
 源码src/configs/vendor和受验train/endpoint/infer/cost/compare字节不变，复用2c85c22短GPU证据，不复跑模型验收。
 旧release、原attempt、STOP、e000、N/S终点和成本不修改；新合同和唯一命令仅准备，真实GPU执行需另授权。

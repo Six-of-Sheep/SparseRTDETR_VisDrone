@@ -1619,7 +1619,7 @@
   "N24_expected_EMA_module_SHA": "46de3cb580a54421e8f77c699487d7a12bfa0ea188986369b4b31040894a0a93",
   "wall_reconciliation": {
     "status": "PASS_CONSERVATIVE_ACTIVE_WALL_RECONCILIATION",
-    "method": "sum full declared wall limits for six completed runs; old formal measured authorization-to-exit envelope plus60s; no GPU-seconds substitution; add ceiling307s of preserved failed corrected formal process wall",
+    "method": "sum full declared wall limits for six completed runs; old formal measured authorization-to-exit envelope plus60s; no GPU-seconds substitution; add600s conservative complete IPC failure envelope including parent preflight, native tmux-to-exit measured plus60s fits within600s",
     "rows": [
       {
         "run": "original short",
@@ -1664,18 +1664,23 @@
       },
       {
         "run": "corrected formal IPC STOP",
-        "upper_seconds": 307,
+        "upper_seconds": 600,
         "terminal": {
           "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261028-001/PROCESS_EXIT.json",
           "bytes": 424,
           "sha256": "3af4358a341cffa9bfda113d167f6e778c9322d103b99d9e59ba7a6161bb02c9"
+        },
+        "whole_call_wall_proof": {
+          "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/FAILED_CALL_WALL_PROOF.json",
+          "bytes": 708,
+          "sha256": "606cc758af8b62383eab4bd5eb06497ce327b2628e172bc0b80f1f7d208d87c2"
         }
       }
     ],
     "historical_exact_active_seconds": "UNKNOWN",
-    "historical_wall_upper_bound_seconds": 46150,
+    "historical_wall_upper_bound_seconds": 46443,
     "original_cumulative_wall_cap_seconds": 172800,
-    "remaining_wall_lower_bound_seconds": 126650,
+    "remaining_wall_lower_bound_seconds": 126357,
     "formal_requested_wall_seconds": 86400,
     "fits_without_wall_expansion": true,
     "forward_counts_reconciled": [
@@ -1760,6 +1765,16 @@
       },
       "seconds_key": "process_wall_seconds",
       "full_wall_allowance": 307
+    },
+    {
+      "name": "whole IPC failed call including admission",
+      "reference": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r18-sabl-corrected-formal-20261029-001/FAILED_CALL_WALL_PROOF.json",
+        "bytes": 708,
+        "sha256": "606cc758af8b62383eab4bd5eb06497ce327b2628e172bc0b80f1f7d208d87c2"
+      },
+      "seconds_key": "observed_upper_seconds",
+      "full_wall_allowance": 601
     }
   ],
   "known_family_cost_files": [
