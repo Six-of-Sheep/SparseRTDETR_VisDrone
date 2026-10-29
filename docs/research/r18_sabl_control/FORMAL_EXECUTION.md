@@ -139,3 +139,180 @@ RawAugmentation从图像xyxy转**归一化cxcywh**，x/w除画布W、y/h除H。M
 最小修复方向应是**明确统一GT目标与桶/头/解码的四边约定**并添加外部合法GT的实际闭环回归，不是交换已预测左右边或放宽无效判据。本轮未实现任何修复、未改原科学源码/预测/阈值、未重算AP或重开训练；后续修复及公平验证另行授权。
 
 审查工具/原误差判据/CPU结果/流式日志SHA与字段缺失证明，登记于服务器r18-sabl-s-path-audit-20261028-001及D盘同名精简交付。为遵守本轮“零检测器前向”，该审查分支CI仅执行新CPU审查与纯管理检查；既有含模型前向的通用jobs显式跳过，不能记作PASS。审查结果为**已证实的实现不一致 + 已登记设计限制 + 失效类别细分证据不足**，不自动进入新实验。
+
+## 2026-10-28：S/A共同修正版v3（仅模型修正和CPU冻结）
+
+本节保留上节原v1错误与实测FAIL，不覆写原结果。新科学身份为`r18-sabl-control-lrtb-logsigmoid-v3`，与v1及PR27的`r18-sabl-control-logsigmoid-v2`区分。本轮只包含两项计算修正：
+
+1. `encode`明确将标准xyxy角点`[L,T,R,B]`重排为`[L,R,T,B]`，再创建所有桶分类、邻桶排除mask、offset目标及mask。桶坐标/Δ、最近桶、阈值<1、BCE与SmoothL1(beta=.1)、4M/M分母、四边头/解码顺序不变。
+2. 原样纳入PR27 `normalized_sigmoid_axis`：`softmax(logsigmoid(logits), dim=原轴)`，水平沿2、纵向沿3；导入函数SHA `d550eb4e9d3f34ee786d9822b2bd9fa07be613b3b81abaf1107025291c5ff41e`，Head类与已验证PR27实现AST一致。无新参数，S/A同用。实数等价不表示FP32逐位或训练轨迹等价。
+
+N/粗框/分类、F8/RoI、采样轴与精度、匹配、aux/DN、日程、监督权重、clip、EMA和无效框处理不改。没有加入排序、abs/裁成正宽高、粗框回退、门控或新loss。
+
+### CPU证据及边界
+
+事前独立GT判据保持FP32归一化误差≤1e−6、rtol0且valid=true。新测试直接从cx/cy/w/h计算`cx−w/2,cx+w/2,cy−h/2,cy+h/2`，不调用生产corners或复用其排列生成期望。原11例及新增7例（不同reference、非对称、越出桶域、小/细框及图像/桶边界）**18/18还原GT**；正确理想预测使实际offset损失0。118项检查还覆盖actual桶分类/offset/mask、四边非理想预测梯度的索引与符号、GT/reference detach；保留左右/上下/双轴逆序、零宽/零高五个反例。独立选边限制仍存在，不预写收益。
+
+PR27既定容差、失败张量fixture及FP64参考保持。归一化108项检查/288比较通过；原“encode AST不变”1项因明确修正GT映射不再适用，改由上述独立GT回归覆盖，未放宽其余数值判据。常值特征可给零logit梯度、有限卷积输入仍可溢出、极端FP64直接sigmoid也非通用oracle等反例仍保留。
+
+完整模型CPU最终检查8次合成检测器forward、2次实际合成optimizer更新（S/A各1逻辑窗口），37项通过。两microbatch均经actual Model→Criterion→boundary_loss→encode，真实收到正确四边目标。头参数梯度由额外损失产生且非零；F8观测的是原总目标梯度，不冒充“仅额外loss的F8梯度”。原coarse reference实际detach。新旧N在各自完整源码根/独立进程下，完整输出和参数/BN/cache字节摘要一致；S/A共有参数与新头初态一致。新完整状态在model、optimizer矩、EMA、RNG被有意扰动后严格恢复一致。
+
+两个实际restore接口均拒绝v1/v2 S/A版本（8项构造元数据拒绝）；测试使用明确标记的header-only夹具证明在任何模型加载前拒绝，不能称为旧真实state续训回放。正常新状态的完整恢复使用实际CPU全状态文件。schema结构名仍为v1，但科学VERSION与criterion/config绑定为v3，禁止改旧receipt/header来“兼容”S/A；正式初态只能来自共同认证父N EMA，不使用验收state或旧S/A。
+
+CPU开发失败均保留：混载旧包被源码归属检查拒绝后改为完整旧源码独立进程；GPU-build共享库虚拟映射触发4GiB AS夹具保护（当时RSS约1.05GiB、CUDA未初始化），随后将实际内存保护修正为父/子进程RSS合计4GiB与单进程DATA4GiB。一个被导入的CLI曾重新施加AS限制，已去掉该CLI导入副作用。模型、输入、误差标准及GPU预算未随这些工具修复改变。最终实测RSS树峰值2220818432B，仍低于4GiB；最终CPU无CUDA初始化。合成CPU消耗单列，不算未来真实forward或训练进度。
+
+### N24复用：核验通过，免重复训练N
+
+结论：**可复用已完成N24的e24 EMA与两档认证评分**。使用原68d/v1生产endpoint+EMA读取接口，在独立CPU进程重新核物理checkpoint（SHA `fbf798c33649253a410c2feeac01bb62757089221709726a02493117469de921`）、e24/7296/EMA、训练输入/父N、4869/548成员manifest及两档评分绑定。N的Model/Criterion/Engine计算AST、24轮/seed/输入/优化器/日程/精度等配置除版本标识外相同；错误encode和稳定归一化均不在N旁路。上述全输出CPU比较补充了计算一致性证据。
+
+同时用新版本**真实生产fresh初始化路径**，在CPU从认证父N（SHA `be5e9e1f…`）分别初始化S/A，未做真实权重前向：native/BN/cache与原N初始记录逐字节一致，S/A新头同初态，optimizer空、EMA/更新0、RNG各自重置seed0一致。N24只作为只读终点/评分控制，**不是将旧N完整训练state恢复成v3**。未来同会话N测速仍需N24原生EMA前向，不能复用旧资源观测；真实执行前需在新受验入口显式绑定该N引用，不绕过旧S/A拒绝规则。
+
+### 修订实验：提案，GPU与扩额未授权
+
+S/A从共同父N e120 EMA独立重新建立native/附加头、optimizer、EMA及RNG，固定seed0；不得续A938、旧S e24、PR27 raw验证state或新短验收state。沿原24轮×304更新，batch8×累积2、4869 train_core、原增强e1–21/e22–24、lr/warmup/cosine、23项监督权重/clip/EMA不变。前两轮工程检查仍保留，正常后固定e24 EMA；548 development、top600/top300共推理、原双评价器/ignore/不补位和原收益/保护/成本门槛全部保留，1602不访问。N24和原N两档评分只读复用，比较S−N24、S−A24、S−原N并保留全部负项；不增加中途AP、选模、调参或seed。
+
+|阶段|更新|新增forward|GPU阶段提案上限|wall提案上限|存储/回传|
+|---|---:|---:|---:|---:|---|
+|一次S/A短训练工程验收|两臂各3实际更新，合计6|12|900秒|1800秒|新增≤2GiB，回传≤1MiB|
+|S/A正式各24轮|各7296，合计14592|29184|与下两行合计57600秒（16h）|与下两行合计86400秒（24h）|正式全链新增≤12GiB，回传≤4MiB|
+|两臂548固定终点|0|274|计入正式上限|计入正式上限|4评分组/8评价器调用；N24/原N0重算|
+|同会话N24/S/A固定64图成本|0|384|计入正式上限|计入正式上限|3臂×(2暖机+6实测)×16；沿原顺序|
+|新增合计|14598实际更新|29854|58500秒|88200秒|新增≤14GiB，回传合计≤5MiB|
+
+显存allocated18GiB、原SABL家族累计存储30GiB仍保留；上表新存储要加到全部旧现场，不能删除旧证据/重置余额。短验收每臂为u1、u2-direct、恢复u1后u2-replay，6次实际更新不是“4次不同更新”；使用固定两个logical16窗口，不额外验证forward。短验收核真实BF16/局部FP32、梯度有限和完整恢复重放，**不判检测收益、不评分/完整测速**，之后退出。旧验收和两次raw前向不能代替修正监督后的新短训练验收。正式科学FAIL仍在预算内完成既定后链，生产新异常STOP不自动修复重试。
+
+历史已用32017forward / 36824.02296776826 GPU阶段秒，当前余12572 / 49575.97703223174秒。若未来批准上述全部范围，则累计需61871forward / 95324.02296776826秒；相对原44589forward/86400秒总上限，**还需另批17282forward及8924.02296776826秒GPU阶段额度**。本轮不改原上限或账本。16h是正式链的拟申请硬上限，不是实测承诺；按旧S24和A前两轮较慢耗时×1.25再留1800秒，估算正式约53021.8秒，修正版真实速度仍UNKNOWN。短窗只排工程/预算问题，不预测e24收益。
+
+历史累计active wall未有统一已核账本；原48h累计wall约束不重置，GPU秒不能冒充wall。未来任何正式合同必须先用既有EXIT/PROCESS回执闭合wall余额及新鲜存储/资源准入，不能将表中的24h当成已批准新余额。
+
+本轮冻结的是**两项模型修正、状态版本保护、CPU测试与修订方案**。旧三臂/旧v1正式命令不得用于本包；本包只交付CPU命令，不生成GPU合同、授权、attempt或启动标记。新的两臂短验收/正式执行入口及其生产CLI闭合、合同与预算批准另行完成；当前不声称GPU执行链已受验或可以直接启动。工程CPU PASS不等于CUDA/完整训练稳定，更不等于质量改善。
+
+## 2026-10-28：v3两臂短训练入口与单次验收
+
+科学基准固定f25b74488f0082cf835b844b89fc8a1f3205b365、manifest 54529a9faccecde599753b03b42095f6d7b8d83f7259cf5e3aadae0109cf7d9b；新增tools/sabl_corrected_short.py只连接现有make_engine、sabl_state和Telemetry，不调用旧三臂命令。302份src/configs/vendor依赖逐字节固定，科学定义/初始化/数据/损失/精度/确定性/门槛不变。原proposal配置继续保留其历史“未授权”状态；当前执行授权绑定新入口commit/manifest及独立合同，不重写历史配置。
+
+限定范围为S/A各u1、u2-direct、恢复u1后u2-replay：6实际更新、12 detector forward；无预热、额外验证forward、评分、测速或完整训练。两臂各自从认证原父N e120 EMA fresh初始化native/附加头、optimizer、EMA与RNG，不能读原S/A状态或用本验收state接正式训练。fixed seed0/e1首两个logical16窗口，32图逐成员原始字节SHA与两窗张量/GT哈希和原短验收相同，不按目标筛图。ordinary final匹配和原aux/DN保持。
+
+CPU验收经最终CLI的prepare→launch→run→slim/CLOSED和实际解释器/release cwd，无预设PYTHONPATH；临时夹具manifest明确synthetic，GPU授权不能用于夹具。覆盖完整FP32训练与全状态重放、原真实历史bytes/size_bytes接口、错误身份/双字段冲突、无效资源合同、forward/update耗尽、非有限输入、错输入、重复启动及缺导出不闭合。夹具状态只在owned临时目录产生，结束自动移除，保留回执/失败stderr；CPU工作不计真实GPU预算。CPU通过不能代替CUDA编译、BF16反向或真实恢复验证。
+
+GPU PASS须同时满足：
+1. 实际loss调用的encode目标与独立GT直接给出的L/R/T/B一致，reference/GT detach；两个microbatch均有匹配与两项新增监督。
+2. 真实native BF16、boundary FP32；所有原损失/新增损失、梯度和健康检查有限。
+3. native及pre、att_x/y、post_x/y、up_x/y、cls、offset预定组确有非零有限梯度和参数更新。钩子只观察原目标的既有反向，不新增autograd调用/拦截器。
+4. u1完整model/optimizer/EMA/RNG/engine/下一窗口恢复一致，u2 direct/replay全状态、输出、DN、损失、梯度哈希严格相同。
+5. 逐臂与整链peak allocated/阶段/更新耗时、编译cache与存储、12forward/6更新硬计数及slim/CLOSED/EXIT通过。异常尽力采集最后峰值，采集失败UNKNOWN；新GPU异常STOP不自动重试。
+
+上限900秒GPU阶段、1800秒wall、allocated18GiB、全任务新存储2GiB、全部回传1MiB。每个forward先记账，失败不退款；实际optimizer更新与预留次数分列。编译器、Triton、CUDA driver、extensions及TMP cache绑定新task，计入2GiB；所有旧SABL现场加入原30GiB累计门槛。全子进程wall保守计GPU秒，原成本账本不覆盖。
+
+历史wall采取有证据的保守上界而非虚构精确active时长：六次已知GPU执行的forward数18+31061+661+1+2+274=32017，与最新账本一致；认证首个短验收合同的UTC当日零点早于这六次串行执行，向当前准入时刻的整个日历包络（含停机/开发间隔）均算占用wall。合同保留exact active wall UNKNOWN，但用该更大的上界计算可保证的48h余额；若上界余额不足1800秒则拒绝。启动时重新核算，不以GPU秒代替wall。即使新GPU验收PASS，也只证明这个短窗的工程条件，不证明24轮稳定或检测收益。
+
+本轮只实现并授权该短入口；正式S/A各24轮/548评价/三臂同会话测速仍仅提案29842forward、57600 GPU秒（无扩额授权）。短验收消耗实际追加后重新计算正式缺口，不将预留未用部分当成已花成本。正式入口未接线，不自动续接。
+
+开发失败留痕：初始工具import把research模块误当tools顶层模块，真实CLI立即拒绝；已统一为完整包导入。夹具结束前保留大量临时state可能使缺导出测试先触发存储拒绝，现逐项清理自有synthetic state并断言确切拒绝原因，不将别的错误冒充目标故障通过。未修改科学源码或放宽数值/资源判据。
+
+## 2026-10-28：修正版S/A正式24轮链（CPU准备，未授权启动）
+
+计算基准为已短GPU PASS的2c85c22d5738f8dc84c7527c3408602561baae09、manifest 5f9e5a2b977ad3e5b2881324eadf670f4e2b2ef82bb1e0ef79aa2e74047fd69d。302份src/configs/vendor依赖及5个复用执行文件逐SHA固定。新增tools/sabl_corrected_formal.py只做执行接线：复用现有sabl_formal.py的train、endpoint、predictions、infer、cost、compare，以及原make_engine和sabl_formal_state；不改变模型、初始化、训练目标、优化器/日程、采样、精度或原门槛。短GPU证据严格核其commit/manifest/CLOSED/12forward6更新和恢复结果，只读复用，不重跑验收；它不冒充全正式链GPU认证。
+
+训练仅S/A，各从原共同父N e120 EMA fresh创建新头、optimizer、EMA、RNGseed0。保留两臂前两轮工程检查，随后从各自本次e2完整状态在同一链严格恢复到e24；训练输入/GT/增强顺序还须与认证N24登记一致。旧错误S/A、A938以及短验收state不能进入本次正式训练。N24终点与已有两档评分只读复用，不重训或重算N质量；N仅进入新同会话测速。
+
+新增N-only只读EMA桥接不跳过版本检查：明确要求原N24 v1完整checkpoint SHA fbf798c33649253a410c2feeac01bb62757089221709726a02493117469de921、原binding/manifest/父N、e24/7296、runtime/config/criterion、EMA clock、完整raw/EMA layout及不可变cache；将EMA tensor严格加载到计算路径未变的N wrapper，核原认证EMA module SHA 46de3cb580a54421e8f77c699487d7a12bfa0ea188986369b4b31040894a0a93。仅为eval/测速，不恢复optimizer、engine或RNG，不把旧state伪称v3训练恢复。S/A终点继续使用本次新v3完整state严格读取EMA。
+
+完整次序为新鲜源码/材料/环境/资源/防重复准入→S/A各e1–2工程检查→各自恢复本链e2并训练到e24→两臂548图e24 EMA FP32整图推理（top600/300共享）→每档原双评价器→N24/S/A同会话固定64图FP32 batch4成本（各2暖机+6实测，原平衡顺序）→原sabl_results.render全部绝对指标/差值/保护与成本门槛→slim/CLOSED/EXIT退出。科学FAIL仍完成固定后链；工程/数值/资源/完整性新异常STOP，不自动重试。没有中途AP/选模/调参/扩seed/1602访问。
+
+|阶段|新增forward|实际更新|
+|---|---:|---:|
+|S/A各24轮训练|29184|14592|
+|两臂548图e24 EMA|274|0|
+|N24/S/A固定64成本|384|0|
+|合计|29842|14592|
+
+新GPU阶段拟上限57600秒、整链wall86400秒、allocated18GiB、正式task新增12GiB、回传4MiB；家族累计存储仍30GiB，原新鲜空闲磁盘30GiB下限保持。编译/driver/Triton/TMP cache绑定本task且计入存储，全链显存峰值不因阶段重置漏计。累计原forward44589/GPU86400秒限制没有被本次修改。
+
+权威短验收后成本32029forward/36872.36945352436秒，余额12560/49527.63054647564秒。正式链若未来批准，应另批17282forward、8072.36945352436 GPU秒；届时请求累计61871forward/94472.36945352436 GPU秒。本次合同只列请求，不创建真实authorization、FORMAL_ONCE或attempt；真实launch必须同时收到显式版本和上述精确扩额参数，否则在启动前拒绝。合同/命令文件不是执行授权。
+
+wall已改为逐运行的可核保守上界：除原正式链外六次已完成调用各计其完整允许wall（1800+1800+600+600+3600+1800秒）；原正式链用其真实authorization文件至EXIT文件的同服务器时间包络35582.6703秒，覆盖原entry monotonic35530.649秒，再向上取整并加60秒保护。合计上界45843秒，原48h可保证余额126957秒，能覆盖本次拟86400秒而无需wall扩额。精确active总和仍UNKNOWN；这是证据更细的上界收紧，不是重置额度或用GPU秒替代wall。后续准入重新核原回执SHA/时间与最新成本不变，任何新运行或材料变化要求重新核账。
+
+CPU实际CLI使用明确合成图/GT/随机模型：三压缩epoch×每epoch一window，S/A合计6更新/12训练forward，2臂6合成评价图共4forward，N/S/A合成4图成本24forward，总40。真实scorer产生4评分组/8双评价器调用；用于测试表语义的历史N/N24行明确为S合成评分别名，绝非N质量证据。用实际完整state接口跨工程阶段保存恢复、真实EMA读出、原门槛比较和slim闭合；CPU只验证压缩流程与FP32接口，不能冒充真实304-window跨epoch CUDA验证。已知无收益的合成门槛也必须闭合，不因阴性中止后链。
+
+CPU负例覆盖错误合同/预算、重复启动、worker异常、非有限输入、forward耗尽、语义错误终点、缺闭合和未知预测ID。语义错误fixture会重算其自有摘要/引用SHA，使拒绝确实达到epoch/成员语义层，而不是只因文件SHA不同；完整旧科学材料不修改。所有合成state为测试临时文件，结束移除但保留索引/日志；开发错误可留痕修复复测，不计GPU实验预算。冻结后唯一COMMANDS仅调用Git内新入口，真实新鲜准入/绑定/授权均在受验CLI内，无外部临时绑定脚本。本轮未执行该命令。
+
+N24桥接补充：真实CPU准入发现唯一配置差异为engine.config.arm的版本身份标签v1→v3；桥接显式要求旧标签v1、当前标签v3，且其余全部字段与完整key集合严格相同。不允许删除未知字段、忽略数值差异或将其称为完整训练恢复；CPU补数值漂移/未知key拒绝检查。初次拒绝日志及旧candidate包保留。正式成本出口沿用GPU_stage_seconds标准键并显式记录已批准累计额度，旧成本不覆盖/不退款。
+
+最终调用器另要求显式已批准CONTRACT.json SHA：launch在授权前核对原始字节，子run再次核对传入的同一SHA；CPU增加错误合同SHA拒绝且不创建attempt/authorization检查。最终命令同时绑定commit、manifest和合同字节，不借外部脚本临时生成绑定。
+
+
+## 2026-10-29 IPC修订：原正式链STOP后重新准备（不授权GPU）
+
+旧3d69171正式入口将TMPDIR设在任务compiler-cache/tmp，并在解释器已导入后修改tempfile缓存。
+旧日志只保存`AF_UNIX path too long`及300秒DataLoader超时，没有保存实际旧地址，故旧地址仍UNKNOWN。
+隔离进程采用与旧配置同为156字节的目录前缀，标准`multiprocessing.connection.arbitrary_address`生成188字节地址并在Listener.bind复现同错误。
+新`tools/sabl_ipc.py exec`用任务绝对路径的SHA前16位建立0700独占`/tmp/sabl-<16hex>`，以OWNER绑定任务/uid。
+它在execve启动新Python前统一TMPDIR/TEMP/TMP；正式launch、run和CPU取数复用此入口。
+不再在run内迟设TMPDIR或重写tempfile缓存；进程核对环境、tempfile缓存及已存在的multiprocessing缓存，冲突拒绝。
+编译缓存和实验产物继续留原任务目录；不改变worker=2、spawn、file_descriptor共享、prefetch=2、300秒超时、确定性或任何采样/增强。
+
+CPU `data-check`仅读前两个逻辑16训练窗口，有限采样器停在两窗，使用真实Dataset/LocalAugmentation/collate/seed_worker及DataLoader。
+观测放在spawn_observer内，生产input_record排除它；核原N24前两条科学input摘要及已认证短GPU的两窗input+GT SHA。
+记录真实socket地址/字节长度、主/worker临时环境、worker正常退出；CUDA隐藏，不加载检测器、权重或做模型前向。
+CPU状态/游标/RNG不供正式训练；下一正式进程重新seed并从父N独立fresh初始化S/A。
+CI增加同一exec入口的真实spawn tensor跨进程传输、长路径拒绝、所有者冲突和旧缓存拒绝；CI构造模型检查不作真实CUDA证明。
+
+原STOP成本306.5618230102118秒继续继承：累计32029 forward/37178.931276534575 GPU秒。
+已批准累计上限保持61871 forward/94472.36945352436 GPU秒，不再次扩额。
+本次拟新29842 forward，GPU精确余额57293.438176989785秒（普通浮点显示57293.43817698979）；合同以十进制字符串保持精度。
+新的requested_addition为0，不再沿用旧17282/8072扩额申请；GPU时限、总进程超时和两轮投影均读取新的余额。
+wall另以原tmux创建至PROCESS_EXIT的原生时间包络核对，并加60秒余量，完整调用（包含父进程准入）小于600秒；保守追加600秒而非仅GPU计账306.561823秒，剩余下界126357秒，仍覆盖拟86400秒；精确activewall仍UNKNOWN。
+所有独占短临时目录按OWNER归入家族存储，运行guard同时计任务目录与自身IPC目录；资源准入保留30GiB家族/30GiB磁盘floor/新12GiB。
+源码src/configs/vendor和受验train/endpoint/infer/cost/compare字节不变，复用2c85c22短GPU证据，不复跑模型验收。
+旧release、原attempt、STOP、e000、N/S终点和成本不修改；新合同和唯一命令仅准备，真实GPU执行需另授权。
+
+
+## 2026-10-29 u52 OOM：独立工程诊断，不正式重启
+
+原6ab入口在CUDA初始化后、make_engine前用`set_per_process_memory_fraction((18<<30)/total_memory)`设置allocator限额。
+PyTorch2.4.1 native CUDACachingAllocator在新增segment时检查已获取segment总量+本次segment申请与fraction限额；reserved、活跃tensor allocated及全卡free不是同一指标。
+公开核对源码：https://github.com/pytorch/pytorch/blob/v2.4.1/c10/cuda/CUDACachingAllocator.cpp#L2241-L2244 。
+原错误allocated14.93GiB、cached未使用1.78GiB、申请1.83GiB、全卡free6.30GiB，允许“18GiB限额可能参与”这一工程假设；没有原始OOM allocator快照，不把碎片或唯一原因写成事实。
+当前allocator配置未设置、backend native；旧进程allocator环境未保存，保持UNKNOWN。第一次重放不设置allocator策略变量。
+
+新tools/sabl_oom_replay.py只读原e000完整训练状态，严格原binding/源依赖及model/optimizer/EMA/RNG/数据位置恢复；无u51 checkpoint。
+从u0重放至u60，前51条记录的完整input与RESULT_KEYS（排除耗时）规范SHA精确比较，首次差异STOP；原日志未保存逐tensor梯度/中途state，不能声称已逐tensor验证整条轨迹。
+新scope的独立工程预算为最多2尝试、合计240forward/120更新/1200GPU秒/2400wall秒，回传5MiB。第一尝试固定120forward/60更新/600秒，唯一干预为allocator18→21GiB；fresh GPU须空闲且free≥22GiB。
+仍用相同模型、batch8×2、BF16/FP32分工、确定性、原GT/损失/优化器/数据顺序；科学源码0修改，原工程梯度见证hook保留。
+只在u52启用allocator内存历史，记录allocated/reserved/free、重试/分裂块、前向/反向边界和大分配事件；观测不保留GPU tensor，不empty_cache，不预热或额外forward。
+u52前不新增checkpoint操作，以免观测序列化改变目标前的allocator布局；通过u60后才保存独立完整诊断状态。诊断state不得自动计入/接入正式24轮训练。
+第二次没有自动启动路径：必须先审查第一结果，有具体修复依据才另提交冻结；不得盲重试。正式账本余29738forward/57131.83263277169GPU秒保留；独立调试实际成本追加，不借用或补回正式余额。
+训练运行限额变化不修改论文E2E≤1.30或推理显存比≤1.20的成本门槛。完整24轮、评价、测速和科学收益仍未授权/未知。
+
+
+## 2026-10-29 正式21GiB运行修订（科学计算不变）
+
+旧6ab正式OOM及独立u60诊断保留。诊断只支持S前60更新在21GiB/native默认策略下运行可行，A及完整24轮稳定性未知。正式S/A仍从共同父N独立fresh，各24轮，不用诊断u60、短验收state或CPU游标。302科学文件和5份受验训练/评价执行依赖SHA不变，复用2c85短GPU与5e08有界重放证据，不新增GPU验收。
+
+仅变更正式allocator fraction及allocated保护18→21GiB、成本继承、独立诊断账本隔离和新attempt绑定。两个allocator配置环境变量必须未设置/空，backend必须native。启动前要求无其他GPU计算进程、free≥22GiB；CUDA上下文建立后、模型构建前要求free≥21.5GiB，记录allocated/reserved/全卡free和系统开销，不额外前向。原论文推理成本门槛保持。
+
+正式prior32133forward/37340.53682075267GPU秒；本链29842forward/57131.83263277169GPU秒。用户补批104forward，正式累计上限61975forward/94472.36945352436GPU秒。独立诊断120forward/199.9896325499285GPU秒另记，未用诊断额度不转正式。wall保守剩余123357秒，可覆盖86400秒；家族30GiB、单任务12GiB、回传4MiB保持并重新准入。旧STOP和失败成本不退款。
+
+CPU合成CLI覆盖训练恢复、两档双评价器、同会话测速、比较和闭合导出，并测试资源不足拒绝、native策略和成本隔离。CPU不代表CUDA全程稳定；历史OOM fixture仍保留原18GiB控制器身份。精确head CI、Git字节/manifest/合同、新鲜材料/环境/资源/防重复全部通过后，本轮授权允许唯一启动，工程异常STOP且不自动修复重试。
+
+
+## 2026-10-29 待授权配对诊断（不提出方法，不执行GPU）
+
+唯一问题：同一正确S/A e24 EMA模型、同一普通query，从粗框到精修框的定位变化是什么，按原图GT尺度分别描述。科学基准601eb75/manifest b22f18cc，原正式质量FAIL不变。新入口tools/sabl_pair_diagnostic.py不改src/configs/vendor；prepare只读548原标注和认证元数据，不读图像/载入检测器。
+
+32图选择预定义：按eligible正GT数和稳定图ID排序，分四个等数密度秩层，每层8图。每层先按S/M/L存在性各取2个不重复图（不足就取全部），SHA256(pair32-v1/层/尺度/ID)升序；再用fill同盐补足8图，最后恢复原548清单顺序，保留original_position供原评价预处理。只依GT，不看预测；覆盖不足如实报告，不扩图。这是反复使用的development子样本，不是独立验证。
+
+eligible GT按原类别0 raster ignore规则排除ignore覆盖>=0.5；排除category0/其他类、score0 crowd和非正面积，分别记数。诊断尺度互斥：S面积<1024，M[1024,9216)，L>=9216，依据原图raw area；与COCO边界重叠区间不同，不能直接等同AP尺度统计。GT只用于关联与诊断，不进模型/训练。
+
+同模型内按粗框与eligible GT的全部FP64连续IoU排序，依(-IoU,稳定GT ID,query ID)贪心一对一配对，不设IoU/类别/分数门槛，零IoU也进入；不在精修后重选。GT超300的容量未配对单列，几何保持UNKNOWN，仍进all-GT分母。每尺度四种互斥变化：改善/持平/退化/转无效，持平|ΔIoU|<=1e-6；无效优先、after IoU=0，保留before=0案例。两套分母同时报告：paired GT与all eligible GT；另报容量未配对GT和全Q300/未配对query有效性。连续IoU前后及Δ给n、均值和0/25/50/75/100分位，不丢精修后无效样本。
+
+配对前不按预测框ignore状态过滤，避免前后条件改变分母；记录粗/精修框的原raster ignore标志，无效精修标志UNKNOWN，GT crowd/ignore排除数保留。本关联是GT辅助几何诊断，不是检测匹配或AP/AR，不以最大类别正确与否筛框；S/A各自关联，绝不跨模型按query号配对。
+
+观测在同一前向的实际roi_features/decode返回前插入只读Tensor复制。插入前后原运算AST逐语句相同，只增加return值暂存及observer回调，未改模型科学字节，不替换RoIAlign/编译/精度/确定性，也不拦autograd.grad。直接取r、实际rois、原始L/R/T/B四边、raw wh、置零后的最终框/valid、原logits及原FP32 CPU sigmoid分数。全Q300，无DN/padding。原生与观测eval输出CPU逐位相等，参数/BN/梯度不变；CPU不认证CUDA编译兼容性。有效框raw边到最终框的浮点转换差异保留，不用abs/排序/裁剪/粗框回退。
+
+四种几何同时保留原生归一化量与明确标注的原图像素量：coarse/final xyxy、reference RoI xyxy、raw edges LRTB。原图映射采用原width/height；实际RoI以输入768x1344像素记录并经确定映射到原图，坐标一致检查atol0.002像素、rtol1e-6，只作表示核验，不改变IoU持平规则或模型计算。原evaluation预处理/FP32/batch4复用Development548.item，按原548位置调用，无目标输入/no_grad eval，只读EMA module，不创建或恢复optimizer、EMA更新器、engine、训练RNG或游标。
+
+拟另批一次独立诊断：S/A各32图、各8次batch4 forward，合计16；零反向/更新/AP/AR重算/测速/预热/额外验证forward。GPU阶段600秒、完整wall1200秒、21GiB allocated/native默认策略、attempt新增128MiB、全部回传2MiB，家族仍30GiB。真实数据前向当前0；正式forward余额0，不借正式剩余GPU时间或未用旧诊断额度。准备期CPU仅合成输入与GT标注选择；实际耗时/内存另记，不折抵未来16次。
+
+将来只回传summary/selection/identity/closure/SHA等小文件，完整query Tensor和GT配对明细留服务器。入口execute父进程硬wall、run阶段/forward/allocated/存储保护、唯一out-ONCE、异常STOP不重试，结束CLOSED退出。没有AP评价、速度实验或训练后链；结果不换算AP或训练因果，不产生新方法。此次只提交CPU验收、CI、冻结方案和待执行命令；尚无GPU授权/attempt/启动标记。唯一命令须在下一次单独批准16forward及相应资源后执行。

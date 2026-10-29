@@ -1,0 +1,25 @@
+{
+  "base_commit": "d25cd799dee4abc4f13a6c5abbb0f08399315f06",
+  "original_science_commit": "79ba59371c21ecfd4fa76885c413941403797214",
+  "unchanged_AST": {
+    "Model": "5001ed5c15888ec22dff077ff21f1850ded4cb2ee618b5d5c0d59f4877b4d8bc",
+    "Criterion": "8fc04d8b97d93c76bdd0ae691c2dd014bf7e32da9b2ab9b1959fad9983e0d155",
+    "buckets": "c045adc2615ec821b626790a6baa2cf13e3af0be70272e7c2fba5010d768af00",
+    "encode": "cc25baf8f112152a0dc72074a50a14121f77c0982c476deecb70e4506c1c9ec5",
+    "decode": "ddb51059386b5df9ed0fddaf8f84f873ff5828741cf8910edf9298bb0d230baf",
+    "boundary_loss": "aca116a3d41186a5d762e5e4f07abff2c8af6d830622afc6a586921e2888495c",
+    "roi_features": "544436a2f2fcf6739adb11b673a8bf8738148c992e56a8280291009ee8a6bcd9",
+    "TrainConfig": "509358e9cff9baf1c67057ccf058ef36e97201a4ab6a816703a9b3cd9c8ff7c3",
+    "Engine": "bac1ebe26f12b32992b6a18da890af81b5013a44493d04bbe678b379d336758b",
+    "make_engine": "cd1ff16f64cdb731bee551f5cb641f1e0f17f3cc5ad22efc22f772d550491cb6",
+    "build": "6be7f41f01312f675fd2584e8b1e218ea2018565b27b1a468e710dd7618ee540"
+  },
+  "BoundaryHead_init_AST": "875f605733e4b3e4b9dc8e108e554c23a0c0ff12c2c9e4d6821b2b2135fbeff9",
+  "legacy_normalization": "sigmoid / axis sum; dx dim2, dy dim3",
+  "new_normalization": "softmax(logsigmoid(logits), same axis)",
+  "version_change": {
+    "old": "r18-sabl-control-v1",
+    "new": "r18-sabl-control-logsigmoid-v2"
+  },
+  "old_automatic_checkpoint_restore": "rejected by version/config binding; no migration implemented"
+}
