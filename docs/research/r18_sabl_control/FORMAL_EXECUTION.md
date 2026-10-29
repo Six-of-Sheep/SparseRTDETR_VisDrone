@@ -295,3 +295,24 @@ u52前不新增checkpoint操作，以免观测序列化改变目标前的allocat
 正式prior32133forward/37340.53682075267GPU秒；本链29842forward/57131.83263277169GPU秒。用户补批104forward，正式累计上限61975forward/94472.36945352436GPU秒。独立诊断120forward/199.9896325499285GPU秒另记，未用诊断额度不转正式。wall保守剩余123357秒，可覆盖86400秒；家族30GiB、单任务12GiB、回传4MiB保持并重新准入。旧STOP和失败成本不退款。
 
 CPU合成CLI覆盖训练恢复、两档双评价器、同会话测速、比较和闭合导出，并测试资源不足拒绝、native策略和成本隔离。CPU不代表CUDA全程稳定；历史OOM fixture仍保留原18GiB控制器身份。精确head CI、Git字节/manifest/合同、新鲜材料/环境/资源/防重复全部通过后，本轮授权允许唯一启动，工程异常STOP且不自动修复重试。
+
+
+## 2026-10-29 待授权配对诊断（不提出方法，不执行GPU）
+
+唯一问题：同一正确S/A e24 EMA模型、同一普通query，从粗框到精修框的定位变化是什么，按原图GT尺度分别描述。科学基准601eb75/manifest b22f18cc，原正式质量FAIL不变。新入口tools/sabl_pair_diagnostic.py不改src/configs/vendor；prepare只读548原标注和认证元数据，不读图像/载入检测器。
+
+32图选择预定义：按eligible正GT数和稳定图ID排序，分四个等数密度秩层，每层8图。每层先按S/M/L存在性各取2个不重复图（不足就取全部），SHA256(pair32-v1/层/尺度/ID)升序；再用fill同盐补足8图，最后恢复原548清单顺序，保留original_position供原评价预处理。只依GT，不看预测；覆盖不足如实报告，不扩图。这是反复使用的development子样本，不是独立验证。
+
+eligible GT按原类别0 raster ignore规则排除ignore覆盖>=0.5；排除category0/其他类、score0 crowd和非正面积，分别记数。诊断尺度互斥：S面积<1024，M[1024,9216)，L>=9216，依据原图raw area；与COCO边界重叠区间不同，不能直接等同AP尺度统计。GT只用于关联与诊断，不进模型/训练。
+
+同模型内按粗框与eligible GT的全部FP64连续IoU排序，依(-IoU,稳定GT ID,query ID)贪心一对一配对，不设IoU/类别/分数门槛，零IoU也进入；不在精修后重选。GT超300的容量未配对单列，几何保持UNKNOWN，仍进all-GT分母。每尺度四种互斥变化：改善/持平/退化/转无效，持平|ΔIoU|<=1e-6；无效优先、after IoU=0，保留before=0案例。两套分母同时报告：paired GT与all eligible GT；另报容量未配对GT和全Q300/未配对query有效性。连续IoU前后及Δ给n、均值和0/25/50/75/100分位，不丢精修后无效样本。
+
+配对前不按预测框ignore状态过滤，避免前后条件改变分母；记录粗/精修框的原raster ignore标志，无效精修标志UNKNOWN，GT crowd/ignore排除数保留。本关联是GT辅助几何诊断，不是检测匹配或AP/AR，不以最大类别正确与否筛框；S/A各自关联，绝不跨模型按query号配对。
+
+观测在同一前向的实际roi_features/decode返回前插入只读Tensor复制。插入前后原运算AST逐语句相同，只增加return值暂存及observer回调，未改模型科学字节，不替换RoIAlign/编译/精度/确定性，也不拦autograd.grad。直接取r、实际rois、原始L/R/T/B四边、raw wh、置零后的最终框/valid、原logits及原FP32 CPU sigmoid分数。全Q300，无DN/padding。原生与观测eval输出CPU逐位相等，参数/BN/梯度不变；CPU不认证CUDA编译兼容性。有效框raw边到最终框的浮点转换差异保留，不用abs/排序/裁剪/粗框回退。
+
+四种几何同时保留原生归一化量与明确标注的原图像素量：coarse/final xyxy、reference RoI xyxy、raw edges LRTB。原图映射采用原width/height；实际RoI以输入768x1344像素记录并经确定映射到原图，坐标一致检查atol0.002像素、rtol1e-6，只作表示核验，不改变IoU持平规则或模型计算。原evaluation预处理/FP32/batch4复用Development548.item，按原548位置调用，无目标输入/no_grad eval，只读EMA module，不创建或恢复optimizer、EMA更新器、engine、训练RNG或游标。
+
+拟另批一次独立诊断：S/A各32图、各8次batch4 forward，合计16；零反向/更新/AP/AR重算/测速/预热/额外验证forward。GPU阶段600秒、完整wall1200秒、21GiB allocated/native默认策略、attempt新增128MiB、全部回传2MiB，家族仍30GiB。真实数据前向当前0；正式forward余额0，不借正式剩余GPU时间或未用旧诊断额度。准备期CPU仅合成输入与GT标注选择；实际耗时/内存另记，不折抵未来16次。
+
+将来只回传summary/selection/identity/closure/SHA等小文件，完整query Tensor和GT配对明细留服务器。入口execute父进程硬wall、run阶段/forward/allocated/存储保护、唯一out-ONCE、异常STOP不重试，结束CLOSED退出。没有AP评价、速度实验或训练后链；结果不换算AP或训练因果，不产生新方法。此次只提交CPU验收、CI、冻结方案和待执行命令；尚无GPU授权/attempt/启动标记。唯一命令须在下一次单独批准16forward及相应资源后执行。
