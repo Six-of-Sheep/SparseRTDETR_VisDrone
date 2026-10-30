@@ -261,7 +261,8 @@ class Sampling:
             f.write('\n'.join(lines) + ('\n' if lines else ''))
         spec = {'rule': 'all feasible train pref pairs; feasible train abstain pairs ranked by '
                         'sha256(pair_id) ascending, first min(#abstain, #pref) taken; no randomness',
-                'mix_ratio_abstain_to_pref': 1.0 if self.pref else None,
+                'mix_ratio_cap_abstain_to_pref': 1.0,
+                'mix_ratio_achieved_abstain_to_pref': (k / len(self.pref)) if self.pref else None,
                 'n_pair_pref': len(self.pref), 'n_pair_abstain_available': len(self.abstain),
                 'n_pair_abstain_selected': k, 'n_pair_total': len(self.pref) + k,
                 'feasibility': 'only pairs whose two exclusive-region reads are valid under theta_region'}
