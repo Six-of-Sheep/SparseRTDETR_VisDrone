@@ -149,10 +149,10 @@
     {
       "id": "r18-nms-suppressor-attribution-20261030-001",
       "role": "nms_suppressor_attribution_cpu_diagnostic_seed0",
-      "result_status": "frozen_pending_single_seed0_execution",
-      "source_commit": null,
-      "git_binding_kind": "frozen_from_this_branch_see_release_SOURCE.json",
-      "source_manifest_sha256": null,
+      "result_status": "seed0_cpu_attribution_complete_no_method_claim_no_gain_claim",
+      "source_commit": "3eb3308478fbcd0c959329382f466775c67433ae",
+      "git_binding_kind": "frozen_from_this_branch_release-001",
+      "source_manifest_sha256": "2661eb9048fc9fe28fdb0934e987e3a905851c6112481319202934d0f07a1399",
       "config": "docs/research/NMS_SUPPRESSOR_ATTRIBUTION_PLAN_20261030.md",
       "report": "r18-nms-suppressor-attribution-20261030-001/REPORT.md"
     }
