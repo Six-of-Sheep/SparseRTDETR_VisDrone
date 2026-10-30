@@ -25,10 +25,10 @@ jobs:
           MKL_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '2'
         run: python -B tools/check_dn_block_replay.py
-      - name: Real full-model CLI synthetic CPU closure
+      - name: Read-only precheck statistics and invalid evidence CPU
         env:
           CUDA_VISIBLE_DEVICES: ''
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '2'
-        run: python -B tools/check_dn_block_explore.py "${{ runner.temp }}/dn-block-integration"
+        run: python -B tools/dn_block_recheck.py cpu-check --out "${{ runner.temp }}/dn-statistics-check.json"

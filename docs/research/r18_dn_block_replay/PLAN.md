@@ -95,3 +95,16 @@ CPU通过不建立经验误差库质量、监督迁移效果或论文贡献。�
 真实准备只读取认证成员清单和核checkpoint文件SHA，不读取真实图像或把真实权重加载进模型。实际真实CUDA/BF16、真实误差库及全部窗口控制可行性、物理显存/耗时、学习收益仍UNKNOWN；CPU通过不替代CUDA验收或科学结果。没有额外隐含GPU验收forward。
 
 待批独立上限保持648 forward/300更新、1800秒GPU阶段/3600秒wall、21GiB allocated、2GiB新增（含任务临时目录/编译cache）、1MiB精简回传。GPU时间保守按整个执行子进程wall计，硬监督超时不重试；原研究累计62111 forward/78363.83911894578 GPU秒只读继承，原正式forward余额0。本提案不是余额转移或执行授权。实际执行前重新核固定GPU身份、无其他计算任务、21GiB之外至少1GiB空闲余量、native allocator、环境与磁盘余量。模板approved=false，未创建真实授权/attempt。唯一命令与完整commit/manifest/合同由tools/package_dn_block.py从已提交Git字节冻结后生成；须另行批准该固定身份方可启动。
+
+
+## 10. 统计设备修复与只读校准库复用预检（2026-10-30）
+原aa3213ab唯一执行完成64图校准16forward/0更新，库small donor2395；随后microbatch0因quantile的q张量在CPU、输入CUDA工程STOP，成本14.0458804811351秒保留。未执行任何学习或probe。原始partial audit为335槽、J/B裁边5/2、无效1/0，但该次未完成控制判定。
+
+限定修复只为distribution中q补device=x.device，保留原dtype=x.dtype及x.double()；公式、抽样、边界、容差及语义关口均不改。统计路径其它常量中donors/perm属于明确CPU抽样，后续已有to(device)；zeros_like及mask已有对应设备，无其它遗漏被发现。新dn_block_recheck.py不暴露模型构建、探针、学习、optimizer或恢复入口，只能校验、最小统计检查、冻结和一次库复用预检。
+旧calibration/library分别绑定SHA 3addf6f9f80d4ea852f995ccff262c3d4aa5e95a9907911269ed9c508764ca76 / 3cabea9aad68c64aec6cabcab4f0e362228fb68c72922d391e44e50dd703c246。逐项核旧423文件、父N bytes、64图ID及query/GT/误差重建、闭合回执和启动合同。无权重模型加载，无重新采集。
+
+CPU实际DN入口与独立GT反例检查；FP32/FP64/BF16输入统一原FP64统计，预先固定CPU/CUDA统计比较rtol=atol=1e-12；空输入、semantic统计及无效框拒绝覆盖。零宽框经epsilon变为正的最终reference不消除原invalid标记。最小CUDA只做构造统计/算子，不调用检测器，时间与唯一真实预检合计扣本次300秒，非额外免费验证。
+
+旧错误在observation写入前发生，旧文件无GT/donor具体坐标及完整input/RNG摘要。唯一重放用原loader、seed0、原生CUDA DN、独立Replay seed20261030+microbatch索引重建；记录新input/RNG摘要及与旧partial audit的严格一致性。不能声称与未保存的旧完整摘要逐位比对。发生无效框时保留recipient GT/ID、donor索引/来源/error、裁边前后框、prospective final reference和原无效判据；其reference仅计算取证，实际注入被拒绝。首次关口失败即退出，不通过修正、重抽或删除样本继续。
+
+本次零检测器forward/零更新，300秒GPU阶段/600秒wall，21GiB，原探索累计2GiB存储及1MiB回传（旧回传按100000B保守预留）。旧16forward和14.045880秒不退回。专属临时目录/新包/新attempt纳入累计存储。统计修复工程PASS、固定控制PASS/FAIL和学习收益NOT_TESTED分列；全部预检PASS也退出，不自动进入学习。原release、STOP、库及账本保持只读，新费用独立追加。

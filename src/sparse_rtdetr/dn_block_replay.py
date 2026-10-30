@@ -106,7 +106,7 @@ def distribution(x):
     centered=x-x.mean(0)
     cov=centered.T@centered/max(1,len(x)-1)
     return {"n":len(x),"mean":x.mean(0).tolist(),
-            "quantiles_0_25_50_75_100":torch.quantile(x,torch.tensor([0.,.25,.5,.75,1.],dtype=x.dtype),dim=0).tolist(),
+            "quantiles_0_25_50_75_100":torch.quantile(x,torch.tensor([0.,.25,.5,.75,1.],dtype=x.dtype,device=x.device),dim=0).tolist(),
             "cross_covariance":cov[:2,2:].tolist()}
 
 def semantic_audit(gt, native_positive, native_negative, empirical):
