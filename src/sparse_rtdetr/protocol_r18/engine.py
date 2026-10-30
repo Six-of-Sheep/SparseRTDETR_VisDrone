@@ -124,6 +124,9 @@ class Engine:
         self.completed_updates = state["completed_updates"]
         self.parameter_steps=dict(state["parameter_optimizer_steps"])
 
+    def rate(self, update):
+        return learning_rate(update)
+
     def train_window(self, images, targets, *, capture=False):
         if self.failed or self.phase or self.completed_updates >= 36480:
             raise RuntimeError("common R18 engine cannot enter another update")
@@ -141,7 +144,7 @@ class Engine:
         self.model.train(); self.criterion.train()
         if getattr(self.model.decoder, "trace_enabled", False):
             raise RuntimeError("training must not enable trace collection")
-        lr = learning_rate(self.completed_updates+1)
+        lr = self.rate(self.completed_updates+1)
         for group in self.optimizer.param_groups: group["lr"] = lr
         self.optimizer.zero_grad(set_to_none=True)
         if self.device.type == "cuda": torch.cuda.synchronize(self.device)

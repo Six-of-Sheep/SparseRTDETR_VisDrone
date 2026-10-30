@@ -77,3 +77,21 @@ CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS
 |源码作用范围|只新增研究adapter/测试/文档/CI，未改vendor、model、criterion、原release。DN/matcher/decoder与原科学79ba593对应三文件逐字节一致|
 |未覆盖|真实残差分布、真实材料控制可行性、完整decoder接线、CUDA/BF16整模型、学习收益均UNKNOWN|
 CPU通过不建立经验误差库质量、监督迁移效果或论文贡献。保留该问题进入**入口准备**，没有真实探索启动授权。
+
+
+## 9. 完整执行入口准备（2026-10-30追加，尚无GPU授权）
+以上1—8节保留为6228e20原定义与原型阶段记录，不覆盖历史状态。当前追加真实采集、完整decoder注入、三臂短学习及闭合入口；科学统计和门槛不变。
+
+执行顺序固定为：认证N e120 EMA的64图校准（16 forward）→库闭合及全部100训练窗口/200 microbatch材料与注入检查→32图共同初态探针（8 forward）→C/J/B各100更新（600 forward）→三臂终态raw探针（24 forward）→比较与导出。任一库/控制检查失败在学习前退出，不重采donor、不删难例、不扩大样本。128图按已定义稳定ID选择，logical16共8窗口/虚拟epoch，循环12整轮及4窗口；学习是固定100更新，非e120。
+
+全窗口预检是独立进程，不构建检测器。读取相同增强窗口，复用真实native DN及独立Replay RNG；真实执行时在相同CUDA设备计算DN随机操作，以核对设备相关原生随机序列，因此预检耗时/资源属于整链，但检测器forward为0。主进程重新建立模型、数据迭代及RNG，不接续预检游标；运行中逐窗核对图像/GT/增强哈希与DN输入、标签、mask、meta和RNG摘要。J/B donor列表及中心/尺寸二维块多重集、裁边后误差和正负语义按原关口检查，不事后配平IoU。若真实模型出现预检未包含的随机调用，立即STOP，不放宽比较。
+
+完整状态含model/optimizer/EMA/RNG、数据位置和DN位置，实际CPU CLI验证u1保存→u2→恢复u1重放u2逐项一致；入口无自动恢复或扩大训练路径。探针eval/no-grad，核参数/buffer/RNG不变，固定初态query关联；无效终点框按IoU0保留。中/大样本不足30时保护为UNKNOWN，即便观察到正向主指标也不得判全部科学PASS。
+
+实现复用原Engine、增强、matcher、criterion及DN。原Engine仅将原学习率调用抽为默认等价rate方法，短入口覆盖为原定义常数1e-5；decoder只增加可选DN调用器，默认仍调用原函数。原误差adapter公式及监督定义不改。原生C与J/B共有参数、BN、输入、监督/分母及optimizer/EMA初态一致；CPU DN-only反向确认预定三层DN损失及分母、共享backbone与DN embedding的有限非零梯度。
+
+服务器实际CLI CPU验收使用明确合成图像和构造父状态，运行launch→supervise→execute→独立precheck→三臂→导出。覆盖双worker实际tensor传输、跨epoch、完整重放、错误材料STOP、源码/预算拒绝、重复启动拒绝和监督进程超时。最终验收记录另以对应Git/冻结交付索引绑定；单次完整构造检查53次CPU检测器forward（12构造+41管线）、10次CPU实际更新，全部不计未来GPU预算。早期导入/夹具/摘要错误与复测日志保留；扩张fixture裁边后B出现4项裁边、J为0及最大块差约0.00041955，按2e-5原关口拒绝，未继续学习。
+
+真实准备只读取认证成员清单和核checkpoint文件SHA，不读取真实图像或把真实权重加载进模型。实际真实CUDA/BF16、真实误差库及全部窗口控制可行性、物理显存/耗时、学习收益仍UNKNOWN；CPU通过不替代CUDA验收或科学结果。没有额外隐含GPU验收forward。
+
+待批独立上限保持648 forward/300更新、1800秒GPU阶段/3600秒wall、21GiB allocated、2GiB新增（含任务临时目录/编译cache）、1MiB精简回传。GPU时间保守按整个执行子进程wall计，硬监督超时不重试；原研究累计62111 forward/78363.83911894578 GPU秒只读继承，原正式forward余额0。本提案不是余额转移或执行授权。实际执行前重新核固定GPU身份、无其他计算任务、21GiB之外至少1GiB空闲余量、native allocator、环境与磁盘余量。模板approved=false，未创建真实授权/attempt。唯一命令与完整commit/manifest/合同由tools/package_dn_block.py从已提交Git字节冻结后生成；须另行批准该固定身份方可启动。

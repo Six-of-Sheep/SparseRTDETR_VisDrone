@@ -3,7 +3,7 @@ on:
   push:
     branches: ['codex/r18-dn-block-replay']
   pull_request:
-    paths: ['src/sparse_rtdetr/dn_block_replay.py', 'tools/check_dn_block_replay.py', '.github/workflows/dn-block-replay.yml']
+    paths: ['src/**', 'vendor/**', 'tools/*dn_block*', '.github/workflows/dn-block-replay.yml']
 permissions:
   contents: read
 jobs:
@@ -18,9 +18,17 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install numpy==1.26.4 scipy==1.13.1 PyYAML==6.0.3 Pillow==12.1.0 tensorboard==2.21.0 faster-coco-eval==1.6.7
       - env:
           CUDA_VISIBLE_DEVICES: ''
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '2'
         run: python -B tools/check_dn_block_replay.py
+      - name: Real full-model CLI synthetic CPU closure
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'
+        run: python -B tools/check_dn_block_explore.py "${{ runner.temp }}/dn-block-integration"
