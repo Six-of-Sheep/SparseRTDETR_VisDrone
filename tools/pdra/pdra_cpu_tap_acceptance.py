@@ -1,16 +1,25 @@
-"""CPU acceptance of the real P3 tap on the frozen seed0 EMA weights (one image, no CUDA).
+"""CPU acceptance of the real P3 tap on the frozen seed0 EMA weights (one image, no CUDA; rev 5).
 
 Scope: tap mechanics on the *real* detector (bitwise-equal outputs with and without the
 hook, P3 shape ``[1, 256, 96, 168]`` on every view, exactly one encoder call per forward),
 the real strip pooling and the complete GT-free decision enumeration for one frozen image,
-and a few fixed comparator updates with the detector held frozen.  CPU numerics differ
-from the GPU run, so agreement with the frozen raw views is *reported*, never gated; the
-audited engine restore and the bitwise raw-view comparison belong to the GPU engineering
-check (``pdra_gpu_check.py``).
+and the rev-5 **shared three-arm acceptance allocation** (``pdra_gpu_check.ARM_ALLOCATION``
+= 30 + 10 + 10 = 50 frozen-spec updates through ``comparator_acceptance_updates``) with the
+detector held frozen, under the same runtime accounting/enforcement entry the GPU check
+uses.  CPU numerics differ from the GPU run, so agreement with the frozen raw views is
+*reported*, never gated; the audited engine restore and the bitwise raw-view comparison
+belong to the GPU engineering check (``pdra_gpu_check.py``).
+
+Ground truth: the decision phase reads no annotation.  After the decisions, annotations are
+opened once for the (b)-arm member targets (matched-GT IoU via the stage-1 ``_gt_items``
+chain, through ``pdra_gpu_check.b_quality_material``); PDRA/(c) labels come from the frozen
+stage-0 rows.  On a single image the (b) material may hold fewer boxes than the frozen batch
+of 256, so this acceptance -- and only it -- lets a batch shrink to the material size
+(``allow_small_batch=True``); the actual batch of every arm is recorded.
 
 Run (frozen interpreter, CUDA hidden):
-    CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=8 python -I tools/pdra/pdra_cpu_tap_acceptance.py \
-        --parent <softnms execution-contract.json> --out <.../r18-pdra-wiring-20261030-001/cpu-tap-001>
+    CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=8 python -I tools/pdra/pdra_cpu_tap_acceptance.py \\
+        --parent <softnms execution-contract.json> --out <.../r18-pdra-wiring-20261031-001/cpu-tap-001>
 """
 from __future__ import annotations
 
@@ -37,22 +46,14 @@ import pdra_core as P
 import pdra_gpu_check as G
 from pdra_stage1 import _affines
 
-TASK = "r18-pdra-wiring-20261030-001"
+TASK = "r18-pdra-wiring-20261031-001"
+ACCEPTANCE_REVISION = "cpu-tap-acceptance-rev5-20261031"
 IMAGE_ROW = 12          # first image of frozen raw batch 3 (all four images eval-split)
 BATCH = 3
-UPDATES = 5
+# CPU acceptance budget, enforced through the same entry as the GPU check (no CUDA, so the
+# GPU cap is never consulted).
+CAPS = {"wall_seconds": 1800, "gpu_peak_bytes": 0, "output_bytes": 64 * 1024 ** 2}
 require, publish, read, exact = G.require, G.publish, G.read, G.exact
-
-
-class _Table:
-    def __init__(self, table):
-        self.table = table
-
-    def r(self, pair):
-        return self.table[(pair.identity_i, pair.identity_j)][2]
-
-    def a(self, pair):
-        return self.table[(pair.identity_i, pair.identity_j)][3]
 
 
 def main(argv=None) -> int:
@@ -66,9 +67,15 @@ def main(argv=None) -> int:
     require(TASK in out.parts, "output must sit inside the task directory " + TASK)
     out.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
-    publish(out / "START.json", {"task": TASK, "mode": "cpu-tap-acceptance", "pid": os.getpid(),
-                                 "started_unix": time.time(), "source_commit": args.source_commit,
-                                 "image_row": IMAGE_ROW, "threads": args.threads})
+    accounting = G.Accounting(TASK, "cpu-tap-acceptance")
+    publish(out / "START.json", {"task": TASK, "revision": ACCEPTANCE_REVISION, "mode": "cpu-tap-acceptance",
+                                 "pid": os.getpid(), "started_unix": time.time(),
+                                 "source_commit": args.source_commit, "image_row": IMAGE_ROW,
+                                 "threads": args.threads, "arm_allocation": G.ARM_ALLOCATION, "caps": CAPS})
+
+    def guard(label: str) -> dict:
+        return G.enforce_runtime(started=started, label=label, caps=CAPS, out=out, accounting=accounting)
+
     try:
         import torch
         torch.set_num_threads(args.threads)
@@ -77,6 +84,7 @@ def main(argv=None) -> int:
         import pdra_features as FEAT
         import pdra_learn as L
         import pdra_tap as TAP
+        accounting.phase("load")
         inputs = G.resolve_inputs(args.parent, G.FROZEN_BATCHES)
         t0 = time.monotonic()
         loaded = TAP.load_cpu_ema_model_for_acceptance(
@@ -92,11 +100,17 @@ def main(argv=None) -> int:
         require(frozen["image_ids"][j] == image, "frozen raw batch image differs")
         load_seconds = time.monotonic() - t0
         digest_before = L.tensor_state_digest(model)
+        guard("load")
+        accounting.complete("load")
+
         # 1. forward without and with the tap (CPU)
+        accounting.phase("forward")
         t0 = time.monotonic()
         a = TAP.five_view_forward(data, [row], model, tap=None, device="cpu")
+        accounting.forwards(a["forward_calls"])
         with TAP.EncoderTap(model) as tap:
             b = TAP.five_view_forward(data, [row], model, tap=tap, device="cpu")
+        accounting.forwards(b["forward_calls"])
         forward_seconds = time.monotonic() - t0
         views = []
         for va, vb, vf in zip(a["records"], b["records"], frozen["views"]):
@@ -111,7 +125,11 @@ def main(argv=None) -> int:
         require([c.as_dict() for c in a["candidates"][0]] == [c.as_dict() for c in b["candidates"][0]],
                 "decoded pools differ between passes")
         require(L.tensor_state_digest(model) == digest_before, "forward changed detector weights")
+        guard("forward")
+        accounting.complete("forward")
+
         # 2. real pooling + complete GT-free decisions for this image
+        accounting.phase("pool_decide")
         t0 = time.monotonic()
         pool = b["candidates"][0]
         affine_of = _affines(row, b["geometry"][0])
@@ -130,7 +148,7 @@ def main(argv=None) -> int:
         arms = L.build_arms()
         pdra_arm = arms["arms"]["pdra_difference_strips"]
         adapter = L.PairBankAdapter.build(pdra_arm, bank, pool, affine_of, "pdra")
-        decisions = P.pair_decisions(pool, affine_of, _Table(adapter.table))
+        decisions = P.pair_decisions(pool, affine_of, G._Table(adapter.table))
         merged = L.merge(pool, affine_of, adapter)
         require(len(decisions) == len(records), "decision count differs from the enumeration")
         stage0_rows = G.stage0_rows_for({image})[image]
@@ -138,7 +156,14 @@ def main(argv=None) -> int:
         b_adapter = L.QualityBankAdapter.build(arms["arms"]["b_single_box_quality"], bank, pool, affine_of)
         decide_seconds = time.monotonic() - t0
         same_keys = sum(1 for d in decisions if (d["identity_i"], d["identity_j"]) in stage0_rows)
-        # 3. a few fixed comparator updates with the detector frozen (labels from stage-0 rows)
+        guard("pool_decide")
+        accounting.complete("pool_decide")
+
+        # 3. training material -- pair labels from the stage-0 rows (GT-free), then the (b)
+        #    member targets (the only annotation access, after the decisions above) -- and
+        #    the shared three-arm acceptance allocation with the detector frozen
+        accounting.phase("learn")
+        t0 = time.monotonic()
         by_id = {P._identity(c): c for c in pool}
         keep, pref_t, abst_t = [], [], []
         for (ii, jj), r0 in stage0_rows.items():
@@ -152,21 +177,40 @@ def main(argv=None) -> int:
             pref_t.append(int(r0[9]) if r0[8] == "pref" else -1)
             abst_t.append(1.0 if r0[8] == "abstain" else 0.0)
         with torch.no_grad():
-            m_i = FEAT.pool_sides(bank, [p.left for p in keep])
-            m_j = FEAT.pool_sides(bank, [p.right for p in keep])
-        tensors = L.PairTensors(m_i, m_j, FEAT.geometry_tensor(keep, "cpu"),
-                                torch.tensor(pref_t, dtype=torch.int8), torch.tensor(abst_t))
-        comparator_before = L.tensor_state_digest(pdra_arm)
-        spec = {**L.frozen_spec(), "updates": UPDATES, "batch_pairs": min(256, len(tensors))}
-        train = L.train_pair_arm(pdra_arm, tensors, spec=spec, device="cpu")
-        grads = {name: (p.grad is not None and bool(torch.isfinite(p.grad).all()) and float(p.grad.abs().sum()) > 0.0)
-                 for name, p in pdra_arm.named_parameters()}
-        require(all(grads.values()), "comparator parameters without finite non-zero gradient")
-        require(all(p.grad is None for p in model.parameters()), "detector received gradients")
+            pair_material = {
+                "s_i": FEAT.pool_sides(bank, [p.left for p in keep]),
+                "s_j": FEAT.pool_sides(bank, [p.right for p in keep]),
+                "w_i": FEAT.pool_whole(bank, [FEAT.whole_box_read(p.box_i, affine_of(by_id[p.identity_i])) for p in keep]),
+                "w_j": FEAT.pool_whole(bank, [FEAT.whole_box_read(p.box_j, affine_of(by_id[p.identity_j])) for p in keep]),
+                "geom": FEAT.geometry_tensor(keep, "cpu"),
+                "pref_target": torch.tensor(pref_t, dtype=torch.int8),
+                "abstain_target": torch.tensor(abst_t)}
+        member_ids = {ident for pair in keep for ident in (pair.identity_i, pair.identity_j)}
+        quality = G.b_quality_material(data, row, by_id, affine_of, bank, member_ids)
+        detector_grad_checks = []
+
+        def on_update(arm_key, record):
+            accounting.update(arm_key)
+            guard(f"learn/{arm_key}/update-{int(record['update'])}")
+
+        def on_arm_complete(arm_key):
+            measured = sum(1 for parameter in model.parameters() if parameter.grad is not None)
+            detector_grad_checks.append({"after_arm": arm_key, "detector_parameters_with_grad": measured})
+            require(measured == 0, f"detector received gradients after {arm_key}")
+            require(L.tensor_state_digest(model) == digest_before, f"detector weights changed after {arm_key}")
+
+        report = G.comparator_acceptance_updates(
+            arms, pair_material, {"desc": quality["desc"], "target": quality["target"]},
+            device="cpu", allow_small_batch=True, on_update=on_update, on_arm_complete=on_arm_complete)
+        require(all(parameter.grad is None for parameter in model.parameters()), "detector received gradients")
         require(L.tensor_state_digest(model) == digest_before, "comparator training changed detector weights")
-        require(L.tensor_state_digest(pdra_arm) != comparator_before, "comparator did not change")
-        result = {"status": "PASS", "task": TASK, "mode": "cpu-tap-acceptance", "image_id": image,
-                  "image_row": IMAGE_ROW, "frozen_batch": BATCH, "source_commit": args.source_commit,
+        learn_seconds = time.monotonic() - t0
+        guard("learn")
+        accounting.complete("learn")
+
+        result = {"status": "PASS", "task": TASK, "revision": ACCEPTANCE_REVISION, "mode": "cpu-tap-acceptance",
+                  "image_id": image, "image_row": IMAGE_ROW, "frozen_batch": BATCH,
+                  "source_commit": args.source_commit,
                   "model": {"ema_updates": loaded["ema_updates"], "scope": loaded["scope"],
                             "load_seconds": load_seconds, "cpu_only": True, "audited_restore": False},
                   "forward": {"calls": a["forward_calls"] + b["forward_calls"], "seconds": forward_seconds,
@@ -189,18 +233,37 @@ def main(argv=None) -> int:
                                                                  "budget_membership_delta_vs_C")},
                                 "controls": {"c_pairs": len(c_adapter.table), "b_pairs": len(b_adapter.table)},
                                 "seconds": decide_seconds},
-                  "learning": {"updates": train["updates"], "batch": train["batch"], "labelled_pairs": len(tensors),
-                               "first_losses": train["first_losses"], "parameters_with_gradient": sum(grads.values()),
-                               "parameters_total": len(grads), "detector_grads": "none",
-                               "detector_digest_unchanged": True, "comparator_changed": True},
-                  "vm_hwm_bytes": G.rss_high_water(), "elapsed_seconds": time.monotonic() - started}
+                  "comparator_acceptance": {**report, "labelled_pairs": len(keep),
+                                            "b_material": {k: quality[k] for k in ("members", "whole_box_readable",
+                                                                                   "zero_targets", "gt_chain")},
+                                            "seconds": learn_seconds},
+                  "detector_frozen_evidence": {"detector_grad_checks": detector_grad_checks,
+                                               "detector_digest_unchanged": True,
+                                               "note": ("no backward counter (the rev-4 no-op is removed); evidenced by "
+                                                        "measured parameter gradients and the weight digest")},
+                  "gt_use": G.GT_USE, "acceptance_scope": G.ACCEPTANCE_SCOPE,
+                  "resources": {"vm_hwm_bytes": G.rss_high_water(), "caps": CAPS,
+                                "constraints_enforced_during_run": ["wall_seconds", "output_bytes"],
+                                "output_bytes": G.output_bytes(out)},
+                  "accounting": accounting.snapshot(),
+                  "elapsed_seconds": time.monotonic() - started}
         ref = publish(out / "RESULT.json", result)
-        publish(out / "CLOSED.json", {"result": ref, "returncode": 0, "automatic_retry": False})
+        publish(out / "CLOSED.json", {"result": ref, "returncode": 0, "automatic_retry": False,
+                                      "acceptance_scope": G.ACCEPTANCE_SCOPE})
         print(json.dumps({"status": "PASS", "result": ref}), flush=True)
         return 0
-    except Exception:
-        publish(out / "STOP.json", {"traceback": traceback.format_exc(),
-                                    "elapsed_seconds": time.monotonic() - started, "automatic_retry": False})
+    except Exception as exc:
+        stop = {"status": "FAIL", "task": TASK, "revision": ACCEPTANCE_REVISION, "mode": "cpu-tap-acceptance",
+                "source_commit": args.source_commit, "out": str(out),
+                "exception": {"type": type(exc).__name__, "message": str(exc),
+                              "observation": getattr(exc, "observation", None)},
+                "traceback": traceback.format_exc(),
+                "elapsed_seconds": time.monotonic() - started,
+                "accounting": accounting.snapshot(), "automatic_retry": False}
+        try:
+            publish(out / "STOP.json", stop)
+        except Exception:
+            traceback.print_exc()
         traceback.print_exc()
         return 2
 

@@ -416,7 +416,49 @@ def check_dimension_budget() -> dict:
         else _ok("dimension_budget", detail)
 
 
+# --- 10: GPU-check runtime constraints and three-arm allocation ---------------
+def check_runtime_accounting_and_allocation() -> dict:
+    import pdra_gpu_check as G
+    errors = []
+    if G.CHECK_UPDATES != 50 or sum(G.ARM_ALLOCATION.values()) != G.CHECK_UPDATES:
+        errors.append("arm allocation does not sum to the frozen 50 updates")
+    if set(G.ARM_ALLOCATION) != set(L.LEARNING_SPEC["arm_keys"]):
+        errors.append("allocation keys differ from the frozen arm keys")
+    if any(value <= 0 for value in G.ARM_ALLOCATION.values()):
+        errors.append("an arm carries no acceptance update")
+    if G.CAPS["comparator_updates"] != G.CHECK_UPDATES or G.CAPS["forward_calls"] != 20:
+        errors.append("caps differ from the frozen check counts")
+    try:
+        G.enforce_runtime(started=time.monotonic() - 10.0, label="selfcheck",
+                          caps={"wall_seconds": 1, "gpu_peak_bytes": 1, "output_bytes": 1})
+        errors.append("a wall-clock breach did not raise")
+    except G.RuntimeConstraintError:
+        pass
+    try:
+        G.enforce_runtime(started=time.monotonic(), label="selfcheck",
+                          caps={"wall_seconds": 3600, "gpu_peak_bytes": 1 << 60, "output_bytes": 1 << 60})
+    except G.RuntimeConstraintError:
+        errors.append("a within-caps observation raised")
+    accounting = G.Accounting(task="selfcheck", mode="cpu")
+    accounting.phase("learn")
+    accounting.complete("restore")
+    accounting.forwards(5)
+    accounting.update("pdra_difference_strips")
+    snapshot = accounting.snapshot()
+    if (snapshot["executed_forward_calls"] != 5
+            or snapshot["executed_updates"]["pdra_difference_strips"] != 1
+            or snapshot["phases_completed"] != ["restore"]):
+        errors.append("accounting snapshot differs")
+    snapshot["executed_forward_calls"] = 999
+    if accounting.snapshot()["executed_forward_calls"] != 5:
+        errors.append("snapshot is not detached from the live accounting")
+    detail = {"allocation": dict(G.ARM_ALLOCATION), "check_updates": G.CHECK_UPDATES,
+              "wall_breach_raised": True, "accounting_detached": True}
+    return _fail("runtime_accounting_and_allocation", {**detail, "errors": errors}) if errors         else _ok("runtime_accounting_and_allocation", detail)
+
+
 CHECKS = (
+    check_runtime_accounting_and_allocation,
     check_roi_align_convention,
     check_slot_encoding,
     check_torch_antisymmetry,

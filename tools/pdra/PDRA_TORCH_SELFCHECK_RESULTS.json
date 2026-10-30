@@ -5,6 +5,19 @@
   "cuda_initialized": false,
   "checks": [
     {
+      "check": "runtime_accounting_and_allocation",
+      "status": "PASS",
+      "allocation": {
+        "pdra_difference_strips": 30,
+        "c_whole_box_pairwise": 10,
+        "b_single_box_quality": 10
+      },
+      "check_updates": 50,
+      "wall_breach_raised": true,
+      "accounting_detached": true,
+      "seconds": 0.0
+    },
+    {
       "check": "roi_align_convention",
       "status": "PASS",
       "reference_max_abs_diff": 4.916649781472326e-07,
@@ -12,7 +25,7 @@
       "impulse_centre_value": 0.5625,
       "equivalent_spelling_agrees": true,
       "double_scaling_detected": true,
-      "seconds": 0.001
+      "seconds": 0.002
     },
     {
       "check": "slot_encoding",
@@ -50,7 +63,7 @@
       "quality_updates": 30,
       "pair_arm_parameters": 3269,
       "deterministic": true,
-      "seconds": 0.107
+      "seconds": 0.111
     },
     {
       "check": "adapter_equivalence",
@@ -62,7 +75,7 @@
         "infeasible_read"
       ],
       "adapter_substitutions": 0,
-      "seconds": 0.112
+      "seconds": 0.115
     },
     {
       "check": "sampling_verification",
@@ -70,7 +83,7 @@
       "positive": "PASS",
       "corrupt_split_detected": true,
       "wrong_count_rejected": true,
-      "seconds": 0.115
+      "seconds": 0.119
     },
     {
       "check": "capacity_report",
@@ -83,7 +96,7 @@
       "cap": 1000000,
       "learning_spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
       "epochs_equivalent": 22.985,
-      "seconds": 0.119
+      "seconds": 0.123
     },
     {
       "check": "tap_mechanics",
@@ -91,7 +104,7 @@
       "calls": 1,
       "outputs_bitwise_equal": true,
       "hook_removed": true,
-      "seconds": 0.119
+      "seconds": 0.123
     },
     {
       "check": "dimension_budget",
@@ -100,7 +113,7 @@
       "whole_dim_256": 1025,
       "stage1_pdra_cache_gb": 6.944,
       "stage1_whole_cache_gb": 0.0,
-      "seconds": 0.119
+      "seconds": 0.123
     }
   ],
   "failed": [],

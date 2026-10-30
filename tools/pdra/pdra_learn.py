@@ -153,6 +153,9 @@ def build_arms(*, channels: int = FEAT.P3_CHANNELS, hidden: int | None = None,
 
 
 # --- training (fixed update count; no search, no early stop) -------------------
+# ``progress`` (optional) fires after every optimizer step with {"arm", "update"};
+# the GPU check uses it for runtime accounting/enforcement only and it changes no
+# training behaviour (default None).
 @dataclass
 class PairTensors:
     """fp16 side descriptors plus fp32 geometry and targets for one arm."""
@@ -168,7 +171,8 @@ class PairTensors:
 
 
 def train_pair_arm(arm: PairArm, tensors: PairTensors, *, spec: Mapping | None = None,
-                   device: str = "cuda:0", step_log: Callable | None = None) -> dict:
+                   device: str = "cuda:0", step_log: Callable | None = None,
+                   progress: Callable | None = None) -> dict:
     spec = spec or LEARNING_SPEC
     arm = arm.to(device).train()
     optimizer = torch.optim.AdamW(arm.parameters(), lr=spec["optimizer"]["lr"],
@@ -210,6 +214,8 @@ def train_pair_arm(arm: PairArm, tensors: PairTensors, *, spec: Mapping | None =
             torch.nn.utils.clip_grad_norm_(arm.parameters(), spec["grad_clip"])
         optimizer.step()
         updates += 1
+        if progress is not None:
+            progress({"arm": "pair", "update": updates})
         running += float(loss.detach())
         if updates <= 8:
             first_losses.append(round(float(loss.detach()), 6))
@@ -225,7 +231,7 @@ def train_pair_arm(arm: PairArm, tensors: PairTensors, *, spec: Mapping | None =
 
 def train_quality_arm(arm: QualityArm, descs: torch.Tensor, targets: torch.Tensor, *,
                       spec: Mapping | None = None, device: str = "cuda:0",
-                      step_log: Callable | None = None) -> dict:
+                      step_log: Callable | None = None, progress: Callable | None = None) -> dict:
     spec = spec or LEARNING_SPEC
     arm = arm.to(device).train()
     optimizer = torch.optim.AdamW(arm.parameters(), lr=spec["optimizer"]["lr"],
@@ -253,6 +259,8 @@ def train_quality_arm(arm: QualityArm, descs: torch.Tensor, targets: torch.Tenso
         loss.backward()
         optimizer.step()
         updates += 1
+        if progress is not None:
+            progress({"arm": "quality", "update": updates})
         running += float(loss.detach())
         if updates <= 8:
             first_losses.append(round(float(loss.detach()), 6))
