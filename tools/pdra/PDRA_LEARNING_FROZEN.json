@@ -1,0 +1,86 @@
+{
+  "arms": {
+    "b_single_box_quality": {
+      "cap": 1000000,
+      "hidden": 128,
+      "parameters": 147969,
+      "side_or_desc_dim": 1025
+    },
+    "c_whole_box_pairwise": {
+      "cap": 1000000,
+      "hidden": 128,
+      "parameters": 164549,
+      "side_or_desc_dim": 1025
+    },
+    "pdra_difference_strips": {
+      "cap": 1000000,
+      "hidden": 128,
+      "parameters": 689349,
+      "side_or_desc_dim": 5125
+    }
+  },
+  "dims": {
+    "channels": 256,
+    "geometry": 5,
+    "side": 5125,
+    "whole": 1025
+  },
+  "epochs_equivalent": 22.985,
+  "feature_convention": {
+    "aligned_semantics": "box shifted by -0.5 feature units; [0,1] samples cell 0 exactly",
+    "channels": 256,
+    "double_scaling_guard": "no spatial_scale=1/stride path exists in this module",
+    "roi_align": {
+      "aligned": true,
+      "output_size": [
+        2,
+        2
+      ],
+      "sampling_ratio": 2,
+      "spatial_scale": 1.0
+    },
+    "slots": [
+      "top",
+      "bottom",
+      "left",
+      "right",
+      "full"
+    ],
+    "to_feature": "ViewAffine.to_feature (crop origin, canvas/crop stretch, /stride) once"
+  },
+  "learning_spec": {
+    "arm_keys": [
+      "pdra_difference_strips",
+      "c_whole_box_pairwise",
+      "b_single_box_quality"
+    ],
+    "b_decision": "vote iff |q_i - q_j| >= tau_q via r = clip(0.5 + (q_i-q_j) * delta_pref / (2*tau_q), 0, 1); no abstain head",
+    "b_loss": "mean squared error against the member's matched-GT IoU",
+    "batch_pairs": 256,
+    "c_invalid_read_maps_to": "infeasible (no vote), same outcome as infeasible_read",
+    "grad_clip": null,
+    "hidden": 128,
+    "lambda_abstain": 1.0,
+    "loss_abstain": "binary_cross_entropy(a, z) averaged over ALL pairs of the batch; z = 1 cross-GT (abstain pairs), z = 0 same-GT (preference pairs)",
+    "loss_pref": "binary_cross_entropy(r, y) averaged over the preference-labelled pairs of the batch (term 0.0 when the batch holds none)",
+    "loss_total": "L_pref + lambda_abstain * L_abstain",
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "lr": 0.0003,
+      "type": "AdamW",
+      "weight_decay": 0.01
+    },
+    "parameter_cap": 1000000,
+    "seed": 20261030,
+    "shuffle": "torch.randperm with torch.Generator().manual_seed(20261030); the generator advances across epochs, so the order is deterministic and reshuffled",
+    "spec_version": "pdra-learning-v1-20261030",
+    "tau_q": 0.05,
+    "updates": 20000
+  },
+  "learning_spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
+  "status": "frozen_pending_gpu_engineering_check"
+}

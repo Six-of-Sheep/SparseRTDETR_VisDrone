@@ -1,0 +1,108 @@
+{
+  "core_version": "pdra-rules-rev4-20261030",
+  "learning_spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
+  "scope": "CONSTRUCTED_INPUTS_CPU_ONLY_NO_DETECTOR_NO_GPU",
+  "cuda_initialized": false,
+  "checks": [
+    {
+      "check": "roi_align_convention",
+      "status": "PASS",
+      "reference_max_abs_diff": 4.916649781472326e-07,
+      "boxes": 3,
+      "impulse_centre_value": 0.5625,
+      "equivalent_spelling_agrees": true,
+      "double_scaling_detected": true,
+      "seconds": 0.001
+    },
+    {
+      "check": "slot_encoding",
+      "status": "PASS",
+      "slots": [
+        "top",
+        "bottom",
+        "left",
+        "right",
+        "full"
+      ],
+      "side_dim_c2": 45,
+      "mask_bits": 5,
+      "invalid_is_zero": true,
+      "whole_dim_c2": 9,
+      "seconds": 0.002
+    },
+    {
+      "check": "torch_antisymmetry",
+      "status": "PASS",
+      "pairs": 64,
+      "max_abs_r_plus_flip_minus_1": 1.1920928955078125e-07,
+      "max_abs_a_symmetry": 0.0,
+      "seconds": 0.004
+    },
+    {
+      "check": "learning_fixed_updates",
+      "status": "PASS",
+      "pair_updates": 40,
+      "pair_first_losses": [
+        1.353932,
+        1.322212,
+        1.348474
+      ],
+      "quality_updates": 30,
+      "pair_arm_parameters": 3269,
+      "deterministic": true,
+      "seconds": 0.107
+    },
+    {
+      "check": "adapter_equivalence",
+      "status": "PASS",
+      "comparators_checked": 5,
+      "clusters": 5,
+      "adapter_reasons": [
+        "dead_zone",
+        "infeasible_read"
+      ],
+      "adapter_substitutions": 0,
+      "seconds": 0.112
+    },
+    {
+      "check": "sampling_verification",
+      "status": "PASS",
+      "positive": "PASS",
+      "corrupt_split_detected": true,
+      "wrong_count_rejected": true,
+      "seconds": 0.115
+    },
+    {
+      "check": "capacity_report",
+      "status": "PASS",
+      "parameters": {
+        "pdra_difference_strips": 689349,
+        "c_whole_box_pairwise": 164549,
+        "b_single_box_quality": 147969
+      },
+      "cap": 1000000,
+      "learning_spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
+      "epochs_equivalent": 22.985,
+      "seconds": 0.119
+    },
+    {
+      "check": "tap_mechanics",
+      "status": "PASS",
+      "calls": 1,
+      "outputs_bitwise_equal": true,
+      "hook_removed": true,
+      "seconds": 0.119
+    },
+    {
+      "check": "dimension_budget",
+      "status": "PASS",
+      "side_dim_256": 5125,
+      "whole_dim_256": 1025,
+      "stage1_pdra_cache_gb": 6.944,
+      "stage1_whole_cache_gb": 0.0,
+      "seconds": 0.119
+    }
+  ],
+  "failed": [],
+  "status": "PASS"
+}

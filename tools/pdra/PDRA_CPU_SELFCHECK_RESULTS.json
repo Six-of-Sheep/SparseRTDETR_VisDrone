@@ -1,5 +1,5 @@
 {
-  "core_version": "pdra-rules-rev3-20261030",
+  "core_version": "pdra-rules-rev4-20261030",
   "constants": {
     "canvas_hw": [
       768,
@@ -230,14 +230,50 @@
       "sequence_level_isolation": true
     },
     {
+      "check": "inference_label_independence",
+      "status": "PASS",
+      "pair_decisions_arguments": [
+        "candidates",
+        "affine_of",
+        "comparator"
+      ],
+      "pairs_decided": 3,
+      "destinations_with_gt": [
+        "excluded_ambiguous",
+        "pref"
+      ],
+      "destinations_without_gt": [
+        "excluded_empty"
+      ],
+      "decisions_identical_across_label_sets": true
+    },
+    {
+      "check": "inference_domain_all_pairs",
+      "status": "PASS",
+      "cluster_pairs": 3,
+      "decisions": 3,
+      "label_destinations_if_scored": [
+        "excluded_empty"
+      ],
+      "substitutions_despite_excluded_labels": 1
+    },
+    {
+      "check": "source_view_propagation",
+      "status": "PASS",
+      "left_source_view": 2,
+      "right_source_view": 3,
+      "swap_exchanges": true,
+      "unspecified_is_none": true
+    },
+    {
       "check": "cpu_cost_measured",
       "status": "PASS",
       "candidates": 3000,
       "clusters": 1502,
       "intra_cluster_pairs": 2384,
-      "nms_seconds": 0.0315,
-      "merge_seconds": 0.153,
-      "seconds_per_pair_us": 64.195,
+      "nms_seconds": 0.0309,
+      "merge_seconds": 0.1558,
+      "seconds_per_pair_us": 65.343,
       "kept": 1502,
       "substitutions": 15,
       "note": "measured on CPU with the geometric provider; stage 1 replaces the provider with RoIAlign reads and re-measures"

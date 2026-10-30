@@ -30,9 +30,11 @@ Coordinate facts used (verified against the frozen inference entry, 2026-10-30)
 * Candidate fields: original-image pixel xyxy, FP32 sigmoid score, category (1-based),
   view, query, view-internal rank.  Merge is classwise hard NMS, suppress iff
   ``IoU > 0.5``, iteration key ``(-score, view_id, query_id, category_id)``.
-* Feature maps are NOT currently exposed by the frozen forward (it returns only
-  ``pred_logits``/``pred_boxes``).  Binding the tap is a stage-1 engineering item;
-  ``FEATURE_STRIDE`` below is a declared placeholder until that binding exists.
+* Feature maps are read only through a read-only hook on the frozen HybridEncoder
+  output (index 0 = P3, stride 8, 256 channels for the frozen R18); the frozen entry
+  itself still returns only ``pred_logits``/``pred_boxes``.  The binding is declared
+  in rev 4 and is marked verified only after the GPU engineering check PASSes
+  (``FEATURE_BINDING_VERIFIED``).
 
 rev-3 corrections over rev 2 (2026-10-30 second-round authorization)
 -------------------------------------------------------------------
@@ -56,6 +58,13 @@ rev-3 corrections over rev 2 (2026-10-30 second-round authorization)
    train/eval sequence partition deterministically, and ``frozen_hyperparameters``
    collects every frozen numeric rule; the main scientific verdict reads only the
    module-untrained (eval) sequences.
+5. **rev-4 real wiring (2026-10-30).**  ``ViewAffine`` carries its own ``view_id`` and
+   every ``RegionRead`` records the ``source_view`` it was mapped from, so a real
+   feature provider reads each side from its own view's map.  ``PairInput`` carries the
+   two candidate identities, so the decision layer can look up precomputed comparator
+   outputs by identity.  ``pair_decisions`` enumerates the *complete* inference domain
+   (every cluster-internal pair, identical to the training enumeration); supervision
+   labels and their exclusions never enter this code path, which takes no GT argument.
 """
 
 from __future__ import annotations
@@ -67,13 +76,16 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import numpy as np
 
 
-CORE_VERSION = "pdra-rules-rev3-20261030"
-DESIGN_REVISION = "rev 3 (2026-10-30)"
+CORE_VERSION = "pdra-rules-rev4-20261030"
+DESIGN_REVISION = "rev 4 (2026-10-30)"
 
 # --- frozen numeric rules -----------------------------------------------------
 CANVAS_HW = (768, 1344)          # every view resizes to this canvas (height, width)
-FEATURE_STRIDE = (8, 8)          # PLACEHOLDER: must be bound to the frozen tap (stage 1)
-FEATURE_LEVEL = "PLACEHOLDER_stage1_tap"   # declared level id until the tap is bound
+FEATURE_STRIDE = (8, 8)          # rev 4: bound to HybridEncoder output-list index 0 (P3)
+FEATURE_LEVEL = "hybrid_encoder_out_index_0_p3"
+FEATURE_BINDING_VERIFIED = False  # set True only after the GPU engineering check PASSes
+FEATURE_READ = ("roi_align(aligned=True, spatial_scale=1.0, output_size=2x2, "
+                "sampling_ratio=2) on the box's own-view P3 map, feature-unit coordinates")
 NMS_IOU = 0.5                    # mirrors the frozen merge core
 PER_VIEW_BUDGET = 600
 FINAL_BUDGETS = (600, 300)
@@ -236,6 +248,7 @@ class ViewAffine:
     crop_box: tuple[float, float, float, float]
     canvas_hw: tuple[int, int] = CANVAS_HW
     stride: tuple[int, int] = FEATURE_STRIDE
+    view_id: int = -1            # own view of this affine; -1 = unspecified
 
     def __post_init__(self) -> None:
         x0, y0, x1, y1 = box64(self.crop_box)
@@ -243,6 +256,8 @@ class ViewAffine:
         sy, sx = self.stride
         if not (ch > 0 and cw > 0 and sy > 0 and sx > 0):
             raise ValueError("canvas and stride must be positive")
+        if not isinstance(self.view_id, int) or not -1 <= self.view_id <= 4:
+            raise ValueError("view_id must be an integer in -1..4")
         object.__setattr__(self, "crop_box", (x0, y0, x1, y1))
 
     @property
@@ -303,10 +318,10 @@ def candidate_affine(candidate: Any, image_hw: tuple[int, int],
     ih, iw = image_hw
     view_id = int(candidate.view_id)
     if view_id == 0:
-        return ViewAffine((0.0, 0.0, float(iw), float(ih)), canvas_hw, stride)
+        return ViewAffine((0.0, 0.0, float(iw), float(ih)), canvas_hw, stride, view_id)
     if not 1 <= view_id <= 4 or not tiles or view_id not in tiles:
         raise ValueError(f"view {view_id} needs its half-open crop box")
-    return ViewAffine(tuple(float(v) for v in tiles[view_id]), canvas_hw, stride)
+    return ViewAffine(tuple(float(v) for v in tiles[view_id]), canvas_hw, stride, view_id)
 
 
 @dataclass(frozen=True)
@@ -319,6 +334,7 @@ class RegionRead:
     visible_area: float
     valid: bool
     reason: str
+    source_view: int | None = None   # own view this read was mapped from (rev 4)
 
     @property
     def visible_fraction(self) -> float:
@@ -351,15 +367,16 @@ def read_exclusive(region_strips: tuple[tuple[str, tuple], ...],
             cropped_strips.append((name, clipped))
             if clamped[2] > clamped[0] and clamped[3] > clamped[1]:
                 feature_strips.append((name, clamped))
+    source_view = affine.view_id if affine.view_id >= 0 else None
     if region_area <= 0:
         return RegionRead(region_strips, tuple(feature_strips), 0.0, 0.0, False,
-                          "empty_difference_region")
+                          "empty_difference_region", source_view)
     frac = visible_area / region_area
     reason = ("below_visibility_threshold" if frac < THETA_REGION
               else ("empty_feature_region" if not feature_strips else "ok"))
     valid = frac >= THETA_REGION and bool(feature_strips)
     return RegionRead(region_strips, tuple(feature_strips), region_area, visible_area,
-                      valid, reason)
+                      valid, reason, source_view)
 
 
 @dataclass(frozen=True)
@@ -373,13 +390,17 @@ class PairInput:
     geometry: tuple[float, ...]
     valid: bool
     reason: str
+    identity_i: tuple | None = None   # (view, query, category) of box i (rev 4)
+    identity_j: tuple | None = None   # (view, query, category) of box j (rev 4)
 
     @property
     def read_area(self) -> float:
         return self.left.region_area + self.right.region_area
 
 
-def build_pair_input(box_i, view_i: ViewAffine, box_j, view_j: ViewAffine) -> PairInput:
+def build_pair_input(box_i, view_i: ViewAffine, box_j, view_j: ViewAffine, *,
+                     identity_i: tuple | None = None,
+                     identity_j: tuple | None = None) -> PairInput:
     """Both exclusive regions read from their own box's view; valid only if both valid."""
     bi, bj = box64(box_i), box64(box_j)
     left = read_exclusive(subtract_strips(bi, bj), view_i)
@@ -394,8 +415,9 @@ def build_pair_input(box_i, view_i: ViewAffine, box_j, view_j: ViewAffine) -> Pa
                 box_iou(bi, bj))
     if not left.valid or not right.valid:
         reason = "left_" + left.reason if not left.valid else "right_" + right.reason
-        return PairInput(bi, bj, left, right, geometry, False, reason)
-    return PairInput(bi, bj, left, right, geometry, True, "ok")
+        return PairInput(bi, bj, left, right, geometry, False, reason,
+                         identity_i, identity_j)
+    return PairInput(bi, bj, left, right, geometry, True, "ok", identity_i, identity_j)
 
 
 def swap_pair(pair: PairInput) -> PairInput:
@@ -406,7 +428,8 @@ def swap_pair(pair: PairInput) -> PairInput:
     """
     dx, dy, lw, lh, iou = pair.geometry
     return PairInput(pair.box_j, pair.box_i, pair.right, pair.left,
-                     (-dx, -dy, -lw, -lh, iou), pair.valid, pair.reason)
+                     (-dx, -dy, -lw, -lh, iou), pair.valid, pair.reason,
+                     pair.identity_j, pair.identity_i)
 
 
 # --- deterministic CPU feature provider (prototype only) ----------------------
@@ -672,7 +695,8 @@ def copeland_votes(members: Sequence[Any],
         for b in range(a + 1, len(members)):
             mi, mj = members[a], members[b]
             stats["pairs"] += 1
-            pair = build_pair_input(mi.box_xyxy, affine_of(mi), mj.box_xyxy, affine_of(mj))
+            pair = build_pair_input(mi.box_xyxy, affine_of(mi), mj.box_xyxy, affine_of(mj),
+                                    identity_i=_identity(mi), identity_j=_identity(mj))
             verdict = decide_pair(pair, comparator.r(pair), comparator.a(pair))
             if verdict.winner == 0:
                 stats["abstained" if pair.valid else "infeasible"] += 1
@@ -745,6 +769,33 @@ def pdra_merge(candidates: Sequence[Any],
         "budget_membership_delta_vs_C": budget_delta,
         "top600": ranked[:budgets[0]], "top300": ranked[:budgets[1]],
     }
+
+
+def pair_decisions(candidates: Sequence[Any],
+                   affine_of: Callable[[Any], ViewAffine], comparator) -> list[dict]:
+    """Decide every cluster-internal pair of one image; ground truth is never read.
+
+    The enumeration is exactly :func:`cluster_pair_records` -- the same domain used
+    for training -- and each verdict depends only on the two boxes, their own-view
+    affines and the comparator outputs.  Supervision labels and their exclusions are
+    absent from this code path by construction (no GT argument exists), so label
+    routing can never narrow the inference domain.  This is the stage-2 inference
+    enumeration and the enumeration exercised by the GPU engineering check.
+    """
+    decisions = []
+    for record in cluster_pair_records(candidates):
+        bi, bj = record["box_i"], record["box_j"]
+        pair = build_pair_input(bi.box_xyxy, affine_of(bi), bj.box_xyxy, affine_of(bj),
+                                identity_i=_identity(bi), identity_j=_identity(bj))
+        r_ij = comparator.r(pair)
+        a_ij = comparator.a(pair)
+        verdict = decide_pair(pair, r_ij, a_ij)
+        decisions.append({"cluster_index": record["cluster_index"],
+                          "identity_i": pair.identity_i, "identity_j": pair.identity_j,
+                          "valid": pair.valid, "read_reason": pair.reason,
+                          "winner": verdict.winner, "decision_reason": verdict.reason,
+                          "r": r_ij, "a": a_ij})
+    return decisions
 
 
 # --- supervision labelling (three-way, with ambiguity routing) ----------------
@@ -925,8 +976,8 @@ def frozen_hyperparameters() -> dict:
     return {
         "design_revision": DESIGN_REVISION, "core_version": CORE_VERSION,
         "canvas_hw": list(CANVAS_HW), "feature_stride": list(FEATURE_STRIDE),
-        "feature_level": FEATURE_LEVEL,
-        "feature_stride_is_placeholder": True,
+        "feature_level": FEATURE_LEVEL, "feature_read": FEATURE_READ,
+        "feature_binding_verified": FEATURE_BINDING_VERIFIED,
         "nms_iou": NMS_IOU, "per_view_budget": PER_VIEW_BUDGET,
         "final_budgets": list(FINAL_BUDGETS), "sample_grid": SAMPLE_GRID,
         "delta_pref": DELTA_PREF, "delta_abstain": DELTA_ABSTAIN,

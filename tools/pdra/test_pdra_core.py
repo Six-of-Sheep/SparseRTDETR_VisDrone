@@ -93,3 +93,15 @@ def test_frozen_constants_are_recorded(name):
     assert CANVAS_HW == (768, 1344)
     assert 0.0 < DELTA_PREF < 0.5 and 0.0 < DELTA_ABSTAIN <= 1.0 and 0.0 < THETA_REGION <= 1.0
     assert PAIR_DOMAIN == "cluster_internal_pairs_of_original_C"
+
+
+def test_inference_label_independence():
+    assert S.check_inference_label_independence()["status"] == "PASS"
+
+
+def test_inference_domain_all_pairs():
+    assert S.check_inference_domain_all_pairs()["status"] == "PASS"
+
+
+def test_source_view_propagation():
+    assert S.check_source_view_propagation()["status"] == "PASS"

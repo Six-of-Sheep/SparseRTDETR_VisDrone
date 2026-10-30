@@ -10,7 +10,9 @@ rev 3 corrections):
   5 cyclic preference                     13 ordering/budget after substitution
   6 near-neighbour distinct targets       14 cluster builder == frozen arithmetic
   7 original-C fallback (byte-identical)  15 frozen sequence split
-  8 region coverage margin (geometry)
+  8 region coverage margin (geometry)     16 inference never reads GT labels
+                                         17 complete inference domain (all cluster pairs)
+                                         18 own-view identity propagation (rev 4)
 
 plus a measured CPU cost count for the budget section.  Everything is deterministic;
 the only randomness is a fixed-seed generator used to fabricate *inputs*.
@@ -700,6 +702,126 @@ def check_sequence_split_frozen() -> dict:
         else _ok("sequence_split_frozen", detail)
 
 
+# --- check 16: inference never reads GT labels --------------------------------
+def check_inference_label_independence() -> dict:
+    """The decision path must not consume GT routing records, and label routing
+    (pref/abstain/excluded_*) must never narrow the inference domain."""
+    import inspect
+    errors = []
+    params = list(inspect.signature(P.pair_decisions).parameters)
+    if params != ["candidates", "affine_of", "comparator"]:
+        errors.append(f"pair_decisions grew a non-decision argument: {params}")
+    pool = _domain_pool()
+    comparator = P.ScriptedComparator(
+        preference=lambda pair: 0.9 if pair.identity_i == (0, 1, 1) else 0.5,
+        abstention=0.0)
+    first = P.pair_decisions(pool, affine_of, comparator)
+    second = P.pair_decisions(pool, affine_of, comparator)
+    if first != second:
+        errors.append("pair_decisions is not deterministic")
+    # Build two label routings with and without GT.  They differ (destinations move
+    # between pref/abstain and excluded_empty), yet the decision pass is a separate
+    # call with no GT argument and identical output.
+    gts = [P.GTItem(1, 1, (100.0, 100.0, 200.0, 200.0)),
+           P.GTItem(2, 1, (100.0, 190.0, 200.0, 290.0))]
+    records = P.cluster_pair_records(pool)
+    routed = {P.label_pair(r["box_i"].box_xyxy, r["box_j"].box_xyxy, 1, gts)["destination"]
+              for r in records}
+    routed_empty = {P.label_pair(r["box_i"].box_xyxy, r["box_j"].box_xyxy, 1, [])["destination"]
+                    for r in records}
+    if routed == routed_empty:
+        errors.append("constructed GT sets do not discriminate the routing check")
+    if first != P.pair_decisions(pool, affine_of, comparator):
+        errors.append("decisions changed between invocations with different label sets")
+    detail = {"pair_decisions_arguments": params, "pairs_decided": len(first),
+              "destinations_with_gt": sorted(routed),
+              "destinations_without_gt": sorted(routed_empty),
+              "decisions_identical_across_label_sets": True}
+    return _fail("inference_label_independence", {**detail, "errors": errors}) if errors \
+        else _ok("inference_label_independence", detail)
+
+
+# --- check 17: complete inference domain --------------------------------------
+def _feasible_cluster_pool() -> list:
+    """One three-member view-0 cluster whose reads are all feasible, plus a singleton.
+
+    S suppresses A and B (IoU 0.667 each) while IoU(A, B) = 0.47 < 0.5; every
+    exclusive region is non-empty and fully visible, so no pair abstains for
+    geometric reasons.
+    """
+    records = [
+        {"box": (100.0, 100.0, 200.0, 200.0), "score": 0.95, "view": 0, "query": 1, "category": 1, "rank": 1},
+        {"box": (120.0, 100.0, 220.0, 200.0), "score": 0.90, "view": 0, "query": 2, "category": 1, "rank": 2},
+        {"box": (100.0, 120.0, 200.0, 220.0), "score": 0.85, "view": 0, "query": 3, "category": 1, "rank": 3},
+        {"box": (500.0, 500.0, 600.0, 600.0), "score": 0.50, "view": 0, "query": 4, "category": 1, "rank": 4},
+    ]
+    return _slice_candidates(records)
+
+
+def check_inference_domain_all_pairs() -> dict:
+    """Every cluster-internal pair is decided, including pairs whose labels would be
+    excluded from training; exclusions cannot silently shrink the inference domain."""
+    errors = []
+    pool = _feasible_cluster_pool()
+    records, comparator = P.cluster_pair_records(pool), P.ScriptedComparator(
+        preference=lambda pair: 0.0, abstention=0.0)      # always prefers j
+    decisions = P.pair_decisions(pool, affine_of, comparator)
+    if len(decisions) != len(records) or len(records) != 3:
+        errors.append(f"pair_decisions enumerated {len(decisions)} of {len(records)} pairs")
+    if any(d["winner"] not in (-1, 0, 1) for d in decisions):
+        errors.append("a decision left the winner domain")
+    if any(not d["valid"] for d in decisions):
+        errors.append("constructed feasible pool produced an infeasible read")
+    # with empty GT every pair would route to excluded_empty, yet the tournament
+    # still substitutes the representative: label exclusion does not reach inference
+    empty_routes = {P.label_pair(r["box_i"].box_xyxy, r["box_j"].box_xyxy, 1, [])["destination"]
+                    for r in records}
+    if empty_routes != {"excluded_empty"}:
+        errors.append("constructed pool did not route to excluded_empty with empty GT")
+    merged = P.pdra_merge(pool, affine_of, comparator)
+    if merged["substitutions"] < 1:
+        errors.append("excluded-by-label pairs did not participate in the tournament")
+    if merged["cluster_count"] != 2:
+        errors.append("constructed pool did not yield the expected two clusters")
+    detail = {"cluster_pairs": len(records), "decisions": len(decisions),
+              "label_destinations_if_scored": sorted(empty_routes),
+              "substitutions_despite_excluded_labels": merged["substitutions"]}
+    return _fail("inference_domain_all_pairs", {**detail, "errors": errors}) if errors \
+        else _ok("inference_domain_all_pairs", detail)
+
+
+# --- check 18: own-view identity propagation (rev 4) ---------------------------
+def check_source_view_propagation() -> dict:
+    errors = []
+    box_i = (100.0, 100.0, 200.0, 200.0)
+    box_j = (150.0, 100.0, 250.0, 200.0)
+    vi, vj = affine_of(Cand(box_i, 0.5, 2, 0, 1)), affine_of(Cand(box_j, 0.5, 3, 0, 1))
+    pair = P.build_pair_input(box_i, vi, box_j, vj,
+                              identity_i=(2, 5, 1), identity_j=(3, 7, 1))
+    if pair.left.source_view != 2 or pair.right.source_view != 3:
+        errors.append("reads did not carry their own source views")
+    if pair.identity_i != (2, 5, 1) or pair.identity_j != (3, 7, 1):
+        errors.append("pair identities were not stored")
+    swapped = P.swap_pair(pair)
+    if swapped.left.source_view != 3 or swapped.right.source_view != 2:
+        errors.append("swap did not exchange source views")
+    if swapped.identity_i != (3, 7, 1) or swapped.identity_j != (2, 5, 1):
+        errors.append("swap did not exchange identities")
+    unspecified = P.ViewAffine((0.0, 0.0, 100.0, 100.0))
+    read = P.read_exclusive(P.subtract_strips(box_i, box_j), unspecified)
+    if read.source_view is not None:
+        errors.append("unspecified affine leaked a source view")
+    for view_id in range(5):
+        affine = affine_of(Cand((0, 0, 1, 1), 0.5, view_id, 0, 1))
+        if affine.view_id != view_id:
+            errors.append(f"candidate_affine lost view {view_id}")
+    detail = {"left_source_view": pair.left.source_view,
+              "right_source_view": pair.right.source_view,
+              "swap_exchanges": True, "unspecified_is_none": True}
+    return _fail("source_view_propagation", {**detail, "errors": errors}) if errors \
+        else _ok("source_view_propagation", detail)
+
+
 # --- measured CPU cost --------------------------------------------------------
 def check_cpu_cost() -> dict:
     """Measure the decision layer's CPU cost on a synthetic pool of realistic size."""
@@ -751,6 +873,9 @@ CHECKS = (
     check_post_replacement_ranking,
     check_cluster_builder_consistency,
     check_sequence_split_frozen,
+    check_inference_label_independence,
+    check_inference_domain_all_pairs,
+    check_source_view_propagation,
     check_cpu_cost,
 )
 

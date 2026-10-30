@@ -1,0 +1,145 @@
+{
+  "decisions": {
+    "controls": {
+      "b_pairs": 11779,
+      "c_pairs": 11779
+    },
+    "count": 11779,
+    "gt_read_in_decision_phase": false,
+    "merge": {
+      "all_abstain_clusters": 502,
+      "budget_membership_delta_vs_C": {
+        "300": {
+          "entered": 0,
+          "left": 0
+        },
+        "600": {
+          "entered": 0,
+          "left": 0
+        }
+      },
+      "cluster_count": 826,
+      "kept_count": 826,
+      "rank_shifted_members": 0,
+      "substitutions": 0
+    },
+    "pairs_with_identical_identity_in_stage0": 11779,
+    "reasons": {
+      "abstain_head": 10154,
+      "infeasible_read": 1625
+    },
+    "seconds": 4.336640727007762,
+    "stage0_pairs_for_image": 11779
+  },
+  "elapsed_seconds": 9.911895736120641,
+  "feature_binding": {
+    "core_extent": [
+      96,
+      168
+    ],
+    "level": "hybrid_encoder_out_index_0_p3",
+    "p3_extent": [
+      96,
+      168
+    ],
+    "stride": [
+      8,
+      8
+    ]
+  },
+  "forward": {
+    "calls": 10,
+    "p3_shape": [
+      1,
+      256,
+      96,
+      168
+    ],
+    "pools_identical_between_passes": true,
+    "seconds": 3.0535302490461618,
+    "tap_calls": 5,
+    "views": [
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 1.087784767150879e-06,
+          "logits": 3.147125244140625e-05
+        },
+        "tap_equal": true,
+        "view_id": 0
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 2.3543834686279297e-06,
+          "logits": 2.86102294921875e-05
+        },
+        "tap_equal": true,
+        "view_id": 1
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 1.8477439880371094e-06,
+          "logits": 0.0001220703125
+        },
+        "tap_equal": true,
+        "view_id": 2
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 1.341104507446289e-06,
+          "logits": 1.9073486328125e-05
+        },
+        "tap_equal": true,
+        "view_id": 3
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 2.6673078536987305e-06,
+          "logits": 2.574920654296875e-05
+        },
+        "tap_equal": true,
+        "view_id": 4
+      }
+    ]
+  },
+  "frozen_batch": 3,
+  "image_id": "8815f71ec469607f91ebda7600c542ec606752d76ad260af37efbbe3af5e7b23",
+  "image_row": 12,
+  "learning": {
+    "batch": 256,
+    "comparator_changed": true,
+    "detector_digest_unchanged": true,
+    "detector_grads": "none",
+    "first_losses": [
+      1.407196,
+      1.326866,
+      1.242013,
+      1.179131,
+      1.067117
+    ],
+    "labelled_pairs": 1225,
+    "parameters_total": 9,
+    "parameters_with_gradient": 9,
+    "updates": 5
+  },
+  "mode": "cpu-tap-acceptance",
+  "model": {
+    "audited_restore": false,
+    "cpu_only": true,
+    "ema_updates": 36480,
+    "load_seconds": 0.8730704120825976,
+    "scope": "formal_R18_seed0_e120"
+  },
+  "pooling": {
+    "clusters": 826,
+    "pairs": 11779,
+    "pool": 3000,
+    "readable": 10154,
+    "seconds": 0.3727937180083245,
+    "strips": 40232,
+    "us_per_readable_pair": 36.713976561781024
+  },
+  "source_commit": "UNCOMMITTED-after-abd8aea",
+  "status": "PASS",
+  "task": "r18-pdra-wiring-20261030-001",
+  "vm_hwm_bytes": 1970364416
+}
