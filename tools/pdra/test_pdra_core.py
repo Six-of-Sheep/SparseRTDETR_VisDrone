@@ -47,6 +47,10 @@ def test_original_c_fallback():
     assert S.check_original_c_fallback()["status"] == "PASS"
 
 
+def test_region_coverage_margin():
+    assert S.check_region_coverage_margin()["status"] == "PASS"
+
+
 def test_control_fairness():
     assert S.check_control_fairness()["status"] == "PASS"
 
@@ -59,8 +63,33 @@ def test_frozen_core_consistency():
     assert S.check_frozen_core_consistency()["status"] == "PASS"
 
 
+def test_pair_domain_unified():
+    assert S.check_pair_domain_unified()["status"] == "PASS"
+
+
+def test_post_replacement_ranking():
+    assert S.check_post_replacement_ranking()["status"] == "PASS"
+
+
+def test_cluster_builder_consistency():
+    assert S.check_cluster_builder_consistency()["status"] == "PASS"
+
+
+def test_sequence_split_frozen():
+    assert S.check_sequence_split_frozen()["status"] == "PASS"
+
+
+def test_stage0_fixture(tmp_path):
+    import pdra_stage0_pairs as stage0
+    result = stage0.fixture(tmp_path)
+    assert result["status"] == "COMPLETE" and result["synthetic"]
+    assert result["ledger"]["total_pairs"] == result["pairs_enumerated"]
+    assert result["split"]["main_verdict_split"] == "eval"
+
+
 @pytest.mark.parametrize("name", ["feature_stride_is_placeholder_bound_at_stage1"])
 def test_frozen_constants_are_recorded(name):
-    from pdra_core import CANVAS_HW, DELTA_PREF, DELTA_ABSTAIN, THETA_REGION
+    from pdra_core import CANVAS_HW, DELTA_PREF, DELTA_ABSTAIN, THETA_REGION, PAIR_DOMAIN
     assert CANVAS_HW == (768, 1344)
     assert 0.0 < DELTA_PREF < 0.5 and 0.0 < DELTA_ABSTAIN <= 1.0 and 0.0 < THETA_REGION <= 1.0
+    assert PAIR_DOMAIN == "cluster_internal_pairs_of_original_C"

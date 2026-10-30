@@ -1,7 +1,7 @@
-"""PDRA decision-and-geometry core (frozen rules, rev 2).
+"""PDRA decision-and-geometry core (frozen rules, rev 3).
 
 Pure CPU.  No torch, no detector, no training loop, no randomness.  Every rule in
-this module is fixed by ``PAIRWISE_ARBITRATION_DESIGN_20261030.md`` rev 2.  Anything
+this module is fixed by ``PAIRWISE_ARBITRATION_DESIGN_20261030.md`` rev 3.  Anything
 that needs a *real* feature map sits behind an explicit provider interface; the CPU
 prototype uses a deterministic geometric provider and therefore never claims a
 detector-feature result.
@@ -11,8 +11,13 @@ Implemented here
 S3  cross-view feature coordinate mapping, visibility domain, out-of-bounds policy
 S3  exclusive difference-region (strip) construction and read validity
 S4  preference / abstention decision, Copeland tournament, cycle and tie rules
+S4  one pairing domain for training and inference (cluster-internal pairs)
+S4  representative replacement followed by re-ranking and budget truncation
 S5  cluster-level representative replacement, original-C fallback
 S6  three-way supervision labelling with explicit ambiguity routing and counts
+S8  frozen module train/eval sequence split and frozen diagnostic buckets
+S7  control fairness asserted on arm specifications, separated from the
+    geometric region-coverage margin
 
 Coordinate facts used (verified against the frozen inference entry, 2026-10-30)
 ------------------------------------------------------------------------------
@@ -28,6 +33,29 @@ Coordinate facts used (verified against the frozen inference entry, 2026-10-30)
 * Feature maps are NOT currently exposed by the frozen forward (it returns only
   ``pred_logits``/``pred_boxes``).  Binding the tap is a stage-1 engineering item;
   ``FEATURE_STRIDE`` below is a declared placeholder until that binding exists.
+
+rev-3 corrections over rev 2 (2026-10-30 second-round authorization)
+-------------------------------------------------------------------
+1. **One pairing domain.**  Training pairs and inference pairs are the *same* set:
+   the unordered pairs inside each original-C cluster.  rev 2 drew training pairs
+   from "same-class IoU>=0.5" over the whole pool while inference judged all pairs
+   inside ``{survivor} U suppressed``; those two sets differ (two suppressed members
+   of one cluster may sit below 0.5, and a >=0.5 pair may straddle two clusters).
+   ``cluster_pair_records`` is now the single enumeration used by both.
+2. **Ordering and budget truncation after substitution.**  rev 2 truncated the
+   representative list in *cluster* order, which silently kept the survivor's rank
+   after its score changed.  The representatives are now re-sorted with the frozen
+   sort key and truncated to the budget afterwards, with no refill, for PDRA and for
+   every control.
+3. **Coverage vs fairness.**  The geometric fact that control (c) reads a superset
+   region (margin ``2*area(i&j) >= 0``) is a *coverage* property and is now reported
+   by ``region_coverage_margin``.  Control fairness is asserted separately, on the
+   four arms' specifications (``ArmSpec``/``assert_control_fairness``), where the read
+   rule is the only permitted difference.
+4. **Frozen split and label rules.**  ``freeze_sequence_split`` fixes the module
+   train/eval sequence partition deterministically, and ``frozen_hyperparameters``
+   collects every frozen numeric rule; the main scientific verdict reads only the
+   module-untrained (eval) sequences.
 """
 
 from __future__ import annotations
@@ -39,11 +67,13 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import numpy as np
 
 
-CORE_VERSION = "pdra-rules-rev2-20261030"
+CORE_VERSION = "pdra-rules-rev3-20261030"
+DESIGN_REVISION = "rev 3 (2026-10-30)"
 
 # --- frozen numeric rules -----------------------------------------------------
 CANVAS_HW = (768, 1344)          # every view resizes to this canvas (height, width)
 FEATURE_STRIDE = (8, 8)          # PLACEHOLDER: must be bound to the frozen tap (stage 1)
+FEATURE_LEVEL = "PLACEHOLDER_stage1_tap"   # declared level id until the tap is bound
 NMS_IOU = 0.5                    # mirrors the frozen merge core
 PER_VIEW_BUDGET = 600
 FINAL_BUDGETS = (600, 300)
@@ -54,10 +84,43 @@ THETA_REGION = 0.5               # a read is valid iff visible area fraction >= 
 MATCH_IOU = 0.5                  # GT match threshold
 TAU_GAP = 0.05                   # min |dIoU| for a same-GT preference label
 TAU_CLEAR = 0.25                 # "clear pair" diagnostic bucket
+LAMBDA_ABSTAIN = 1.0             # weight of the abstention loss (frozen, not searched)
 
 STRIP_ORDER = ("top", "bottom", "left", "right")
 PAIR_DESTINATIONS = ("pref", "abstain", "excluded_empty", "excluded_gap",
                      "excluded_ambiguous")
+
+# --- frozen pairing / ordering / evidence rules (rev 3) -----------------------
+PAIR_DOMAIN = "cluster_internal_pairs_of_original_C"
+PAIR_DOMAIN_NOTE = (
+    "Training and inference share one pairing domain: the unordered pairs inside each "
+    "original-C cluster ({survivor} U suppressed).  It is NOT 'same-class IoU>=0.5 pairs "
+    "from the pool'; two suppressed members may sit below 0.5 and a >=0.5 pool pair may "
+    "straddle two clusters."
+)
+POST_REPLACEMENT_RANKING = "canonical_sort_key_then_truncate_no_refill"
+CLUSTER_BUILDER = "numpy_mirror_of_frozen_classwise_nms"
+
+# Frozen diagnostic buckets (declared, never searched).
+DIOU_BUCKETS = ("gap_0.05_0.10", "gap_0.10_0.15", "gap_0.15_0.25",
+                "gap_0.25_0.50", "gap_ge_0.50")
+AREA_BUCKETS = ("area_le_1024", "area_1024_9216", "area_gt_9216")
+GAP_EDGES = (0.05, 0.10, 0.15, 0.25, 0.50)
+AREA_EDGES = (1024.0, 9216.0)
+N_MIN_PAIRS = 300                # a bucket below this pair count is "insufficient evidence"
+N_MIN_IMAGES = 40                # ...and below this image count as well
+EVIDENCE_INSUFFICIENT = "insufficient_evidence"
+
+# Frozen module train/eval sequence split rule (rev 3).
+SPLIT_RULE = "sorted_sequence_keys_stride3_remainder2_to_eval"
+SPLIT_RULE_NOTE = (
+    "Sequence keys (VisDrone sequence prefix of annotation_relative_path) are sorted "
+    "ascending; keys at sorted index i with i % 3 == 2 go to the module-eval split, all "
+    "others to module-train.  The rule is deterministic, sequence-level (no image "
+    "leakage between splits) and frozen; the main scientific verdict reads only the "
+    "module-untrained (eval) sequences."
+)
+MAIN_VERDICT_SPLIT = "eval"
 
 
 # --- small float64 box helpers (binary64, mirroring the frozen core) ----------
@@ -105,6 +168,36 @@ def box_iou(a: Sequence[float], b: Sequence[float]) -> float:
     if not math.isfinite(union) or union <= 0:
         raise ValueError("IoU union is not finite and valid")
     return ia / union
+
+
+def iou_matrix(boxes_a: np.ndarray, boxes_b: np.ndarray) -> np.ndarray:
+    """Vectorised binary64 IoU using the same op order as :func:`box_iou`.
+
+    ``boxes_a`` is ``(n, 4)`` and ``boxes_b`` is ``(m, 4)``; the result is ``(n, m)``.
+    The arithmetic is written so that each entry equals :func:`box_iou` bit for bit
+    (same order of min/max, products, union and division), which lets the stage-0
+    materialiser match GT without paying pure-Python IoU for every candidate pair.
+    """
+    a = np.asarray(boxes_a, dtype=np.float64).reshape(-1, 4)
+    b = np.asarray(boxes_b, dtype=np.float64).reshape(-1, 4)
+    if not a.size or not b.size:
+        return np.zeros((a.shape[0], b.shape[0]), dtype=np.float64)
+    x0 = np.maximum(a[:, None, 0], b[None, :, 0])
+    y0 = np.maximum(a[:, None, 1], b[None, :, 1])
+    x1 = np.minimum(a[:, None, 2], b[None, :, 2])
+    y1 = np.minimum(a[:, None, 3], b[None, :, 3])
+    width = x1 - x0
+    height = y1 - y0
+    inter = np.maximum(0.0, width) * np.maximum(0.0, height)
+    area_a = (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1])
+    area_b = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    union = area_a[:, None] + area_b[None, :] - inter
+    if not (np.isfinite(union).all() and (union > 0).all() and np.isfinite(inter).all()):
+        raise ValueError("IoU intersection/union is not finite and valid")
+    iou = inter / union
+    if not (np.isfinite(iou).all() and (iou >= 0).all() and (iou <= 1).all()):
+        raise ValueError("IoU outside [0,1]")
+    return iou
 
 
 def subtract_strips(a: Sequence[float], b: Sequence[float]) -> tuple[tuple[str, tuple], ...]:
@@ -437,19 +530,39 @@ def canonical_order(candidates: Sequence[Any]) -> list[Any]:
     return sorted(candidates, key=sort_key_of)
 
 
-def nms_clusters(candidates: Sequence[Any], *, iou_threshold: float = NMS_IOU) -> list[dict]:
-    """Classwise hard NMS mirroring the frozen core, additionally exposing clusters.
+def _identity(candidate: Any) -> tuple[int, int, int]:
+    """``(view_id, query_id, category_id)``; works for frozen and minimal candidates."""
+    identity = getattr(candidate, "identity", None)
+    if identity is not None:
+        return tuple(identity)
+    return (int(candidate.view_id), int(candidate.query_id), int(candidate.category_id))
 
-    Returns clusters in kept order; each is ``{"survivor": c, "suppressed": [...]}``
-    where ``suppressed`` are the candidates the survivor removed (suppress iff
-    ``IoU > iou_threshold``).  The survivor sequence equals the frozen core's kept list.
-    """
+
+# --- clustering: the frozen core's own arithmetic, with cluster bookkeeping -----
+def _frozen_iou_rows(boxes: np.ndarray, areas: np.ndarray,
+                     first: int, rest: np.ndarray) -> np.ndarray:
+    left = np.maximum(boxes[first, :2], boxes[rest, :2])
+    right = np.minimum(boxes[first, 2:], boxes[rest, 2:])
+    extent = np.maximum(0.0, right - left)
+    intersection = extent[:, 0] * extent[:, 1]
+    union = areas[first] + areas[rest] - intersection
+    if not (np.isfinite(intersection).all() and np.isfinite(union).all()
+            and (union > 0).all()):
+        raise ValueError("NMS intersection/union is not finite and valid")
+    iou = intersection / union
+    if not (np.isfinite(iou).all() and (iou >= 0).all() and (iou <= 1).all()):
+        raise ValueError("NMS IoU outside [0,1]")
+    return iou
+
+
+def nms_clusters_scalar(candidates: Sequence[Any], *, iou_threshold: float = NMS_IOU) -> list[dict]:
+    """Scalar cluster builder (binary64 via :func:`box_iou`); kept for cross-checks."""
     ordered = canonical_order(candidates)
     by_class: dict[int, list[int]] = {}
     for index, candidate in enumerate(ordered):
         by_class.setdefault(int(candidate.category_id), []).append(index)
     clusters: list[dict] = []
-    for _, indices in sorted(by_class.items()):
+    for _, indices in by_class.items():
         alive = list(indices)
         while alive:
             survivor = ordered[alive[0]]
@@ -466,15 +579,99 @@ def nms_clusters(candidates: Sequence[Any], *, iou_threshold: float = NMS_IOU) -
     return clusters
 
 
+def nms_clusters(candidates: Sequence[Any], *, iou_threshold: float = NMS_IOU,
+                 with_stats: bool = False) -> list[dict] | tuple[list[dict], dict]:
+    """Classwise hard NMS mirroring the frozen core, additionally exposing clusters.
+
+    The arithmetic replicates ``slice_core.classwise_nms`` step by step in numpy
+    float64 (same min/max order, same ``IoU > threshold`` suppression, same iteration
+    key), so the survivor sequence equals the frozen core's kept list.  Each cluster is
+    ``{"survivor": c, "suppressed": [...]}`` in frozen order; clusters are returned in
+    the survivor's canonical position.
+    """
+    ordered = canonical_order(candidates)
+    identities = [_identity(c) for c in ordered]
+    if len(set(identities)) != len(identities):
+        raise ValueError("duplicate candidate identity")
+    by_class: dict[int, list[int]] = {}
+    for index, candidate in enumerate(ordered):
+        by_class.setdefault(int(candidate.category_id), []).append(index)
+    clusters: list[dict] = []
+    comparisons = boundary = 0
+    for _, indices in by_class.items():
+        boxes = np.asarray([ordered[i].box_xyxy for i in indices], dtype=np.float64)
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        remaining = np.arange(len(indices), dtype=np.int64)
+        while remaining.size:
+            first = int(remaining[0])
+            survivor = ordered[indices[first]]
+            rest = remaining[1:]
+            suppressed: list[Any] = []
+            if rest.size:
+                iou = _frozen_iou_rows(boxes, areas, first, rest)
+                comparisons += int(rest.size)
+                boundary += int(np.sum(np.abs(iou - iou_threshold) <= 1e-9))
+                removed = rest[iou > iou_threshold]
+                suppressed = [ordered[indices[int(k)]] for k in removed.tolist()]
+                remaining = rest[iou <= iou_threshold]
+            else:
+                remaining = rest
+            clusters.append({"survivor": survivor, "suppressed": suppressed})
+    clustered = sum(1 + len(cl["suppressed"]) for cl in clusters)
+    if clustered != len(ordered):
+        raise ValueError("cluster partition incomplete")
+    position = {id(c): i for i, c in enumerate(ordered)}
+    clusters.sort(key=lambda cl: position[id(cl["survivor"])])
+    if with_stats:
+        return clusters, {"comparisons": comparisons, "boundary_within_eps": boundary,
+                          "boundary_eps": 1e-9, "nms_iou": iou_threshold,
+                          "cluster_count": len(clusters)}
+    return clusters
+
+
+def cluster_members(cluster: Mapping) -> list[Any]:
+    """``{survivor} U suppressed`` in frozen order (survivor first)."""
+    return [cluster["survivor"], *cluster["suppressed"]]
+
+
+def cluster_pairs(cluster: Mapping) -> list[tuple[Any, Any]]:
+    """The frozen pairing domain *inside one cluster*: unordered member pairs.
+
+    Member order is the frozen member order, so the pair list is canonical and the
+    same list drives the inference tournament and the stage-0 training labels.
+    """
+    members = cluster_members(cluster)
+    return [(members[i], members[j])
+            for i in range(len(members)) for j in range(i + 1, len(members))]
+
+
+def cluster_pair_records(candidates: Sequence[Any], *,
+                         iou_threshold: float = NMS_IOU) -> list[dict]:
+    """Enumerate every pair the comparator may judge, in cluster-canonical order.
+
+    This is the single enumeration used by training-material prep and by inference; it
+    replaces the rev-2 split where training used a same-class ``IoU>=0.5`` pool filter.
+    """
+    records = []
+    for cluster_index, cluster in enumerate(nms_clusters(candidates, iou_threshold=iou_threshold)):
+        for i, j in cluster_pairs(cluster):
+            records.append({"cluster_index": cluster_index, "box_i": i, "box_j": j})
+    return records
+
+
 def copeland_votes(members: Sequence[Any],
                    affine_of: Callable[[Any], ViewAffine],
                    comparator) -> tuple[dict, dict]:
-    """One Copeland vote per decided unordered pair; abstentions cast no vote."""
+    """One Copeland vote per decided unordered pair; abstentions cast no vote.
+
+    The pairs visited are exactly :func:`cluster_pairs` of the member list.
+    """
     votes = {id(m): 0 for m in members}
-    stats = {"decided": 0, "abstained": 0, "infeasible": 0}
+    stats = {"decided": 0, "abstained": 0, "infeasible": 0, "pairs": 0}
     for a in range(len(members)):
         for b in range(a + 1, len(members)):
             mi, mj = members[a], members[b]
+            stats["pairs"] += 1
             pair = build_pair_input(mi.box_xyxy, affine_of(mi), mj.box_xyxy, affine_of(mj))
             verdict = decide_pair(pair, comparator.r(pair), comparator.a(pair))
             if verdict.winner == 0:
@@ -502,19 +699,26 @@ def select_representative(members: Sequence[Any],
 def pdra_merge(candidates: Sequence[Any],
                affine_of: Callable[[Any], ViewAffine], comparator,
                *, budgets: tuple[int, int] = FINAL_BUDGETS) -> dict:
-    """Replace each NMS cluster's representative; keep the frozen suppression topology.
+    """Replace each NMS cluster's representative; then re-rank and truncate.
 
-    The cluster decomposition, budgets, raw-ignore and per-class maxDets handling are
-    the original C's.  Only *which* member of a cluster represents it changes.  A
-    cluster in which every pair abstains keeps the original survivor, so an all-abstain
-    run is identical to C.
+    Cluster decomposition, suppression topology, raw-ignore and the per-class
+    ``maxDets`` handling stay the original C's.  What changes is *which* member of a
+    cluster represents it, and therefore the score that ranks it.
+
+    rev-3 correction: because a substituted representative carries a *different* score
+    than the survivor it replaced, the representative list is re-sorted with the frozen
+    sort key and only then truncated to the budget (no refill).  rev 2 truncated the
+    list in cluster order, which kept the survivor's rank.  With no substitution the
+    re-ranked list equals the survivor list, so an all-abstain run is still identical
+    to C.
     """
     clusters = nms_clusters(candidates)
+    c_kept = [cluster["survivor"] for cluster in clusters]
     kept: list[Any] = []
     substitutions = 0
     all_abstain_clusters = 0
     for cluster in clusters:
-        members = [cluster["survivor"], *cluster["suppressed"]]
+        members = cluster_members(cluster)
         if len(members) == 1:
             kept.append(cluster["survivor"])
             continue
@@ -525,11 +729,21 @@ def pdra_merge(candidates: Sequence[Any],
         if representative is not cluster["survivor"]:
             substitutions += 1
         kept.append(representative)
+    ranked = canonical_order(kept)
+    c_ranked = canonical_order(c_kept)
+    rank_shifted = sum(1 for a, b in zip(ranked, c_ranked) if a is not b)
+    budget_delta = {}
+    for budget in budgets:
+        before, after = set(map(id, c_ranked[:budget])), set(map(id, ranked[:budget]))
+        budget_delta[str(budget)] = {"entered": len(after - before), "left": len(before - after)}
     return {
         "core_version": CORE_VERSION, "nms_iou": NMS_IOU,
         "cluster_count": len(clusters), "kept_count": len(kept),
         "substitutions": substitutions, "all_abstain_clusters": all_abstain_clusters,
-        "top600": kept[:budgets[0]], "top300": kept[:budgets[1]],
+        "representative_ranking": POST_REPLACEMENT_RANKING,
+        "rank_shifted_members": rank_shifted,
+        "budget_membership_delta_vs_C": budget_delta,
+        "top600": ranked[:budgets[0]], "top300": ranked[:budgets[1]],
     }
 
 
@@ -539,15 +753,22 @@ class GTItem:
     gt_id: int
     category_id: int
     box_xyxy: tuple[float, float, float, float]
+    area: float = 0.0
+
+
+def match_gts_iou(box: Sequence[float], category_id: int,
+                  gts: Sequence[GTItem]) -> tuple[tuple[float, GTItem], ...]:
+    """Same-category GTs matched at ``IoU >= MATCH_IOU``, best first (IoU desc, id asc)."""
+    hits = [(box_iou(box, g.box_xyxy), g) for g in gts if g.category_id == category_id]
+    hits = [(iou, g) for iou, g in hits if iou >= MATCH_IOU]
+    hits.sort(key=lambda item: (-item[0], item[1].gt_id))
+    return tuple(hits)
 
 
 def match_gts(box: Sequence[float], category_id: int,
               gts: Sequence[GTItem]) -> tuple[GTItem, ...]:
-    """GTs of the same category matched at IoU >= MATCH_IOU, best first (IoU desc, id asc)."""
-    hits = [(box_iou(box, g.box_xyxy), g) for g in gts if g.category_id == category_id]
-    hits = [(iou, g) for iou, g in hits if iou >= MATCH_IOU]
-    hits.sort(key=lambda item: (-item[0], item[1].gt_id))
-    return tuple(g for _, g in hits)
+    """Backwards-compatible wrapper returning only the matched GTs."""
+    return tuple(g for _, g in match_gts_iou(box, category_id, gts))
 
 
 def label_pair(box_i, box_j, category_id: int, gts: Sequence[GTItem]) -> dict:
@@ -567,41 +788,52 @@ def label_pair(box_i, box_j, category_id: int, gts: Sequence[GTItem]) -> dict:
     destinations and GT ids are recorded.  A box matching several GTs is also flagged
     ``multigt`` even when the pair is not excluded.
     """
-    mi = match_gts(box_i, category_id, gts)
-    mj = match_gts(box_j, category_id, gts)
-    shared = tuple(g for g in mi if g in mj)
+    return route_pair(match_gts_iou(box_i, category_id, gts),
+                      match_gts_iou(box_j, category_id, gts))
+
+
+def route_pair(mi: Sequence[tuple[float, GTItem]],
+               mj: Sequence[tuple[float, GTItem]]) -> dict:
+    """:func:`label_pair` on precomputed matches (same IoUs, same routing)."""
+    iou_i = {g.gt_id: iou for iou, g in mi}
+    iou_j = {g.gt_id: iou for iou, g in mj}
     record = {"destination": None, "ambiguous": False, "would_be": [], "gt_ids": [],
               "multigt": (len(mi) > 1 or len(mj) > 1)}
     if not mi or not mj:
         record["destination"] = "excluded_empty"
-        record["gt_ids"] = [g.gt_id for g in mi + mj]
+        record["gt_ids"] = [g.gt_id for _, g in mi] + [g.gt_id for _, g in mj]
         return record
-    extras_i = tuple(g for g in mi if g not in mj)
-    extras_j = tuple(g for g in mj if g not in mi)
+    shared = [(iou_i[g.gt_id], g) for _, g in mi if g.gt_id in iou_j]
+    extras_i = [g for _, g in mi if g.gt_id not in iou_j]
+    extras_j = [g for _, g in mj if g.gt_id not in iou_i]
     if shared and extras_i and extras_j:
         record.update(destination="excluded_ambiguous", ambiguous=True,
                       would_be=["pref", "abstain"],
-                      gt_ids=[g.gt_id for g in shared + extras_i + extras_j])
+                      gt_ids=[g.gt_id for _, g in shared] + [g.gt_id for g in extras_i]
+                             + [g.gt_id for g in extras_j])
         return record
-    for boxes, side in ((box_i, mi), (box_j, mj)):
-        if len(side) > 1 and abs(box_iou(boxes, side[0].box_xyxy)
-                                 - box_iou(boxes, side[1].box_xyxy)) <= 1e-9:
+    for side in (mi, mj):
+        if len(side) > 1 and abs(side[0][0] - side[1][0]) <= 1e-9:
             record.update(destination="excluded_ambiguous", ambiguous=True,
-                          would_be=[], gt_ids=[g.gt_id for g in side])
+                          would_be=[], gt_ids=[g.gt_id for _, g in side])
             return record
     if shared:
         signs = {}
-        for g in shared:
-            delta = box_iou(box_i, g.box_xyxy) - box_iou(box_j, g.box_xyxy)
+        for _, g in shared:
+            delta = iou_i[g.gt_id] - iou_j[g.gt_id]
             if abs(delta) >= TAU_GAP:
                 signs[g.gt_id] = 1 if delta > 0 else -1
         if 1 in signs.values() and -1 in signs.values():
             record.update(destination="excluded_ambiguous", ambiguous=True,
-                          would_be=["pref"], gt_ids=[g.gt_id for g in shared])
+                          would_be=["pref"], gt_ids=[g.gt_id for _, g in shared])
             return record
-        g_star = sorted(shared, key=lambda g: (-min(box_iou(box_i, g.box_xyxy),
-                                                   box_iou(box_j, g.box_xyxy)), g.gt_id))[0]
-        delta = box_iou(box_i, g_star.box_xyxy) - box_iou(box_j, g_star.box_xyxy)
+        g_star = sorted((g for _, g in shared),
+                        key=lambda g: (-min(iou_i[g.gt_id], iou_j[g.gt_id]), g.gt_id))[0]
+        delta = iou_i[g_star.gt_id] - iou_j[g_star.gt_id]
+        record["iou_i"] = iou_i[g_star.gt_id]
+        record["iou_j"] = iou_j[g_star.gt_id]
+        record["delta_iou"] = delta
+        record["gt_area"] = g_star.area
         if abs(delta) < TAU_GAP:
             record.update(destination="excluded_gap", gt_ids=[g_star.gt_id])
             return record
@@ -610,7 +842,7 @@ def label_pair(box_i, box_j, category_id: int, gts: Sequence[GTItem]) -> dict:
         record["iou_gap"] = abs(delta)
         return record
     record.update(destination="abstain",
-                  gt_ids=[g.gt_id for g in mi] + [g.gt_id for g in mj])
+                  gt_ids=[g.gt_id for _, g in mi] + [g.gt_id for _, g in mj])
     record["label"] = 1
     return record
 
@@ -634,6 +866,82 @@ def aggregate_labels(records: Iterable[Mapping]) -> dict:
     return {"total_pairs": total, "destination_counts": counts,
             "ambiguous_pairs": ambiguous, "ambiguous_would_be": ambiguous_would_be,
             "multigt_pairs": multigt}
+
+
+# --- frozen diagnostic buckets and the frozen sequence split -------------------
+def delta_bucket_of(abs_delta: float) -> str:
+    """|dIoU| -> frozen bucket name (``gap_ge_0.50`` is the open top bucket)."""
+    edges = GAP_EDGES
+    for index in range(len(edges) - 1):
+        if edges[index] <= abs_delta < edges[index + 1]:
+            return DIOU_BUCKETS[index]
+    if abs_delta >= edges[-1]:
+        return DIOU_BUCKETS[-1]
+    return DIOU_BUCKETS[0]
+
+
+def area_bucket_of(area: float) -> str:
+    if area <= AREA_EDGES[0]:
+        return AREA_BUCKETS[0]
+    if area <= AREA_EDGES[1]:
+        return AREA_BUCKETS[1]
+    return AREA_BUCKETS[2]
+
+
+def pair_buckets(record: Mapping) -> dict:
+    """Frozen diagnostic keys of one labelled pair (``None`` where undefined)."""
+    delta = record.get("delta_iou")
+    area = record.get("gt_area")
+    return {"diou": None if delta is None else delta_bucket_of(abs(delta)),
+            "area": None if area is None else area_bucket_of(float(area)),
+            "view": None if record.get("same_view") is None else (
+                "same_view" if record["same_view"] else "cross_view")}
+
+
+def freeze_sequence_split(sequence_images: Mapping[str, Sequence[Any]]) -> dict:
+    """Deterministic module train/eval sequence partition (frozen rule).
+
+    ``sequence_images`` maps a sequence key to its image identifiers.  Keys are sorted
+    ascending; the key at sorted index ``i`` joins the eval split iff ``i % 3 == 2``.
+    The rule uses no randomness and no per-image choice, so no sequence can leak
+    between the two splits.
+    """
+    keys = sorted(sequence_images)
+    assignment = {}
+    for index, key in enumerate(keys):
+        assignment[key] = "eval" if index % 3 == 2 else "train"
+    train = [k for k in keys if assignment[k] == "train"]
+    evaluation = [k for k in keys if assignment[k] == "eval"]
+    return {"rule": SPLIT_RULE, "rule_note": SPLIT_RULE_NOTE,
+            "sequence_count": len(keys), "sequences": keys, "assignment": assignment,
+            "train_sequences": train, "eval_sequences": evaluation,
+            "train_images": sum(len(sequence_images[k]) for k in train),
+            "eval_images": sum(len(sequence_images[k]) for k in evaluation),
+            "main_verdict_split": MAIN_VERDICT_SPLIT}
+
+
+def frozen_hyperparameters() -> dict:
+    """Every frozen numeric rule, for the stage-0 hyperparameter freeze file."""
+    return {
+        "design_revision": DESIGN_REVISION, "core_version": CORE_VERSION,
+        "canvas_hw": list(CANVAS_HW), "feature_stride": list(FEATURE_STRIDE),
+        "feature_level": FEATURE_LEVEL,
+        "feature_stride_is_placeholder": True,
+        "nms_iou": NMS_IOU, "per_view_budget": PER_VIEW_BUDGET,
+        "final_budgets": list(FINAL_BUDGETS), "sample_grid": SAMPLE_GRID,
+        "delta_pref": DELTA_PREF, "delta_abstain": DELTA_ABSTAIN,
+        "theta_region": THETA_REGION, "match_iou": MATCH_IOU, "tau_gap": TAU_GAP,
+        "tau_clear": TAU_CLEAR, "lambda_abstain": LAMBDA_ABSTAIN,
+        "strip_order": list(STRIP_ORDER), "pair_domain": PAIR_DOMAIN,
+        "post_replacement_ranking": POST_REPLACEMENT_RANKING,
+        "cluster_builder": CLUSTER_BUILDER,
+        "diou_buckets": list(DIOU_BUCKETS), "area_buckets": list(AREA_BUCKETS),
+        "gap_edges": list(GAP_EDGES), "area_edges": list(AREA_EDGES),
+        "n_min_pairs": N_MIN_PAIRS, "n_min_images": N_MIN_IMAGES,
+        "split_rule": SPLIT_RULE, "main_verdict_split": MAIN_VERDICT_SPLIT,
+        "destinations": list(PAIR_DESTINATIONS),
+        "abstain_semantics": "abstention withholds a vote; it preserves nothing across instances",
+    }
 
 
 # --- control specifications (declared, not trained here) ----------------------
@@ -662,8 +970,12 @@ CONTROL_WHOLE_BOX_PAIRWISE = ControlSpec(
     "same comparator reading whole boxes (a superset of the difference strips)")
 
 
-def assert_control_fairness(pairs: Sequence[PairInput]) -> dict:
-    """Structural invariants that PDRA and every control must share."""
+def region_coverage_margin(pairs: Sequence[PairInput]) -> dict:
+    """Geometric *coverage* property: control (c)'s read region contains PDRA's.
+
+    This is a fact about region areas, not about experimental fairness.  Fairness is
+    asserted separately by :func:`assert_control_fairness` on the arm specifications.
+    """
     checks = {"pairs_checked": len(pairs), "c_covers_pdra_domain": True,
               "every_pair_uses_one_source_rule": True, "min_margin": None}
     for pair in pairs:
@@ -675,3 +987,71 @@ def assert_control_fairness(pairs: Sequence[PairInput]) -> dict:
         checks["min_margin"] = margin if checks["min_margin"] is None else min(
             checks["min_margin"], margin)
     return checks
+
+
+# --- control fairness on arm specifications (rev 3) --------------------------
+#: Fields every arm must share for the comparison to be attributable to the read.
+FAIRNESS_EQUAL_FIELDS = (
+    "candidate_pool_sha256", "pair_domain", "feature_source_rule", "feature_level",
+    "feature_stride", "canvas_hw", "theta_region", "sample_grid", "split_sha256",
+    "sampling_spec_sha256", "parameter_cap", "update_cap", "eval_members_sha256",
+)
+#: The one field allowed to differ between arms.
+FAIRNESS_FREE_FIELD = "reads"
+
+
+@dataclass(frozen=True)
+class ArmSpec:
+    """Declared specification of one experimental arm.
+
+    Only ``reads`` may differ between arms (``"difference_strips"`` for PDRA,
+    ``"whole_box_pairwise"`` for (c), ``"whole_box_quality"`` for (b), ``"score"`` for
+    (a)); every other field is a fairness invariant and must be identical.
+    """
+
+    key: str
+    reads: str
+    candidate_pool_sha256: str
+    pair_domain: str = PAIR_DOMAIN
+    feature_source_rule: str = "each box read from its own view via candidate_affine"
+    feature_level: str = FEATURE_LEVEL
+    feature_stride: tuple = FEATURE_STRIDE
+    canvas_hw: tuple = CANVAS_HW
+    theta_region: float = THETA_REGION
+    sample_grid: int = SAMPLE_GRID
+    split_sha256: str = "PENDING_STAGE0"
+    sampling_spec_sha256: str = "PENDING_STAGE0"
+    parameter_cap: int = 1_000_000
+    update_cap: int = 20_000
+    eval_members_sha256: str = "PENDING_STAGE0"
+
+
+def assert_control_fairness(arms: Sequence[ArmSpec]) -> dict:
+    """Assert the four arms differ only in what they read.
+
+    Returns the shared specification, the per-arm read rule and any violation of a
+    fairness invariant (empty list means the comparison is fair by declaration).
+    """
+    if len(arms) < 2:
+        raise ValueError("control fairness needs at least two arms")
+    violations: list[str] = []
+    reads = {}
+    seen_keys = set()
+    for arm in arms:
+        if arm.key in seen_keys:
+            raise ValueError(f"duplicate arm key: {arm.key}")
+        seen_keys.add(arm.key)
+        if arm.reads in reads.values():
+            violations.append(f"two arms share the read rule {arm.reads!r}")
+        reads[arm.key] = arm.reads
+    reference = arms[0]
+    for arm in arms[1:]:
+        for field in FAIRNESS_EQUAL_FIELDS:
+            if getattr(arm, field) != getattr(reference, field):
+                violations.append(
+                    f"{arm.key}:{field} differs from {reference.key}: "
+                    f"{getattr(arm, field)!r} != {getattr(reference, field)!r}")
+    return {"arms": [arm.key for arm in arms], "reads": reads,
+            "equal_fields": list(FAIRNESS_EQUAL_FIELDS),
+            "free_field": FAIRNESS_FREE_FIELD,
+            "violations": violations, "fair": not violations}

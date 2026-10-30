@@ -1,17 +1,21 @@
 """PDRA CPU self-check: constructed inputs only, no detector, no GPU, no training.
 
-Runs the targeted checks the 2026-10-30 authorization lists:
+Runs the targeted checks of the 2026-10-30 authorizations (rev 2 six items plus the
+rev 3 corrections):
 
-  1 coordinate mapping across views        6 near-neighbour distinct targets
-  2 input swap (antisymmetry)              7 original-C fallback (byte-identical)
-  3 empty difference regions               8 control fairness
-  4 abstention                             9 label ambiguity routing
-  5 cyclic preference                     10 consistency with the frozen merge core
+  1 coordinate mapping across views        9 control fairness (arm specifications)
+  2 input swap (antisymmetry)             10 label ambiguity routing
+  3 empty difference regions              11 consistency with the frozen merge core
+  4 abstention                            12 one pairing domain (train == inference)
+  5 cyclic preference                     13 ordering/budget after substitution
+  6 near-neighbour distinct targets       14 cluster builder == frozen arithmetic
+  7 original-C fallback (byte-identical)  15 frozen sequence split
+  8 region coverage margin (geometry)
 
 plus a measured CPU cost count for the budget section.  Everything is deterministic;
 the only randomness is a fixed-seed generator used to fabricate *inputs*.
 
-Usage:  python3 -I tools/pdra_selfcheck.py [--out results.json]
+Usage:  python3 -I tools/pdra/pdra_selfcheck.py [--out results.json]
 """
 
 from __future__ import annotations
@@ -343,24 +347,27 @@ def check_original_c_fallback() -> dict:
     detail = {"clusters": pdra["cluster_count"], "kept": pdra["kept_count"],
               "substitutions": pdra["substitutions"],
               "all_abstain_clusters": pdra["all_abstain_clusters"],
+              "rank_shifted_members": pdra["rank_shifted_members"],
               "byte_identical_to_frozen_C": identical}
     if not identical:
         diff = [i for i, (x, y) in enumerate(zip(frozen_top, pdra_top)) if x != y]
         return _fail("original_c_fallback", {**detail, "first_differing_index": diff[:5]})
     if pdra["kept_count"] != len(frozen_top):
         return _fail("original_c_fallback", {**detail, "reason": "kept count differs"})
+    if pdra["rank_shifted_members"] != 0:
+        return _fail("original_c_fallback", {**detail, "reason": "re-ranking moved a survivor"})
     return _ok("original_c_fallback", detail)
 
 
-# --- check 8: control fairness -----------------------------------------------
-def check_control_fairness() -> dict:
+# --- check 8: region coverage margin (geometry only) --------------------------
+def check_region_coverage_margin() -> dict:
     aff = affine_of(Cand((0, 0, 1, 1), 0.5, 0, 0, 1))
     pairs = [P.build_pair_input(bi, aff, bj, aff) for bi, bj in (
         ((100.0, 100.0, 200.0, 200.0), (150.0, 100.0, 250.0, 200.0)),
         ((300.0, 300.0, 400.0, 400.0), (320.0, 330.0, 420.0, 430.0)),
         ((600.0, 100.0, 700.0, 200.0), (650.0, 100.0, 750.0, 200.0)),
     )]
-    checks = P.assert_control_fairness(pairs)
+    checks = P.region_coverage_margin(pairs)
     errors = []
     if not checks["c_covers_pdra_domain"]:
         errors.append("control (c) region does not cover the PDRA difference domain")
@@ -373,17 +380,54 @@ def check_control_fairness() -> dict:
         c_area = P.CONTROL_WHOLE_BOX_PAIRWISE.read_area(pair.box_i, pair.box_j)
         if abs((c_area - pair.read_area) - margin) > 1e-9:
             errors.append("control (c) area margin is not 2x the intersection area")
-    # controls and PDRA must consume the same candidate pool and source rule
-    shared = {"candidate_pool": "frozen C pool (identical objects)",
-              "source_rule": "each box read from its own view via candidate_affine",
-              "budget": "same feature layer, same read capability, same capacity cap"}
     detail = {"pairs": checks["pairs_checked"], "min_margin": checks["min_margin"],
-              "shared": shared}
+              "property": "geometric coverage only; not a fairness statement"}
+    return _fail("region_coverage_margin", {**detail, "errors": errors}) if errors \
+        else _ok("region_coverage_margin", detail)
+
+
+# --- check 9: control fairness on arm specifications --------------------------
+def check_control_fairness() -> dict:
+    errors = []
+    pool_sha = "constructed-pool-sha256"
+    arms = [P.ArmSpec("a_original_c", "score", pool_sha),
+            P.ArmSpec("b_single_box_quality", "whole_box_quality", pool_sha),
+            P.ArmSpec("c_whole_box_pairwise", "whole_box_pairwise", pool_sha),
+            P.ArmSpec("pdra", "difference_strips", pool_sha)]
+    fair = P.assert_control_fairness(arms)
+    if not fair["fair"]:
+        errors.append(f"identical arms reported unfair: {fair['violations']}")
+    if sorted(fair["reads"].values()) != sorted(a.reads for a in arms):
+        errors.append("read rules not reported per arm")
+    # a richer PDRA input (finer stride) must be detected
+    richer = arms[:3] + [P.ArmSpec("pdra", "difference_strips", pool_sha, feature_stride=(4, 4))]
+    if P.assert_control_fairness(richer)["fair"]:
+        errors.append("finer PDRA feature stride not detected as unfair")
+    # a different split or evaluation membership must be detected
+    other_split = arms[:3] + [P.ArmSpec("pdra", "difference_strips", pool_sha,
+                                        split_sha256="other")]
+    if P.assert_control_fairness(other_split)["fair"]:
+        errors.append("different module split not detected as unfair")
+    other_eval = arms[:3] + [P.ArmSpec("pdra", "difference_strips", pool_sha,
+                                       eval_members_sha256="other")]
+    if P.assert_control_fairness(other_eval)["fair"]:
+        errors.append("different evaluation members not detected as unfair")
+    # a larger parameter or update budget must be detected
+    bigger = arms[:3] + [P.ArmSpec("pdra", "difference_strips", pool_sha, parameter_cap=2_000_000)]
+    if P.assert_control_fairness(bigger)["fair"]:
+        errors.append("larger PDRA parameter cap not detected as unfair")
+    # two arms with the same read rule are not two controls
+    same_read = arms[:3] + [P.ArmSpec("pdra", "whole_box_pairwise", pool_sha)]
+    if P.assert_control_fairness(same_read)["fair"]:
+        errors.append("duplicate read rule not detected")
+    detail = {"arms": fair["arms"], "equal_fields": fair["equal_fields"],
+              "free_field": fair["free_field"], "negative_cases_detected": 5,
+              "separate_from_region_coverage": True}
     return _fail("control_fairness", {**detail, "errors": errors}) if errors \
         else _ok("control_fairness", detail)
 
 
-# --- check 9: label ambiguity routing ----------------------------------------
+# --- check 10: label ambiguity routing ---------------------------------------
 def check_label_ambiguity() -> dict:
     errors = []
     # near-coincident, shifted GTs so that one large box can match two of them
@@ -425,15 +469,30 @@ def check_label_ambiguity() -> dict:
     stats = P.aggregate_labels(records)
     if stats["ambiguous_pairs"] != 1:
         errors.append(f"ambiguity ledger counted {stats['ambiguous_pairs']}")
+    # the precomputed-match route must equal the box route bit for bit
+    mi = P.match_gts_iou((500.0, 500.0, 600.0, 600.0), 1, clean)
+    mj = P.match_gts_iou((505.0, 505.0, 605.0, 605.0), 1, clean)
+    if P.route_pair(mi, mj) != records[0]:
+        errors.append("route_pair on precomputed matches differs from label_pair")
+    # vectorised IoU must equal the scalar IoU bit for bit
+    boxes = np.asarray([(500.0, 500.0, 600.0, 600.0), (505.0, 505.0, 605.0, 605.0),
+                        (620.0, 500.0, 720.0, 600.0)])
+    gt_boxes = np.asarray([g.box_xyxy for g in clean])
+    matrix = P.iou_matrix(boxes, gt_boxes)
+    for bi, box in enumerate(boxes):
+        for gi, g in enumerate(clean):
+            if float(matrix[bi, gi]) != P.box_iou(tuple(box), g.box_xyxy):
+                errors.append("iou_matrix differs from box_iou")
     detail = {"destinations": got, "conflict_would_be": conflict["would_be"],
               "ledger": stats["destination_counts"],
               "ambiguous_pairs": stats["ambiguous_pairs"],
-              "ambiguous_would_be": stats["ambiguous_would_be"]}
+              "ambiguous_would_be": stats["ambiguous_would_be"],
+              "vectorised_iou_bit_identical": True}
     return _fail("label_ambiguity", {**detail, "errors": errors}) if errors \
         else _ok("label_ambiguity", detail)
 
 
-# --- check 10: consistency with the frozen merge core ------------------------
+# --- check 11: consistency with the frozen merge core ------------------------
 def check_frozen_core_consistency() -> dict:
     pool = _constructed_pool()
     clusters = P.nms_clusters(pool)
@@ -451,6 +510,196 @@ def check_frozen_core_consistency() -> dict:
                                            "survivors_match_frozen_nms": True})
 
 
+# --- check 12: one pairing domain for training and inference ------------------
+def _domain_pool() -> list:
+    # S suppresses A and B (IoU 0.526 each) but IoU(A, B) = 0.357 < 0.5;
+    # D overlaps the suppressed A at IoU 0.526 yet forms its own cluster.
+    records = [
+        {"box": (100.0, 100.0, 200.0, 200.0), "score": 0.95, "view": 0, "query": 1, "category": 1, "rank": 1},
+        {"box": (100.0, 100.0, 200.0, 290.0), "score": 0.90, "view": 1, "query": 2, "category": 1, "rank": 2},
+        {"box": (100.0, 10.0, 200.0, 200.0), "score": 0.85, "view": 2, "query": 3, "category": 1, "rank": 3},
+        {"box": (100.0, 190.0, 200.0, 290.0), "score": 0.50, "view": 3, "query": 4, "category": 1, "rank": 4},
+    ]
+    return _slice_candidates(records)
+
+
+def check_pair_domain_unified() -> dict:
+    errors = []
+    pool = _domain_pool()
+    by_id = {c.identity: c for c in pool}
+    S, A, B, D = by_id[(0, 1, 1)], by_id[(1, 2, 1)], by_id[(2, 3, 1)], by_id[(3, 4, 1)]
+    clusters = P.nms_clusters(pool)
+    if [cl["survivor"].identity for cl in clusters] != [S.identity, D.identity]:
+        errors.append("constructed pool did not yield the expected two clusters")
+    # training enumeration
+    training = {frozenset((r["box_i"].identity, r["box_j"].identity))
+                for r in P.cluster_pair_records(pool)}
+    # inference enumeration: the pairs the tournament actually visits
+    visited = []
+
+    class Recorder:
+        def r(self, pair):
+            visited.append((pair.box_i, pair.box_j))
+            return 0.5
+
+        def a(self, pair):
+            return 0.0
+
+    box_to_id = {c.box_xyxy: c.identity for c in pool}
+    for cl in clusters:
+        P.select_representative(P.cluster_members(cl), affine_of, Recorder())
+    inference = {frozenset((box_to_id[bi], box_to_id[bj])) for bi, bj in visited}
+    if training != inference:
+        errors.append(f"training pairs {sorted(map(sorted, training))} != "
+                      f"inference pairs {sorted(map(sorted, inference))}")
+    expected = {frozenset((S.identity, A.identity)), frozenset((S.identity, B.identity)),
+                frozenset((A.identity, B.identity))}
+    if training != expected:
+        errors.append(f"pair domain differs from the cluster-internal set: {sorted(map(sorted, training))}")
+    iou_ab = P.box_iou(A.box_xyxy, B.box_xyxy)
+    iou_ad = P.box_iou(A.box_xyxy, D.box_xyxy)
+    if not (iou_ab < 0.5 and frozenset((A.identity, B.identity)) in training):
+        errors.append("a below-0.5 cluster-internal pair is missing from the domain")
+    if not (iou_ad >= 0.5 and frozenset((A.identity, D.identity)) not in training):
+        errors.append("a cross-cluster >=0.5 pair leaked into the domain")
+    # the rev-2 pool filter would have produced a different set
+    rev2 = {frozenset((x.identity, y.identity)) for i, x in enumerate(pool)
+            for y in pool[i + 1:] if x.category_id == y.category_id
+            and P.box_iou(x.box_xyxy, y.box_xyxy) >= 0.5}
+    if rev2 == training:
+        errors.append("rev-2 pool filter coincides with the cluster domain on this case; "
+                      "the counter-example does not discriminate")
+    detail = {"pair_domain": P.PAIR_DOMAIN, "training_pairs": len(training),
+              "inference_pairs": len(inference),
+              "below_half_pair_in_domain": round(iou_ab, 4),
+              "cross_cluster_pair_excluded": round(iou_ad, 4),
+              "rev2_filter_pairs": len(rev2)}
+    return _fail("pair_domain_unified", {**detail, "errors": errors}) if errors \
+        else _ok("pair_domain_unified", detail)
+
+
+# --- check 13: ordering and budget truncation after substitution --------------
+def check_post_replacement_ranking() -> dict:
+    errors = []
+    records = [
+        {"box": (100.0, 100.0, 200.0, 200.0), "score": 0.95, "view": 0, "query": 1, "category": 1, "rank": 1},
+        {"box": (105.0, 100.0, 205.0, 200.0), "score": 0.40, "view": 1, "query": 2, "category": 1, "rank": 2},
+        {"box": (500.0, 500.0, 600.0, 600.0), "score": 0.60, "view": 0, "query": 3, "category": 1, "rank": 3},
+        {"box": (800.0, 800.0, 900.0, 900.0), "score": 0.50, "view": 0, "query": 4, "category": 1, "rank": 4},
+    ]
+    pool = _slice_candidates(records)
+    by_id = {c.identity: c for c in pool}
+    S1, M1, S2, S3 = by_id[(0, 1, 1)], by_id[(1, 2, 1)], by_id[(0, 3, 1)], by_id[(0, 4, 1)]
+    frozen_kept = [c.identity for c in slice_core.classwise_nms(pool)]
+    if frozen_kept != [S1.identity, S2.identity, S3.identity]:
+        errors.append(f"unexpected frozen kept order {frozen_kept}")
+    prefer_j = P.ScriptedComparator(preference=0.0, abstention=0.0)
+    result = P.pdra_merge(pool, affine_of, prefer_j, budgets=(2, 1))
+    kept = [c.identity for c in result["top600"]]
+    if result["substitutions"] != 1:
+        errors.append(f"expected one substitution, got {result['substitutions']}")
+    if kept != [S2.identity, S3.identity]:
+        errors.append(f"budget-2 output not re-ranked by the frozen key: {kept}")
+    if [c.identity for c in result["top300"]] != [S2.identity]:
+        errors.append("budget-1 output did not pick the highest re-ranked representative")
+    full = P.pdra_merge(pool, affine_of, prefer_j, budgets=(10, 5))
+    order = [c.identity for c in full["top600"]]
+    if order != [S2.identity, S3.identity, M1.identity]:
+        errors.append(f"full output not in canonical order after substitution: {order}")
+    keys = [P.sort_key_of(c) for c in full["top600"]]
+    if keys != sorted(keys):
+        errors.append("representative list is not sorted by the frozen sort key")
+    delta = result["budget_membership_delta_vs_C"]
+    if delta.get("2") != {"entered": 1, "left": 1}:
+        errors.append(f"budget membership delta mis-reported: {delta}")
+    if result["rank_shifted_members"] != 3:
+        errors.append(f"rank shift mis-counted: {result['rank_shifted_members']}")
+    if result["representative_ranking"] != P.POST_REPLACEMENT_RANKING:
+        errors.append("ranking rule not recorded")
+    # all-abstain stays identical to C under the same budgets
+    abstaining = P.ScriptedComparator(preference=0.5, abstention=0.0)
+    same = P.pdra_merge(pool, affine_of, abstaining, budgets=(2, 1))
+    if [c.identity for c in same["top600"]] != frozen_kept[:2] or same["rank_shifted_members"]:
+        errors.append("all-abstain run no longer equals C after re-ranking")
+    detail = {"ranking": P.POST_REPLACEMENT_RANKING, "substituted_representative_score": M1.score,
+              "budget2_output": kept, "budget_delta_vs_C": delta,
+              "rank_shifted_members": result["rank_shifted_members"]}
+    return _fail("post_replacement_ranking", {**detail, "errors": errors}) if errors \
+        else _ok("post_replacement_ranking", detail)
+
+
+# --- check 14: cluster builder equals the frozen arithmetic --------------------
+def _random_pool(seed: int, count: int) -> list:
+    rng = random.Random(seed)
+    out = []
+    for index in range(count):
+        x = rng.uniform(0, 1800)
+        y = rng.uniform(0, 1300)
+        w = rng.uniform(5, 120)
+        h = rng.uniform(5, 120)
+        out.append(slice_core.Candidate((x, y, x + w, y + h), rng.random(),
+                                        rng.randrange(0, 5), index % 300, 1 + index % 3,
+                                        1 + index))
+    return out
+
+
+def check_cluster_builder_consistency() -> dict:
+    errors = []
+    pools = [_constructed_pool(), _domain_pool()] + [_random_pool(s, 240) for s in (5, 6, 7)]
+    checked = 0
+    for pool in pools:
+        frozen = [c.identity for c in slice_core.classwise_nms(pool)]
+        numpy_clusters, stats = P.nms_clusters(pool, with_stats=True)
+        scalar_clusters = P.nms_clusters_scalar(pool)
+        mine = [cl["survivor"].identity for cl in numpy_clusters]
+        theirs = [cl["survivor"].identity for cl in scalar_clusters]
+        if mine != frozen:
+            errors.append("numpy mirror survivors differ from the frozen core")
+        if theirs != frozen:
+            errors.append("scalar builder survivors differ from the frozen core")
+        for a, b in zip(numpy_clusters, scalar_clusters):
+            if [c.identity for c in a["suppressed"]] != [c.identity for c in b["suppressed"]]:
+                errors.append("numpy and scalar builders disagree on a cluster's members")
+        if sum(1 + len(cl["suppressed"]) for cl in numpy_clusters) != len(pool):
+            errors.append("cluster partition incomplete")
+        if stats["cluster_count"] != len(frozen):
+            errors.append("cluster count differs from kept count")
+        checked += 1
+    return _fail("cluster_builder_consistency", {"errors": errors[:5]}) if errors \
+        else _ok("cluster_builder_consistency",
+                 {"pools": checked, "builder": P.CLUSTER_BUILDER,
+                  "survivors_equal_frozen": True, "members_equal_scalar": True})
+
+
+# --- check 15: frozen sequence split ------------------------------------------
+def check_sequence_split_frozen() -> dict:
+    errors = []
+    rng = random.Random(3)
+    sequences = {f"seq{index:02d}": [f"img{index:02d}_{k}" for k in range(rng.randint(10, 30))]
+                 for index in range(24)}
+    first = P.freeze_sequence_split(sequences)
+    second = P.freeze_sequence_split(dict(reversed(list(sequences.items()))))
+    if first != second:
+        errors.append("split is not deterministic under input order")
+    keys = sorted(sequences)
+    if first["eval_sequences"] != [k for i, k in enumerate(keys) if i % 3 == 2]:
+        errors.append("eval sequences differ from the frozen rule")
+    if set(first["train_sequences"]) & set(first["eval_sequences"]):
+        errors.append("a sequence sits in both splits")
+    if sorted(first["train_sequences"] + first["eval_sequences"]) != keys:
+        errors.append("split does not cover every sequence")
+    if first["train_images"] + first["eval_images"] != sum(map(len, sequences.values())):
+        errors.append("image totals do not add up")
+    if first["main_verdict_split"] != "eval":
+        errors.append("main verdict split not the module-untrained one")
+    detail = {"rule": first["rule"], "sequences": first["sequence_count"],
+              "train_sequences": len(first["train_sequences"]),
+              "eval_sequences": len(first["eval_sequences"]),
+              "deterministic": True, "sequence_level_isolation": True}
+    return _fail("sequence_split_frozen", {**detail, "errors": errors}) if errors \
+        else _ok("sequence_split_frozen", detail)
+
+
 # --- measured CPU cost --------------------------------------------------------
 def check_cpu_cost() -> dict:
     """Measure the decision layer's CPU cost on a synthetic pool of realistic size."""
@@ -462,12 +711,12 @@ def check_cpu_cost() -> dict:
             y = rng.uniform(0, 1360)
             w = rng.uniform(20, 60)
             h = rng.uniform(20, 60)
-            for _ in range(5):                      # five near-duplicate candidates
+            for copy in range(5):                      # five near-duplicate candidates
                 jx = rng.uniform(-0.3, 0.3) * w
                 jy = rng.uniform(-0.3, 0.3) * h
                 s = rng.uniform(0.9, 1.1)
                 box = (x + jx, y + jy, x + jx + w * s, y + jy + h * s)
-                pool.append(Cand(box, rng.random(), rng.randrange(0, 5), target, cls))
+                pool.append(Cand(box, rng.random(), copy, target, cls))
     comparator = P.PairComparator(P.GeometricFeatureProvider())
     start = time.perf_counter()
     clusters = P.nms_clusters(pool)
@@ -494,9 +743,14 @@ CHECKS = (
     check_cyclic_preference,
     check_near_neighbor_distinct_targets,
     check_original_c_fallback,
+    check_region_coverage_margin,
     check_control_fairness,
     check_label_ambiguity,
     check_frozen_core_consistency,
+    check_pair_domain_unified,
+    check_post_replacement_ranking,
+    check_cluster_builder_consistency,
+    check_sequence_split_frozen,
     check_cpu_cost,
 )
 
@@ -514,6 +768,10 @@ def main() -> int:
             "nms_iou": P.NMS_IOU, "delta_pref": P.DELTA_PREF,
             "delta_abstain": P.DELTA_ABSTAIN, "theta_region": P.THETA_REGION,
             "tau_gap": P.TAU_GAP, "tau_clear": P.TAU_CLEAR, "match_iou": P.MATCH_IOU,
+            "pair_domain": P.PAIR_DOMAIN,
+            "post_replacement_ranking": P.POST_REPLACEMENT_RANKING,
+            "split_rule": P.SPLIT_RULE, "n_min_pairs": P.N_MIN_PAIRS,
+            "n_min_images": P.N_MIN_IMAGES,
         },
         "scope": "CONSTRUCTED_INPUTS_CPU_ONLY_NO_DETECTOR_NO_GPU",
         "checks": results,
