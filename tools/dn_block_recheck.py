@@ -67,13 +67,16 @@ def verify_materials():
     protected={str(f):sha(f) for f in [OLD/"CONTRACT.json",OLD/"MANIFEST.json",r/"STOP.json",
         r/"COST_ADDITION.json",r/"LIBRARY_CLOSED.json",r/"library.pt",r/"calibration.pt",r/"precheck.pt.failure.json"]}
     return c,lib,rows,cost,protected
+def recipient_slots(targets,meta):
+    mapping={}
+    for i,t in enumerate(targets):
+        for ordinal,slot in enumerate(meta["dn_positive_idx"][i].tolist()):
+            mapping[(i,slot)]=ordinal%len(t["boxes"])
+    return sorted(mapping)[::2],mapping
 def evidence(ctx,targets,meta,rows):
     """Read existing replay observation; independently associate recorded slot/GT IDs."""
     obs=ctx.observation;gt=obs["gt"].to(targets[0]["boxes"])
-    allidx=[]
-    for i,t in enumerate(targets):
-        for slot in meta["dn_positive_idx"][i].tolist():allidx.append((i,slot))
-    chosen=sorted(allidx)[::2]
+    chosen,mapping=recipient_slots(targets,meta)
     need(len(chosen)==len(gt),"observation/slot count")
     donor_identity=[]
     for row in rows:
@@ -83,7 +86,7 @@ def evidence(ctx,targets,meta,rows):
     for arm in ("J","B"):
         before,clipped,final,unact,wasclipped,invalid=effective(gt,obs[arm].to(gt))
         for k in invalid.nonzero().flatten().tolist():
-            bi,slot=chosen[k];ti=slot%len(targets[bi]["boxes"])
+            bi,slot=chosen[k];ti=mapping[(bi,slot)]
             need(torch.equal(gt[k],targets[bi]["boxes"][ti]),"recipient identity")
             donor=ctx.audit["donors"][k];size_source=ctx.audit["donors"][ctx.audit["size_permutation"][k]] if arm=="B" else donor
             found.append({"arm":arm,"replacement_index":k,"batch_row":bi,"DN_slot":slot,
@@ -122,6 +125,9 @@ def gpu_resource(c):
 def cpu_check(out):
     torch.set_num_threads(2);torch.use_deterministic_algorithms(True)
     r=stats_check(torch.device("cpu"))
+    slots,mapping=recipient_slots([{"boxes":torch.zeros(3,4)}],
+        {"dn_positive_idx":[torch.tensor([0,1,2,8,9,10])]})
+    need(slots==[(0,0),(0,2),(0,9)] and mapping[(0,9)]==1,"multi-group recipient identity")
     fn=native();g=torch.tensor([[.5,.5,.1,.1]])
     t=[{"boxes":g,"labels":torch.tensor([0]),"image_id":"CPU_CONSTRUCTED","gt_ids":["g"]}]
     embed=torch.nn.Embedding(11,256);seed()
