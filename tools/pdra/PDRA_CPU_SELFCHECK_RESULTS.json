@@ -1,0 +1,160 @@
+{
+  "core_version": "pdra-rules-rev2-20261030",
+  "constants": {
+    "canvas_hw": [
+      768,
+      1344
+    ],
+    "feature_stride": [
+      8,
+      8
+    ],
+    "nms_iou": 0.5,
+    "delta_pref": 0.1,
+    "delta_abstain": 0.5,
+    "theta_region": 0.5,
+    "tau_gap": 0.05,
+    "tau_clear": 0.25,
+    "match_iou": 0.5
+  },
+  "scope": "CONSTRUCTED_INPUTS_CPU_ONLY_NO_DETECTOR_NO_GPU",
+  "checks": [
+    {
+      "check": "coordinate_mapping",
+      "status": "PASS",
+      "views": 5,
+      "round_trip_boxes": 4,
+      "frozen_core_agreement": true
+    },
+    {
+      "check": "input_swap",
+      "status": "PASS",
+      "pairs": 60,
+      "r_antisymmetry": "exact_to_1e-12",
+      "a_symmetry": "exact_to_1e-12"
+    },
+    {
+      "check": "empty_difference_regions",
+      "status": "PASS",
+      "identical_boxes": {
+        "left_valid": false,
+        "right_valid": false,
+        "left_reason": "empty_difference_region",
+        "right_reason": "empty_difference_region",
+        "verdict": "infeasible_read"
+      },
+      "right_side_contained": {
+        "left_valid": true,
+        "right_valid": false,
+        "left_reason": "ok",
+        "right_reason": "empty_difference_region",
+        "verdict": "infeasible_read"
+      },
+      "left_side_contained": {
+        "left_valid": false,
+        "right_valid": true,
+        "left_reason": "empty_difference_region",
+        "right_reason": "ok",
+        "verdict": "infeasible_read"
+      },
+      "partial_overlap": {
+        "valid": true
+      }
+    },
+    {
+      "check": "abstention",
+      "status": "PASS",
+      "abstain_head_withholds_vote": true,
+      "dead_zone": true,
+      "all_abstain_keeps_survivor": true,
+      "decided_pair_promotes": true
+    },
+    {
+      "check": "cyclic_preference",
+      "status": "PASS",
+      "votes": [
+        1,
+        1,
+        1
+      ],
+      "decided": 3,
+      "deterministic_tie_break": true,
+      "no_crash": true
+    },
+    {
+      "check": "near_neighbor_distinct_targets",
+      "status": "PASS",
+      "label_destination": "abstain",
+      "abstention_holds": true,
+      "contrast_promotes": true
+    },
+    {
+      "check": "original_c_fallback",
+      "status": "PASS",
+      "clusters": 5,
+      "kept": 5,
+      "substitutions": 0,
+      "all_abstain_clusters": 2,
+      "byte_identical_to_frozen_C": true
+    },
+    {
+      "check": "control_fairness",
+      "status": "PASS",
+      "pairs": 3,
+      "min_margin": 10000.0,
+      "shared": {
+        "candidate_pool": "frozen C pool (identical objects)",
+        "source_rule": "each box read from its own view via candidate_affine",
+        "budget": "same feature layer, same read capability, same capacity cap"
+      }
+    },
+    {
+      "check": "label_ambiguity",
+      "status": "PASS",
+      "destinations": [
+        "pref",
+        "abstain",
+        "excluded_ambiguous",
+        "excluded_empty",
+        "excluded_gap"
+      ],
+      "conflict_would_be": [
+        "pref",
+        "abstain"
+      ],
+      "ledger": {
+        "pref": 1,
+        "abstain": 1,
+        "excluded_empty": 1,
+        "excluded_gap": 1,
+        "excluded_ambiguous": 1
+      },
+      "ambiguous_pairs": 1,
+      "ambiguous_would_be": {
+        "pref": 1,
+        "abstain": 1
+      }
+    },
+    {
+      "check": "frozen_core_consistency",
+      "status": "PASS",
+      "clusters": 5,
+      "survivors_match_frozen_nms": true
+    },
+    {
+      "check": "cpu_cost_measured",
+      "status": "PASS",
+      "candidates": 3000,
+      "clusters": 1507,
+      "intra_cluster_pairs": 2364,
+      "nms_seconds": 0.5133,
+      "merge_seconds": 0.6245,
+      "seconds_per_pair_us": 264.151,
+      "kept": 1507,
+      "substitutions": 15,
+      "note": "measured on CPU with the geometric provider; stage 1 replaces the provider with RoIAlign reads and re-measures"
+    }
+  ],
+  "failed": [],
+  "status": "PASS"
+}
