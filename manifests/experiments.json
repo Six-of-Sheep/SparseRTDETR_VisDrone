@@ -145,6 +145,16 @@
         -0.0019060879541954456,
         -0.11774518943879486
       ]
+    },
+    {
+      "id": "r18-nms-suppressor-attribution-20261030-001",
+      "role": "nms_suppressor_attribution_cpu_diagnostic_seed0",
+      "result_status": "frozen_pending_single_seed0_execution",
+      "source_commit": null,
+      "git_binding_kind": "frozen_from_this_branch_see_release_SOURCE.json",
+      "source_manifest_sha256": null,
+      "config": "docs/research/NMS_SUPPRESSOR_ATTRIBUTION_PLAN_20261030.md",
+      "report": "r18-nms-suppressor-attribution-20261030-001/REPORT.md"
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"
