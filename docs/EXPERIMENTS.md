@@ -8,6 +8,7 @@
 | r18-sahi-fixed-20261016-001 | 固定A/B/C推理 | 单seed收益/保护/成本初筛通过 |
 | r18-sahi-seed12-20261016-001 | 成对跨seed复验 | 已启动，最终结果待回传；禁止重启 |
 | rtdetrv2-r18-mal-continue-20261015-001 | 分类损失对照 | 完整训练，整体科学门槛未通过 |
+| r18-nms-suppressor-attribution-20261030-001 | 原C候选池NMS抑制归因（CPU） | seed0完成；未提出方法候选 |
 
 报告相对项目资料根目录的路径见JSON；本机主资料根D:/Lzy_CV，服务器按共享PROJECT的Workspace。大型材料不进Git。
 

@@ -32,3 +32,5 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - run: python -B -m unittest discover -s tests -p test_c_stage_core.py
+      - run: python -B -m unittest discover -s tests -p test_nms_attribution.py
