@@ -54,10 +54,10 @@ def test_gradient_direction():
     boxes[0, 2] = torch.tensor([0.51, 0.51, 0.021, 0.021])
     boxes[0, 3] = torch.tensor([0.90, 0.90, 0.020, 0.020])
     matched = [[(0, 0)]]
-    value, evidence = sr.loss(logits, boxes, gt, matched, k=2, mode="A2", weights=WEIGHTS)
-    reference, expected, pairs = sr.check_gradient_direction(logits, boxes, gt, matched, k=2, mode="A2", weights=WEIGHTS)
+    value, evidence = sr.loss(logits, boxes, [gt], matched, k=2, mode="A2", weights=WEIGHTS)
+    reference, expected, pairs = sr.check_gradient_direction(logits, boxes, [gt], matched, k=2, mode="A2", weights=WEIGHTS)
     logits2 = logits.clone().requires_grad_(True)
-    value2, _ = sr.loss(logits2, boxes, gt, matched, k=2, mode="A2", weights=WEIGHTS)
+    value2, _ = sr.loss(logits2, boxes, [gt], matched, k=2, mode="A2", weights=WEIGHTS)
     value2.backward()
     got = logits2.grad
     assert pairs and len(pairs) == 1, "expected exactly one pair, got %d" % len(pairs)
@@ -81,7 +81,7 @@ def test_satisfied_pair_is_exactly_zero():
     boxes[0, 2] = torch.tensor([0.505, 0.505, 0.020, 0.020])
     matched = [[(0, 0)]]
     logits2 = logits.clone().requires_grad_(True)
-    value, evidence = sr.loss(logits2, boxes, gt, matched, k=2, mode="A2", weights=WEIGHTS)
+    value, evidence = sr.loss(logits2, boxes, [gt], matched, k=2, mode="A2", weights=WEIGHTS)
     value.backward()
     assert evidence["pairs"] == 1 and evidence["active_pairs"] == 0, evidence
     assert float(value) == 0.0, float(value)
@@ -95,7 +95,7 @@ def test_empty_partner_is_exactly_zero():
     boxes[0, 2] = torch.tensor([0.9, 0.9, 0.5, 0.5])
     matched = [[(0, 0)]]
     logits2 = logits.clone().requires_grad_(True)
-    value, evidence = sr.loss(logits2, boxes, gt, matched, k=1, mode="A2", weights=WEIGHTS)
+    value, evidence = sr.loss(logits2, boxes, [gt], matched, k=1, mode="A2", weights=WEIGHTS)
     value.backward()
     assert evidence["pairs"] == 0 and evidence["per_image"][0]["records"][0]["eligible_count"] == 0, evidence
     assert float(value) == 0.0 and float(logits2.grad.abs().sum()) == 0.0, "empty partner produced a gradient"
@@ -111,7 +111,7 @@ def test_cross_gt_conflict_uses_the_declared_dedup():
     boxes[0, 2] = torch.tensor([0.51, 0.51, 0.020, 0.020])   # nearest to GT0 by size
     boxes[0, 3] = torch.tensor([0.79, 0.79, 0.040, 0.040])
     matched = [[(0, 0), (1, 1)]]
-    info = sr.pairing(logits[0], boxes[0], gt[0], [(0, 0), (1, 1)], k=2, mode="A2", weights=WEIGHTS)
+    info = sr.pairing(logits[0], boxes[0], gt, [(0, 0), (1, 1)], k=2, mode="A2", weights=WEIGHTS)
     owners = {g: list(pool) for g, pool in info["eligible"].items()}
     records = {r["gt"]: r for r in info["records"]}
     assert records[0]["partner"] == 2, records
@@ -130,10 +130,10 @@ def test_a1_a2_share_eligibility_counts_and_margins():
     boxes[0, 5] = torch.tensor([0.81, 0.81, 0.061, 0.061])
     matched = [[(0, 0), (7, 1)]]
     generator = torch.Generator().manual_seed(1234)
-    a2 = sr.pairing(logits[0], boxes[0], gt[0], [(0, 0), (7, 1)], k=2, mode="A2", weights=WEIGHTS)
-    a1 = sr.pairing(logits[0], boxes[0], gt[0], [(0, 0), (7, 1)], k=2, mode="A1", weights=WEIGHTS,
+    a2 = sr.pairing(logits[0], boxes[0], gt, [(0, 0), (7, 1)], k=2, mode="A2", weights=WEIGHTS)
+    a1 = sr.pairing(logits[0], boxes[0], gt, [(0, 0), (7, 1)], k=2, mode="A1", weights=WEIGHTS,
                     generator=torch.Generator().manual_seed(1234))
-    a1_again = sr.pairing(logits[0], boxes[0], gt[0], [(0, 0), (7, 1)], k=2, mode="A1", weights=WEIGHTS,
+    a1_again = sr.pairing(logits[0], boxes[0], gt, [(0, 0), (7, 1)], k=2, mode="A1", weights=WEIGHTS,
                           generator=torch.Generator().manual_seed(1234))
     assert a1["eligible_counts"] == a2["eligible_counts"], (a1["eligible_counts"], a2["eligible_counts"])
     assert a1["candidate_counts"] == a2["candidate_counts"], (a1["candidate_counts"], a2["candidate_counts"])
@@ -155,7 +155,7 @@ def test_margin_is_monotone_in_scale_with_clamp():
         logits, boxes, gt = scene(16, 3, [[0.5, 0.5, side, side]], {0: 5.0, 1: 4.0, 2: 3.0})
         boxes[0, 0] = torch.tensor([0.5, 0.5, side, side])
         boxes[0, 1] = torch.tensor([0.51, 0.51, side, side])
-        info = sr.pairing(logits[0], boxes[0], gt[0], [(0, 0)], k=1, mode="A2", weights=WEIGHTS)
+        info = sr.pairing(logits[0], boxes[0], gt, [(0, 0)], k=1, mode="A2", weights=WEIGHTS)
         values[side] = info["records"][0]["margin"]
     ordered = [values[s] for s in (0.01, 0.02, 0.05, 0.10, 0.50)]
     assert ordered == sorted(ordered), ordered
@@ -173,7 +173,7 @@ def test_added_gradient_touches_at_most_two_tokens_per_pair():
     boxes[0, 3] = torch.tensor([0.81, 0.81, 0.041, 0.041])
     matched = [[(0, 0), (1, 1)]]
     logits2 = logits.clone().requires_grad_(True)
-    value, evidence = sr.loss(logits2, boxes, gt, matched, k=2, mode="A2", weights=WEIGHTS)
+    value, evidence = sr.loss(logits2, boxes, [gt], matched, k=2, mode="A2", weights=WEIGHTS)
     value.backward()
     nonzero = int((logits2.grad.abs().sum(-1) > 0).sum())
     assert evidence["pairs"] == 2, evidence

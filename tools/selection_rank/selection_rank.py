@@ -223,6 +223,9 @@ def loss(images_logits, pred_boxes, gt_boxes, matched, *, k, mode, weights, gene
 
     A1 and A2 share eligibility, dedup, pair count, margins and the loss form.
     """
+    _require(isinstance(gt_boxes, (list, tuple)) or (hasattr(gt_boxes, "dim") and gt_boxes.dim() == 3),
+             "gt_boxes must be a list of per-image (G,4) tensors or a (B,G,4) tensor")
+    _require(len(matched) == images_logits.shape[0] == len(gt_boxes), "batch members differ")
     total_pairs = 0
     active_pairs = 0
     terms = []
@@ -259,6 +262,8 @@ def loss(images_logits, pred_boxes, gt_boxes, matched, *, k, mode, weights, gene
 
 def check_gradient_direction(logits, pred_boxes, gt_boxes, matched, *, k, mode="A2", weights, generator=None):
     """Reference implementation of the expected gradient, for the synthetic checks."""
+    _require(isinstance(gt_boxes, (list, tuple)) or (hasattr(gt_boxes, "dim") and gt_boxes.dim() == 3),
+             "gt_boxes must be a list of per-image (G,4) tensors or a (B,G,4) tensor")
     scores = max_class_statistic(logits)
     total = 0
     pairs = []
