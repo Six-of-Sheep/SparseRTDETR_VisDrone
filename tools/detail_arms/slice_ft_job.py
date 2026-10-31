@@ -104,9 +104,11 @@ def native_twin(c,out):
 def arm_probe(c,out,arm,mode,e,x,t):
     """Zero-gate identity, stop-gradient and nonzero-gate evidence before the windows.
 
-    Compares the installed model against a parent-loaded native twin on the first
-    micro-batch of the acceptance window under pinned manual seeds: zero-gate outputs
-    and loss must be bitwise identical, every shared-parameter gradient must be
+    Compares the installed model against a parent-loaded native twin on a halved
+    micro-batch (bs//2, min 1) of the acceptance window under pinned manual seeds;
+    only one FP32 graph is alive at any time (sequentialized forward/backward), so
+    the comparison stays inside the chain's guarded GPU memory envelope.  Zero-gate
+    outputs and loss must be bitwise identical, every shared-parameter gradient must be
     bitwise identical (installation must not change the scientific gradient
     definition of the main path), the branch gate must receive gradient while the
     conv receives exactly zero at gate 0, and the forward guard must have detached
@@ -115,9 +117,9 @@ def arm_probe(c,out,arm,mode,e,x,t):
     """
     from . import detail_path
     from ..baseline.training_v2b_engine import _move
-    bs=e.config.physical_batch_size
-    require(isinstance(x,torch.Tensor) and len(t)>=bs and x.shape[0]==2*bs,'FT probe window shape')
-    xp=x[:bs].to(e.device);tp=_move(list(t[:bs]),e.device)
+    bs=e.config.physical_batch_size;pb=max(1,bs//2)
+    require(isinstance(x,torch.Tensor) and len(t)>=pb and x.shape[0]==2*bs,'FT probe window shape')
+    xp=x[:pb].to(e.device);tp=_move(list(t[:pb]),e.device)
     twin,criterion_t=native_twin(c,out)
     twin.train();criterion_t.train();e.model.train();e.criterion.train()
     with torch.no_grad():
@@ -126,14 +128,21 @@ def arm_probe(c,out,arm,mode,e,x,t):
     require(all(torch.equal(a[k],b[k]) for k in ('pred_logits','pred_boxes')),'FT probe zero-gate output identity differs')
     info=dict(detail_path.LAST_SOURCE_INFO)
     require(info.get('mode')==mode and info.get('source_requires_grad') is False,'FT probe stop-gradient guard evidence')
+    del a,b
     twin.zero_grad(set_to_none=True);e.model.zero_grad(set_to_none=True)
     torch.manual_seed(20261031);out_n=twin(xp,targets=tp)
     torch.manual_seed(20261031);loss_n=sum(criterion_t(out_n,tp).values())
+    loss_n_value=loss_n.detach().clone()
+    loss_n.backward()
+    grads_n={n:(p.grad.detach().clone() if p.grad is not None else None) for n,p in twin.named_parameters()}
+    del out_n,loss_n
+    twin.zero_grad(set_to_none=True)
+    if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
     torch.manual_seed(20261031);out_i=e.model(xp,targets=tp)
     torch.manual_seed(20261031);loss_i=sum(e.criterion(out_i,tp).values())
-    require(torch.equal(loss_n,loss_i),'FT probe zero-gate loss identity differs')
-    loss_n.backward();grads_n={n:p.grad for n,p in twin.named_parameters()}
+    require(torch.equal(loss_n_value,loss_i.detach()),'FT probe zero-gate loss identity differs')
     loss_i.backward()
+    del out_i,loss_i,loss_n_value
     installed=dict(e.model.named_parameters());shared=0;nonzero=False
     for n,g0 in grads_n.items():
         g1=installed[n].grad
@@ -143,7 +152,7 @@ def arm_probe(c,out,arm,mode,e,x,t):
             if float(g0.abs().sum())>0:nonzero=True
     require(shared>0 and nonzero,'FT probe gradient comparison vacuous')
     gate=e.model.decoder.detail_inject.gate;conv=e.model.decoder.detail_inject.conv.weight
-    probe={'mode':mode,'zero_gate_bitwise_outputs':True,'zero_gate_bitwise_loss':True,
+    probe={'mode':mode,'probe_batch':pb,'zero_gate_bitwise_outputs':True,'zero_gate_bitwise_loss':True,
            'shared_parameter_gradients_bitwise_identical':shared,
            'shared_parameter_gradients_nonzero':nonzero,
            'source_requires_grad_before_branch_detach':info.get('source_requires_grad_before_branch_detach'),
@@ -154,7 +163,7 @@ def arm_probe(c,out,arm,mode,e,x,t):
     require(probe['conv_grad_zero_at_zero_gate'],'FT probe conv gradient at zero gate differs')
     e.model.zero_grad(set_to_none=True)
     twin.zero_grad(set_to_none=True)
-    del twin,criterion_t,grads_n,out_n,out_i,loss_n,loss_i,a,b,xp,tp
+    del twin,criterion_t,grads_n,xp,tp
     if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
     return probe
 

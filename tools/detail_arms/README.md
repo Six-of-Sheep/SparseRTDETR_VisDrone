@@ -76,3 +76,17 @@ checkpoint-carried RNG + full state, so probe draws cannot perturb it.
 `tools/slice_ft_cpu_accept.py` end-to-end fixture gate (real supervisors,
 duplicate-launch refusal, fault injection, mutated-wire rejection, 6 dual-
 evaluator score calls).
+
+## r2 evidenced fix (2026-10-31, production attempt-001)
+
+Attempt-001 stopped at `accept-G2`: the supervisor's resource admission screen
+(`memory.free >= 3072 MiB` while running; GPU temperature steady at 48-49 C in
+the persisted samples) aborted the detail arm's worker at the moment the
+acceptance probe held two simultaneous full-microbatch FP32 graphs (evidence:
+`production-001/accept-G2-supervise.log` + `accept-G2/runtime-archive`,
+including `resources.jsonl`).  Fix, engineering only and with no scientific
+change: the probe runs on a halved micro-batch (bs//2, min 1), the
+native/installed FP32 forward+backward are sequentialized (one graph alive at
+any time), gradients are cloned off-graph, and the CUDA cache is emptied
+between stages; all bitwise claims and thresholds are unchanged and every other
+phase/mechanism is byte-identical to the release-001 overlay.
