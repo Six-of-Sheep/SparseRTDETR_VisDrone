@@ -47,14 +47,23 @@ def test_acceptance_scope_forbids_formal_learning():
 def test_wall_constraint_breach_raises():
     with pytest.raises(G.RuntimeConstraintError) as excinfo:
         G.enforce_runtime(started=time.monotonic() - 10.0, label="test",
-                          caps={"wall_seconds": 1, "gpu_peak_bytes": 10 ** 18, "output_bytes": 10 ** 18})
+                          caps={"wall_seconds": 1, "output_bytes": 10 ** 18})
     assert excinfo.value.observation["label"] == "test"
     assert excinfo.value.observation["elapsed_seconds"] >= 10.0
 
 
+def test_memory_gate_removed_wall_and_output_kept():
+    assert "gpu_peak_bytes" not in G.CAPS
+    assert G.CAPS["wall_seconds"] == 1800
+    assert G.CAPS["output_bytes"] == 256 * 1024 ** 2
+    observation = G.enforce_runtime(started=time.monotonic(), label="test",
+                                    caps={"wall_seconds": 3600, "output_bytes": 10 ** 18})
+    assert observation["cuda_peak_reserved_bytes"] is None
+
+
 def test_runtime_within_caps_returns_observation():
     observation = G.enforce_runtime(started=time.monotonic(), label="test",
-                                    caps={"wall_seconds": 3600, "gpu_peak_bytes": 10 ** 18, "output_bytes": 10 ** 18})
+                                    caps={"wall_seconds": 3600, "output_bytes": 10 ** 18})
     assert observation["label"] == "test"
     assert observation["elapsed_seconds"] >= 0.0
     assert observation["cuda_peak_reserved_bytes"] is None      # CPU path: no torch module passed
@@ -63,7 +72,7 @@ def test_runtime_within_caps_returns_observation():
 
 def test_output_bytes_constraint(tmp_path):
     (tmp_path / "file.json").write_bytes(b"x" * 64)
-    caps = {"wall_seconds": 3600, "gpu_peak_bytes": 10 ** 18, "output_bytes": 8}
+    caps = {"wall_seconds": 3600, "output_bytes": 8}
     with pytest.raises(G.RuntimeConstraintError) as excinfo:
         G.enforce_runtime(started=time.monotonic(), label="test", caps=caps, out=tmp_path)
     assert excinfo.value.observation["output_bytes"] == 64

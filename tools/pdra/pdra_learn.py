@@ -1,4 +1,4 @@
-"""Real learning modules and controls for PDRA (rev 4).
+"""Real learning modules and controls for PDRA (rev 6).
 
 Three trainable arms share one architecture family and one capacity cap:
 
@@ -197,10 +197,18 @@ def train_pair_arm(arm: PairArm, tensors: PairTensors, *, spec: Mapping | None =
         d_j = tensors.sides_j[idx].to(device)
         geom = tensors.geom[idx].to(device)
         r, a = arm.forward_batch(d_i, d_j, geom)
-        pref_mask = tensors.pref_target[idx].to(device) >= 0
-        if bool(pref_mask.any()):
-            y = tensors.pref_target[idx][pref_mask].float().to(device)
-            loss_pref = F.binary_cross_entropy(r[pref_mask], y)
+        # rev 6 device-placement fix (2026-10-31): build and apply the keep-mask on the
+        # CPU copy and move the boolean mask to ``device`` only to index the device-side
+        # outputs.  rev 5 moved the mask to the device first and then indexed the CPU
+        # ``pref_target`` with it, raising "indices should be either on cpu or on the
+        # same device as the indexed tensor" on the first CUDA update.  The selected
+        # rows, their order and the loss values are identical to the intended semantics
+        # (and to rev 5 on CPU).
+        pref_cpu = tensors.pref_target[idx]
+        pref_keep = pref_cpu >= 0
+        if bool(pref_keep.any()):
+            y = pref_cpu[pref_keep].float().to(device)
+            loss_pref = F.binary_cross_entropy(r[pref_keep.to(device)], y)
         else:
             loss_pref = r.sum() * 0.0
         z = tensors.abstain_target[idx].float().to(device)

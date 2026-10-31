@@ -1,10 +1,11 @@
-"""CPU acceptance of the real P3 tap on the frozen seed0 EMA weights (one image, no CUDA; rev 5).
+"""CPU acceptance of the real P3 tap on the frozen seed0 EMA weights (one image, no CUDA; rev 6).
 
 Scope: tap mechanics on the *real* detector (bitwise-equal outputs with and without the
 hook, P3 shape ``[1, 256, 96, 168]`` on every view, exactly one encoder call per forward),
 the real strip pooling and the complete GT-free decision enumeration for one frozen image,
-and the rev-5 **shared three-arm acceptance allocation** (``pdra_gpu_check.ARM_ALLOCATION``
-= 30 + 10 + 10 = 50 frozen-spec updates through ``comparator_acceptance_updates``) with the
+and the shared **three-arm acceptance allocation** (``pdra_gpu_check.ARM_ALLOCATION``
+= 30 + 10 + 10 = 50 frozen-spec updates through ``comparator_acceptance_updates``; introduced
+in rev 5, unchanged in rev 6) with the
 detector held frozen, under the same runtime accounting/enforcement entry the GPU check
 uses.  CPU numerics differ from the GPU run, so agreement with the frozen raw views is
 *reported*, never gated; the audited engine restore and the bitwise raw-view comparison
@@ -47,12 +48,13 @@ import pdra_gpu_check as G
 from pdra_stage1 import _affines
 
 TASK = "r18-pdra-wiring-20261031-001"
-ACCEPTANCE_REVISION = "cpu-tap-acceptance-rev5-20261031"
+ACCEPTANCE_REVISION = "cpu-tap-acceptance-rev6-20261031"
 IMAGE_ROW = 12          # first image of frozen raw batch 3 (all four images eval-split)
 BATCH = 3
-# CPU acceptance budget, enforced through the same entry as the GPU check (no CUDA, so the
-# GPU cap is never consulted).
-CAPS = {"wall_seconds": 1800, "gpu_peak_bytes": 0, "output_bytes": 64 * 1024 ** 2}
+# CPU acceptance budget, enforced through the same entry as the GPU check (no CUDA; the
+# rev-6 entry gates only the wall clock and output bytes -- memory peaks are recorded,
+# never gated).
+CAPS = {"wall_seconds": 1800, "output_bytes": 64 * 1024 ** 2}
 require, publish, read, exact = G.require, G.publish, G.read, G.exact
 
 

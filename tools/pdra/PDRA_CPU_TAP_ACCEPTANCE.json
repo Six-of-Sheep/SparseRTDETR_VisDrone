@@ -26,9 +26,9 @@
     "last_budget_observation": {
       "cuda_peak_allocated_bytes": null,
       "cuda_peak_reserved_bytes": null,
-      "elapsed_seconds": 9.991,
+      "elapsed_seconds": 10.052,
       "label": "learn",
-      "output_bytes": 487
+      "output_bytes": 462
     },
     "mode": "cpu-tap-acceptance",
     "phase": "learn",
@@ -101,7 +101,7 @@
         "material_rows": 344,
         "mean_loss": 0.021930294577032328,
         "parameters_changed": true,
-        "seconds": 0.008688260102644563,
+        "seconds": 0.008840898983180523,
         "steps_exactly_allocated": true,
         "updates": 10
       },
@@ -174,7 +174,7 @@
         "material_rows": 1225,
         "mean_loss": 1.1955001890659331,
         "parameters_changed": true,
-        "seconds": 0.022855785908177495,
+        "seconds": 0.023676459211856127,
         "steps_exactly_allocated": true,
         "updates": 10
       },
@@ -247,7 +247,7 @@
         "material_rows": 1225,
         "mean_loss": 0.7283209423224132,
         "parameters_changed": true,
-        "seconds": 0.20778563688509166,
+        "seconds": 0.21129718399606645,
         "steps_exactly_allocated": true,
         "updates": 30
       }
@@ -260,7 +260,7 @@
     },
     "batch_pairs": 256,
     "labelled_pairs": 1225,
-    "seconds": 0.5745060602203012,
+    "seconds": 0.5741832267958671,
     "small_batch_fallback_used": false,
     "spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
     "total_updates": 50
@@ -294,7 +294,7 @@
       "abstain_head": 10154,
       "infeasible_read": 1625
     },
-    "seconds": 4.292381233070046,
+    "seconds": 4.359046849887818,
     "stage0_pairs_for_image": 11779
   },
   "detector_frozen_evidence": {
@@ -315,7 +315,7 @@
     ],
     "note": "no backward counter (the rev-4 no-op is removed); evidenced by measured parameter gradients and the weight digest"
   },
-  "elapsed_seconds": 10.014165322994813,
+  "elapsed_seconds": 10.075469149975106,
   "feature_binding": {
     "core_extent": [
       96,
@@ -340,7 +340,7 @@
       168
     ],
     "pools_identical_between_passes": true,
-    "seconds": 3.2207636679522693,
+    "seconds": 3.0656379419378936,
     "tap_calls": 5,
     "views": [
       {
@@ -399,7 +399,7 @@
     "audited_restore": false,
     "cpu_only": true,
     "ema_updates": 36480,
-    "load_seconds": 0.5365557889454067,
+    "load_seconds": 0.6145243758801371,
     "scope": "formal_R18_seed0_e120"
   },
   "pooling": {
@@ -407,13 +407,12 @@
     "pairs": 11779,
     "pool": 3000,
     "readable": 10154,
-    "seconds": 0.36149619915522635,
+    "seconds": 0.37577125802636147,
     "strips": 40232,
-    "us_per_readable_pair": 35.601358987120975
+    "us_per_readable_pair": 37.00721469631293
   },
   "resources": {
     "caps": {
-      "gpu_peak_bytes": 0,
       "output_bytes": 67108864,
       "wall_seconds": 1800
     },
@@ -421,11 +420,11 @@
       "wall_seconds",
       "output_bytes"
     ],
-    "output_bytes": 487,
-    "vm_hwm_bytes": 2043817984
+    "output_bytes": 462,
+    "vm_hwm_bytes": 1955971072
   },
-  "revision": "cpu-tap-acceptance-rev5-20261031",
-  "source_commit": "WORKTREE-UNCOMMITTED-REV5",
+  "revision": "cpu-tap-acceptance-rev6-20261031",
+  "source_commit": "WORKTREE-UNCOMMITTED-REV6",
   "status": "PASS",
   "task": "r18-pdra-wiring-20261031-001"
 }

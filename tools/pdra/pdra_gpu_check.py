@@ -1,4 +1,4 @@
-"""PDRA limited GPU engineering check (one command, fixed scope; rev 5).
+"""PDRA limited GPU engineering check (one command, fixed scope; rev 6).
 
 Scope (frozen by this file; the brief ``PDRA_GPU_CHECK_R2.md`` repeats it)
 --------------------------------------------------------------------------
@@ -20,11 +20,13 @@ Scope (frozen by this file; the brief ``PDRA_GPU_CHECK_R2.md`` repeats it)
   ``_gt_items`` helper chain) -- and only after each image's decision phase.  The pair
   labels for the PDRA/(c) arms come from the frozen stage-0 rows, as in rev 4.
 * Runtime constraints are enforced *while* the check runs, not only at the end:
-  wall <= 1800 s, CUDA reserved peak <= 12 GiB, output <= 256 MiB; checked at input
-  resolution, after the engine restore (the restore-phase peak is recorded and gated
-  before the per-phase statistics are reset), after every forward pass, after every
-  decided image, after every comparator update and after every publish.  Host VmHWM is
-  reported per phase, not gated.
+  wall <= 1800 s and output <= 256 MiB; checked at input resolution, after the engine
+  restore, after every forward pass, after every decided image, after every comparator
+  update and after every publish.  rev 6 removed the artificial memory threshold and
+  the allocator quota (2026-10-31 authorization): CUDA allocated/reserved peaks are
+  recorded for the whole run (restore phase included) but not gated, and a genuine OOM
+  surfaces as an exception -> STOP.json (no batch or precision fallback, no retry).
+  Host VmHWM is reported per phase, not gated.
 * Exception accounting: any failure writes ``STOP.json`` with the exception type and
   message, the full traceback and the executed-count accounting (phase reached, forward
   calls, per-arm updates, observed peaks).  No automatic retry.
@@ -45,8 +47,9 @@ Scope (frozen by this file; the brief ``PDRA_GPU_CHECK_R2.md`` repeats it)
      decided through the GT-free inference enumeration; the pair count equals the stage-0
      ledger for these images; readability agrees pair by pair with the stage-0 rows when
      the raw views reproduce exactly (otherwise reported, not gated);
-  5. resource peaks: wall per phase, CUDA peak allocated/reserved (restore included),
-     host VmHWM, within caps -- and enforced during the run as above.
+  5. resource peaks: wall per phase within the enforced cap; CUDA peak allocated/reserved
+     (restore included) and host VmHWM recorded for the whole run (memory is not gated in
+     rev 6; a real OOM fails the run as an exception).
 * Acceptance boundary: a PASS is an engineering wiring acceptance on eight frozen
   images, nothing more.  ``ACCEPTANCE_SCOPE`` (written into PLAN/RESULT/CLOSED) states
   that it authorizes neither formal learning (stage-1 20,000 updates), nor scoring, nor
@@ -86,8 +89,8 @@ for _path in (str(HERE), str(REPO)):
 
 import pdra_core as P
 
-TASK = "r18-pdra-gpu-check-20261031-001"
-CHECK_REVISION = "pdra-gpu-check-rev5-20261031"
+TASK = "r18-pdra-gpu-check-20261031-002"
+CHECK_REVISION = "pdra-gpu-check-rev6-20261031"
 PARENT_SHA = "b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28"
 STAGE0_DIR = Path("/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/"
                   "localization-distribution/r18-pdra-stage0-20261030-001/attempt-001")
@@ -106,7 +109,11 @@ CHECK_UPDATES = 50
 # updates to prove their own training path (gradients on every parameter, parameters
 # change, detector untouched).  Sum must equal CHECK_UPDATES.
 ARM_ALLOCATION = {"pdra_difference_strips": 30, "c_whole_box_pairwise": 10, "b_single_box_quality": 10}
-CAPS = {"wall_seconds": 1800, "gpu_peak_bytes": 12 * 1024 ** 3, "output_bytes": 256 * 1024 ** 2,
+# rev 6: the wall clock and output bytes are the enforced caps; CUDA allocated/reserved
+# peaks are recorded for the whole run but no longer gated (the rev-5 12 GiB threshold
+# and any allocator quota are removed per the 2026-10-31 authorization).  A real OOM is
+# an exception -> STOP.json; no batch or precision fallback, no retry.
+CAPS = {"wall_seconds": 1800, "output_bytes": 256 * 1024 ** 2,
         "forward_calls": 20, "comparator_updates": CHECK_UPDATES}
 EXPECTED_P3 = (256, 96, 168)
 ACCEPTANCE_SCOPE = {
@@ -185,7 +192,7 @@ def output_bytes(out: Path) -> int:
     return sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
 
 
-# --- runtime constraints and accounting (rev 5) ---------------------------------
+# --- runtime constraints and accounting (rev 6) ---------------------------------
 class RuntimeConstraintError(RuntimeError):
     """A runtime resource constraint was exceeded; ``observation`` holds the values."""
 
@@ -197,15 +204,15 @@ class RuntimeConstraintError(RuntimeError):
 def enforce_runtime(*, started: float, label: str, caps: Mapping = CAPS, out: Path | None = None,
                     torch_mod=None, accounting: "Accounting | None" = None,
                     peak_floor: int | None = None) -> dict:
-    """Enforce the runtime constraints (wall clock, CUDA reserved peak, output bytes).
+    """Record resource observations; enforce the wall-clock and output constraints.
 
     Called at every phase boundary, after every forward pass, after every decided image,
     after every comparator update and after every publish, so a breach fails the run where
-    it happens and the failure accounting shows the observed values.  ``peak_floor`` is the
-    CUDA reserved peak already recorded for earlier phases (the gated restore-phase peak,
-    whose statistics are reset afterwards), so the cap applies to the whole run and not to
-    the current statistics window.  Without ``torch_mod`` (CPU entries, tests) the CUDA
-    constraint is not consulted.
+    it happens and the failure accounting shows the observed values.  CUDA allocated and
+    reserved peaks are recorded for the whole run -- ``peak_floor`` carries the earlier,
+    pre-reset restore-phase reserved peak -- but are not gated (rev 6 removed the
+    artificial memory threshold and allocator quota; a genuine OOM surfaces as an
+    exception).  Without ``torch_mod`` (CPU entries, tests) no CUDA values are consulted.
     """
     elapsed = time.monotonic() - started
     observed = {"label": label, "elapsed_seconds": round(elapsed, 3),
@@ -224,9 +231,6 @@ def enforce_runtime(*, started: float, label: str, caps: Mapping = CAPS, out: Pa
     breach = None
     if elapsed > float(caps["wall_seconds"]):
         breach = "wall_seconds"
-    elif (observed["cuda_peak_reserved_bytes"] is not None
-          and observed["cuda_peak_reserved_bytes"] > int(caps["gpu_peak_bytes"])):
-        breach = "gpu_peak_bytes"
     elif observed["output_bytes"] is not None and observed["output_bytes"] > int(caps["output_bytes"]):
         breach = "output_bytes"
     if breach is not None:
@@ -402,12 +406,14 @@ def plan(inputs: dict, batches) -> dict:
                 "no backward counter (the rev-4 counter was a no-op and is removed)"],
             "runtime_constraints": {
                 "enforced": {"wall_seconds": CAPS["wall_seconds"],
-                             "gpu_peak_reserved_bytes": CAPS["gpu_peak_bytes"],
                              "output_bytes": CAPS["output_bytes"]},
-                "checked_at": ("input resolution; restore completion (restore-phase peak gated before the "
-                               "phase statistics reset); every forward pass; every decided image; every "
-                               "comparator update; every publish; final resources"),
-                "reported_not_gated": ["host VmHWM per phase"],
+                "checked_at": ("input resolution; restore completion; every forward pass; every decided "
+                               "image; every comparator update; every publish; final resources"),
+                "recorded_not_gated": ["CUDA peak allocated/reserved for the whole run (restore phase "
+                                       "included)", "host VmHWM per phase"],
+                "memory_gate_removed": ("rev 6 removed the artificial CUDA-reserved threshold and the "
+                                        "allocator quota (2026-10-31 authorization); a real OOM fails the "
+                                        "run as an exception, with no batch or precision fallback"),
                 "on_breach": "RuntimeConstraintError -> STOP.json with accounting; no retry"},
             "exception_accounting": ("STOP.json carries exception type/message, traceback and the executed "
                                      "counts (phase, forward calls, per-arm updates, observed peaks)"),
@@ -575,7 +581,8 @@ def run(inputs: dict, out: Path, batches, source_commit: str, *, budget_started:
     rows_by_image = stage0_rows_for(images)
 
     # 1. audited restore of the frozen seed0 e120 EMA engine (training-release imports);
-    #    the restore-phase CUDA peak is recorded and gated before the phase stats reset
+    #    the restore-phase CUDA peak is recorded before the phase stats reset (rev 6:
+    #    recorded, not gated)
     accounting.phase("restore")
     enforce_runtime(started=started, label="pre_restore", out=out, accounting=accounting)
     t0 = time.monotonic()
@@ -608,7 +615,7 @@ def run(inputs: dict, out: Path, batches, source_commit: str, *, budget_started:
                          "runtime": restored["runtime"], "host_hwm_bytes": rss_high_water(),
                          "peak_allocated_bytes": restore_peak_allocated,
                          "peak_reserved_bytes": restore_peak_reserved}
-    guard("restore")                            # the restore-phase peak is gated here
+    guard("restore")                            # records the restore-phase peak floor
     torch.cuda.reset_peak_memory_stats()
     accounting.complete("restore")
 
@@ -843,12 +850,14 @@ def run(inputs: dict, out: Path, batches, source_commit: str, *, budget_started:
                  "restore_peak_allocated_bytes": restore_peak_allocated,
                  "restore_peak_reserved_bytes": restore_peak_reserved,
                  "peak_allocated_bytes": worst_peak["allocated"], "peak_reserved_bytes": worst_peak["reserved"],
+                 "memory_peaks_recorded_not_gated": True,
+                 "memory_gate_removed": ("rev 6: no artificial CUDA-reserved threshold or allocator quota; "
+                                         "a real OOM fails as an exception"),
                  "phase_seconds": {name: round(record["seconds"], 3) for name, record in phases.items()},
                  "output_bytes": output_bytes(out), "caps": CAPS,
-                 "constraints_enforced_during_run": ["wall_seconds", "gpu_peak_bytes (reserved; restore phase included)",
-                                                     "output_bytes"],
+                 "constraints_enforced_during_run": ["wall_seconds", "output_bytes"],
                  "budget_observations": accounting.snapshot()["budget_observations"],
-                 "within_caps": (wall <= CAPS["wall_seconds"] and worst_peak["reserved"] <= CAPS["gpu_peak_bytes"]
+                 "within_caps": (wall <= CAPS["wall_seconds"]
                                  and output_bytes(out) <= CAPS["output_bytes"])}
     require(resources["within_caps"], f"resource caps exceeded: {resources}")
     publish(out / "RESOURCE.json", resources)

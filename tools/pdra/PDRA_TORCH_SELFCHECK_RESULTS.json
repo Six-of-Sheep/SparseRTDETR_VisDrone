@@ -14,8 +14,9 @@
       },
       "check_updates": 50,
       "wall_breach_raised": true,
+      "memory_gate_absent": true,
       "accounting_detached": true,
-      "seconds": 0.0
+      "seconds": 0.006
     },
     {
       "check": "roi_align_convention",
@@ -25,7 +26,7 @@
       "impulse_centre_value": 0.5625,
       "equivalent_spelling_agrees": true,
       "double_scaling_detected": true,
-      "seconds": 0.002
+      "seconds": 0.007
     },
     {
       "check": "slot_encoding",
@@ -41,7 +42,7 @@
       "mask_bits": 5,
       "invalid_is_zero": true,
       "whole_dim_c2": 9,
-      "seconds": 0.002
+      "seconds": 0.008
     },
     {
       "check": "torch_antisymmetry",
@@ -49,7 +50,7 @@
       "pairs": 64,
       "max_abs_r_plus_flip_minus_1": 1.1920928955078125e-07,
       "max_abs_a_symmetry": 0.0,
-      "seconds": 0.004
+      "seconds": 0.01
     },
     {
       "check": "learning_fixed_updates",
@@ -63,7 +64,18 @@
       "quality_updates": 30,
       "pair_arm_parameters": 3269,
       "deterministic": true,
-      "seconds": 0.111
+      "seconds": 0.132
+    },
+    {
+      "check": "pair_arm_pref_mask_semantics",
+      "status": "PASS",
+      "mixed_batch_labelled_rows": 35,
+      "mixed_batch_size": 64,
+      "first_loss_reference": 1.3822755813598633,
+      "first_loss_recorded": 1.382276,
+      "unlabelled_fallback_equals_abstain_term": true,
+      "updates": 3,
+      "seconds": 0.14
     },
     {
       "check": "adapter_equivalence",
@@ -75,7 +87,7 @@
         "infeasible_read"
       ],
       "adapter_substitutions": 0,
-      "seconds": 0.115
+      "seconds": 0.144
     },
     {
       "check": "sampling_verification",
@@ -83,7 +95,7 @@
       "positive": "PASS",
       "corrupt_split_detected": true,
       "wrong_count_rejected": true,
-      "seconds": 0.119
+      "seconds": 0.149
     },
     {
       "check": "capacity_report",
@@ -96,7 +108,7 @@
       "cap": 1000000,
       "learning_spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
       "epochs_equivalent": 22.985,
-      "seconds": 0.123
+      "seconds": 0.152
     },
     {
       "check": "tap_mechanics",
@@ -104,7 +116,7 @@
       "calls": 1,
       "outputs_bitwise_equal": true,
       "hook_removed": true,
-      "seconds": 0.123
+      "seconds": 0.153
     },
     {
       "check": "dimension_budget",
@@ -113,7 +125,7 @@
       "whole_dim_256": 1025,
       "stage1_pdra_cache_gb": 6.944,
       "stage1_whole_cache_gb": 0.0,
-      "seconds": 0.123
+      "seconds": 0.153
     }
   ],
   "failed": [],

@@ -1,10 +1,11 @@
-"""CPU torch self-checks for the rev-4 PDRA wiring (synthetic inputs only).
+"""CPU torch self-checks for the rev-6 PDRA wiring (synthetic inputs only).
 
 Covers: the frozen RoIAlign convention against a float64 reference; the five-slot
 descriptor encoding; exact antisymmetry of the torch pair arm; fixed-count training
 determinism; byte-equal equivalence of the adapter tournament/merge with the numpy rules
 core; sampling-manifest verification (positive and corrupted); arm capacities; tap
-mechanics on a synthetic encoder; descriptor dimensions and the fp16 cache budget.
+mechanics on a synthetic encoder; descriptor dimensions and the fp16 cache budget; the
+pref-mask semantics of the pair-arm loss (the rev-6 device-placement regression).
 
 No detector, no CUDA, no real data, no randomness beyond fixed seeds.  Run:
     python -I tools/pdra/pdra_torch_selfcheck.py [--out results.json]
@@ -27,6 +28,7 @@ for _path in (_HERE, _REPO):
 import numpy as np
 import torch
 from torchvision.ops import roi_align
+import torch.nn.functional as F
 
 import pdra_core as P
 import pdra_features as FEAT
@@ -225,6 +227,79 @@ def check_learning_fixed_updates() -> dict:
               "deterministic": True}
     return _fail("learning_fixed_updates", {**detail, "errors": errors}) if errors \
         else _ok("learning_fixed_updates", detail)
+
+
+# --- 5b: rev-6 device-placement regression (pref-mask semantics) ---------------
+def check_pair_arm_pref_mask_semantics() -> dict:
+    """CPU regression for the rev-5 CUDA device bug.
+
+    rev 5 moved the preference keep-mask to the compute device and then used it to index
+    the CPU ``pref_target``, which fails on CUDA ("indices should be either on cpu or on
+    the same device as the indexed tensor"); the first real-CUDA update of the r18-pdra
+    GPU check stopped there.  On CPU the mask semantics are the testable part: the
+    preference loss must be exactly BCE over the rows with ``pref_target >= 0`` in
+    original order, and a batch without labelled rows must fall back to the frozen 0.0
+    preference term.  The device placement itself is exercised by the real-CUDA updates
+    of the GPU engineering check (learn phase).
+    """
+    errors = []
+    batch, n = 64, 512
+    generator = torch.Generator().manual_seed(23)
+    tensors = L.PairTensors(
+        sides_i=torch.randn(n, 45, generator=generator).half(),
+        sides_j=torch.randn(n, 45, generator=generator).half(),
+        geom=torch.rand(n, 5, generator=generator),
+        pref_target=torch.randint(-1, 2, (n,), generator=generator).to(torch.int8),
+        abstain_target=torch.rand(n, generator=generator))
+    spec = {**L.frozen_spec(), "updates": 3, "batch_pairs": batch}
+    torch.manual_seed(0)
+    arm = L.PairArm(45, hidden=16)
+    digest_before = L.tensor_state_digest(arm)
+    report = L.train_pair_arm(arm, tensors, spec=spec, device="cpu")
+    # independent reference of the first optimizer step, rebuilt from the frozen spec
+    torch.manual_seed(0)
+    reference_arm = L.PairArm(45, hidden=16)
+    perm = torch.randperm(n, generator=torch.Generator().manual_seed(spec["seed"]))
+    idx = perm[:batch]
+    with torch.no_grad():
+        r, a = reference_arm.forward_batch(tensors.sides_i[idx], tensors.sides_j[idx], tensors.geom[idx])
+        keep = tensors.pref_target[idx] >= 0
+        if bool(keep.any()):
+            reference = float(F.binary_cross_entropy(r[keep], tensors.pref_target[idx][keep].float())
+                              + F.binary_cross_entropy(a, tensors.abstain_target[idx]))
+        else:
+            reference = float(F.binary_cross_entropy(a, tensors.abstain_target[idx]))
+    if not (bool(keep.any()) and not bool(keep.all())):
+        errors.append("the regression batch is not mixed (some but not all rows labelled)")
+    if report["updates"] != 3 or not report["steps_exactly_frozen_count"]:
+        errors.append(f"pair arm ran {report['updates']} updates instead of the frozen 3")
+    if abs(report["first_losses"][0] - reference) > 2e-6:
+        errors.append(f"first-step loss {report['first_losses'][0]} differs from the reference {reference}")
+    if L.tensor_state_digest(arm) == digest_before:
+        errors.append("training did not change the comparator parameters")
+    # a batch without preference labels must fall back to the frozen 0.0 preference term
+    generator_u = torch.Generator().manual_seed(29)
+    unlabelled = L.PairTensors(
+        sides_i=torch.randn(batch, 45, generator=generator_u).half(),
+        sides_j=torch.randn(batch, 45, generator=generator_u).half(),
+        geom=torch.rand(batch, 5, generator=generator_u),
+        pref_target=torch.full((batch,), -1, dtype=torch.int8),
+        abstain_target=torch.rand(batch, generator=generator_u))
+    spec_u = {**L.frozen_spec(), "updates": 1, "batch_pairs": batch}
+    torch.manual_seed(0)
+    arm_u = L.PairArm(45, hidden=16)
+    report_u = L.train_pair_arm(arm_u, unlabelled, spec=spec_u, device="cpu")
+    torch.manual_seed(0)
+    reference_u = L.PairArm(45, hidden=16)
+    with torch.no_grad():
+        r_u, a_u = reference_u.forward_batch(unlabelled.sides_i, unlabelled.sides_j, unlabelled.geom)
+        reference_abstain = float(F.binary_cross_entropy(a_u, unlabelled.abstain_target))
+    if abs(report_u["first_losses"][0] - reference_abstain) > 1e-6:
+        errors.append("all-unlabelled batch did not fall back to the abstain-only loss")
+    detail = {"mixed_batch_labelled_rows": int(keep.sum()), "mixed_batch_size": batch,
+              "first_loss_reference": reference, "first_loss_recorded": report["first_losses"][0],
+              "unlabelled_fallback_equals_abstain_term": True, "updates": report["updates"]}
+    return _fail("pair_arm_pref_mask_semantics", {**detail, "errors": errors}) if errors else _ok("pair_arm_pref_mask_semantics", detail)
 
 
 # --- 5: adapter tournament/merge equals the numpy rules core -------------------
@@ -428,15 +503,17 @@ def check_runtime_accounting_and_allocation() -> dict:
         errors.append("an arm carries no acceptance update")
     if G.CAPS["comparator_updates"] != G.CHECK_UPDATES or G.CAPS["forward_calls"] != 20:
         errors.append("caps differ from the frozen check counts")
+    if "gpu_peak_bytes" in G.CAPS:
+        errors.append("the artificial memory gate is gone in rev 6 and must not return to CAPS")
     try:
         G.enforce_runtime(started=time.monotonic() - 10.0, label="selfcheck",
-                          caps={"wall_seconds": 1, "gpu_peak_bytes": 1, "output_bytes": 1})
+                          caps={"wall_seconds": 1, "output_bytes": 1})
         errors.append("a wall-clock breach did not raise")
     except G.RuntimeConstraintError:
         pass
     try:
         G.enforce_runtime(started=time.monotonic(), label="selfcheck",
-                          caps={"wall_seconds": 3600, "gpu_peak_bytes": 1 << 60, "output_bytes": 1 << 60})
+                          caps={"wall_seconds": 3600, "output_bytes": 1 << 60})
     except G.RuntimeConstraintError:
         errors.append("a within-caps observation raised")
     accounting = G.Accounting(task="selfcheck", mode="cpu")
@@ -453,7 +530,7 @@ def check_runtime_accounting_and_allocation() -> dict:
     if accounting.snapshot()["executed_forward_calls"] != 5:
         errors.append("snapshot is not detached from the live accounting")
     detail = {"allocation": dict(G.ARM_ALLOCATION), "check_updates": G.CHECK_UPDATES,
-              "wall_breach_raised": True, "accounting_detached": True}
+              "wall_breach_raised": True, "memory_gate_absent": True, "accounting_detached": True}
     return _fail("runtime_accounting_and_allocation", {**detail, "errors": errors}) if errors         else _ok("runtime_accounting_and_allocation", detail)
 
 
@@ -463,6 +540,7 @@ CHECKS = (
     check_slot_encoding,
     check_torch_antisymmetry,
     check_learning_fixed_updates,
+    check_pair_arm_pref_mask_semantics,
     check_adapter_equivalence,
     check_sampling_verification,
     check_capacity_report,
