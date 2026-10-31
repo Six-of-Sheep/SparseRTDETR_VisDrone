@@ -83,7 +83,7 @@ DESIGN_REVISION = "rev 4 (2026-10-30)"
 CANVAS_HW = (768, 1344)          # every view resizes to this canvas (height, width)
 FEATURE_STRIDE = (8, 8)          # rev 4: bound to HybridEncoder output-list index 0 (P3)
 FEATURE_LEVEL = "hybrid_encoder_out_index_0_p3"
-FEATURE_BINDING_VERIFIED = False  # set True only after the GPU engineering check PASSes
+FEATURE_BINDING_VERIFIED = True  # rev6 GPU engineering check PASS (2026-10-31): task r18-pdra-gpu-check-20261031-002/attempt-001, RESULT.json sha256 3e18792511dfa282d373f957c3eabd54cf42e47cecb3efec14d9a55e24f7046d
 FEATURE_READ = ("roi_align(aligned=True, spatial_scale=1.0, output_size=2x2, "
                 "sampling_ratio=2) on the box's own-view P3 map, feature-unit coordinates")
 NMS_IOU = 0.5                    # mirrors the frozen merge core
