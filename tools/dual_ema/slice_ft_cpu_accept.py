@@ -74,10 +74,15 @@ def main():
     before={str(p):reference(p) for p in job.glob('*.json')}
     assert run(success,token,'duplicate-launch')!=0
     assert before=={str(p):reference(p) for p in job.glob('*.json')},'duplicate changed closed outputs'
-    fail,token2=create('worker-failure',fault='formal-D0')
+    # The injected worker fault is placed on the FIRST phase on purpose: the
+    # negative test still requires STOP + SLIM_EXPORT + no later phase, while
+    # writing no fixture checkpoint, which keeps the retained CPU-gate material
+    # inside the declared 8 GiB server-new budget (declared before writing).
+    fail,token2=create('worker-failure',fault='accept-D0')
     assert run(fail,token2,'worker-exception')!=0
     assert read(Path(fail['job_root'])/'STOP.json')['status']=='STOP'
     assert (Path(fail['job_root'])/'SLIM_EXPORT.json').is_file()
+    assert not (Path(fail['job_root'])/'formal-D0').exists(),'worker failure continued chain'
     assert not (Path(fail['job_root'])/'infer-D0-A-emaR').exists(),'worker failure continued chain'
     # Mutate REAL generated wire records, rebuild wire hashes, require semantic
     # rejection. This is not a hand-authored successful event stream.

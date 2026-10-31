@@ -424,7 +424,7 @@ def evaluation(c,out):
     parsed=[data.raw(r) for r in rows]
     values={};metricrefs={};ordinal=0
     for name in EMAS:
-        values[name]={};metricrefs[name]={};grouped={}
+        values[name]={'A':{}};metricrefs[name]={'A':{}};grouped={}
         result=execution.complete(c,'infer-D0-A-ema'+name)
         for b in (600,300):
             records=execution.verified(result['predictions'][str(b)])
@@ -434,14 +434,14 @@ def evaluation(c,out):
                 'ema_module_sha256':result['ema_module_sha256'],'ema_updates':result['ema_updates'],
                 'prediction':result['predictions'][str(b)],'CPU_fixture':c['scope']=='CPU_FIXTURE'}
             q=out/f'D0-ema{name}-A-top{b}-metrics.json';publish(q,z)
-            values[name][str(b)]=bridge_values(z);metricrefs[name][str(b)]=reference(q);ordinal+=1
+            values[name]['A'][str(b)]=bridge_values(z);metricrefs[name]['A'][str(b)]=reference(q);ordinal+=1
             event(out,'evaluation_budget_complete',ordinal=ordinal,arm_name=name,view='A',budget=b,images=len(ids))
         _prefix(grouped[600],grouped[300],ids,whole=True)
     if c['scope']=='PRODUCTION':
         parent={str(b):bridge_values(execution.verified(c['parent_metrics']['A'][str(b)])) for b in (600,300)}
         g0={str(b):bridge_values(execution.verified(c['reference_metrics']['original_G0']['A'][str(b)])) for b in (600,300)}
     else:
-        parent=copy.deepcopy(values['R']);g0=copy.deepcopy(values['R'])
+        parent=copy.deepcopy(values['R']['A']);g0=copy.deepcopy(values['R']['A'])
     refs={'original_G0':g0,'parent':parent}
     rhs={'R':values['R']['A'],'C':values['C']['A'],'G0REF':g0,'PARENT':parent}
     pairs=[('A_C_minus_R','C','R'),('A_R_minus_originalG0','R','G0REF'),
