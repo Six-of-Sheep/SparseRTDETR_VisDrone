@@ -129,12 +129,13 @@ def ranks_of(scores):
 
 
 def _iou_xyxy(a, b):
-    low = torch.maximum(a[:, :2], b[None, :2])
-    high = torch.minimum(a[:, 2:], b[None, 2:])
+    """Pairwise IoU between two (N,4) xyxy tensors of equal length (element-wise)."""
+    low = torch.maximum(a[:, :2], b[:, :2])
+    high = torch.minimum(a[:, 2:], b[:, 2:])
     inter = (high - low).clamp_min(0).prod(-1)
     area_a = (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1])
-    area_b = (b[2] - b[0]) * (b[3] - b[1])
-    return (inter / (area_a + area_b - inter).clamp_min(1e-12))
+    area_b = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    return inter / (area_a + area_b - inter).clamp_min(1e-12)
 
 
 def _xyxy(boxes):
