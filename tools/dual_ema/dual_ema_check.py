@@ -55,6 +55,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     source = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(source / 'src'))
+    sys.path.insert(0, str(source))
     torch.set_num_threads(2)
     torch.use_deterministic_algorithms(True)
     require(not torch.cuda.is_initialized(), 'dual-EMA check initialized CUDA')
