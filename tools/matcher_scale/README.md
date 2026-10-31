@@ -53,6 +53,10 @@ error magnitude.  The prototype replaces the localization term only:
   batch means, i.e. the operator without the per-instance differentiation;
 - `off` (identity): the native expression, byte-for-byte (used by the tests).
 
+A matcher call whose target list carries no GT box at all is passed through with
+the native expression (the normalization has no columns to act on); empty windows
+are a legitimate input of this chain.
+
 Nothing else changes: the class and GIoU terms, the one-to-one structure, the
 loss path, the model, the optimizer, inference and the checkpoint schema.  The
 matcher still runs under `torch.no_grad()` and consumes no RNG draw.

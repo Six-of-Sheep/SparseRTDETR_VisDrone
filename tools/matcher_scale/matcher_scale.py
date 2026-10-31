@@ -25,7 +25,10 @@ This module replaces the localization term of the matching cost only:
 The class term and the GIoU term are untouched, the one-to-one structure is
 untouched, no parameter is added, nothing is added to the model or to inference,
 and the matching runs under ``torch.no_grad()`` exactly as the native one does.
-The mechanism acts only through WHICH token each instance owns.
+The mechanism acts only through WHICH token each instance owns.  A call whose
+target list carries no GT box at all is passed through with the native
+expression (the normalization has no columns to act on; empty windows are a
+legitimate input of this chain).
 
 Relation to the nearest precedents (declared honestly; no originality is claimed
 for the operator): scale-normalized localization metrics for tiny objects exist
@@ -111,10 +114,13 @@ def cost_terms(outputs, targets, mode, weights):
     tgt_ids = torch.cat([v["labels"] for v in targets])
     tgt_bbox = torch.cat([v["boxes"] for v in targets])
     cost_class = _class_cost(out_prob, tgt_ids, weights["alpha"], weights["gamma"])
-    if mode == "off":
+    empty_targets = bool(tgt_bbox.numel() == 0)
+    if mode == "off" or empty_targets:
+        # With no GT in the call the normalization is vacuous (the cost matrix has no
+        # columns), so the native expression is used unchanged.  Empty windows are a
+        # legitimate input of this chain (empty views are kept, no resampling).
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
     else:
-        require(tgt_bbox.numel() > 0, "a normalized cost needs at least one GT box")
         delta = (out_bbox[:, None, :] - tgt_bbox[None, :, :]).abs()
         width, height = tgt_bbox[:, 2], tgt_bbox[:, 3]
         if mode == "rel":
@@ -129,6 +135,7 @@ def cost_terms(outputs, targets, mode, weights):
     C = (weights["cost_bbox"] * cost_bbox + weights["cost_class"] * cost_class
          + weights["cost_giou"] * cost_giou)
     info = {"mode": mode, "queries": int(out_bbox.shape[0]), "targets": int(tgt_bbox.shape[0]),
+            "empty_targets": empty_targets,
             "cost_bbox_mean": float(cost_bbox.mean()) if cost_bbox.numel() else None}
     if mode != "off" and tgt_bbox.numel():
         info["scale_norm_mean"] = float(divisors[:, 0].mean())

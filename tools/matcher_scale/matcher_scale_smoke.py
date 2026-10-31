@@ -192,6 +192,7 @@ def main():
                        "scale_norm_mean": cost_info.get("scale_norm_mean")},
         "parameter_names_and_count_unchanged": True,
         "ema_state_keys_unchanged": True,
+        "window_gt_counts": [int(sum(len(t["boxes"]) for t in w[1])) for w in windows],
         "training": {"windows": len(windows), "updates": engine.completed_updates,
                      "replay_result_exact": same_result, "replay_state_exact": state_exact,
                      "restore_full_state_exact": bool(restored.get("full_state_exact")),
