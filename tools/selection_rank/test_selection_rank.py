@@ -48,7 +48,7 @@ def scene(seed, n_tokens, gt_boxes, selected_high):
 
 def test_gradient_direction():
     # tokens 0..3 with the score ordering 0 > 1 > 2 > 3 ; k=2 selects {0,1}
-    logits, boxes, gt = scene(11, 4, [[0.5, 0.5, 0.02, 0.02], [0.8, 0.8, 0.02, 0.02]], {0: 5.0, 1: 4.0, 2: 3.0, 3: 2.0})
+    logits, boxes, gt = scene(11, 4, [[0.5, 0.5, 0.02, 0.02], [0.8, 0.8, 0.02, 0.02]], {0: 5.0, 1: 4.8, 2: 4.7, 3: 1.0})
     # token 0 is the matched token of GT0; token 2 is the best localizer for GT0 among the unselected
     boxes[0, 0] = torch.tensor([0.50, 0.50, 0.020, 0.020])
     boxes[0, 2] = torch.tensor([0.51, 0.51, 0.021, 0.021])
@@ -166,7 +166,7 @@ def test_margin_is_monotone_in_scale_with_clamp():
 
 def test_added_gradient_touches_at_most_two_tokens_per_pair():
     logits, boxes, gt = scene(17, 6, [[0.5, 0.5, 0.02, 0.02], [0.8, 0.8, 0.04, 0.04]],
-                              {0: 5.0, 1: 4.0, 2: 3.0, 3: 2.0, 4: 1.0, 5: 0.5})
+                              {0: 5.0, 1: 4.9, 2: 4.85, 3: 4.8, 4: 1.0, 5: 0.5})
     boxes[0, 0] = torch.tensor([0.50, 0.50, 0.020, 0.020])
     boxes[0, 1] = torch.tensor([0.80, 0.80, 0.040, 0.040])
     boxes[0, 2] = torch.tensor([0.51, 0.51, 0.021, 0.021])
