@@ -1,5 +1,5 @@
 """PDRA stage 1 (feature pass + fixed training + eval diagnostics) and stage 2 (full
-inference with representative replacement) -- rev 7 runners.
+inference with representative replacement) -- rev 8 runners.
 
 Modes
 -----
@@ -18,7 +18,9 @@ Modes
                 never used for updates, tuning, checkpoint selection or early stopping),
                 and the eval diagnostics by the frozen buckets.  Diagnostics are reported,
                 never gated: the detection evaluation always proceeds (``pdra_score.py``).
-``run-stage2``  GPU.  Same five-view pass; for every image the complete GT-free inference
+``run-stage2``  GPU (rev 8: the entry verifies the four stage-1 artifact pins, restores
+                the audited engine and only then moves the frozen arm weights to CUDA).
+                Same five-view pass; for every image the complete GT-free inference
                 enumeration decides all cluster-internal pairs for PDRA, (c) and (b); the
                 representative replacement with re-ranking produces top600/top300
                 predictions per arm in the frozen prediction schema, next to original C.
@@ -32,6 +34,16 @@ exception -> STOP.json, no batch or precision fallback, no retry).  Nothing here
 ground truth at inference; stage 1 opens annotations only for the (b) member targets after
 each image's feature pass, and reads training/eval labels solely from the frozen stage-0
 rows.
+
+rev 8 (2026-10-31): the stage-2 entry restores the audited seed0 engine *before* any CUDA
+touch -- ``deterministic_device_setup`` refuses to run once CUDA is initialized, so the
+frozen arm weights are moved to CUDA only after the restore completed (the rev-7 order
+stopped exactly there), and the detector baseline capture keeps its stage-1 invariant
+(fresh arm construction first, capture second, inference third).  The entry also SHA-pins
+the closed stage-1 attempt on the command line: the RESULT file, its CLOSED receipt, the
+LEARNING_FROZEN spec file and the recorded stage-1 source commit are re-verified before
+the restore, and the arm files stay bound through the pinned RESULT's SHA record.  A pin,
+criteria or learning-spec mismatch is a STOP, never a retrain.
 """
 from __future__ import annotations
 
@@ -611,6 +623,60 @@ def evaluate_arms(arms: dict, ev_t: dict, L, FEAT) -> dict:
     return report
 
 
+def verify_stage1_binding(stage1_result_path, stage1_result_sha256, stage1_closed_sha256,
+                          stage1_learning_frozen_sha256, stage1_source_commit) -> dict:
+    """SHA-pin the closed stage-1 attempt consumed by a stage-2 resume (rev 8; CPU only).
+
+    The four values are passed on the command line and re-verified here before the audited
+    engine restore: the RESULT file, its CLOSED receipt, the LEARNING_FROZEN spec file and
+    the stage-1 source commit.  The arm files stay bound through the pinned RESULT's SHA
+    record, checked again in the arms phase.  A pin mismatch, a criteria difference or a
+    learning-spec drift raises (-> STOP.json); it never triggers a retrain.
+    """
+    import pdra_learn as L
+    result_path = Path(stage1_result_path)
+    require(result_path.is_file() and not result_path.is_symlink(),
+            f"stage-1 RESULT missing: {result_path}")
+    require(isinstance(stage1_source_commit, str) and len(stage1_source_commit) == 40
+            and all(char in "0123456789abcdef" for char in stage1_source_commit),
+            "the stage-1 commit pin must be a full 40-hex commit")
+    require(sha(result_path) == stage1_result_sha256, "stage-1 RESULT differs from the pinned SHA")
+    result = read(result_path)
+    require(result.get("status") == "PASS", "stage-1 result is not PASS")
+    require(result.get("source_commit") == stage1_source_commit,
+            "stage-1 source commit differs from the pin")
+    require(result.get("criteria_sha256") == SCORE.criteria_sha256(),
+            "stage-1 criteria differ from the frozen scoring criteria")
+    closed_path = result_path.parent / "CLOSED.json"
+    require(closed_path.is_file() and not closed_path.is_symlink(),
+            f"stage-1 CLOSED missing: {closed_path}")
+    require(sha(closed_path) == stage1_closed_sha256, "stage-1 CLOSED differs from the pinned SHA")
+    closed = read(closed_path)
+    closed_result = closed.get("result") if isinstance(closed.get("result"), dict) else {}
+    require(closed.get("returncode") == 0 and closed.get("automatic_retry") is False,
+            "stage-1 CLOSED is not a clean close")
+    require(closed_result.get("sha256") == stage1_result_sha256
+            and Path(str(closed_result.get("path", ""))) == result_path,
+            "stage-1 CLOSED does not reference the pinned RESULT")
+    frozen_path = result_path.parent / "LEARNING_FROZEN.json"
+    require(frozen_path.is_file() and not frozen_path.is_symlink(),
+            f"stage-1 learning spec missing: {frozen_path}")
+    require(sha(frozen_path) == stage1_learning_frozen_sha256,
+            "stage-1 learning spec differs from the pinned SHA")
+    frozen = read(frozen_path)
+    require(frozen.get("learning_spec_sha256") == L.learning_spec_sha(),
+            "stage-1 learning spec is incompatible with the current learning code")
+    record = {"stage1_result_path": str(result_path),
+              "stage1_result_sha256": stage1_result_sha256,
+              "stage1_closed_sha256": stage1_closed_sha256,
+              "stage1_learning_frozen_sha256": stage1_learning_frozen_sha256,
+              "stage1_source_commit": stage1_source_commit,
+              "criteria_sha256": result["criteria_sha256"],
+              "learning_spec_sha256": frozen["learning_spec_sha256"],
+              "verified": True}
+    return {"result": result, "closed": closed, "learning_frozen": frozen, "record": record}
+
+
 # --- stage 2 ----------------------------------------------------------------------
 def prediction(image_id, candidate) -> dict:
     return {"image_id": image_id, "query_id": candidate.query_id, "category_id": candidate.category_id,
@@ -619,7 +685,11 @@ def prediction(image_id, candidate) -> dict:
 
 
 def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, source_commit: str, *,
-               stage1_result_path: Path | None = None, budget_started: float | None = None,
+               stage1_result_path: Path | None = None, stage1_result_sha256: str | None = None,
+               stage1_closed_sha256: str | None = None,
+               stage1_learning_frozen_sha256: str | None = None,
+               stage1_source_commit: str | None = None,
+               budget_started: float | None = None,
                accounting: G.Accounting | None = None) -> dict:
     import torch
     import pdra_features as FEAT
@@ -630,32 +700,23 @@ def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, s
             "a PASSing GPU engineering check with a verified P3 binding is required")
     started = time.monotonic() if budget_started is None else budget_started
     accounting = G.Accounting("r18-pdra-stage2", "run-stage2") if accounting is None else accounting
+    require(stage1_result_path is not None and stage1_result_sha256 and stage1_closed_sha256
+            and stage1_learning_frozen_sha256 and stage1_source_commit,
+            "stage 2 requires --stage1-result together with the four SHA/commit pins")
 
     def guard(label: str) -> dict:
         return G.enforce_runtime(started=started, label=label, caps=STAGE2_CAPS, out=out,
                                  torch_mod=torch, accounting=accounting)
 
-    accounting.phase("arms")
-    stage1_result = read(stage1_result_path) if stage1_result_path is not None else None
-    if stage1_result is not None:
-        require(stage1_result.get("status") == "PASS", "stage-1 result is not PASS")
-    arms = L.build_arms()["arms"]
-    provenance = {}
-    for key, arm in arms.items():
-        path = arm_dir / f"{key}.pt"
-        require(path.is_file() and not path.is_symlink(), f"arm file missing: {path}")
-        entry = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha(path)}
-        if stage1_result is not None:
-            expect = stage1_result["arms"][key]
-            require(Path(expect["path"]) == path and expect["sha256"] == entry["sha256"]
-                    and expect["bytes"] == entry["bytes"],
-                    f"arm {key} differs from the stage-1 record")
-            entry["stage1_record_sha256_match"] = True
-        provenance[key] = entry
-        arm.load_state_dict(torch.load(str(path), map_location="cpu", weights_only=True))
-        arm.to("cuda:0").eval()
-    accounting.complete("arms")
+    accounting.phase("stage1_binding")
+    binding_record = verify_stage1_binding(stage1_result_path, stage1_result_sha256,
+                                           stage1_closed_sha256, stage1_learning_frozen_sha256,
+                                           stage1_source_commit)
+    stage1_result = binding_record["result"]
+    accounting.complete("stage1_binding")
 
+    # rev 8: the audited restore runs first -- deterministic_device_setup refuses to run once
+    # CUDA is initialized -- and the arm weights are moved to CUDA only after it completed.
     accounting.phase("restore")
     restored = TAP.restore_frozen_seed0_engine(
         training_source_root=inputs["training_root"], train_contract=inputs["training"],
@@ -665,11 +726,30 @@ def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, s
     from sparse_rtdetr.protocol_r18 import checkpoint
     from sparse_rtdetr.r0.evaluation_data import Development548
     data = Development548(inputs["data_spec"])
-    before = checkpoint.capture(engine, binding)
     restore_peak_reserved = int(torch.cuda.max_memory_reserved())
     guard("restore")
     torch.cuda.reset_peak_memory_stats()
     accounting.complete("restore")
+
+    accounting.phase("arms")
+    arms = L.build_arms()["arms"]
+    provenance = {}
+    for key, arm in arms.items():
+        path = arm_dir / f"{key}.pt"
+        require(path.is_file() and not path.is_symlink(), f"arm file missing: {path}")
+        entry = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha(path)}
+        expect = stage1_result["arms"][key]
+        require(Path(expect["path"]) == path and expect["sha256"] == entry["sha256"]
+                and expect["bytes"] == entry["bytes"],
+                f"arm {key} differs from the stage-1 record")
+        entry["stage1_record_sha256_match"] = True
+        provenance[key] = entry
+        arm.load_state_dict(torch.load(str(path), map_location="cpu", weights_only=True))
+        arm.to("cuda:0").eval()
+    # capture the detector baseline after the fresh arm construction (which consumes the CPU
+    # RNG) and before inference -- the same invariant as stage 1
+    before = checkpoint.capture(engine, binding)
+    accounting.complete("arms")
 
     accounting.phase("inference")
     preds = {arm: {600: [], 300: []} for arm in ("a_original_c", "b_single_box_quality",
@@ -757,6 +837,7 @@ def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, s
             "decision_stats_totals": decision_totals,
             "decision_seconds": decision_seconds,
             "arms_provenance": provenance,
+            "stage1_binding": binding_record["record"],
             "gt_use": GT_USE_STAGE2,
             "scoring": ("separate CPU step: pdra_score.py score (frozen criteria on the eval split; "
                         "train split diagnostic)"),
@@ -773,6 +854,14 @@ def main(argv=None) -> int:
     parser.add_argument("--arms", type=Path, default=None, help="stage-1 arms directory (stage 2)")
     parser.add_argument("--stage1-result", type=Path, default=None,
                         help="stage-1 RESULT.json; arm files are verified against its SHA record (stage 2)")
+    parser.add_argument("--stage1-result-sha256", default=None,
+                        help="pinned SHA-256 of the stage-1 RESULT.json (stage 2)")
+    parser.add_argument("--stage1-closed-sha256", default=None,
+                        help="pinned SHA-256 of the stage-1 CLOSED.json (stage 2)")
+    parser.add_argument("--stage1-learning-frozen-sha256", default=None,
+                        help="pinned SHA-256 of the stage-1 LEARNING_FROZEN.json (stage 2)")
+    parser.add_argument("--stage1-source-commit", default=None,
+                        help="stage-1 source commit, full 40-hex (stage 2)")
     parser.add_argument("--source-commit", default="UNRECORDED")
     args = parser.parse_args(argv)
     out = args.out.resolve()
@@ -783,9 +872,16 @@ def main(argv=None) -> int:
     started = time.monotonic()
     task = "r18-pdra-stage1" if args.mode != "run-stage2" else "r18-pdra-stage2"
     accounting = G.Accounting(task, args.mode)
-    publish(out / "START.json", {"mode": args.mode, "pid": os.getpid(), "started_unix": time.time(),
-                                 "source_commit": args.source_commit,
-                                 "caps": STAGE1_CAPS if args.mode != "run-stage2" else STAGE2_CAPS})
+    start_record = {"mode": args.mode, "pid": os.getpid(), "started_unix": time.time(),
+                    "source_commit": args.source_commit,
+                    "caps": STAGE1_CAPS if args.mode != "run-stage2" else STAGE2_CAPS}
+    if args.mode == "run-stage2":
+        start_record["stage1_binding_pins"] = {
+            "result_sha256": args.stage1_result_sha256,
+            "closed_sha256": args.stage1_closed_sha256,
+            "learning_frozen_sha256": args.stage1_learning_frozen_sha256,
+            "source_commit": args.stage1_source_commit}
+    publish(out / "START.json", start_record)
     try:
         inputs = G.resolve_inputs(args.parent, G.FROZEN_BATCHES)
         if args.mode == "plan":
@@ -803,9 +899,16 @@ def main(argv=None) -> int:
                                     budget_started=started, accounting=accounting)
             else:
                 require(args.arms is not None, "--arms is required for stage 2")
+                require(args.stage1_result is not None and args.stage1_result_sha256
+                        and args.stage1_closed_sha256 and args.stage1_learning_frozen_sha256
+                        and args.stage1_source_commit,
+                        "stage 2 requires --stage1-result together with the four SHA/commit pins")
                 result = run_stage2(inputs, out, gpu_check_result, args.arms.resolve(), args.source_commit,
-                                    stage1_result_path=(args.stage1_result.resolve()
-                                                        if args.stage1_result is not None else None),
+                                    stage1_result_path=args.stage1_result.resolve(),
+                                    stage1_result_sha256=args.stage1_result_sha256,
+                                    stage1_closed_sha256=args.stage1_closed_sha256,
+                                    stage1_learning_frozen_sha256=args.stage1_learning_frozen_sha256,
+                                    stage1_source_commit=args.stage1_source_commit,
                                     budget_started=started, accounting=accounting)
         result["elapsed_seconds"] = time.monotonic() - started
         ref = publish(out / "RESULT.json", result)
