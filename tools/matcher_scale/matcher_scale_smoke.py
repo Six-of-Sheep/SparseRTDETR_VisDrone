@@ -143,13 +143,13 @@ def main():
     require(r0["update"] == 1 and engine.completed_updates == engine.ema.updates == 1 and engine.phase == 0,
             "update clock differs after window 1")
     cp0 = checkpoint.save(engine, binding, state_dir / "CPU-C1.pth")
-    expected = checkpoint.capture(engine, binding)
-    require(expected["behavior"]["criterion"]["matching"] == matcher_scale.declaration(mode),
-            "saved behaviour identity does not carry the declared matching mode")
     r1 = engine.train_window(*windows[1], capture=True)
     require(r1["update"] == 2 and engine.completed_updates == engine.ema.updates == 2,
             "update clock differs after window 2")
     direct = checkpoint.save(engine, binding, state_dir / "CPU-C2-direct.pth")
+    expected = checkpoint.capture(engine, binding)
+    require(expected["behavior"]["criterion"]["matching"] == matcher_scale.declaration(mode),
+            "saved behaviour identity does not carry the declared matching mode")
     rng_after_installed = checkpoint.capture_rng(torch.device("cpu"))
 
     clone, _ = engine_for(mode)
