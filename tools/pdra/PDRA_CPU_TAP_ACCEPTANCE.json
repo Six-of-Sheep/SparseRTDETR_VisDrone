@@ -1,0 +1,430 @@
+{
+  "acceptance_scope": {
+    "authorizes_548_image_pass": false,
+    "authorizes_ap_ar_scoring": false,
+    "authorizes_formal_learning": false,
+    "authorizes_stage1_training": false,
+    "authorizes_stage2_inference": false,
+    "kind": "engineering_wiring_check_only",
+    "permitted_followups": [
+      "a new commit flipping pdra_core.FEATURE_BINDING_VERIFIED to True and registering this RESULT.json SHA",
+      "reports and shared handoff records"
+    ],
+    "settles_capacity_control": false,
+    "statement": "A PASS verifies the wiring on eight frozen images only. It is not evidence of effectiveness, it does not settle the formal-learning capacity-control question, and it must not be used to start formal learning (stage 1), scoring or the 548-image pass; each of those needs a separate user authorization."
+  },
+  "accounting": {
+    "budget_observations": 54,
+    "cuda_peak_allocated_bytes": null,
+    "cuda_peak_reserved_bytes": null,
+    "executed_forward_calls": 10,
+    "executed_updates": {
+      "b_single_box_quality": 10,
+      "c_whole_box_pairwise": 10,
+      "pdra_difference_strips": 30
+    },
+    "last_budget_observation": {
+      "cuda_peak_allocated_bytes": null,
+      "cuda_peak_reserved_bytes": null,
+      "elapsed_seconds": 13.219,
+      "label": "learn",
+      "output_bytes": 462
+    },
+    "mode": "cpu-tap-acceptance",
+    "phase": "learn",
+    "phases_completed": [
+      "load",
+      "forward",
+      "pool_decide",
+      "learn"
+    ],
+    "task": "r18-pdra-wiring-20261031-001"
+  },
+  "comparator_acceptance": {
+    "allocation": {
+      "b_single_box_quality": 10,
+      "c_whole_box_pairwise": 10,
+      "pdra_difference_strips": 30
+    },
+    "arms": {
+      "b_single_box_quality": {
+        "batch": 256,
+        "digest_after": "9905f7c6a3749d3c1c32dcff7a77f34a353ce618c6f33cdc25ecc5cb738156c2",
+        "digest_before": "f9290b542a217eede6be5ca0ebdf934af69605148c107d618a98a6a3f1d2afac",
+        "first_losses": [
+          0.051159,
+          0.022153,
+          0.01444,
+          0.018259,
+          0.019226,
+          0.016107,
+          0.015094,
+          0.013091
+        ],
+        "gradient": {
+          "all_with_finite_nonzero_gradient": true,
+          "parameters_total": 6,
+          "parameters_with_gradient": 6,
+          "per_parameter": {
+            "encoder.0.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.0.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.2.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.2.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.4.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.4.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            }
+          }
+        },
+        "material_rows": 344,
+        "mean_loss": 0.019765589851886034,
+        "parameters_changed": true,
+        "seconds": 0.01887707388959825,
+        "steps_exactly_allocated": true,
+        "updates": 10
+      },
+      "c_whole_box_pairwise": {
+        "batch": 256,
+        "digest_after": "ebc84295cdb6f091ce3d1c107f6f38e67e02d2c64fe683592e5edad161196c93",
+        "digest_before": "bf0a0d5a759c99f415c209cf8c46a3d9ee9e06b280373464377ba1108b519903",
+        "first_losses": [
+          1.387527,
+          1.287724,
+          1.203118,
+          1.122682,
+          1.029286,
+          0.942107,
+          0.856715,
+          0.786019
+        ],
+        "gradient": {
+          "all_with_finite_nonzero_gradient": true,
+          "parameters_total": 9,
+          "parameters_with_gradient": 9,
+          "per_parameter": {
+            "abstain.0.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "abstain.0.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "abstain.2.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "abstain.2.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.0.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.0.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.2.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.2.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "pref_u.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            }
+          }
+        },
+        "material_rows": 1225,
+        "mean_loss": 1.0099780321121217,
+        "parameters_changed": true,
+        "seconds": 0.06677694479003549,
+        "steps_exactly_allocated": true,
+        "updates": 10
+      },
+      "pdra_difference_strips": {
+        "batch": 256,
+        "digest_after": "a869903bcc433c852b5f36a60b14b2b961151e18693be83564d4e617de33a16f",
+        "digest_before": "af940ac43505e23317a19586bd8cf7c2907e2ac9a66ee0d014945b2cd10a0c76",
+        "first_losses": [
+          1.407196,
+          1.326866,
+          1.242013,
+          1.179131,
+          1.067117,
+          0.988744,
+          0.935438,
+          0.851304
+        ],
+        "gradient": {
+          "all_with_finite_nonzero_gradient": true,
+          "parameters_total": 9,
+          "parameters_with_gradient": 9,
+          "per_parameter": {
+            "abstain.0.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "abstain.0.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "abstain.2.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "abstain.2.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.0.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.0.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.2.bias": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "encoder.2.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            },
+            "pref_u.weight": {
+              "finite": true,
+              "nonzero": true,
+              "present": true
+            }
+          }
+        },
+        "material_rows": 1225,
+        "mean_loss": 0.7283209423224132,
+        "parameters_changed": true,
+        "seconds": 0.21025754092261195,
+        "steps_exactly_allocated": true,
+        "updates": 30
+      }
+    },
+    "b_material": {
+      "gt_chain": "pdra_stage1._gt_items (stage-1 chain), opened after the image's decision phase",
+      "members": 344,
+      "whole_box_readable": 344,
+      "zero_targets": 0
+    },
+    "batch_pairs": 256,
+    "labelled_pairs": 1225,
+    "seconds": 0.6292033540084958,
+    "small_batch_fallback_used": false,
+    "spec_sha256": "e00d0d75cc37db00064a849c9c1b897ba362b9c69ff3697840e92100f1e99eb2",
+    "total_updates": 50
+  },
+  "decisions": {
+    "controls": {
+      "b_pairs": 11779,
+      "c_pairs": 11779
+    },
+    "count": 11779,
+    "gt_read_in_decision_phase": false,
+    "merge": {
+      "all_abstain_clusters": 502,
+      "budget_membership_delta_vs_C": {
+        "300": {
+          "entered": 0,
+          "left": 0
+        },
+        "600": {
+          "entered": 0,
+          "left": 0
+        }
+      },
+      "cluster_count": 826,
+      "kept_count": 826,
+      "rank_shifted_members": 0,
+      "substitutions": 0
+    },
+    "pairs_with_identical_identity_in_stage0": 11779,
+    "reasons": {
+      "abstain_head": 10154,
+      "infeasible_read": 1625
+    },
+    "seconds": 4.5306088391225785,
+    "stage0_pairs_for_image": 11779
+  },
+  "detector_frozen_evidence": {
+    "detector_digest_unchanged": true,
+    "detector_grad_checks": [
+      {
+        "after_arm": "pdra_difference_strips",
+        "detector_parameters_with_grad": 0
+      },
+      {
+        "after_arm": "c_whole_box_pairwise",
+        "detector_parameters_with_grad": 0
+      },
+      {
+        "after_arm": "b_single_box_quality",
+        "detector_parameters_with_grad": 0
+      }
+    ],
+    "note": "no backward counter (the rev-4 no-op is removed); evidenced by measured parameter gradients and the weight digest"
+  },
+  "elapsed_seconds": 13.241805439814925,
+  "feature_binding": {
+    "core_extent": [
+      96,
+      168
+    ],
+    "level": "hybrid_encoder_out_index_0_p3",
+    "p3_extent": [
+      96,
+      168
+    ],
+    "stride": [
+      8,
+      8
+    ]
+  },
+  "forward": {
+    "calls": 10,
+    "p3_shape": [
+      1,
+      256,
+      96,
+      168
+    ],
+    "pools_identical_between_passes": true,
+    "seconds": 3.078300196910277,
+    "tap_calls": 5,
+    "views": [
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 1.087784767150879e-06,
+          "logits": 3.147125244140625e-05
+        },
+        "tap_equal": true,
+        "view_id": 0
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 2.3543834686279297e-06,
+          "logits": 2.86102294921875e-05
+        },
+        "tap_equal": true,
+        "view_id": 1
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 1.8477439880371094e-06,
+          "logits": 0.0001220703125
+        },
+        "tap_equal": true,
+        "view_id": 2
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 1.341104507446289e-06,
+          "logits": 1.9073486328125e-05
+        },
+        "tap_equal": true,
+        "view_id": 3
+      },
+      {
+        "frozen_gpu_raw_max_abs_diff": {
+          "boxes": 2.6673078536987305e-06,
+          "logits": 2.574920654296875e-05
+        },
+        "tap_equal": true,
+        "view_id": 4
+      }
+    ]
+  },
+  "frozen_batch": 3,
+  "gt_use": {
+    "annotations_opened_by_any_other_phase": false,
+    "annotations_opened_for": "the (b)-arm member matched-GT IoU targets of its 10 acceptance updates, through the identical stage-1 _gt_items chain, after each image's decision phase",
+    "pair_labels_source": "frozen stage-0 rows (seed0-pairs.jsonl), as in rev 4",
+    "pooling_and_decisions_gt_free": true
+  },
+  "image_id": "8815f71ec469607f91ebda7600c542ec606752d76ad260af37efbbe3af5e7b23",
+  "image_row": 12,
+  "mode": "cpu-tap-acceptance",
+  "model": {
+    "audited_restore": false,
+    "cpu_only": true,
+    "ema_updates": 36480,
+    "load_seconds": 3.552327468059957,
+    "scope": "formal_R18_seed0_e120"
+  },
+  "pooling": {
+    "clusters": 826,
+    "pairs": 11779,
+    "pool": 3000,
+    "readable": 10154,
+    "seconds": 0.3833260021638125,
+    "strips": 40232,
+    "us_per_readable_pair": 37.751231255053426
+  },
+  "resources": {
+    "caps": {
+      "output_bytes": 67108864,
+      "wall_seconds": 1800
+    },
+    "constraints_enforced_during_run": [
+      "wall_seconds",
+      "output_bytes"
+    ],
+    "output_bytes": 462,
+    "vm_hwm_bytes": 1953173504
+  },
+  "revision": "cpu-tap-acceptance-rev8-20261031",
+  "source_commit": "WORKTREE-UNCOMMITTED-REV8",
+  "status": "PASS",
+  "task": "r18-pdra-wiring-20261031-001"
+}

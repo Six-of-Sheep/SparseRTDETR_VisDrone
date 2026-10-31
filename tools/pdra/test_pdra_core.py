@@ -1,0 +1,107 @@
+"""pytest mirror of the PDRA CPU self-checks (constructed inputs only).
+
+Run from the repository root:  python3 -m pytest tools/pdra/test_pdra_core.py -q
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+import pytest
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.dirname(os.path.dirname(_HERE))
+for _p in (_HERE, _REPO):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+import pdra_selfcheck as S
+
+
+def test_coordinate_mapping():
+    assert S.check_coordinate_mapping()["status"] == "PASS"
+
+
+def test_input_swap():
+    assert S.check_input_swap()["status"] == "PASS"
+
+
+def test_empty_difference_regions():
+    assert S.check_empty_difference_regions()["status"] == "PASS"
+
+
+def test_abstention():
+    assert S.check_abstention()["status"] == "PASS"
+
+
+def test_cyclic_preference():
+    assert S.check_cyclic_preference()["status"] == "PASS"
+
+
+def test_near_neighbor_distinct_targets():
+    assert S.check_near_neighbor_distinct_targets()["status"] == "PASS"
+
+
+def test_original_c_fallback():
+    assert S.check_original_c_fallback()["status"] == "PASS"
+
+
+def test_region_coverage_margin():
+    assert S.check_region_coverage_margin()["status"] == "PASS"
+
+
+def test_control_fairness():
+    assert S.check_control_fairness()["status"] == "PASS"
+
+
+def test_label_ambiguity():
+    assert S.check_label_ambiguity()["status"] == "PASS"
+
+
+def test_frozen_core_consistency():
+    assert S.check_frozen_core_consistency()["status"] == "PASS"
+
+
+def test_pair_domain_unified():
+    assert S.check_pair_domain_unified()["status"] == "PASS"
+
+
+def test_post_replacement_ranking():
+    assert S.check_post_replacement_ranking()["status"] == "PASS"
+
+
+def test_cluster_builder_consistency():
+    assert S.check_cluster_builder_consistency()["status"] == "PASS"
+
+
+def test_sequence_split_frozen():
+    assert S.check_sequence_split_frozen()["status"] == "PASS"
+
+
+def test_stage0_fixture(tmp_path):
+    import pdra_stage0_pairs as stage0
+    result = stage0.fixture(tmp_path)
+    assert result["status"] == "COMPLETE" and result["synthetic"]
+    assert result["ledger"]["total_pairs"] == result["pairs_enumerated"]
+    assert result["split"]["main_verdict_split"] == "eval"
+
+
+@pytest.mark.parametrize("name", ["feature_stride_is_placeholder_bound_at_stage1"])
+def test_frozen_constants_are_recorded(name):
+    from pdra_core import CANVAS_HW, DELTA_PREF, DELTA_ABSTAIN, THETA_REGION, PAIR_DOMAIN
+    assert CANVAS_HW == (768, 1344)
+    assert 0.0 < DELTA_PREF < 0.5 and 0.0 < DELTA_ABSTAIN <= 1.0 and 0.0 < THETA_REGION <= 1.0
+    assert PAIR_DOMAIN == "cluster_internal_pairs_of_original_C"
+
+
+def test_inference_label_independence():
+    assert S.check_inference_label_independence()["status"] == "PASS"
+
+
+def test_inference_domain_all_pairs():
+    assert S.check_inference_domain_all_pairs()["status"] == "PASS"
+
+
+def test_source_view_propagation():
+    assert S.check_source_view_propagation()["status"] == "PASS"

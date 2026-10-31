@@ -1,0 +1,165 @@
+{
+  "core_version": "pdra-rules-rev4-20261030",
+  "learning_spec_sha256": "e00d0d75cc37db00064a849c9c1b897ba362b9c69ff3697840e92100f1e99eb2",
+  "scope": "CONSTRUCTED_INPUTS_CPU_ONLY_NO_DETECTOR_NO_GPU",
+  "cuda_initialized": false,
+  "checks": [
+    {
+      "check": "runtime_accounting_and_allocation",
+      "status": "PASS",
+      "allocation": {
+        "pdra_difference_strips": 30,
+        "c_whole_box_pairwise": 10,
+        "b_single_box_quality": 10
+      },
+      "check_updates": 50,
+      "wall_breach_raised": true,
+      "memory_gate_absent": true,
+      "accounting_detached": true,
+      "seconds": 0.0
+    },
+    {
+      "check": "roi_align_convention",
+      "status": "PASS",
+      "reference_max_abs_diff": 4.916649781472326e-07,
+      "boxes": 3,
+      "impulse_centre_value": 0.5625,
+      "equivalent_spelling_agrees": true,
+      "double_scaling_detected": true,
+      "seconds": 0.002
+    },
+    {
+      "check": "slot_encoding",
+      "status": "PASS",
+      "slots": [
+        "top",
+        "bottom",
+        "left",
+        "right",
+        "full"
+      ],
+      "side_dim_c2": 45,
+      "mask_bits": 5,
+      "invalid_is_zero": true,
+      "whole_dim_c2": 9,
+      "seconds": 0.002
+    },
+    {
+      "check": "torch_antisymmetry",
+      "status": "PASS",
+      "pairs": 64,
+      "max_abs_r_plus_flip_minus_1": 1.1920928955078125e-07,
+      "max_abs_a_symmetry": 0.0,
+      "seconds": 0.004
+    },
+    {
+      "check": "learning_fixed_updates",
+      "status": "PASS",
+      "pair_updates": 40,
+      "pair_first_losses": [
+        1.353932,
+        1.322212,
+        1.348474
+      ],
+      "quality_updates": 30,
+      "pair_arm_parameters": 3269,
+      "deterministic": true,
+      "seconds": 0.109
+    },
+    {
+      "check": "pair_arm_pref_mask_semantics",
+      "status": "PASS",
+      "mixed_batch_labelled_rows": 35,
+      "mixed_batch_size": 64,
+      "first_loss_reference": 1.3822755813598633,
+      "first_loss_recorded": 1.382276,
+      "unlabelled_fallback_equals_abstain_term": true,
+      "updates": 3,
+      "seconds": 0.116
+    },
+    {
+      "check": "adapter_equivalence",
+      "status": "PASS",
+      "comparators_checked": 5,
+      "clusters": 5,
+      "adapter_reasons": [
+        "dead_zone",
+        "infeasible_read"
+      ],
+      "adapter_substitutions": 0,
+      "seconds": 0.121
+    },
+    {
+      "check": "sampling_verification",
+      "status": "PASS",
+      "positive": "PASS",
+      "corrupt_split_detected": true,
+      "wrong_count_rejected": true,
+      "seconds": 0.124
+    },
+    {
+      "check": "capacity_report",
+      "status": "PASS",
+      "parameters": {
+        "pdra_difference_strips": 689349,
+        "c_whole_box_pairwise": 690257,
+        "b_single_box_quality": 688381
+      },
+      "hidden": {
+        "pdra_difference_strips": 128,
+        "c_whole_box_pairwise": 434,
+        "b_single_box_quality": 462
+      },
+      "weight_macs_per_sample": {
+        "pdra_difference_strips": 1361412,
+        "c_whole_box_pairwise": 1322530,
+        "b_single_box_quality": 687456
+      },
+      "pdra_parameter_reference": 689349,
+      "training_macs_total": {
+        "b_single_box_quality": 3519774720000,
+        "c_whole_box_pairwise": 6771353600000,
+        "pdra_difference_strips": 6970429440000
+      },
+      "cap": 1000000,
+      "learning_spec_sha256": "e00d0d75cc37db00064a849c9c1b897ba362b9c69ff3697840e92100f1e99eb2",
+      "epochs_equivalent": 22.985,
+      "seconds": 0.131
+    },
+    {
+      "check": "arm_initialization_digests",
+      "status": "PASS",
+      "init_digests": {
+        "pdra_difference_strips": "af940ac43505e23317a19586bd8cf7c2907e2ac9a66ee0d014945b2cd10a0c76",
+        "c_whole_box_pairwise": "bf0a0d5a759c99f415c209cf8c46a3d9ee9e06b280373464377ba1108b519903",
+        "b_single_box_quality": "f9290b542a217eede6be5ca0ebdf934af69605148c107d618a98a6a3f1d2afac"
+      },
+      "deterministic": true,
+      "parameters": {
+        "pdra_difference_strips": 689349,
+        "c_whole_box_pairwise": 690257,
+        "b_single_box_quality": 688381
+      },
+      "seconds": 0.155
+    },
+    {
+      "check": "tap_mechanics",
+      "status": "PASS",
+      "calls": 1,
+      "outputs_bitwise_equal": true,
+      "hook_removed": true,
+      "seconds": 0.156
+    },
+    {
+      "check": "dimension_budget",
+      "status": "PASS",
+      "side_dim_256": 5125,
+      "whole_dim_256": 1025,
+      "stage1_pdra_cache_gb": 6.944,
+      "stage1_whole_cache_gb": 0.0,
+      "seconds": 0.156
+    }
+  ],
+  "failed": [],
+  "status": "PASS"
+}

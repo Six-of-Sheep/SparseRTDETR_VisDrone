@@ -1,0 +1,284 @@
+{
+  "core_version": "pdra-rules-rev4-20261030",
+  "constants": {
+    "canvas_hw": [
+      768,
+      1344
+    ],
+    "feature_stride": [
+      8,
+      8
+    ],
+    "nms_iou": 0.5,
+    "delta_pref": 0.1,
+    "delta_abstain": 0.5,
+    "theta_region": 0.5,
+    "tau_gap": 0.05,
+    "tau_clear": 0.25,
+    "match_iou": 0.5,
+    "pair_domain": "cluster_internal_pairs_of_original_C",
+    "post_replacement_ranking": "canonical_sort_key_then_truncate_no_refill",
+    "split_rule": "sorted_sequence_keys_stride3_remainder2_to_eval",
+    "n_min_pairs": 300,
+    "n_min_images": 40
+  },
+  "scope": "CONSTRUCTED_INPUTS_CPU_ONLY_NO_DETECTOR_NO_GPU",
+  "checks": [
+    {
+      "check": "coordinate_mapping",
+      "status": "PASS",
+      "views": 5,
+      "round_trip_boxes": 4,
+      "frozen_core_agreement": true
+    },
+    {
+      "check": "input_swap",
+      "status": "PASS",
+      "pairs": 60,
+      "r_antisymmetry": "exact_to_1e-12",
+      "a_symmetry": "exact_to_1e-12"
+    },
+    {
+      "check": "empty_difference_regions",
+      "status": "PASS",
+      "identical_boxes": {
+        "left_valid": false,
+        "right_valid": false,
+        "left_reason": "empty_difference_region",
+        "right_reason": "empty_difference_region",
+        "verdict": "infeasible_read"
+      },
+      "right_side_contained": {
+        "left_valid": true,
+        "right_valid": false,
+        "left_reason": "ok",
+        "right_reason": "empty_difference_region",
+        "verdict": "infeasible_read"
+      },
+      "left_side_contained": {
+        "left_valid": false,
+        "right_valid": true,
+        "left_reason": "empty_difference_region",
+        "right_reason": "ok",
+        "verdict": "infeasible_read"
+      },
+      "partial_overlap": {
+        "valid": true
+      }
+    },
+    {
+      "check": "abstention",
+      "status": "PASS",
+      "abstain_head_withholds_vote": true,
+      "dead_zone": true,
+      "all_abstain_keeps_survivor": true,
+      "decided_pair_promotes": true
+    },
+    {
+      "check": "cyclic_preference",
+      "status": "PASS",
+      "votes": [
+        1,
+        1,
+        1
+      ],
+      "decided": 3,
+      "deterministic_tie_break": true,
+      "no_crash": true
+    },
+    {
+      "check": "near_neighbor_distinct_targets",
+      "status": "PASS",
+      "label_destination": "abstain",
+      "abstention_holds": true,
+      "contrast_promotes": true
+    },
+    {
+      "check": "original_c_fallback",
+      "status": "PASS",
+      "clusters": 5,
+      "kept": 5,
+      "substitutions": 0,
+      "all_abstain_clusters": 2,
+      "rank_shifted_members": 0,
+      "byte_identical_to_frozen_C": true
+    },
+    {
+      "check": "region_coverage_margin",
+      "status": "PASS",
+      "pairs": 3,
+      "min_margin": 10000.0,
+      "property": "geometric coverage only; not a fairness statement"
+    },
+    {
+      "check": "control_fairness",
+      "status": "PASS",
+      "arms": [
+        "a_original_c",
+        "b_single_box_quality",
+        "c_whole_box_pairwise",
+        "pdra"
+      ],
+      "equal_fields": [
+        "candidate_pool_sha256",
+        "pair_domain",
+        "feature_source_rule",
+        "feature_level",
+        "feature_stride",
+        "canvas_hw",
+        "theta_region",
+        "sample_grid",
+        "split_sha256",
+        "sampling_spec_sha256",
+        "parameter_cap",
+        "update_cap",
+        "eval_members_sha256"
+      ],
+      "free_field": "reads",
+      "negative_cases_detected": 5,
+      "separate_from_region_coverage": true
+    },
+    {
+      "check": "label_ambiguity",
+      "status": "PASS",
+      "destinations": [
+        "pref",
+        "abstain",
+        "excluded_ambiguous",
+        "excluded_empty",
+        "excluded_gap"
+      ],
+      "conflict_would_be": [
+        "pref",
+        "abstain"
+      ],
+      "ledger": {
+        "pref": 1,
+        "abstain": 1,
+        "excluded_empty": 1,
+        "excluded_gap": 1,
+        "excluded_ambiguous": 1
+      },
+      "ambiguous_pairs": 1,
+      "ambiguous_would_be": {
+        "pref": 1,
+        "abstain": 1
+      },
+      "vectorised_iou_bit_identical": true
+    },
+    {
+      "check": "frozen_core_consistency",
+      "status": "PASS",
+      "clusters": 5,
+      "survivors_match_frozen_nms": true
+    },
+    {
+      "check": "pair_domain_unified",
+      "status": "PASS",
+      "pair_domain": "cluster_internal_pairs_of_original_C",
+      "training_pairs": 3,
+      "inference_pairs": 3,
+      "below_half_pair_in_domain": 0.3571,
+      "cross_cluster_pair_excluded": 0.5263,
+      "rev2_filter_pairs": 3
+    },
+    {
+      "check": "post_replacement_ranking",
+      "status": "PASS",
+      "ranking": "canonical_sort_key_then_truncate_no_refill",
+      "substituted_representative_score": 0.4,
+      "budget2_output": [
+        [
+          0,
+          3,
+          1
+        ],
+        [
+          0,
+          4,
+          1
+        ]
+      ],
+      "budget_delta_vs_C": {
+        "2": {
+          "entered": 1,
+          "left": 1
+        },
+        "1": {
+          "entered": 1,
+          "left": 1
+        }
+      },
+      "rank_shifted_members": 3
+    },
+    {
+      "check": "cluster_builder_consistency",
+      "status": "PASS",
+      "pools": 5,
+      "builder": "numpy_mirror_of_frozen_classwise_nms",
+      "survivors_equal_frozen": true,
+      "members_equal_scalar": true
+    },
+    {
+      "check": "sequence_split_frozen",
+      "status": "PASS",
+      "rule": "sorted_sequence_keys_stride3_remainder2_to_eval",
+      "sequences": 24,
+      "train_sequences": 16,
+      "eval_sequences": 8,
+      "deterministic": true,
+      "sequence_level_isolation": true
+    },
+    {
+      "check": "inference_label_independence",
+      "status": "PASS",
+      "pair_decisions_arguments": [
+        "candidates",
+        "affine_of",
+        "comparator"
+      ],
+      "pairs_decided": 3,
+      "destinations_with_gt": [
+        "excluded_ambiguous",
+        "pref"
+      ],
+      "destinations_without_gt": [
+        "excluded_empty"
+      ],
+      "decisions_identical_across_label_sets": true
+    },
+    {
+      "check": "inference_domain_all_pairs",
+      "status": "PASS",
+      "cluster_pairs": 3,
+      "decisions": 3,
+      "label_destinations_if_scored": [
+        "excluded_empty"
+      ],
+      "substitutions_despite_excluded_labels": 1
+    },
+    {
+      "check": "source_view_propagation",
+      "status": "PASS",
+      "left_source_view": 2,
+      "right_source_view": 3,
+      "swap_exchanges": true,
+      "unspecified_is_none": true
+    },
+    {
+      "check": "cpu_cost_measured",
+      "status": "PASS",
+      "candidates": 3000,
+      "clusters": 1502,
+      "intra_cluster_pairs": 2384,
+      "nms_seconds": 0.0309,
+      "merge_seconds": 0.1558,
+      "seconds_per_pair_us": 65.343,
+      "kept": 1502,
+      "substitutions": 15,
+      "note": "measured on CPU with the geometric provider; stage 1 replaces the provider with RoIAlign reads and re-measures"
+    }
+  ],
+  "failed": [],
+  "status": "PASS"
+}
