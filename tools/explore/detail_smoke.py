@@ -4,8 +4,11 @@ Per mode ('detail' or 'control'), mirrors the release's own CPU lifecycle
 (``protocol_r18.worker.cpu_state``): synthetic Config -> install -> zero-gate
 identity vs native -> one manual criterion + backward gradient pass -> Engine
 with a fresh optimizer and EMA -> two train windows -> checkpoint
-save/restore/replay exactness -> JSON evidence.  CUDA must be hidden; the
-frozen runs and their outputs are untouched.
+save/restore/replay exactness -> JSON evidence.  The report additionally proves
+that installation consumes no global RNG draws and that the gate/EMA carry the
+branch off zero after the two windows, so the save/restore/replay exactness is
+exercised at a NONZERO gate.  CUDA must be hidden; the frozen runs and their
+outputs are untouched.
 """
 from __future__ import annotations
 
@@ -97,6 +100,21 @@ def main():
         model.decoder.detail_inject.gate.zero_()
     del native_model, reference, installed, acted
 
+    # installation must not consume any global RNG draw (arm-to-arm stream identity)
+    neutral_probe, _, _ = build(conf, pretrained_path=None, synthetic=True)
+    random.seed(5)
+    np.random.seed(5)
+    torch.manual_seed(5)
+    s_py, s_np, s_t = random.getstate(), np.random.get_state(), torch.get_rng_state()
+    detail_path.install_detail_path(neutral_probe, args.mode)
+    now_np = np.random.get_state()
+    install_rng_neutral = (random.getstate() == s_py and now_np[0] == s_np[0]
+                           and (now_np[1] == s_np[1]).all() and now_np[2] == s_np[2]
+                           and now_np[3] == s_np[3] and now_np[4] == s_np[4]
+                           and torch.equal(torch.get_rng_state(), s_t))
+    del neutral_probe
+    require(install_rng_neutral, "installation consumed global RNG draws")
+
     model.train()
     images = torch.rand(2, 3, 128, 128, generator=torch.Generator().manual_seed(21))
     targets = fixture(0)
@@ -133,6 +151,10 @@ def main():
     r1 = engine.train_window(*windows[1], capture=True)
     require(r1["update"] == 2 and engine.completed_updates == engine.ema.updates == 2
             and engine.phase == 0, "update clock differs after window 2")
+    gate_absmax = float(model.decoder.detail_inject.gate.detach().abs().max())
+    ema_gate_absmax = float(engine.ema.module.decoder.detail_inject.gate.detach().abs().max())
+    require(engine.ema.updates == 2 and gate_absmax > 0 and ema_gate_absmax > 0,
+            "trained/EMA branch gate did not move off zero")
     expected = checkpoint.capture(engine, binding)
     direct = checkpoint.save(engine, binding, out / "CPU-C2-direct.pth")
     clone_model, clone_criterion, clone_info = construct(args.mode)
@@ -155,6 +177,12 @@ def main():
         "identity": {"zero_gate_bitwise_identical": identical,
                      "nonzero_gate_max_abs_diff": round(acting_diff, 6)},
         "gradients": grad_report,
+        "branch": {"install_rng_neutral": install_rng_neutral,
+                   "gate_absmax_after_updates": gate_absmax,
+                   "ema_gate_absmax": ema_gate_absmax,
+                   "gate_moved_off_zero": True,
+                   "ema_carried_branch": True,
+                   "nonzero_gate_replay_covered": True},
         "training": {"windows": 2, "updates": engine.completed_updates,
                      "window0_result_keys": sorted(r0),
                      "replay_result_exact": same_result,

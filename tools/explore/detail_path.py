@@ -1,45 +1,64 @@
-"""Sub-stride detail path for the common-protocol R18 (r10 exploration prototype).
+"""Sub-stride detail path for the common-protocol R18 (r10 execution-round prototype).
 
-Mechanism (H-beta of the r10 screening; see
+Mechanism (H-beta of the r10 screening; see the single exploration record
 ``delivery/research/r18-explore-20261031-001/EXPLORATION_R1.md``): on the frozen
 carrier every ground-truth instance's best encoder candidate lives at level 0
 (stride 8), the pool coverage at IoU 0.75 for raw-area <= 1024 objects is 0.421,
 and the native model discards the stride-4 backbone stage entirely.  This module
-restores that detail as a parameter-light, inference-retained path:
+exposes that stage as a parameter-light, inference-retained side path.
 
-  * ``BackboneCapture`` wraps ``model.backbone`` (PResNet), transplanting its
-    children so every state-dict key keeps its native name, and records the
-    stride-4 stage output during the forward in a layout-invisible capture
-    slot that is consumed and cleared by the same forward (the frozen
-    checkpoint format digests plain tensor attributes, so the capture must not
-    survive module state);
-  * the stride-4 tensor is folded to the stride-8 grid with
-    ``F.pixel_unshuffle(x, 2)`` (64 ch x 2 x 2 -> 256 ch) and injected into the
-    decoder's finest level after its native 1x1 projection:
-    ``proj_feats[0] + gate * conv1x1(source)`` with ``gate`` initialized to
-    zero, so at step 0 the installed model is functionally identical to the
-    native one;
-  * mode ``detail`` uses the pixel-unshuffled stride-4 source; mode ``control``
-    uses the projected level-0 feature itself (identical module, identical
-    parameter count and grid, no additional information), so a trained
-    comparison isolates "sub-stride detail" from "extra capacity".
+Exact insertion point: inside the decoder's ``_get_encoder_input``, on the
+level-0 branch, AFTER the native 1x1 ``input_proj[0]`` projection and BEFORE the
+per-level flatten/concat into the encoder token sequence:
 
-Installation happens *after* the frozen state is strict-loaded and before the
-optimizer/EMA are constructed (new state-dict keys only exist on installed
-arms).  The decoder's ``_get_encoder_input`` is replaced by a
-``functools.partial`` bound to the decoder instance; that is the only patch
-form whose self-reference survives ``copy.deepcopy`` (the EMA is a deep copy
-of the live model), and ``assert_installed`` verifies the identity links on
-both the live model and the EMA after engine construction.
+    proj_feats[0] = proj_feats[0] + gate * conv1x1(pixel_unshuffle(stride4))
+
+It is NOT inside the backbone (the backbone is only tapped by a key-preserving
+wrapper whose forward mirrors ``PResNet.forward``), NOT a new pyramid level, NOT
+a new head/anchor, and it does not touch the query construction.
+
+Relation to strided convolutions: ``pixel_unshuffle(x, 2)`` followed by a 1x1
+linear map (64ch -> 4x64ch -> 256ch here) is algebraically identical to a single
+2x2 stride-2 convolution applied to the stride-4 tensor, i.e. the operator is
+the space-to-depth + linear primitive family already used by the cited
+precedents (SPD-Conv style downsampling).  This round claims NO originality and
+performed no new literature sweep; the declared differences to the nearest
+precedents are only: the tap point (the stride-4 stage output the native model
+otherwise discards), the insertion interface (encoder input construction, after
+the native projection, detection protocol unchanged), the zero-initialized gate
+(bitwise identity at step 0), and the capacity-matched control arm.
+
+Gradient definition (fixed mechanism of this round, NOT a save-state
+workaround): the branch input is stop-gradient in BOTH modes.  The main path
+(``proj_feats[0]`` as consumed by the encoder) trains normally; the branch
+trains only ``gate`` and ``conv``.  Mode ``detail`` uses the stride-4 capture
+(detached at capture so it never holds a graph); mode ``control`` uses
+``proj_feats[0].detach()`` (the same tensor, a stop-gradient copy, so no
+sub-stride information enters).  A forward-time guard enforces
+``not source.requires_grad`` and ``LAST_SOURCE_INFO`` records the evidence for
+the checks.  The wrapper stores its transient capture in a plain dict slot that
+is consumed and cleared by the same forward (the frozen checkpoint format
+digests plain tensor attributes, so the capture must not survive module state).
+
+Installation happens *after* the frozen parent state is strict-loaded and before
+the optimizer/EMA are constructed.  The 1x1 conv is initialized from an explicit
+seeded generator: installation consumes NO global RNG draws, so the three arms
+share identical data/augmentation/DN random streams.  The decoder's
+``_get_encoder_input`` is replaced by a ``functools.partial`` bound to the
+decoder instance; that is the only patch form whose self-reference survives
+``copy.deepcopy`` (the EMA is a deep copy of the live model), and
+``assert_installed`` verifies the identity links on both the live model and the
+EMA after engine construction.
 
 Scope notes: the native decoder class is intentionally NOT subclassed
-(``protocol_r18.geometry.validate_geometry`` requires the exact native type);
-no encoder attribute is set; the wrapper adds no state-dict keys of its own.
-CPU checks: ``test_detail_path.py`` and ``detail_smoke.py``.
+(``validate_geometry`` requires the exact native type); no encoder attribute is
+set; the wrapper adds no state-dict keys of its own.  CPU checks:
+``test_detail_path.py`` and ``detail_smoke.py``.
 """
 from __future__ import annotations
 
 import functools
+import math
 
 import torch
 import torch.nn as nn
@@ -47,6 +66,7 @@ import torch.nn.functional as F
 
 MODES = ("detail", "control")
 DETAIL_PARAMETERS = 256 * 256 + 256  # 1x1 conv weight + per-channel gate
+LAST_SOURCE_INFO = {}  # evidence hook: mode / detach flags / shape of the branch input
 
 
 def require(condition, message):
@@ -93,12 +113,27 @@ class BackboneCapture(nn.Module):
 
 
 class DetailInjection(nn.Module):
-    """gate * conv1x1(source); gate zero-initialized (identity at step 0)."""
+    """gate * conv1x1(source); gate zero-initialized (identity at step 0).
 
-    def __init__(self, channels=256):
+    The 1x1 conv is xavier-uniform initialized from an explicit seeded
+    generator (equivalent bound sqrt(6/(fan_in+fan_out)), gain 1), so installing
+    the module consumes no global RNG draws and both installed arms receive
+    identical new-module initial values.
+    """
+
+    def __init__(self, channels=256, seed=0):
         super().__init__()
-        self.conv = nn.Conv2d(channels, channels, 1, bias=False)
-        nn.init.xavier_uniform_(self.conv.weight)
+        # The nn.Conv2d constructor itself draws from the global RNG; bracket it
+        # with a save/restore so installation is fully RNG-neutral (the actual
+        # weights come from the explicit seeded generator below).
+        rng_state = torch.random.get_rng_state()
+        try:
+            self.conv = nn.Conv2d(channels, channels, 1, bias=False)
+        finally:
+            torch.random.set_rng_state(rng_state)
+        bound = math.sqrt(6.0 / (channels + channels))
+        with torch.no_grad():
+            self.conv.weight.uniform_(-bound, bound, generator=torch.Generator().manual_seed(seed))
         self.gate = nn.Parameter(torch.zeros(channels))
 
 
@@ -107,7 +142,8 @@ def _encoder_input(decoder, mode, feats):
 
     Projection/flatten arithmetic mirrors
     ``src.zoo.rtdetr.rtdetrv2_decoder.RTDETRTransformerv2._get_encoder_input``
-    verbatim; the injection line is the only addition.
+    verbatim; the injection line and the stop-gradient definition are the only
+    additions.
     """
     proj_feats = [decoder.input_proj[i](feat) for i, feat in enumerate(feats)]
     if decoder.num_levels > len(proj_feats):
@@ -127,9 +163,16 @@ def _encoder_input(decoder, mode, feats):
                 and source.shape[-1] == proj_feats[0].shape[-1] * 2,
                 "stride-4 grid is not exactly twice the finest-level grid")
         capture["s4"] = None
-        source = F.pixel_unshuffle(source, 2)
+        pre = bool(source.requires_grad)          # False by construction: detached at capture
+        source = F.pixel_unshuffle(source, 2).detach()
     else:
-        source = proj_feats[0]
+        pre = bool(proj_feats[0].requires_grad)   # True on a live training forward
+        source = proj_feats[0].detach()
+    LAST_SOURCE_INFO.clear()
+    LAST_SOURCE_INFO.update(mode=mode, source_requires_grad_before_branch_detach=pre,
+                            source_requires_grad=bool(source.requires_grad),
+                            shape=list(source.shape))
+    require(not source.requires_grad, "branch source must be stop-gradient")
     injection = decoder.detail_inject
     proj_feats[0] = proj_feats[0] + injection.gate.view(1, -1, 1, 1) * injection.conv(source)
     feat_flatten = []
@@ -142,7 +185,7 @@ def _encoder_input(decoder, mode, feats):
     return feat_flatten, spatial_shapes
 
 
-def install_detail_path(model, mode):
+def install_detail_path(model, mode, seed=0):
     """Install the capture wrapper and the injection path; returns the parameter delta."""
     require(mode in MODES, "unknown detail mode: " + str(mode))
     require(type(model.backbone).__name__ == "PResNet", "unexpected backbone type")
@@ -152,7 +195,7 @@ def install_detail_path(model, mode):
     before = sum(p.numel() for p in model.parameters())
     wrapper = BackboneCapture(model.backbone)
     model.backbone = wrapper
-    decoder.detail_inject = DetailInjection()
+    decoder.detail_inject = DetailInjection(seed=seed)
     object.__setattr__(decoder, "reference_backbone", wrapper)
     decoder._get_encoder_input = functools.partial(_encoder_input, decoder, mode)
     after = sum(p.numel() for p in model.parameters())

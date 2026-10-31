@@ -1,16 +1,26 @@
 """CPU unit tests for the sub-stride detail path (frozen release source).
 
-Run in the frozen interpreter with CUDA hidden, from the worktree root:
-  CUDA_VISIBLE_DEVICES= python -I tools/explore/test_detail_path.py
-or via pytest.  The tests build small synthetic-config models through the real
-``protocol_r18.model.build`` (no pretrained weights, no data).
+Run with the real CLI in the frozen interpreter with CUDA hidden:
+  CUDA_VISIBLE_DEVICES= python -I tools/explore/test_detail_path.py --source-root <release>/source
+Under pytest the same functions run when the RELEASE source root is provided via
+the ``--source-root`` pytest option or the ``DETAIL_RELEASE_SRC`` env variable.
+
+Covered: parameter delta and key names; zero-gate bitwise identity in both
+modes plus nonzero-gate output change; deepcopy self-reference; strict
+state_dict roundtrip; the real loss path (21 terms incl. DN) with gradient
+behaviour at gate 0; installation RNG-neutrality; zero-gate shared-parameter
+gradients bitwise identical to the native model; and the nonzero-gate
+stop-gradient branch check (source detached, gate+conv train, main path live).
 """
 from __future__ import annotations
 
 import copy
+import os
+import random
 import sys
 from pathlib import Path
 
+import numpy as np
 import torch
 
 HERE = Path(__file__).resolve().parent
@@ -20,7 +30,7 @@ if str(HERE) not in sys.path:
 import detail_path  # noqa: E402
 import frozen_r18  # noqa: E402
 
-RELEASE_SRC = None  # set via --source-root or RELEASE env in run(); see main().
+RELEASE_SRC = None  # set via --source-root / DETAIL_RELEASE_SRC in _configure().
 
 
 def _configure(release_src):
@@ -49,6 +59,25 @@ def _forward_pair(model):
     with torch.no_grad():
         out = model(_probe_input())
     return out
+
+
+def _targets():
+    return [
+        {"boxes": torch.tensor([[.4, .4, .15, .2]]), "labels": torch.tensor([1]),
+         "gt_ids": ["fixture/raw0"],
+         "ignore_union": torch.empty(0, 4, dtype=torch.float64),
+         "ignore_class_boxes": torch.empty(0, 4, dtype=torch.float64),
+         "ignore_class_labels": torch.empty(0, dtype=torch.int64)},
+        {"boxes": torch.empty(0, 4), "labels": torch.empty(0, dtype=torch.int64), "gt_ids": [],
+         "ignore_union": torch.empty(0, 4, dtype=torch.float64),
+         "ignore_class_boxes": torch.empty(0, 4, dtype=torch.float64),
+         "ignore_class_labels": torch.empty(0, dtype=torch.int64)},
+    ]
+
+
+def _np_state_equal(a):
+    b = np.random.get_state()
+    return a[0] == b[0] and (a[1] == b[1]).all() and a[2] == b[2] and a[3] == b[3] and a[4] == b[4]
 
 
 def test_parameter_delta_and_key_names():
@@ -110,21 +139,11 @@ def test_state_dict_roundtrip_strict():
 
 
 def test_loss_path_and_gradients():
-    from sparse_rtdetr.protocol_r18.model import Config
+    from sparse_rtdetr.protocol_r18.model import Config  # noqa: F401 (release import check)
     model, criterion = _build("detail")
     model.train()
     images = _probe_input(11).expand(2, 3, 128, 128).contiguous()
-    targets = [
-        {"boxes": torch.tensor([[.4, .4, .15, .2]]), "labels": torch.tensor([1]),
-         "gt_ids": ["fixture/raw0"],
-         "ignore_union": torch.empty(0, 4, dtype=torch.float64),
-         "ignore_class_boxes": torch.empty(0, 4, dtype=torch.float64),
-         "ignore_class_labels": torch.empty(0, dtype=torch.int64)},
-        {"boxes": torch.empty(0, 4), "labels": torch.empty(0, dtype=torch.int64), "gt_ids": [],
-         "ignore_union": torch.empty(0, 4, dtype=torch.float64),
-         "ignore_class_boxes": torch.empty(0, 4, dtype=torch.float64),
-         "ignore_class_labels": torch.empty(0, dtype=torch.int64)},
-    ]
+    targets = _targets()
     outputs = model(images, targets)
     losses = criterion(outputs, targets)
     total = sum(losses.values())
@@ -148,6 +167,98 @@ def test_loss_path_and_gradients():
     total.backward()
     assert conv.grad is not None and torch.isfinite(conv.grad).all() and conv.grad.abs().sum() > 0
     model.zero_grad(set_to_none=True)
+
+
+def test_install_rng_neutral():
+    model, _ = _build(None)
+    random.seed(5)
+    np.random.seed(5)
+    torch.manual_seed(5)
+    s_py = random.getstate()
+    s_np = np.random.get_state()
+    s_t = torch.get_rng_state()
+    detail_path.install_detail_path(model, "control")
+    assert random.getstate() == s_py
+    assert _np_state_equal(s_np)
+    assert torch.equal(torch.get_rng_state(), s_t)
+    # a fixed draw sequence is identical before and after installation
+    random.seed(123)
+    np.random.seed(123)
+    torch.manual_seed(123)
+    before = (random.random(), float(np.random.rand()), float(torch.rand(1)))
+    fresh, _ = _build(None)
+    detail_path.install_detail_path(fresh, "detail")
+    random.seed(123)
+    np.random.seed(123)
+    torch.manual_seed(123)
+    after = (random.random(), float(np.random.rand()), float(torch.rand(1)))
+    assert before == after
+
+
+def test_zero_gate_shared_gradients_bitwise_vs_native():
+    images = _probe_input(11).expand(2, 3, 128, 128).contiguous()
+    targets = _targets()
+    for mode in ("detail", "control"):
+        native, crit_n = _build(None)
+        model, crit_m = _build(mode)
+        native.train()
+        model.train()
+        torch.manual_seed(99)
+        out_n = native(images, targets)
+        torch.manual_seed(99)
+        out_m = model(images, targets)
+        for key in ("pred_logits", "pred_boxes"):
+            assert torch.equal(out_n[key], out_m[key]), (mode, key)
+        torch.manual_seed(7)
+        loss_n = sum(crit_n(out_n, targets).values())
+        torch.manual_seed(7)
+        loss_m = sum(crit_m(out_m, targets).values())
+        assert torch.equal(loss_n, loss_m), mode
+        loss_n.backward()
+        loss_m.backward()
+        grads_n = {n: p.grad for n, p in native.named_parameters()}
+        compared = 0
+        for n, p in model.named_parameters():
+            if n not in grads_n:
+                continue
+            g = grads_n[n]
+            assert (g is None) == (p.grad is None), (mode, n)
+            if g is not None:
+                assert torch.equal(g, p.grad), (mode, n)
+                compared += 1
+        assert compared > 300, (mode, compared)
+        native.zero_grad(set_to_none=True)
+        model.zero_grad(set_to_none=True)
+
+
+def test_stop_gradient_and_nonzero_gate_paths():
+    for mode in ("detail", "control"):
+        model, criterion = _build(mode)
+        model.train()
+        images = _probe_input(11).expand(2, 3, 128, 128).contiguous()
+        targets = _targets()
+        with torch.no_grad():
+            model.decoder.detail_inject.gate.fill_(0.02)
+        outputs = model(images, targets)
+        info = dict(detail_path.LAST_SOURCE_INFO)
+        assert info["mode"] == mode
+        assert info["source_requires_grad"] is False, mode
+        if mode == "control":
+            # the live training forward had a grad-requiring main-path tensor
+            assert info["source_requires_grad_before_branch_detach"] is True, mode
+        else:
+            # the stride-4 capture is value-only by construction (detached at capture)
+            assert info["source_requires_grad_before_branch_detach"] is False, mode
+        assert info["shape"][-2:] == [16, 16]  # stride-4 grid for 128px input
+        total = sum(criterion(outputs, targets).values())
+        total.backward()
+        gate = model.decoder.detail_inject.gate
+        conv = model.decoder.detail_inject.conv.weight
+        assert gate.grad is not None and torch.isfinite(gate.grad).all() and gate.grad.abs().sum() > 0, mode
+        assert conv.grad is not None and torch.isfinite(conv.grad).all() and conv.grad.abs().sum() > 0, mode
+        shared = [p.grad for n, p in model.named_parameters() if not n.startswith("decoder.detail_inject")]
+        assert any(g is not None and float(g.abs().sum()) > 0 for g in shared), mode
+        model.zero_grad(set_to_none=True)
 
 
 def main():
