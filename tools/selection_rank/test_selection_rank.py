@@ -21,6 +21,7 @@ import argparse
 import json
 import sys
 import time
+import traceback
 from pathlib import Path
 
 import torch
@@ -194,8 +195,9 @@ def main():
             globals()[name]()
             print("PASS", name, flush=True)
         except Exception as error:  # noqa: BLE001
-            failures.append((name, repr(error)))
+            failures.append((name, repr(error), traceback.format_exc()))
             print("FAIL", name, repr(error), flush=True)
+            print(traceback.format_exc(), flush=True)
     payload = {"status": "PASS" if not failures else "FAIL",
                "scope": "synthetic logits/boxes only; verifies that the formulas implement the declared mechanism",
                "declaration": sr.DECLARATION, "evidence": EVIDENCE, "failures": failures,
