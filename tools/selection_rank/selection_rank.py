@@ -1,79 +1,64 @@
-"""Train-time near-tie selection ranking term -- r13 minimal prototype (record section 16/17).
+"""Quality-ordered near-tie selection ranking term -- r14 corrected definition (record section 18).
 
-WHAT IT RAISES AND WHAT IT SUPPRESSES (declared before implementation)
----------------------------------------------------------------------
-The selection rule of the frozen carrier is unchanged at inference: it takes the
-global top-k of the max-class encoder logit ``s(t) = max_c logits[t, c]``.  D1
-measured that the tokens lost for small objects sit inside a narrow near-tie band
-(58.2% of lost small GTs have their best token within the top 3% by score) and
-that the score ordering does not track localization quality there (small paired
-IoU median 0.7126 against 0.8823 for medium, score-size Spearman -0.51).
+WHAT IT RAISES AND WHAT IT LOWERS, AND WHY (corrected)
+-----------------------------------------------------
+The v1 rule of r13 decided the direction from ``matched`` versus ``unselected``
+status, which is a bookkeeping proxy: the frozen Hungarian matcher minimises a
+global cost, so an instance's matched token can easily be a WORSE localizer
+pairwise than an unselected competitor (that is exactly the dense-competition
+case the mechanism targets).  v1 would then have pushed the worse token up.  This
+definition fixes the direction by an explicit quality measure and only ever fires
+where the frozen selection is measurably mis-ordered:
 
-This term therefore
-  * RAISES the matched token ``t*(g)`` of each ground-truth instance ``g``: the
-    token the frozen Hungarian matcher already chose, i.e. the token that is the
-    best localizer for ``g`` under the matcher's own localization cost.  The
-    basis is the matcher's decision, not a new quality estimate; and
-  * SUPPRESSES its partner ``t-(g)``: the best-localizing UNSELECTED near-tie
-    token of the same ``g``, restricted to a declared relative-size band.  The
-    basis is again the matcher's localization cost, evaluated on tokens the
-    selection rule discarded.
+    quality   q(t, g) = IoU(pred_box_t, gt_box_g)                  (higher is better)
 
-It is a ranking constraint, not a new score, and it changes nothing at inference:
-if the term works, the same top-k rule selects different tokens.
+    owner     t*(g) = the frozen matcher's matched token for g      (bookkeeping only)
 
-PAIRING AND LOSS (complete formulas)
-------------------------------------
-Per image, with ``S`` the selected set (top-k by ``s``), ``M`` the matched pairs
-from the frozen matcher and ``rank(t)`` the descending-score rank with a
-deterministic tie-break (higher token index gets the worse rank):
+    eligible competitor u for g  (all conditions required):
+      spatial   |log sqrt(area_u / area_g)| <= B                     (same size regime)
+      coverage  q(u, g) >= q_floor            (u really covers this instance)
+                and q(u, g) > q(t*(g), g) + q_margin   (u is measurably BETTER)
+      neighbour protection: for every other GT g' != g, IoU(pred_box_u, gt_box_g') <= tau
+      score band: rank_s(u) <= ceil(alpha * k) and u is not selected
+      exclusivity: u is not another instance's matched token, and a token partners at
+                  most one instance (smallest |log size error| wins, ties to the
+                  smallest instance index)
 
-    eligible(g) = { t : t not in S,
-                        |log(sqrt(area_t / area_g))| <= B,
-                        rank(t) <= R_max = ceil(alpha * k),
-                        t is not the matched token of any other GT }
-    dedup: a token may partner at most ONE g -- it is assigned to the g with the
-           smallest |log size error| (ties -> smallest GT index) and dropped from
-           all others; so the eligible sets are disjoint after dedup.
-    partner(g) = argmin_{t in eligible(g)} loc(t, g)        (A2, the method)
-               = uniform draw from eligible(g)              (A1, the control)
-    loc(t, g)  = w_bbox * L1(pred_box_t, gt_box_g) + w_giou * (1 - IoU)   (same
-                 terms as the matcher's localization cost; ties -> lowest index)
-    margin(g)  = m0 * clamp(sqrt(w_g * h_g) / s_ref, lo, hi)   (shrinks with the
-                 object's scale)
-    L          = (1 / N) * sum_g relu(margin(g) - (s(t*(g)) - s(t-(g)))) ,  N =
-                 number of GTs with a non-empty eligible set after dedup
-    if N == 0:  L == 0 exactly and no gradient anywhere.
+    pairing   one pair per instance at most.  If the eligible set is empty the
+              instance contributes NOTHING: zero pairs, exactly zero loss, no
+              padding.  The competitor is by construction the BETTER token and the
+              owner the WORSE one, so the term raises the better and lowers the
+              worse -- decided by q, never by selected/unselected status.
 
-Gradients on the max-class logit only:
-    dL/ds(t*(g)) = -1/N on active pairs, dL/ds(t-(g)) = +1/N on active pairs,
-    exactly 0 for every other token and exactly 0 for pairs whose margin is
-    already satisfied.  The term is class-agnostic in the sense that it acts on
-    whatever class is each token's argmax.
+    partner   A2 (method): the eligible token with the highest q(u, g)
+                           (ties -> lowest token index)
+              A1 (control): uniform draw from the same eligible set with a
+                           declared generator seed
 
-CONTROL AND COUNTING RULES SHARED BY A1/A2
-------------------------------------------
-A1 and A2 use the SAME eligibility code, the SAME dedup rule, the SAME pair count
-(one eligible GT -> one pair), the SAME margin and the SAME loss form; they differ
-only in how the partner is picked inside the already-fixed eligible set (uniform
-random under a declared generator vs. the best localizer).  A1's draw is seeded
-and reproducible; a GT whose eligible set is empty contributes nothing in both.
+    margin(g) = m0 * clamp(sqrt(w_g * h_g) / s_ref, 0.5, 2.0)      (shrinks with scale)
 
-HONEST REGISTRATION OF THE ADDED DIRECT SUPERVISION
---------------------------------------------------
-No token becomes supervised that was not already supervised (the VFL term already
-supervises every token, as positive or negative).  What is NEW is a pairwise,
-geometry-conditioned constraint placed on two already-supervised tokens per pair:
-at most 2*N tokens per update receive the added ranking gradient, and the term
-introduces one new weak label -- "the matched token must outrank the
-best-localizing eligible near-tie token of the same instance".  The term is
-therefore registered as an added DIRECT supervision of the partner token, not as a
-re-weighting inside an unchanged objective.
+    L         = (1/N) * sum_g relu(margin(g) - (s(better) - s(worse))),   N = number of
+                instances with a non-empty eligible set;   N = 0  ->  L == 0 exactly
 
-Boundary: this prototype only shows that the formulas implement the mechanism
-described above (gradient direction, empty partner, cross-GT conflict, A1/A2
-eligibility and counting parity).  It claims nothing about AP or coverage, is not
-wired into the formal chain, and does not run on any GPU.
+    gradients dL/ds(better) = -1/N (raised), dL/ds(worse) = +1/N (lowered) on active
+              pairs; exactly zero elsewhere and zero for pairs whose margin already holds.
+
+CONTROL AND SHARED RULES
+------------------------
+A1 and A2 use the SAME eligibility code, the SAME dedup, the SAME pair count, the
+SAME margin and the SAME loss form; they differ only in which eligible token is
+chosen.  A1's draw is seeded and reproducible; a scene with two legal competitors
+makes the two arms choose differently (checked).
+
+WHAT ONLY TRAINING CAN ANSWER
+-----------------------------
+Whether aligning the score order with the box branch's current quality helps or
+hurts; the risk is declared: q is the model's own opinion, so the target moves with
+the box branch, and the term never rewards lowering a token's box quality.  This
+prototype claims nothing about AP, coverage or selection rates.
+
+Boundary: corrected formulas only.  No formal chain is assembled, nothing runs on a
+GPU, and the checks below verify the mechanism as implemented, not a research result.
 """
 from __future__ import annotations
 
@@ -82,25 +67,28 @@ import math
 import torch
 
 DECLARATION = {
-    "objective": "selection_rank_v1",
-    "statistic": "max_class(encoder score logits) per token",
-    "selected_set": "global top-k by that statistic (k=300 in production)",
-    "raises": "the matched token of each ground-truth instance",
-    "suppresses": "its partner: the best-localizing unselected near-tie token of the same instance",
-    "basis": "the frozen matcher's own localization cost (w_bbox*L1 + w_giou*(1-IoU)), not a new quality estimate",
+    "objective": "selection_rank_v2_quality_ordered",
+    "statistic": "max_class(encoder score logits) per token; the selection rule itself is unchanged",
+    "quality": "q(t,g) = IoU(predicted box of t, ground-truth box of g); higher is better; no matcher involvement",
+    "owner": "the frozen matcher's matched token t*(g) -- bookkeeping only, it does not set the direction",
+    "direction": ("raise the BETTER of the pair and lower the WORSE one, where better/worse are decided by q; "
+                  "the pairing only fires when the owner is measurably worse than an eligible competitor"),
+    "eligible": {
+        "spatial": "|log sqrt(area_u / area_g)| <= B",
+        "coverage": "q(u,g) >= q_floor and q(u,g) > q(owner,g) + q_margin",
+        "neighbour_protection": "for every other GT g' != g: IoU(pred_box_u, gt_box_g') <= tau",
+        "score_band": "rank_s(u) <= ceil(alpha * k) and u not selected",
+        "exclusivity": "u is not another instance's matched token; a token partners at most one instance",
+    },
     "pairs_per_instance": 1,
-    "size_band_B": 0.7,
-    "rank_band_alpha": 4.0,
-    "margin_m0": 1.0,
-    "margin_s_ref": 0.05,
-    "margin_clamp": [0.5, 2.0],
-    "tie_break": "lowest token index for partners, smallest GT index for the dedup owner",
-    "control_A1": "identical eligibility/dedup/count/margin/loss; partner drawn uniformly from the eligible set with a declared generator seed",
-    "method_A2": "identical eligibility/dedup/count/margin/loss; partner chosen as the best localizer inside the eligible set",
-    "gradient": "dL/ds(t*) = -1/N, dL/ds(t-) = +1/N on active pairs; zero elsewhere",
-    "new_direct_supervision": ("no new supervised tokens; a pairwise geometry-conditioned constraint on two "
-                              "already-supervised tokens per pair; at most 2N tokens per update; one new weak "
-                              "label: the matched token must outrank the best-localizing eligible near-tie token"),
+    "empty_allowed": "an instance without an eligible competitor contributes nothing: zero pairs, exactly zero loss, no padding",
+    "constants": {"B": 0.7, "q_floor": 0.25, "q_margin": 0.10, "tau": 0.10, "alpha": 4.0,
+                  "m0": 1.0, "s_ref": 0.05, "margin_clamp": [0.5, 2.0]},
+    "loss": "L = (1/N) * sum_g relu(margin(g) - (s(better) - s(worse)))",
+    "gradient": "dL/ds(better) = -1/N, dL/ds(worse) = +1/N on active pairs; zero elsewhere",
+    "control_A1": ("identical eligibility/dedup/count/margin/loss; the competitor is drawn uniformly from the "
+                   "eligible set with a declared generator seed"),
+    "method_A2": "identical eligibility/dedup/count/margin/loss; the competitor is the highest-q eligible token",
     "inference": "unchanged: same top-k rule, no module, no head, no parameter",
 }
 
@@ -128,101 +116,109 @@ def ranks_of(scores):
     return rank
 
 
-def _iou_xyxy(a, b):
-    """Pairwise IoU between two (N,4) xyxy tensors of equal length (element-wise)."""
-    low = torch.maximum(a[:, :2], b[:, :2])
-    high = torch.minimum(a[:, 2:], b[:, 2:])
-    inter = (high - low).clamp_min(0).prod(-1)
-    area_a = (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1])
-    area_b = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-    return inter / (area_a + area_b - inter).clamp_min(1e-12)
-
-
 def _xyxy(boxes):
     return torch.cat([boxes[:, :2] - boxes[:, 2:] / 2, boxes[:, :2] + boxes[:, 2:] / 2], dim=-1)
 
 
-def pairing(logits, pred_boxes, gt_boxes, matched, *, k, mode, weights, generator=None):
-    """Eligibility, dedup and partner choice for one image.
+def iou_matrix(boxes_a, boxes_b):
+    """Pairwise IoU between (N,4) and (M,4) xyxy tensors -> (N, M).  This IS the quality."""
+    low = torch.maximum(boxes_a[:, None, :2], boxes_b[None, :, :2])
+    high = torch.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
+    inter = (high - low).clamp_min(0).prod(-1)
+    area_a = ((boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1]))[:, None]
+    area_b = ((boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1]))[None, :]
+    return inter / (area_a + area_b - inter).clamp_min(1e-12)
+
+
+def pairing(logits, pred_boxes, gt_boxes, matched, *, k, mode, generator=None):
+    """Eligibility, exclusivity and competitor choice for one image (corrected rule).
 
     ``matched`` is a list of (token_index, gt_index) from the frozen matcher.
-    Returns per-GT records so the caller can compute the loss and the counts.
     """
     _require(mode in ("A1", "A2"), "unknown ranking mode: " + str(mode))
     _require(k >= 1 and k <= logits.shape[0], "k outside the token count")
+    _require(gt_boxes.dim() == 2 and gt_boxes.shape[1] == 4, "gt_boxes must be (G,4) for one image")
+    constants = DECLARATION["constants"]
     scores = max_class_statistic(logits)
     rank = ranks_of(scores)
     order = torch.argsort(scores, descending=True, stable=True)
     selected = set(int(i) for i in order[:k])
     matched_tokens = {int(i) for i, _ in matched}
-    r_max = int(math.ceil(DECLARATION["rank_band_alpha"] * k))
+    r_max = int(math.ceil(constants["alpha"] * k))
     boxes_xyxy = _xyxy(pred_boxes)
     gt_xyxy = _xyxy(gt_boxes)
+    quality = iou_matrix(boxes_xyxy, gt_xyxy)          # (T, G)
 
     candidates = {}
-    for _, g in matched:
-        g = int(g)
+    for _token, gt in matched:
+        g = int(gt)
         area_g = float(gt_boxes[g, 2] * gt_boxes[g, 3])
         _require(area_g > 0, "ground-truth box has no area")
+        owner = int(_token)
         pool = []
-        for t in range(logits.shape[0]):
-            if t in selected or t in matched_tokens:
+        for u in range(logits.shape[0]):
+            if u == owner or u in selected or u in matched_tokens:
                 continue
-            if int(rank[t]) > r_max:
+            if int(rank[u]) > r_max:
                 continue
-            area_t = float(pred_boxes[t, 2] * pred_boxes[t, 3])
-            if area_t <= 0:
+            area_u = float(pred_boxes[u, 2] * pred_boxes[u, 3])
+            if area_u <= 0:
                 continue
-            error = abs(math.log(math.sqrt(area_t / area_g)))
-            if error > DECLARATION["size_band_B"]:
+            error = abs(math.log(math.sqrt(area_u / area_g)))
+            if error > constants["B"]:
                 continue
-            pool.append((t, error))
+            q_u = float(quality[u, g])
+            if q_u < constants["q_floor"] or q_u <= float(quality[owner, g]) + constants["q_margin"]:
+                continue
+            if any(float(quality[u, other]) > constants["tau"] for other in range(len(gt_boxes)) if other != g):
+                continue
+            pool.append((u, q_u, error))
         candidates[g] = pool
 
-    # dedup: a token partners at most one instance -- smallest |log size error| wins
-    owner = {}
+    # exclusivity: a token partners at most one instance -- smallest relative size error wins
+    owner_of = {}
     for g, pool in sorted(candidates.items()):
-        for t, error in pool:
-            best = owner.get(t)
+        for u, _q, error in pool:
+            best = owner_of.get(u)
             if best is None or (error, g) < (best[0], best[1]):
-                owner[t] = (error, g)
-    eligible = {g: [t for t, error in pool if owner[t][1] == g] for g, pool in candidates.items()}
+                owner_of[u] = (error, g)
+    eligible = {g: [(u, q) for u, q, error in pool if owner_of[u][1] == g] for g, pool in candidates.items()}
 
     records = []
-    for token, g in sorted((int(i), int(j)) for i, j in matched):
+    for token, gt in sorted((int(i), int(j)) for i, j in matched):
+        g = int(gt)
         pool = eligible.get(g, [])
         if not pool:
-            records.append({"gt": g, "matched_token": token, "partner": None,
-                            "eligible_count": 0, "margin": None, "active": False})
+            records.append({"gt": g, "owner": int(token), "partner": None, "better": None, "worse": None,
+                            "eligible_count": 0, "margin": None, "active": False, "score_gap": None})
             continue
-        margin = float(DECLARATION["margin_m0"] * min(max(
-            float(math.sqrt(float(gt_boxes[g, 2] * gt_boxes[g, 3]))) / DECLARATION["margin_s_ref"],
-            DECLARATION["margin_clamp"][0]), DECLARATION["margin_clamp"][1]))
+        margin = float(constants["m0"] * min(max(
+            float(math.sqrt(float(gt_boxes[g, 2] * gt_boxes[g, 3]))) / constants["s_ref"],
+            constants["margin_clamp"][0]), constants["margin_clamp"][1]))
         if mode == "A2":
-            costs = []
-            for t in pool:
-                l1 = float((pred_boxes[t] - gt_boxes[g]).abs().sum())
-                iou = float(_iou_xyxy(boxes_xyxy[t:t + 1], gt_xyxy[g].unsqueeze(0))[0])
-                costs.append((weights["cost_bbox"] * l1 + weights["cost_giou"] * (1.0 - iou), t))
-            partner = min(costs, key=lambda row: (row[0], row[1]))[1]
+            partner = min(pool, key=lambda row: (-row[1], row[0]))[0]
         else:
             _require(generator is not None, "A1 needs the declared generator")
-            draw = torch.randint(len(pool), (1,), generator=generator).item()
-            partner = pool[int(draw)]
-        gap = float(scores[token] - scores[partner])
-        records.append({"gt": g, "matched_token": token, "partner": int(partner),
+            partner = pool[int(torch.randint(len(pool), (1,), generator=generator).item())][0]
+        # the competitor is eligible only if it is measurably better than the owner
+        better, worse = int(partner), int(token)
+        _require(float(quality[better, g]) > float(quality[worse, g]) + constants["q_margin"],
+                 "pairing produced a token that is not measurably better than the owner")
+        gap = float(scores[better] - scores[worse])
+        records.append({"gt": g, "owner": int(token), "partner": int(partner), "better": better, "worse": worse,
                         "eligible_count": len(pool), "margin": margin, "active": bool(gap < margin),
-                        "score_gap": gap})
+                        "score_gap": gap,
+                        "quality_better": float(quality[better, g]), "quality_worse": float(quality[worse, g])})
     return {"records": records, "selected": sorted(selected), "r_max": r_max,
-            "eligible": {g: list(pool) for g, pool in eligible.items()},
+            "eligible": {g: [u for u, _q in pool] for g, pool in eligible.items()},
             "eligible_counts": {g: len(pool) for g, pool in eligible.items()},
             "candidate_counts": {g: len(pool) for g, pool in candidates.items()}}
 
 
-def loss(images_logits, pred_boxes, gt_boxes, matched, *, k, mode, weights, generator=None):
+def loss(images_logits, pred_boxes, gt_boxes, matched, *, k, mode, generator=None):
     """The ranking term; returns (loss tensor, evidence dict).
 
-    A1 and A2 share eligibility, dedup, pair count, margins and the loss form.
+    A1 and A2 share eligibility, exclusivity, pair count, margins and the loss form.
     """
     _require(isinstance(gt_boxes, (list, tuple)) or (hasattr(gt_boxes, "dim") and gt_boxes.dim() == 3),
              "gt_boxes must be a list of per-image (G,4) tensors or a (B,G,4) tensor")
@@ -235,33 +231,28 @@ def loss(images_logits, pred_boxes, gt_boxes, matched, *, k, mode, weights, gene
     for batch in range(images_logits.shape[0]):
         pairs = [(int(i), int(j)) for i, j in matched[batch]]
         info = pairing(images_logits[batch], pred_boxes[batch], gt_boxes[batch], pairs,
-                       k=k, mode=mode, weights=weights, generator=generator)
+                       k=k, mode=mode, generator=generator)
         per_image.append(info)
+        scores = max_class_statistic(images_logits[batch])
         for record in info["records"]:
             if record["partner"] is None:
                 continue
             total_pairs += 1
-            scores = max_class_statistic(images_logits[batch])
-            gap = scores[record["matched_token"]] - scores[record["partner"]]
+            gap = scores[record["better"]] - scores[record["worse"]]
             term = torch.relu(torch.as_tensor(record["margin"], dtype=scores.dtype, device=scores.device) - gap)
             terms.append(term)
             if bool(term > 0):
                 active_pairs += 1
-                touched.add((batch, record["matched_token"]))
-                touched.add((batch, record["partner"]))
-    if not terms:
-        value = images_logits.sum() * 0.0
-    else:
-        value = torch.stack(terms).sum() / float(len(terms))
-    evidence = {
-        "mode": mode, "pairs": total_pairs, "active_pairs": active_pairs,
-        "tokens_with_added_gradient": len(touched), "k": k, "declaration": DECLARATION,
-        "per_image": per_image,
-    }
+                touched.add((batch, record["better"]))
+                touched.add((batch, record["worse"]))
+    value = images_logits.sum() * 0.0 if not terms else torch.stack(terms).sum() / float(len(terms))
+    evidence = {"mode": mode, "pairs": total_pairs, "active_pairs": active_pairs,
+                "tokens_with_added_gradient": len(touched), "k": k,
+                "declaration": DECLARATION, "per_image": per_image}
     return value, evidence
 
 
-def check_gradient_direction(logits, pred_boxes, gt_boxes, matched, *, k, mode="A2", weights, generator=None):
+def check_gradient_direction(logits, pred_boxes, gt_boxes, matched, *, k, mode="A2", generator=None):
     """Reference implementation of the expected gradient, for the synthetic checks."""
     _require(isinstance(gt_boxes, (list, tuple)) or (hasattr(gt_boxes, "dim") and gt_boxes.dim() == 3),
              "gt_boxes must be a list of per-image (G,4) tensors or a (B,G,4) tensor")
@@ -270,8 +261,7 @@ def check_gradient_direction(logits, pred_boxes, gt_boxes, matched, *, k, mode="
     pairs = []
     for batch in range(logits.shape[0]):
         info = pairing(logits[batch], pred_boxes[batch], gt_boxes[batch],
-                       [(int(i), int(j)) for i, j in matched[batch]], k=k, mode=mode,
-                       weights=weights, generator=generator)
+                       [(int(i), int(j)) for i, j in matched[batch]], k=k, mode=mode, generator=generator)
         for record in info["records"]:
             if record["partner"] is None:
                 continue
@@ -282,12 +272,10 @@ def check_gradient_direction(logits, pred_boxes, gt_boxes, matched, *, k, mode="
         return 0.0, expected, pairs
     value = 0.0
     for batch, record in pairs:
-        gap = float(scores[batch, record["matched_token"]] - scores[batch, record["partner"]])
+        gap = float(scores[batch, record["better"]] - scores[batch, record["worse"]])
         term = max(0.0, record["margin"] - gap)
         value += term
         if term > 0:
-            best = int(logits[batch, record["matched_token"]].argmax())
-            other = int(logits[batch, record["partner"]].argmax())
-            expected[batch, record["matched_token"], best] -= 1.0 / total
-            expected[batch, record["partner"], other] += 1.0 / total
+            expected[batch, record["better"], int(logits[batch, record["better"]].argmax())] -= 1.0 / total
+            expected[batch, record["worse"], int(logits[batch, record["worse"]].argmax())] += 1.0 / total
     return value / total, expected, pairs
