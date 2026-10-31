@@ -304,7 +304,11 @@ def main():
     require(len(control) == len(native) + 1
             and abs(float(control["loss_rank"]) - term1.last_stats["loss"]) < 1e-12,
             "the A1 term key/value differs")
-    require(term1.draws > 0 and term1.mode == "A1", "the A1 arm drew no partner from the eligible set")
+    paired_instances = sum(1 for row in term1.last_stats["per_image"]
+                           for record in row["records"] if record["partner"] is not None)
+    require(term1.mode == "A1" and term1.draws == paired_instances,
+            ("the A1 draw count does not match the instances with an eligible set",
+             term1.draws, paired_instances))
 
     term2 = m["sr"].SelectionRankTerm("A2", seed=0, k=300).bind_manual(cache, consumer=m["geo"])
     criterion.selection_rank = term2
@@ -386,7 +390,8 @@ def main():
                   "counts_identical_A1_A2": {key: term2.last_stats[key] for key in
                                              ("instances", "pairs", "zero_pair_instances", "choice_space_instances")},
                   "partner_compared": compared, "partner_disagreements_A1_vs_A2": disagreements,
-                  "a1_draws": term1.draws, "training_rng_untouched": True},
+                  "a1_draws": term1.draws, "a1_draws_expected": paired_instances,
+                  "training_rng_untouched": True},
         "a1_state": {"generator_bytes": int(state["a1_generator"].numel()),
                      "serialized_bytes": saved_bytes, "roundtrip_exact": True, "draws": state["draws"]},
         "per_image_records": term2.last_stats["per_image"],
