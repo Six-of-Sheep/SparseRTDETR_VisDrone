@@ -1,74 +1,70 @@
-# r14 corrected prototype: quality-ordered near-tie selection ranking term
+# r15: the selection-ranking term wired into the production path
 
-Round scope (user instruction 2026-11-01, second pass): record section 16 stays an
-**unclosed hypothesis**; no formal chain is assembled; this round delivers the
-corrected formulas, the corresponding source and a small set of synthetic checks.
-No GPU, no training, no detection scoring, and no claim of a research result.
+Round scope (record section 19): wire the r14 quality-ordered near-tie selection-ranking
+term into the real encoder outputs and the criterion, freeze the total-loss weight,
+application site, normalization and stop-gradient boundary **before any run**, complete
+the owner-to-pool index mapping, the production invariants, the A1 independent RNG state
+and the empty-pair path, and verify all of that on a few real training-side inputs with
+the real production code.  CPU only; no GPU (still requires explicit authorization), no
+training round, no scoring, no new module and no parameter sweep.
 
-## What it raises and what it lowers, and why (corrected)
+## What is wired where
 
-The v1 rule decided the direction from *matched* versus *unselected* status.  That is
-a bookkeeping proxy: the frozen Hungarian matcher minimises a global cost, so an
-instance's matched token can be a worse localizer pairwise than an unselected
-competitor, and v1 would then have pushed the worse token up.  The corrected rule
-decides the direction from an explicit quality measure and fires only where the
-frozen selection is measurably mis-ordered:
+    statistic      the term acts on the full encoder pool logits handed to
+                   ``decoder._select_topk`` (the same tensor the selection rule uses),
+                   not on the decoder queries
+    capture        ``SelectionRankTerm.attach`` wraps ``decoder._select_topk``; the
+                   cache lives on the term (never on a module) and is consumed by the
+                   criterion call of the same micro-batch
+    owner          the frozen matcher's matched query, mapped to its pool index through
+                   the cached top-k indices: owner_pool = topk_indices[query]; the
+                   harness checks bitwise that the cached indices reproduce the
+                   decoder's gathered enc_topk logits and boxes
+    matched pairs  the criterion's ``get_loss`` diagnostics record the final family's
+                   ``matched_indices`` (query, ground truth); aux/enc/dn families never
+                   feed the term
+    quality        q(t,g) = IoU(sigmoid(cxcywh pool box of t), GT box of g), under no_grad
+    gradient       only the pool logits' max-class entries of the two chosen tokens per
+                   pair; a backward hook records -coef/N on each better (unselected)
+                   token and nothing else on any unselected pool token
 
-    q(t, g)  = IoU(predicted box of t, ground-truth box of g)      (higher is better)
-    owner    = the frozen matcher's matched token (bookkeeping only)
-    raise    = the BETTER of the pair;   lower = the WORSE one       (decided by q)
+## Frozen before launch (declared, never tuned on results)
 
-## Eligible competitor (spatial relation, coverage, neighbour protection)
+    loss key       loss_rank
+    weight         lambda = 1.0 inside the criterion, once per micro-batch
+    position       final family only, added after the native losses
+    normalization  L = (1/N) * sum relu(margin - gap), N = instances with a non-empty
+                   eligible set in that micro-batch; N = 0 -> exactly 0.0 while the key
+                   stays present (native loss counts become 13 without DN, 22 with DN)
+    stop gradient  q, size band, coverage, neighbour protection, score band, exclusivity,
+                   partner choice and margins are all no-grad
 
-    spatial    |log sqrt(area_u / area_g)| <= B = 0.7            (same size regime)
-    coverage   q(u,g) >= q_floor = 0.25                          (u really covers g)
-               and q(u,g) > q(owner,g) + q_margin = 0.10         (u is measurably better)
-    neighbour  for every other GT g' != g: IoU(pred_box_u, gt_box_g') <= tau = 0.10
-    score band rank_s(u) <= ceil(alpha * k), alpha = 4, and u is not selected
-    exclusivity u is not another instance's matched token; a token partners at most one
-               instance -- smallest |log size error| wins, ties to the smallest instance index
+## A1 control
 
-One pair per instance at most.  **No padding**: an instance without an eligible
-competitor contributes zero pairs, exactly zero loss and no gradient.
+Same eligibility, dedup, counts, margins and loss.  The partner is drawn uniformly from
+the eligible set with the term's own ``torch.Generator``; its state (and the draw
+counter) is part of ``state_dict`` and must be saved/restored with the checkpoint.  The
+training RNG stream is never read or written (checked around a real criterion call).
 
-    partner    A2: the highest-q eligible token (ties -> lowest index)
-               A1: uniform draw from the same eligible set with a declared seed
-    margin(g)  = m0 * clamp(sqrt(w_g h_g) / s_ref, 0.5, 2.0),  m0 = 1.0, s_ref = 0.05
-    L          = (1/N) * sum_g relu(margin(g) - (s(better) - s(worse))),  N = 0 -> L = 0
-    gradients  dL/ds(better) = -1/N (raised), dL/ds(worse) = +1/N (lowered), zero elsewhere
+## Test-criteria correction (same batch)
 
-## Added direct supervision, registered from the frozen source (corrected)
+``worker.py`` ``full_clock`` and ``slice_ft_job.py`` ``update`` become mode-aware
+(13/22 with an installed term, 12/21 otherwise); ``slice_finetune_cpu.py`` keeps its
+native 21/12 assertion and is not reused by a term-installed arm (declared, not patched).
 
-The earlier statement that VFL supervises the whole encoder pool was wrong and is
-retracted.  In the frozen release:
+## Files
 
-- `vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_decoder.py:504-511` builds the
-  encoder auxiliary outputs from `self._select_topk(...)`, and line 593 sets
-  `out['enc_aux_outputs']` from those **top-k selected** logits/boxes;
-- `vendor/rtdetrv2_pytorch/src/zoo/rtdetr/rtdetrv2_criterion.py:194-207` applies the
-  losses to exactly those `enc_aux_outputs`, with one Hungarian match per family;
-- the carrier names those families `enc{i}` (`src/sparse_rtdetr/protocol_r18/criterion.py:23`).
+    selection_rank.py           the term (module plus the r14-suite compatibility adapters)
+    patch_frozen.py             the four anchored frozen-file patches of this round
+    verify_production_path.py   the CPU harness on the real chain (contract, Dataset,
+                                FineTuneEngine): real loss-key counts, pair count, zero-pair
+                                fraction, choice-space fraction, the backward audit, the A1
+                                state round-trip and the index mapping
+    test_selection_rank.py      the r14 synthetic suite (unchanged; runs against v3)
 
-So the encoder-level direct supervision covers the selected tokens; an **unselected
-pool token takes part only through the hard top-k selection**, which carries no
-gradient.  The partner token in this term therefore receives its first direct
-supervision at that level, and the term is registered as an added direct supervision
-of that token (at most 2N tokens per update, plus one new weak label: the matched
-token must be outranked by a measurably better eligible competitor).
+## Declared limits
 
-## What the checks verify (and what they do not)
-
-`test_selection_rank.py` (synthetic logits/boxes, frozen interpreter, CUDA hidden):
-direction follows quality in a scene where the selected token is worse and an
-unselected token is better; no padding (owner already better, no coverage, wrong size
-band); neighbour protection excluded/admitted across two variants of one scene;
-exclusivity when a token is eligible for two instances; a control scene with **two
-legal competitors** where A1 and A2 demonstrably choose differently with identical
-eligibility, counts and margins; an already-satisfied pair with exactly zero loss and
-zero gradient; margin monotonicity with the clamp; the added gradient touching at most
-2N tokens; and the quality measure being the predicted-box/GT IoU.
-
-It claims nothing about AP, coverage or selection rates.  Whether aligning the score
-order with the box branch's own quality helps or hurts can only be answered by
-training; q is the model's own opinion, so the target moves with the box branch (risk
-declared).
+The verification configuration is not the production recipe (real canvas 768x1344,
+physical batch 1, fp32; production stays batch 8 / bf16).  GPU cost is not measured.
+The reported numbers are mechanism-opportunity evidence on a few real inputs, not a
+benefit result and not a threshold.
