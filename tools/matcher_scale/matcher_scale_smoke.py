@@ -44,6 +44,16 @@ def _load(root):
     return module
 
 
+def rng_same(left, right):
+    """Exact comparison of two captured CPU-side RNG states (python/torch/numpy)."""
+    if left["python"] != right["python"] or not torch.equal(left["torch_cpu"], right["torch_cpu"]):
+        return False
+    a, b = left["numpy"], right["numpy"]
+    return ((a["algorithm"], a["position"], a["has_gauss"], a["cached_gaussian"])
+            == (b["algorithm"], b["position"], b["has_gauss"], b["cached_gaussian"])
+            and torch.equal(a["keys"], b["keys"]))
+
+
 def state_diff(expected, got, checkpoint, limit=8):
     """Top-level key diff of two captures, using the frozen exact_equal on leaves."""
     result = {}
@@ -150,7 +160,6 @@ def main():
     expected = checkpoint.capture(engine, binding)
     require(expected["behavior"]["criterion"]["matching"] == matcher_scale.declaration(mode),
             "saved behaviour identity does not carry the declared matching mode")
-    rng_after_installed = checkpoint.capture_rng(torch.device("cpu"))
 
     clone, _ = engine_for(mode)
     restored = checkpoint.restore(clone, binding, cp0["path"], cp0["sha256"])
@@ -182,16 +191,23 @@ def main():
         native_refusal = repr(error)
     require(native_refusal is not None, "an installed checkpoint was accepted by the native engine")
 
-    # --- closed RNG equality against a native engine over the same windows ----------
+    # --- the matcher must consume no training RNG draw: paired single-update runs ---
+    # Both engines come from the same synthetic seed and run the same frozen window, so
+    # their RNG streams must stay identical before and after one update, whatever the
+    # assignment does.  Comparing against a run with a different draw history (extra
+    # forwards, a different window construction order) would be meaningless.
     reset()
-    rng_engine, _ = engine_for(None)
-    for win in windows:
-        rng_engine.train_window(*win, capture=True)
-    rng_after_native = checkpoint.capture_rng(torch.device("cpu"))
-    rng_equal = bool(rng_after_installed["python"] == rng_after_native["python"]
-                     and torch.equal(rng_after_installed["torch_cpu"], rng_after_native["torch_cpu"])
-                     and rng_after_installed["numpy"]["position"] == rng_after_native["numpy"]["position"])
-    require(rng_equal, "the installed matcher changed the closed training RNG state")
+    paired_native, _ = engine_for(None)
+    before_native = checkpoint.capture_rng(torch.device("cpu"))
+    paired_native.train_window(*windows[0], capture=True)
+    after_native = checkpoint.capture_rng(torch.device("cpu"))
+    reset()
+    paired_installed, _ = engine_for(mode)
+    before_installed = checkpoint.capture_rng(torch.device("cpu"))
+    paired_installed.train_window(*windows[0], capture=True)
+    after_installed = checkpoint.capture_rng(torch.device("cpu"))
+    rng_equal = bool(rng_same(before_native, before_installed) and rng_same(after_native, after_installed))
+    require(rng_equal, "the installed matcher changed the training RNG stream over one update")
 
     # --- matcher compute cost on the real shapes -----------------------------------
     timing = {}
@@ -221,6 +237,7 @@ def main():
         "cross_mode_restore_refused": clash_refusal,
         "native_restore_of_installed_state_refused": native_refusal,
         "closed_rng_equal_to_native_engine": rng_equal,
+        "matcher_consumes_no_training_rng": rng_equal,
         "matcher_ms_per_call": timing,
         "elapsed_seconds": round(time.monotonic() - started, 3),
         "cuda_initialized": bool(torch.cuda.is_initialized()),
