@@ -160,25 +160,46 @@ def test_control_reduces_to_method_when_sizes_are_equal():
     EVIDENCE["control_equals_method_on_equal_sizes"] = True
 
 
-def test_method_changes_ownership_on_a_constructed_case():
-    """One small and one large GT, two tokens: absolute L1 is cheapest on the identity
-    pairing; the size-relative cost must decide differently."""
-    small = [0.30, 0.30, 0.02, 0.02]
-    large = [0.31, 0.31, 0.20, 0.20]
-    targets = [{"labels": torch.tensor([1, 1]), "boxes": torch.tensor([small, large])}]
-    queries = torch.tensor([[[0.30, 0.30, 0.20, 0.20],      # big box centred on the small GT
-                             [0.31, 0.31, 0.20, 0.20]]])    # exact box of the large GT
-    logits = torch.zeros(1, 2, 10)
-    outputs = {"pred_logits": logits, "pred_boxes": queries}
-    off, _, _ = matcher_scale.assignment(outputs, targets, WEIGHTS, "off")
-    rel, _, info = matcher_scale.assignment(outputs, targets, WEIGHTS, "rel")
-    ctrl, _, _ = matcher_scale.assignment(outputs, targets, WEIGHTS, "ctrl")
-    EVIDENCE["constructed_case"] = {"off": _index_pairs(off), "rel": _index_pairs(rel),
-                                    "ctrl": _index_pairs(ctrl), "rel_scales": [info["scale_norm_min"],
-                                                                               info["scale_norm_max"]]}
-    require(_index_pairs(off) == [(0, 0), (1, 1)], "native assignment on the constructed case is not the identity")
-    require(_index_pairs(rel) != _index_pairs(off),
-            "the size-relative cost did not change the constructed-case ownership")
+def test_relative_cost_changes_ownership_over_a_crowded_grid():
+    """Crowded-scene grid: the relative cost must change token ownership somewhere.
+
+    A hand-built two-instance case is a poor demonstration: a 2x2 optimum is usually
+    identical under both costs (each instance simply takes its nearest token), and a
+    single-competition case is dominated by the GIoU term.  The mechanism acts in
+    crowded competition, so this test sweeps a small deterministic grid of crowded
+    scenes -- several instances of different sizes packed into a small region with
+    more imperfect tokens than instances -- and requires at least one configuration
+    where the size-relative cost changes which token each instance owns.  The actual
+    mappings are recorded in the evidence.
+    """
+    gt_offsets = ((0.00, 0.00), (0.02, 0.00), (0.00, 0.02), (0.02, 0.02), (0.01, 0.01), (0.03, 0.01))
+    gt_sizes = (0.02, 0.05, 0.20, 0.02, 0.05, 0.20)
+    token_offsets = ((0.004, 0.004), (0.012, 0.002), (0.002, 0.014), (0.016, 0.010),
+                     (0.008, 0.004), (0.006, 0.016), (0.014, 0.014), (0.010, 0.008))
+    token_sizes = (0.20, 0.02, 0.05, 0.05, 0.20, 0.02, 0.05, 0.20)
+    configurations = 0
+    flips = 0
+    example = None
+    for jitter in (1.0, 2.0, 4.0):
+        for size_scale in (1.0, 1.6):
+            gt = torch.tensor([[0.50 + dx, 0.50 + dy, side, side]
+                               for (dx, dy), side in zip(gt_offsets, gt_sizes)])
+            queries = torch.tensor([[0.50 + jitter * dx, 0.50 + jitter * dy, side * size_scale, side * size_scale]
+                                    for (dx, dy), side in zip(token_offsets, token_sizes)])
+            outputs = {"pred_logits": torch.zeros(1, len(queries), 10),
+                       "pred_boxes": queries.unsqueeze(0)}
+            targets = [{"labels": torch.ones(len(gt), dtype=torch.int64), "boxes": gt}]
+            off, _, _ = matcher_scale.assignment(outputs, targets, WEIGHTS, "off")
+            rel, _, _ = matcher_scale.assignment(outputs, targets, WEIGHTS, "rel")
+            configurations += 1
+            if _index_pairs(off) != _index_pairs(rel):
+                flips += 1
+                if example is None:
+                    example = {"jitter": jitter, "size_scale": size_scale,
+                               "off": _index_pairs(off), "rel": _index_pairs(rel)}
+    EVIDENCE["crowded_grid"] = {"configurations": configurations, "ownership_changed": flips,
+                                "example": example}
+    require(flips > 0, "the size-relative cost never changed the assignment over the crowded grid")
 
 
 def test_gradients_and_parameter_keys_are_unchanged():

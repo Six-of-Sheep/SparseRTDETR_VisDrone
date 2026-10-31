@@ -94,7 +94,7 @@ def main():
         return [(int(i), int(j)) for i, j in zip(indices[0][0].tolist(), indices[0][1].tolist())]
 
     reset()
-    windows = [window(1), window(2)]
+    windows = [(w[0], w[1]) for w in (window(1), window(2))]
 
     # --- same inputs, both matchers -------------------------------------------------
     native_model, native_criterion, _ = construct(None)

@@ -86,6 +86,9 @@ def main():
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--split", required=True)
     parser.add_argument("--source-manifest", default=None)
+    parser.add_argument("--module", required=True,
+                        help="path to the staged matcher_scale.py (the mechanism module; it is "
+                             "loaded standalone because the model comes from the frozen release tree)")
     parser.add_argument("--images", type=int, default=16)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
@@ -107,8 +110,10 @@ def main():
                        "probe image set differs from the frozen D1 diagnostic: " + ",".join(prefixes))
 
     global matcher_scale
-    from sparse_rtdetr.protocol_r18 import matcher_scale as module
-    matcher_scale = module
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("matcher_scale_standalone", args.module)
+    matcher_scale = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(matcher_scale)
     vendor = importlib.import_module(type(loaded["criterion"].matcher).__module__)
     matcher_scale.bind_vendor_names(vendor)
     native_matcher = loaded["criterion"].matcher
