@@ -219,6 +219,8 @@ class SelectionRankTerm:
         topk = cache["topk_indices"]
         pairs = self._pairs_from_diagnostics(diagnostics)
         _require(len(targets) == pool_logits.shape[0] == len(pairs), "term batch members differ")
+        owners = [[(int(topk[image][query]), gt) for query, gt in pairs[image]]
+                  for image in range(len(pairs))]
         self._pending_grad_audit = None
         if self._consumer is not None:
             self._consumer.tensor("rank/pool_logits", pool_logits)
@@ -238,7 +240,7 @@ class SelectionRankTerm:
                                   "choice_space": 0, "records": []})
                 continue
             records, info = self._pair_image(pool_logits[image], pool_coord[image], topk[image],
-                                             pairs[image], gt_boxes, activate=True)
+                                             owners[image], gt_boxes, activate=True)
             info.pop("eligible", None)
             info["records"] = records
             per_image.append(info)
@@ -345,7 +347,8 @@ class SelectionRankTerm:
         Returns (records, info): one record per matched ground truth, partner None when the
         eligible set is empty.  ``activate`` converts the unactivated production pool
         coordinates with sigmoid; the synthetic suite feeds boxes that are already in
-        normalized cxcywh space and passes False.
+        normalized cxcywh space and passes False.  ``pairs`` are owner pool tokens:
+        the caller maps the matcher's matched queries through the cached top-k indices.
         """
         constants = DECLARATION["constants"]
         scores = max_class_statistic(pool_logits)
@@ -356,8 +359,8 @@ class SelectionRankTerm:
             selected[topk[:self.k]] = True
             matched_tokens = torch.zeros(token_count, dtype=torch.bool)
             owner_of_gt = {}
-            for query, gt in pairs:
-                token = int(topk[query])
+            for token, gt in pairs:
+                token = int(token)
                 matched_tokens[token] = True
                 owner_of_gt[gt] = token
             coords = pool_coord.detach()
