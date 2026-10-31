@@ -28,6 +28,10 @@ top-k indices of the same forward: ``owner_pool = topk_indices[query]``.
                        inspected, because no native loss reaches them
     geometry consumer  optional (``attach(..., consumer=geo)``): the term's pool logits,
                        quality matrix and loss join the frozen consumer-geometry audit
+    deep-copy contract the chain deep-copies the model for its two EMA records after a
+                       module is installed, and the decoder's wrapper references the
+                       term: the copy carries its own term (same identity, draws and
+                       generator state) through an explicit ``__deepcopy__``
 
 FROZEN BEFORE LAUNCH (declared, never tuned on results)
 ------------------------------------------------------
@@ -52,6 +56,7 @@ definition.  The r14 synthetic suite keeps running against this file: ``pairing`
 """
 from __future__ import annotations
 
+import copy
 import functools
 import math
 import time
@@ -134,6 +139,23 @@ def _margin(side, constants):
                                   constants["margin_clamp"][1]))
 
 
+class _Consumer:
+    """Stateless holder of the frozen geometry consumer (module objects cannot be copied).
+
+    The chain deep-copies the model for its EMAs, and the decoder's selection wrapper
+    references the term; the holder is shared by the copies because it only delegates.
+    """
+
+    def __init__(self, module):
+        self.module = module
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def tensor(self, name, value, *args, **kwargs):
+        return self.module.tensor(name, value, *args, **kwargs)
+
+
 class SelectionRankTerm:
     """The production term: capture, pair, loss, state.  One instance per arm."""
 
@@ -163,7 +185,7 @@ class SelectionRankTerm:
         the term's own tensors join the same audit family as the native losses.
         """
         _require(not self._installed, "term already installed")
-        self._consumer = consumer
+        self._consumer = None if consumer is None else _Consumer(consumer)
         decoder = model.decoder
         _require(hasattr(decoder, "_select_topk"), "decoder has no _select_topk")
         self._original_select = decoder._select_topk
@@ -200,9 +222,26 @@ class SelectionRankTerm:
 
     def bind_manual(self, cache, *, consumer=None):
         """Bind one captured pool batch for a manual call (no decoder wrapper needed)."""
-        self._consumer = consumer
+        self._consumer = None if consumer is None else _Consumer(consumer)
         self._cache = {key: cache[key] for key in ("pool_logits", "pool_coord_unact", "topk_indices")}
         return self
+
+    def __deepcopy__(self, memo):
+        """The chain deep-copies the model for its EMA records after installation.
+
+        The copy must carry its own term: same identity, draws and generator state, no
+        transient cache, and a selection callable bound to the copied decoder.
+        """
+        clone = SelectionRankTerm(self.mode, seed=self.seed, k=self.k,
+                                  audit_gradients=self.audit_gradients)
+        memo[id(self)] = clone
+        clone.generator = torch.Generator()
+        clone.generator.set_state(self.generator.get_state())
+        clone.draws = self.draws
+        clone._consumer = self._consumer
+        clone._original_select = copy.deepcopy(self._original_select, memo)
+        clone._installed = self._installed
+        return clone
 
     def consume_cache(self):
         _require(self._cache is not None, "no captured pool tensors for this micro-batch")
