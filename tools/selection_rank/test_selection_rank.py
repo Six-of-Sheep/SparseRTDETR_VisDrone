@@ -176,10 +176,13 @@ def test_a1_and_a2_can_choose_differently_with_two_legal_partners():
 
 
 def test_satisfied_pair_is_exactly_zero():
-    logits, boxes, gt = scene(17, 3, [[0.50, 0.50, 0.02, 0.02]], {0: 1.0, 1: 5.0, 2: 0.5})
-    set_box(boxes, 0, [0.510, 0.510, 0.020, 0.020])   # owner, worse, low score
-    set_box(boxes, 1, [0.500, 0.500, 0.020, 0.020])   # better competitor, high score (already ranked above)
-    set_box(boxes, 2, [0.900, 0.900, 0.020, 0.020])
+    # k=1 selects the far token; the owner (matched, worse localizer) and the better
+    # competitor are both unselected, and the competitor already ranks above the owner
+    # by more than the margin, so the pair is satisfied and must contribute nothing.
+    logits, boxes, gt = scene(17, 3, [[0.50, 0.50, 0.02, 0.02]], {0: 1.0, 1: 2.0, 2: 5.0})
+    set_box(boxes, 0, [0.510, 0.510, 0.020, 0.020])   # owner: worse localizer, lower score
+    set_box(boxes, 1, [0.500, 0.500, 0.020, 0.020])   # competitor: better localizer, higher score
+    set_box(boxes, 2, [0.900, 0.900, 0.020, 0.020])   # far, selected, no quality
     value, evidence, grad = gradient_of(logits, boxes, gt, [[(0, 0)]], k=1)
     assert evidence["pairs"] == 1 and evidence["active_pairs"] == 0, evidence
     assert float(value) == 0.0 and float(grad.abs().sum()) == 0.0, "a satisfied pair produced a gradient"
