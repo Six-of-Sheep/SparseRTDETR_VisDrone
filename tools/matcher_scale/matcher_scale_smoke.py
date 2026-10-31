@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-import matcher_scale  # noqa: E402
+matcher_scale = None  # bound by _load() from the staged release package
 
 
 def require(condition, message):
@@ -31,19 +31,29 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def _load(root):
+    """Import the staged package module; the release tree holds the single copy."""
+    global matcher_scale
+    sys.path.insert(0, str(Path(root) / "src"))
+    sys.path.insert(0, str(root))
+    import sparse_rtdetr
+    require(str(Path(sparse_rtdetr.__file__).resolve()).startswith(str(Path(root) / "src")),
+            "sparse_rtdetr resolved outside the release")
+    from sparse_rtdetr.protocol_r18 import matcher_scale as module
+    matcher_scale = module
+    return module
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", required=True)
-    parser.add_argument("--mode", choices=list(matcher_scale.MODES), required=True)
+    parser.add_argument("--mode", required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
     root = Path(args.source_root).resolve()
-    sys.path.insert(0, str(root / "src"))
-    sys.path.insert(0, str(root))
-    import sparse_rtdetr
-    require(str(Path(sparse_rtdetr.__file__).resolve()).startswith(str(root / "src")),
-            "sparse_rtdetr resolved outside the release")
+    _load(root)
+    require(args.mode in matcher_scale.MODES, "unknown matching mode: " + args.mode)
     from sparse_rtdetr.protocol_r18.model import ARM, CommonEMA, Config, build
     from sparse_rtdetr.protocol_r18.engine import Engine
     from sparse_rtdetr.protocol_r18 import checkpoint

@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-import matcher_scale  # noqa: E402
+matcher_scale = None  # bound by _configure() from the staged release package
 
 RELEASE_SRC = None
 EVIDENCE = {}
@@ -35,13 +35,15 @@ def require(condition, message):
 
 
 def _configure(source_root):
-    global RELEASE_SRC
+    global RELEASE_SRC, matcher_scale
     RELEASE_SRC = str(source_root)
     sys.path.insert(0, str(Path(RELEASE_SRC) / "src"))
     import sparse_rtdetr
     resolved = Path(sparse_rtdetr.__file__).resolve()
     require(str(resolved).startswith(str(Path(RELEASE_SRC) / "src")),
             "sparse_rtdetr resolved outside the release: " + str(resolved))
+    from sparse_rtdetr.protocol_r18 import matcher_scale as module
+    matcher_scale = module
     torch.set_num_threads(2)
 
 

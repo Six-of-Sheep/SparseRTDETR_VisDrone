@@ -40,7 +40,8 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import frozen_r18  # noqa: E402
-import matcher_scale  # noqa: E402
+
+matcher_scale = None  # bound inside main() from the frozen release package
 
 FROZEN_IMAGE_PREFIXES = ("00e9facd8565", "02a34eb8a81b", "02d411276904", "03b327dd752d", "03b4f0b1dc7e",
                          "03d569ae67c6", "05759bbe3643", "0636d25253b9", "06d0c5aa00dd", "07c21db371c3",
@@ -105,6 +106,9 @@ def main():
     frozen_r18.require(tuple(prefixes) == FROZEN_IMAGE_PREFIXES,
                        "probe image set differs from the frozen D1 diagnostic: " + ",".join(prefixes))
 
+    global matcher_scale
+    from sparse_rtdetr.protocol_r18 import matcher_scale as module
+    matcher_scale = module
     vendor = importlib.import_module(type(loaded["criterion"].matcher).__module__)
     matcher_scale.bind_vendor_names(vendor)
     native_matcher = loaded["criterion"].matcher
