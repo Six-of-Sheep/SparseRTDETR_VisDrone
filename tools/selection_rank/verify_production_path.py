@@ -146,8 +146,8 @@ def main():
     args = parser.parse_args()
 
     root = Path(args.source_root).resolve()
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     torch.set_num_threads(4)
     torch.use_deterministic_algorithms(True)
@@ -406,7 +406,7 @@ def main():
         "elapsed_seconds": round(time.monotonic() - started, 3),
         "cuda_initialized": bool(torch.cuda.is_initialized()),
     }
-    payload_path = out / "PRODUCTION-PATH.json"
+    payload_path = out_dir / "PRODUCTION-PATH.json"
     payload_path.write_text(json.dumps(report, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     print(json.dumps({key: report[key] for key in ("status", "window1", "window2_empty", "pass3",
                                                    "a1_state", "cost", "elapsed_seconds")},
