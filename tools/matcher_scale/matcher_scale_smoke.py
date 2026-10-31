@@ -44,6 +44,22 @@ def _load(root):
     return module
 
 
+def state_diff(expected, got, checkpoint, limit=8):
+    """Top-level key diff of two captures, using the frozen exact_equal on leaves."""
+    result = {}
+    for key in sorted(set(expected) | set(got)):
+        if key in expected and key in got and checkpoint.exact_equal(expected[key], got[key]):
+            continue
+        left, right = expected.get(key), got.get(key)
+        if isinstance(left, dict) and isinstance(right, dict):
+            result[key] = sorted(
+                sub for sub in set(left) | set(right)
+                if not (sub in left and sub in right and checkpoint.exact_equal(left[sub], right[sub])))[:limit]
+        else:
+            result[key] = "differs"
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", required=True)
@@ -121,17 +137,19 @@ def main():
     binding = {"arm": ARM, "scope": "cpu_R18_synthetic",
                "run_id": "r18-matcher-scale-smoke-20261031-001",
                "config": conf.binding(), "model": info}
+    state_dir = out / ("state-%s" % mode)
+    state_dir.mkdir(parents=True, exist_ok=True)
     r0 = engine.train_window(*windows[0], capture=True)
     require(r0["update"] == 1 and engine.completed_updates == engine.ema.updates == 1 and engine.phase == 0,
             "update clock differs after window 1")
-    cp0 = checkpoint.save(engine, binding, out / "CPU-C1.pth")
+    cp0 = checkpoint.save(engine, binding, state_dir / "CPU-C1.pth")
     expected = checkpoint.capture(engine, binding)
     require(expected["behavior"]["criterion"]["matching"] == matcher_scale.declaration(mode),
             "saved behaviour identity does not carry the declared matching mode")
     r1 = engine.train_window(*windows[1], capture=True)
     require(r1["update"] == 2 and engine.completed_updates == engine.ema.updates == 2,
             "update clock differs after window 2")
-    direct = checkpoint.save(engine, binding, out / "CPU-C2-direct.pth")
+    direct = checkpoint.save(engine, binding, state_dir / "CPU-C2-direct.pth")
     rng_after_installed = checkpoint.capture_rng(torch.device("cpu"))
 
     clone, _ = engine_for(mode)
@@ -139,9 +157,11 @@ def main():
     r1_replay = clone.train_window(*windows[1], capture=True)
     same_result = ({k: v for k, v in r1.items() if k != "elapsed_seconds"}
                    == {k: v for k, v in r1_replay.items() if k != "elapsed_seconds"})
-    state_exact = checkpoint.exact_equal(expected, checkpoint.capture(clone, binding))
+    replay_capture = checkpoint.capture(clone, binding)
+    state_exact = checkpoint.exact_equal(expected, replay_capture)
+    diff = None if state_exact else state_diff(expected, replay_capture, checkpoint)
     require(same_result, "window-2 replay result differs")
-    require(state_exact, "window-2 replay state differs")
+    require(state_exact, "window-2 replay state differs: " + json.dumps(diff))
     require(bool(restored.get("full_state_exact", False)), "C1 restore is not exact")
 
     # --- refusals: the declaration travels with the state ---------------------------
@@ -195,6 +215,7 @@ def main():
         "window_gt_counts": [int(sum(len(t["boxes"]) for t in w[1])) for w in windows],
         "training": {"windows": len(windows), "updates": engine.completed_updates,
                      "replay_result_exact": same_result, "replay_state_exact": state_exact,
+                     "replay_state_diff": diff,
                      "restore_full_state_exact": bool(restored.get("full_state_exact")),
                      "checkpoints": [cp0, direct]},
         "cross_mode_restore_refused": clash_refusal,
