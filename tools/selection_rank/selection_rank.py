@@ -111,8 +111,11 @@ def _require(condition, message):
 
 
 def max_class_statistic(logits):
-    """s(t) = max over classes of the encoder score logit (the statistic the rule uses)."""
-    _require(logits.dim() == 3, "logits must be (images, tokens, classes)")
+    """s(t) = max over classes of the encoder score logit (the statistic the rule uses).
+
+    Accepts (tokens, classes) for a single image and (images, tokens, classes).
+    """
+    _require(logits.dim() in (2, 3), "logits must be (images, tokens, classes) or (tokens, classes)")
     return logits.max(dim=-1).values
 
 
