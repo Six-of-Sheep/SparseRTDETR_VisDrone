@@ -1,6 +1,11 @@
-"""Real learning modules and controls for PDRA (rev 6).
+"""Real learning modules and controls for PDRA (rev 7).
 
-Three trainable arms share one architecture family and one capacity cap:
+Three trainable arms share one architecture family and one capacity cap.  rev 7 matches
+the controls' effective trainable parameter counts to the PDRA arm within 0.15 percent via
+per-arm integer hidden widths (``LEARNING_SPEC['capacity_control']``; every parameter enters
+the forward computation -- no unused, padded or frozen parameters), and reports per-sample
+weight MACs next to the parameter counts because matched parameters do not imply matched
+compute:
 
 * ``pdra_difference_strips``  pair arm reading the two exclusive-region reads (five slots);
 * ``c_whole_box_pairwise``    pair arm reading the two whole boxes (superset region);
@@ -47,7 +52,7 @@ import pdra_core as P
 import pdra_features as FEAT
 
 LEARNING_SPEC = {
-    "spec_version": "pdra-learning-v1-20261030",
+    "spec_version": "pdra-learning-v2-20261031",
     "updates": 20_000,
     "batch_pairs": 256,
     "optimizer": {"type": "AdamW", "lr": 3e-4, "betas": [0.9, 0.999], "eps": 1e-8,
@@ -62,8 +67,22 @@ LEARNING_SPEC = {
     "shuffle": ("torch.randperm with torch.Generator().manual_seed(20261030); the generator "
                 "advances across epochs, so the order is deterministic and reshuffled"),
     "seed": 20261030,
-    "hidden": 128,
+    "hidden_by_arm": {"pdra_difference_strips": 128, "c_whole_box_pairwise": 434,
+                      "b_single_box_quality": 462},
     "parameter_cap": 1_000_000,
+    "capacity_control": {
+        "rule": ("per-arm integer hidden width minimising |parameters - pdra reference| inside the "
+                 "shared architecture family; every parameter enters the forward computation (no "
+                 "unused, padded or frozen parameters)"),
+        "pdra_parameter_reference": 689_349,
+        "parameters": {"pdra_difference_strips": 689_349, "c_whole_box_pairwise": 690_257,
+                       "b_single_box_quality": 688_381},
+        "relative_deviation": {"c_whole_box_pairwise": 0.001317, "b_single_box_quality": -0.001404},
+        "compute_note": ("parameter counts match within 0.15 percent; compute is reported, not "
+                         "equal: weight MACs per pair 1,361,412 (PDRA) and 1,322,530 (c), per box "
+                         "687,456 (b); per training update the pair arms execute about twice the "
+                         "(b) arm's MACs"),
+    },
     "tau_q": 0.05,
     "b_decision": ("vote iff |q_i - q_j| >= tau_q via r = clip(0.5 + (q_i-q_j) * delta_pref / "
                    "(2*tau_q), 0, 1); no abstain head"),
@@ -115,6 +134,13 @@ class PairArm(nn.Module):
         a = torch.sigmoid(self.abstain_logit(d_i, d_j, geom[..., 4]))
         return r, a
 
+    def weight_macs_per_pair(self) -> int:
+        """Weight multiply-accumulates of one pair forward (Linear weights, applied once)."""
+        encoder = sum(m.weight.numel() for m in self.encoder if isinstance(m, nn.Linear))
+        pref = self.pref_u.weight.numel()
+        abstain = sum(m.weight.numel() for m in self.abstain if isinstance(m, nn.Linear))
+        return 2 * encoder + pref + abstain
+
 
 class QualityArm(nn.Module):
     """Independent per-box quality head over one whole-box descriptor (control b)."""
@@ -122,6 +148,7 @@ class QualityArm(nn.Module):
     def __init__(self, desc_dim: int, *, hidden: int = 128) -> None:
         super().__init__()
         self.desc_dim = int(desc_dim)
+        self.hidden = int(hidden)
         self.encoder = nn.Sequential(
             nn.Linear(self.desc_dim, hidden), nn.ReLU(inplace=False),
             nn.Linear(hidden, hidden), nn.ReLU(inplace=False), nn.Linear(hidden, 1))
@@ -129,26 +156,45 @@ class QualityArm(nn.Module):
     def value(self, desc: torch.Tensor) -> torch.Tensor:
         return torch.sigmoid(self.encoder(desc.float()).squeeze(-1))
 
+    def weight_macs_per_box(self) -> int:
+        """Weight multiply-accumulates of one box forward (Linear weights, applied once)."""
+        return sum(m.weight.numel() for m in self.encoder if isinstance(m, nn.Linear))
+
 
 def build_arms(*, channels: int = FEAT.P3_CHANNELS, hidden: int | None = None,
                seed: int | None = None) -> dict:
-    """Fresh arms for the three module controls; capacities recorded against the cap."""
+    """Fresh arms for the three module controls; capacities recorded against the cap.
+
+    rev 7: hidden widths come from ``LEARNING_SPEC['hidden_by_arm']`` unless ``hidden``
+    overrides every arm (test-only helper).  The report records effective trainable
+    parameters, the integer hidden width and the per-sample weight MACs of every arm.
+    """
     spec = LEARNING_SPEC
     torch.manual_seed(spec["seed"] if seed is None else seed)
-    hidden = spec["hidden"] if hidden is None else hidden
+    widths = dict(spec["hidden_by_arm"])
+    if hidden is not None:
+        widths = {key: int(hidden) for key in widths}
     arms = {
-        "pdra_difference_strips": PairArm(FEAT.side_dim(channels), hidden=hidden),
-        "c_whole_box_pairwise": PairArm(FEAT.whole_dim(channels), hidden=hidden),
-        "b_single_box_quality": QualityArm(FEAT.whole_dim(channels), hidden=hidden),
+        "pdra_difference_strips": PairArm(FEAT.side_dim(channels),
+                                          hidden=widths["pdra_difference_strips"]),
+        "c_whole_box_pairwise": PairArm(FEAT.whole_dim(channels),
+                                        hidden=widths["c_whole_box_pairwise"]),
+        "b_single_box_quality": QualityArm(FEAT.whole_dim(channels),
+                                           hidden=widths["b_single_box_quality"]),
     }
     report = {}
     for key, arm in arms.items():
         count = sum(p.numel() for p in arm.parameters())
         if count > spec["parameter_cap"]:
             raise ValueError(f"{key} exceeds the frozen parameter cap: {count}")
-        report[key] = {"parameters": count, "hidden": hidden,
+        if isinstance(arm, PairArm):
+            macs, unit = arm.weight_macs_per_pair(), "pair"
+        else:
+            macs, unit = arm.weight_macs_per_box(), "box"
+        report[key] = {"parameters": count, "hidden": arm.hidden,
                        "cap": spec["parameter_cap"],
-                       "side_or_desc_dim": int(getattr(arm, "side_dim", 0) or arm.desc_dim)}
+                       "side_or_desc_dim": int(getattr(arm, "side_dim", 0) or arm.desc_dim),
+                       "weight_macs_per_sample": macs, "sample_unit": unit}
     return {"arms": arms, "report": report, "spec_sha256": learning_spec_sha()}
 
 
@@ -435,6 +481,7 @@ def merge(candidates: Sequence, affine_of: Callable, adapter, *,
     clusters = P.nms_clusters(candidates)
     c_kept = [cluster["survivor"] for cluster in clusters]
     kept, substitutions, all_abstain_clusters = [], 0, 0
+    decision_stats = {"pairs": 0, "decided": 0, "abstained": 0, "infeasible": 0}
     for cluster in clusters:
         members = P.cluster_members(cluster)
         if len(members) == 1:
@@ -442,6 +489,8 @@ def merge(candidates: Sequence, affine_of: Callable, adapter, *,
             continue
         chosen = tournament(members, affine_of, adapter)
         representative = chosen["representative"]
+        for name in decision_stats:
+            decision_stats[name] += int(chosen["stats"][name])
         if chosen["stats"]["decided"] == 0:
             all_abstain_clusters += 1
         if representative is not cluster["survivor"]:
@@ -460,6 +509,7 @@ def merge(candidates: Sequence, affine_of: Callable, adapter, *,
             "representative_ranking": P.POST_REPLACEMENT_RANKING,
             "rank_shifted_members": rank_shifted,
             "budget_membership_delta_vs_C": budget_delta,
+            "decision_stats": decision_stats,
             "top600": ranked[:budgets[0]], "top300": ranked[:budgets[1]]}
 
 
@@ -558,10 +608,16 @@ def verify_sampling(ids_path, jsonl_path, manifest: Mapping, *, progress=None) -
 def freeze_payload(*, channels: int = FEAT.P3_CHANNELS) -> dict:
     spec = frozen_spec()
     arms = build_arms(channels=channels)
+    updates, batch = int(spec["updates"]), int(spec["batch_pairs"])
+    macs = {key: row["weight_macs_per_sample"] for key, row in arms["report"].items()}
+    capacity = dict(spec["capacity_control"])
+    capacity["macs_definition"] = ("weight multiply-accumulate operations per forward sample "
+                                   "(Linear weights applied once; biases and activations excluded)")
+    capacity["training_macs_total"] = {key: updates * batch * macs[key] for key in sorted(macs)}
     return {"learning_spec": spec, "learning_spec_sha256": learning_spec_sha(),
             "feature_convention": FEAT.CONVENTION,
             "dims": {"side": FEAT.side_dim(channels), "whole": FEAT.whole_dim(channels),
                      "geometry": FEAT.pair_geometry_dim(), "channels": channels},
-            "arms": arms["report"],
+            "arms": arms["report"], "capacity_control": capacity,
             "epochs_equivalent": round(spec["updates"] * spec["batch_pairs"] / 222_755, 3),
-            "status": "frozen_pending_gpu_engineering_check"}
+            "status": "frozen_capacity_matched_awaiting_stage1_authorization"}

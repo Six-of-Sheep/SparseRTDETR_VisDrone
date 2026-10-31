@@ -1,11 +1,13 @@
-"""CPU torch self-checks for the rev-6 PDRA wiring (synthetic inputs only).
+"""CPU torch self-checks for the rev-7 PDRA wiring (synthetic inputs only).
 
 Covers: the frozen RoIAlign convention against a float64 reference; the five-slot
 descriptor encoding; exact antisymmetry of the torch pair arm; fixed-count training
 determinism; byte-equal equivalence of the adapter tournament/merge with the numpy rules
-core; sampling-manifest verification (positive and corrupted); arm capacities; tap
-mechanics on a synthetic encoder; descriptor dimensions and the fp16 cache budget; the
-pref-mask semantics of the pair-arm loss (the rev-6 device-placement regression).
+core; sampling-manifest verification (positive and corrupted); capacity-matched arm widths
+with their parameter counts and per-sample compute; deterministic fresh-initialisation
+digests of the three arms under the frozen seed; tap mechanics on a synthetic encoder;
+descriptor dimensions and the fp16 cache budget; the pref-mask semantics of the pair-arm
+loss (the rev-6 device-placement regression).
 
 No detector, no CUDA, no real data, no randomness beyond fixed seeds.  Run:
     python -I tools/pdra/pdra_torch_selfcheck.py [--out results.json]
@@ -406,27 +408,46 @@ def check_sampling_verification() -> dict:
 
 
 # --- 7: capacity and freeze payload -------------------------------------------
-EXPECTED_PARAMS = {"pdra_difference_strips": 689_349, "c_whole_box_pairwise": 164_549,
-                   "b_single_box_quality": 147_969}
+EXPECTED_PARAMS = {"pdra_difference_strips": 689_349, "c_whole_box_pairwise": 690_257,
+                   "b_single_box_quality": 688_381}
+EXPECTED_HIDDEN = {"pdra_difference_strips": 128, "c_whole_box_pairwise": 434,
+                   "b_single_box_quality": 462}
+EXPECTED_MACS = {"pdra_difference_strips": 1_361_412, "c_whole_box_pairwise": 1_322_530,
+                 "b_single_box_quality": 687_456}
 
 
 def check_capacity_report() -> dict:
     errors = []
     payload = L.freeze_payload()
+    reference = payload["capacity_control"]["pdra_parameter_reference"]
     for key, expected in EXPECTED_PARAMS.items():
         got = payload["arms"][key]["parameters"]
         if got != expected:
             errors.append(f"{key} parameter count {got} differs from expected {expected}")
         if got > L.LEARNING_SPEC["parameter_cap"]:
             errors.append(f"{key} exceeds the parameter cap")
+        if payload["arms"][key]["hidden"] != EXPECTED_HIDDEN[key]:
+            errors.append(f"{key} hidden width {payload['arms'][key]['hidden']} differs from {EXPECTED_HIDDEN[key]}")
+        if payload["arms"][key]["weight_macs_per_sample"] != EXPECTED_MACS[key]:
+            errors.append(f"{key} weight MACs differ from {EXPECTED_MACS[key]}")
+    for key in ("c_whole_box_pairwise", "b_single_box_quality"):
+        deviation = abs(payload["arms"][key]["parameters"] - reference) / reference
+        if deviation > 0.002:
+            errors.append(f"{key} parameter deviation {deviation:.5f} exceeds 0.002 of the PDRA reference")
+    if payload["learning_spec"]["spec_version"] != "pdra-learning-v2-20261031":
+        errors.append("learning spec version differs")
     if payload["learning_spec_sha256"] != L.learning_spec_sha():
         errors.append("spec SHA is not stable")
     if payload["learning_spec"]["updates"] != 20_000 or payload["learning_spec"]["batch_pairs"] != 256:
         errors.append("frozen update/batch count changed")
-    hidden = {meta["hidden"] for meta in payload["arms"].values()}
-    if hidden != {128}:
-        errors.append("arm hidden widths differ")
+    totals = payload["capacity_control"]["training_macs_total"]
+    if totals != {k: 20_000 * 256 * EXPECTED_MACS[k] for k in sorted(EXPECTED_MACS)}:
+        errors.append("training MAC totals differ")
     detail = {"parameters": {k: v["parameters"] for k, v in payload["arms"].items()},
+              "hidden": {k: v["hidden"] for k, v in payload["arms"].items()},
+              "weight_macs_per_sample": {k: v["weight_macs_per_sample"] for k, v in payload["arms"].items()},
+              "pdra_parameter_reference": reference,
+              "training_macs_total": totals,
               "cap": L.LEARNING_SPEC["parameter_cap"],
               "learning_spec_sha256": payload["learning_spec_sha256"],
               "epochs_equivalent": payload["epochs_equivalent"]}
@@ -534,6 +555,34 @@ def check_runtime_accounting_and_allocation() -> dict:
     return _fail("runtime_accounting_and_allocation", {**detail, "errors": errors}) if errors         else _ok("runtime_accounting_and_allocation", detail)
 
 
+def check_arm_initialization_digests() -> dict:
+    """Fresh, deterministic initialization of the three arms under the frozen seed.
+
+    Stage 1 constructs the arms with ``build_arms()`` and records the same digests as
+    fresh-initialization evidence; no path ever loads comparator or optimizer state from
+    disk or from the GPU engineering check.
+    """
+    errors = []
+    first = L.build_arms()
+    second = L.build_arms()
+    digests = {key: L.tensor_state_digest(arm) for key, arm in first["arms"].items()}
+    again = {key: L.tensor_state_digest(arm) for key, arm in second["arms"].items()}
+    if digests != again:
+        errors.append("arm initialization is not deterministic under the frozen seed")
+    allowed_modules = {"PairArm", "QualityArm", "Sequential", "Linear", "ReLU"}
+    for key, arm in first["arms"].items():
+        if sum(p.numel() for p in arm.parameters()) != first["report"][key]["parameters"]:
+            errors.append(f"{key} parameter count differs from its own build report")
+        if any(not p.requires_grad for p in arm.parameters()):
+            errors.append(f"{key} holds a non-trainable parameter")
+        if not {type(m).__name__ for m in arm.modules()} <= allowed_modules:
+            errors.append(f"{key} holds a module outside the frozen architecture family")
+    detail = {"init_digests": digests, "deterministic": True,
+              "parameters": {key: first["report"][key]["parameters"] for key in digests}}
+    return _fail("arm_initialization_digests", {**detail, "errors": errors}) if errors \
+        else _ok("arm_initialization_digests", detail)
+
+
 CHECKS = (
     check_runtime_accounting_and_allocation,
     check_roi_align_convention,
@@ -544,6 +593,7 @@ CHECKS = (
     check_adapter_equivalence,
     check_sampling_verification,
     check_capacity_report,
+    check_arm_initialization_digests,
     check_tap_mechanics,
     check_dimension_budget,
 )

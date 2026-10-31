@@ -1,26 +1,37 @@
 """PDRA stage 1 (feature pass + fixed training + eval diagnostics) and stage 2 (full
-inference with representative replacement) -- rev 4 runners.
+inference with representative replacement) -- rev 7 runners.
 
 Modes
 -----
 ``plan``        CPU only.  Resolves and SHA-checks every input, re-verifies the frozen
                 sampling manifest against the stage-0 rows, instantiates the four arm
-                specifications with the real identities, emits the frozen learning spec and
-                the stage-1 / stage-2 budgets (forwards, pooled pairs, cache bytes, update
-                counts, measured frozen forward time as the basis of the GPU estimate).
-``run-stage1``  GPU.  Requires a PASSing GPU engineering check result.  One five-view pass
-                over the 548 development images (137 x 5 = 685 batch forwards, zero extra),
-                fp16 descriptor caches for the frozen train sample (222,755 pairs) and the
-                eval readable pref/abstain pairs, fixed-count training of the three arms,
-                eval diagnostics by the frozen buckets, frozen stage-1 gates reported.
-``run-stage2``  GPU.  Same forward pass; for every image the complete GT-free inference
+                specifications with the real identities, emits the frozen learning spec
+                (capacity-matched widths and per-sample compute), the frozen final
+                criteria (``pdra_score.CRITERIA``) and the stage-1 / stage-2 / scoring
+                budgets (feature-extraction forwards, descriptor cache, full eval
+                inference, scoring calls, update counts, measured frozen forward time).
+``run-stage1``  GPU.  Requires a PASSing GPU engineering check result.  One five-view
+                pass over the 548 development images (137 x 5 = 685 batch forwards, zero
+                extra), fp16 descriptor caches for the frozen train sample (222,755
+                pairs) and the eval readable pref/abstain pairs, fixed-count training of
+                the three freshly initialised arms (train split only -- eval rows are
+                never used for updates, tuning, checkpoint selection or early stopping),
+                and the eval diagnostics by the frozen buckets.  Diagnostics are reported,
+                never gated: the detection evaluation always proceeds (``pdra_score.py``).
+``run-stage2``  GPU.  Same five-view pass; for every image the complete GT-free inference
                 enumeration decides all cluster-internal pairs for PDRA, (c) and (b); the
                 representative replacement with re-ranking produces top600/top300
                 predictions per arm in the frozen prediction schema, next to original C.
-                Scoring is a separate CPU step on the frozen evaluator.
+                Scoring is the separate CPU step ``pdra_score.py score``.
 
-Nothing here reads ground truth at inference; GT is opened only to build training targets
-(stage 1) and to read the stage-0 label rows for eval diagnostics.
+rev 7 (2026-10-31): the three arms train with capacity-matched widths
+(``pdra_learn.LEARNING_SPEC['hidden_by_arm']``); runtime constraints are enforced while
+each stage runs (wall clock and output bytes; CUDA allocated/reserved peaks are recorded,
+never gated -- no artificial memory threshold and no allocator quota; a real OOM is an
+exception -> STOP.json, no batch or precision fallback, no retry).  Nothing here reads
+ground truth at inference; stage 1 opens annotations only for the (b) member targets after
+each image's feature pass, and reads training/eval labels solely from the frozen stage-0
+rows.
 """
 from __future__ import annotations
 
@@ -46,6 +57,7 @@ for _path in (str(HERE), str(REPO)):
 
 import pdra_core as P
 import pdra_gpu_check as G
+import pdra_score as SCORE
 
 STAGE1_TASK_PREFIX = "r18-pdra-stage1-"
 STAGE2_TASK_PREFIX = "r18-pdra-stage2-"
@@ -53,6 +65,28 @@ STAGE2_TASK_PREFIX = "r18-pdra-stage2-"
 # pair cache 1.39 GB + <=0.91 GB member boxes); the rev-3 "<= 8 GB" figure was an
 # estimate and is replaced by this computed requirement with a 10 GiB server-only cap.
 CACHE_CAP_BYTES = 10 * 1024 ** 3
+# rev 7 runtime caps (2026-10-31 preference): wall clock and output bytes are enforced
+# while the stage runs; CUDA peaks are recorded, never gated; no allocator quota.
+STAGE1_CAPS = {"wall_seconds": 3600, "output_bytes": 11 * 1024 ** 3}
+STAGE2_CAPS = {"wall_seconds": 5400, "output_bytes": 2 * 1024 ** 3}
+GT_USE_STAGE1 = {
+    "stage1_train_labels": ("frozen stage-0 rows (seed0-pairs.jsonl), train split only; the sampling "
+                            "manifest was re-verified against these rows in plan"),
+    "stage1_eval_labels": ("frozen stage-0 rows, eval split; used for the eval diagnostics only, "
+                           "after training, never for updates, tuning, checkpoint selection or "
+                           "early stopping"),
+    "annotations_opened": ("only for the (b)-arm member matched-GT IoU targets, through the identical "
+                           "_gt_items chain, after each image's five-view pass"),
+    "pooling_and_pairs_gt_free": True,
+}
+GT_USE_STAGE2 = {
+    "annotations_read_anywhere": False,
+    "labels_read_anywhere": False,
+    "decision_enumeration": ("the complete cluster-internal pair set of every image "
+                             "(cluster_pair_records, identical to the training pairing domain); "
+                             "no GT filter, no label-based narrowing"),
+    "note": "the stage-2 path has no ground-truth argument anywhere; scoring is a separate CPU step",
+}
 require, publish, read, exact, sha = G.require, G.publish, G.read, G.exact, G.sha
 
 
@@ -86,10 +120,20 @@ def select_rows(train_pairs: dict) -> dict:
     return rows
 
 
+def image_split() -> tuple[set, set]:
+    """The frozen module train/eval image split from the stage-0 image counts (338/210)."""
+    counts = read(G.STAGE0_DIR / "seed0-IMAGE_COUNTS.json")
+    require(isinstance(counts, list) and len(counts) == 548, "image-counts file differs")
+    train = {row["image_id"] for row in counts if row["split"] == "train"}
+    evaluation = {row["image_id"] for row in counts if row["split"] == "eval"}
+    require(len(train) == 338 and len(evaluation) == 210,
+            "split sizes differ from the frozen 338 train / 210 eval")
+    return train, evaluation
+
+
 # --- budgets --------------------------------------------------------------------
-def budgets(inputs: dict) -> dict:
-    import pdra_features as FEAT
-    import pdra_learn as L
+def budgets(inputs: dict, freeze: dict) -> dict:
+    """Every budget the full run consumes, split into its four cost blocks (rev 7)."""
     summary = read(G.STAGE0_DIR / "STAGE0_SUMMARY.json")
     ledgers = summary["ledgers"]
     full = read(Path(inputs["seed0"]["job_root"]) / "full-C" / "RESULT.json")
@@ -99,42 +143,110 @@ def budgets(inputs: dict) -> dict:
     eval_abstain = ledgers["eval"]["feasible_counts"]["abstain"]
     stage1_pairs = train_pairs + eval_pref + eval_abstain
     readable_all = sum(ledgers["all"]["feasible_counts"].values())
-    spec = L.frozen_spec()
+    all_pairs = summary["scale"]["all"]["pairs"]
+    pool_all = summary["scale"]["all"]["pool"]
+    spec = L_LEARNING_SPEC()
+    capacity = {key: {"parameters": row["parameters"], "hidden": row["hidden"],
+                      "weight_macs_per_sample": row["weight_macs_per_sample"],
+                      "sample_unit": row["sample_unit"]}
+                for key, row in freeze["arms"].items()}
+    feature_extraction = {
+        "stage1_batch_forwards": 137 * 5, "stage2_batch_forwards": 137 * 5,
+        "batch_size": 4, "views": 5, "images_per_stage": 548,
+        "extra_forwards_beyond_the_single_five_view_pass": 0,
+        "note": ("each stage makes exactly one five-view pass over the same 548 images; the P3 tap is a "
+                 "read-only hook, stage-1 diagnostics and stage-2 adapters add no forward, and the "
+                 "scoring step makes no model call at all"),
+    }
+    descriptor_cache = {
+        "pdra_sides_bytes": FEAT_cache_budget(stage1_pairs),
+        "c_whole_pairs_bytes": 2 * FEAT_whole_dim() * 2 * stage1_pairs,
+        "b_boxes_upper_bytes": 2 * FEAT_whole_dim() * 2 * train_pairs,
+        "total_required_upper_bytes": (FEAT_cache_budget(stage1_pairs)
+                                       + 2 * FEAT_whole_dim() * 2 * stage1_pairs
+                                       + 2 * FEAT_whole_dim() * 2 * train_pairs),
+        "cap_bytes": CACHE_CAP_BYTES, "server_only": True,
+        "note": "(b) is an upper bound (unique-member de-duplication shrinks it at run time)",
+    }
+    training = {
+        "updates": {"pdra_difference_strips": spec["updates"],
+                    "c_whole_box_pairwise": spec["updates"],
+                    "b_single_box_quality": spec["updates"],
+                    "batch_pairs": spec["batch_pairs"]},
+        "capacity": capacity,
+        "training_macs_total": freeze["capacity_control"]["training_macs_total"],
+        "optimizer": spec["optimizer"], "grad_clip": spec["grad_clip"],
+        "fresh_initialization": ("arms constructed by pdra_learn.build_arms() under the frozen seed; "
+                                 "no comparator or optimizer state is loaded from disk or from the GPU "
+                                 "engineering check"),
+        "train_split_only": ("updates consume only the train-split sample; eval rows are never used for "
+                             "updates, tuning, checkpoint selection or early stopping"),
+    }
+    eval_diagnostics = {
+        "split": "eval", "pairs": eval_pref + eval_abstain,
+        "buckets": "delta-IoU x area buckets, clear pairs (>= 0.25), cross-GT abstention",
+        "diagnostic_only": ("these diagnostics never gate the detection evaluation; the frozen final "
+                            "criteria live in pdra_score.CRITERIA and are evaluated in the separate "
+                            "scoring step"),
+    }
     stage1 = {
-        "images": 548, "batch_forwards": 137 * 5, "extra_forwards": 0,
-        "pooled_pairs": {"train_sampled": train_pairs, "eval_readable_pref": eval_pref,
-                         "eval_readable_abstain": eval_abstain, "total": stage1_pairs},
-        "cache_bytes_fp16": {"pdra_sides": FEAT.cache_budget_bytes(stage1_pairs),
-                             "c_whole_pairs": 2 * FEAT.whole_dim() * 2 * stage1_pairs,
-                             "b_boxes_upper": 2 * FEAT.whole_dim() * 2 * train_pairs,
-                             "total_required_upper": (FEAT.cache_budget_bytes(stage1_pairs)
-                                                      + 2 * FEAT.whole_dim() * 2 * stage1_pairs
-                                                      + 2 * FEAT.whole_dim() * 2 * train_pairs),
-                             "cap": CACHE_CAP_BYTES, "server_only": True},
-        "updates": {"pdra": spec["updates"], "c": spec["updates"], "b": spec["updates"],
-                    "batch": spec["batch_pairs"]},
-        "eval_decisions": eval_pref + eval_abstain,
-        "time_basis": {"frozen_full_C_e2e_seconds_548_images": forward_seconds,
-                       "forward_estimate_seconds": forward_seconds,
-                       "pooling_estimate_seconds": "seconds (measured by the GPU check per pair)",
-                       "training_estimate": "3 arms x 20,000 updates of <=0.69M-parameter MLPs; minutes",
-                       "wall_cap_seconds": 3600, "gpu_hour_cap": 1.0},
+        "images": 548, "feature_extraction": feature_extraction,
+        "descriptor_cache": descriptor_cache, "training": training,
+        "eval_diagnostics": eval_diagnostics,
+        "wall_cap_seconds": STAGE1_CAPS["wall_seconds"],
+        "output_cap_bytes": STAGE1_CAPS["output_bytes"],
         "returned_bytes_cap": 1024 ** 2,
+        "time_basis": {"frozen_full_C_e2e_seconds_548_images": forward_seconds,
+                       "pooling_estimate_seconds": "seconds (measured per pair by the GPU check)",
+                       "training_estimate": "3 arms x 20,000 updates of <=0.70M-parameter MLPs; minutes"},
+    }
+    inference_macs = {
+        "pdra_difference_strips": readable_all * capacity["pdra_difference_strips"]["weight_macs_per_sample"],
+        "c_whole_box_pairwise": readable_all * capacity["c_whole_box_pairwise"]["weight_macs_per_sample"],
+        "b_single_box_quality": pool_all * capacity["b_single_box_quality"]["weight_macs_per_sample"],
+        "definition": ("weight MACs of the readable-pair adapters (pair arms: both sides encoded per "
+                       "readable pair) and of the per-member quality head (per pool member)"),
     }
     stage2 = {
-        "images": 548, "batch_forwards": 137 * 5, "extra_forwards": 0,
-        "pairs_decided": summary["scale"]["all"]["pairs"], "pairs_pooled_readable": readable_all,
+        "images": 548, "feature_extraction": feature_extraction,
+        "pairs_decided": all_pairs, "pairs_pooled_readable": readable_all,
         "pooled_on_the_fly_no_cache": True,
         "comparator_batches_per_image_max": int(-(-51210 // 4096)),
-        "decision_layer": "pure-Python Copeland over all cluster pairs (measured by the check per pair)",
+        "decision_layer": "pure-Python Copeland over all cluster pairs (measured per pair by the check)",
         "arms": ["a_original_c", "b_single_box_quality", "c_whole_box_pairwise", "pdra_difference_strips"],
-        "outputs": "top600/top300 predictions per arm (frozen schema), replacement stats; ~113 MB per 600-file",
+        "inference_macs": inference_macs,
+        "outputs": "top600/top300 predictions per arm (frozen schema) + replacement stats",
+        "wall_cap_seconds": STAGE2_CAPS["wall_seconds"],
+        "output_cap_bytes": STAGE2_CAPS["output_bytes"],
         "time_basis": {"frozen_full_C_e2e_seconds_548_images": forward_seconds,
-                       "wall_cap_seconds": 5400},
-        "scoring": "separate CPU step on the frozen evaluator (score_budget), 2 budgets x 3 new arms",
+                       "decision_layer_estimate": "measured by the GPU check per pair"},
     }
-    return {"stage1": stage1, "stage2": stage2,
-            "estimates_marked": "all seconds are estimates until the GPU check and stage runs measure them"}
+    scoring = {
+        "mode": "pdra_score.py score (CPU, frozen score_budget)",
+        "calls": "4 arms x 2 budgets x 2 splits (eval 210 primary, train 338 diagnostic)",
+        "model_calls": 0,
+        "wall_cap_seconds": SCORE.WALL_CAP_SECONDS,
+        "output_cap_bytes": SCORE.OUTPUT_CAP_BYTES,
+        "criteria": "pdra_score.CRITERIA (frozen 2026-10-31, before any learning or score result)",
+    }
+    return {"stage1": stage1, "stage2": stage2, "scoring": scoring,
+            "chain_document": "PDRA_FULL_RUN_R1.md (single command; stop on first failure, no retry)",
+            "estimates_marked": "all seconds are estimates until the stage runs measure them"}
+
+
+def L_LEARNING_SPEC() -> dict:
+    import pdra_learn as L
+    return L.frozen_spec()
+
+
+def FEAT_cache_budget(n_pairs: int) -> int:
+    import pdra_features as FEAT
+    return FEAT.cache_budget_bytes(n_pairs)
+
+
+def FEAT_whole_dim() -> int:
+    import pdra_features as FEAT
+    return FEAT.whole_dim()
 
 
 def plan(inputs: dict, out: Path) -> dict:
@@ -145,11 +257,18 @@ def plan(inputs: dict, out: Path) -> dict:
     freeze = L.freeze_payload()
     publish(out / "LEARNING_FROZEN.json", freeze)
     publish(out / "SAMPLING_VERIFICATION.json", verification)
+    publish(out / "CRITERIA_FROZEN.json", {"criteria": SCORE.CRITERIA,
+                                           "criteria_sha256": SCORE.criteria_sha256()})
     result = {"status": "PLAN_ONLY", "core_version": P.CORE_VERSION,
               "feature_level": P.FEATURE_LEVEL, "feature_binding_verified": P.FEATURE_BINDING_VERIFIED,
               "fairness": inputs["fairness"], "learning_spec_sha256": freeze["learning_spec_sha256"],
-              "arms": freeze["arms"], "sampling_verification": verification["status"],
-              "budgets": budgets(inputs), "stage0_inputs": inputs["stage0"],
+              "arms": freeze["arms"], "capacity_control": freeze["capacity_control"],
+              "criteria_sha256": SCORE.criteria_sha256(),
+              "sampling_verification": verification["status"],
+              "budgets": budgets(inputs, freeze),
+              "runtime_caps": {"stage1": STAGE1_CAPS, "stage2": STAGE2_CAPS,
+                               "score_wall_seconds": SCORE.WALL_CAP_SECONDS},
+              "stage0_inputs": inputs["stage0"],
               "cuda_initialized": False, "model_constructed": False,
               "executed_forward_calls": 0, "executed_updates": 0}
     return result
@@ -180,18 +299,31 @@ def _affines(row, geometry):
     return lambda c, _a=affines: _a[c.view_id]
 
 
-def run_stage1(inputs: dict, out: Path, gpu_check_result: dict, source_commit: str) -> dict:
+def run_stage1(inputs: dict, out: Path, gpu_check_result: dict, source_commit: str, *,
+               budget_started: float | None = None, accounting: G.Accounting | None = None) -> dict:
     import torch
     import pdra_features as FEAT
     import pdra_learn as L
     import pdra_tap as TAP
     require(gpu_check_result.get("status") == "PASS" and gpu_check_result["feature_binding"]["verified"],
             "a PASSing GPU engineering check with a verified P3 binding is required")
-    started = time.monotonic()
+    started = time.monotonic() if budget_started is None else budget_started
+    accounting = G.Accounting("r18-pdra-stage1", "run-stage1") if accounting is None else accounting
+
+    def guard(label: str) -> dict:
+        return G.enforce_runtime(started=started, label=label, caps=STAGE1_CAPS, out=out,
+                                 torch_mod=torch, accounting=accounting)
+
+    accounting.phase("plan")
     plan_record = plan(inputs, out)
     publish(out / "PLAN.json", plan_record)
+    guard("plan")
+    accounting.complete("plan")
     train_pairs = manifest_pairs(G.STAGE0_DIR / "train-sampling-ids.txt")
     rows = select_rows(train_pairs)
+    train_images, eval_images = image_split()
+
+    accounting.phase("restore")
     restored = TAP.restore_frozen_seed0_engine(
         training_source_root=inputs["training_root"], train_contract=inputs["training"],
         binding_path=inputs["binding_path"], checkpoint_path=inputs["checkpoint"]["path"],
@@ -201,17 +333,29 @@ def run_stage1(inputs: dict, out: Path, gpu_check_result: dict, source_commit: s
     from sparse_rtdetr.r0.evaluation_data import Development548
     from sparse_rtdetr.r0 import evaluation as ev
     data = Development548(inputs["data_spec"])
-    arms = L.build_arms()
+    arms = L.build_arms()                       # fresh construction; consumes the CPU RNG before capture
+    arm_init = {key: {"parameters": arms["report"][key]["parameters"],
+                      "hidden": arms["report"][key]["hidden"],
+                      "weight_macs_per_sample": arms["report"][key]["weight_macs_per_sample"],
+                      "init_digest": L.tensor_state_digest(arm)}
+                for key, arm in arms["arms"].items()}
     before = checkpoint.capture(engine, binding)
+    restore_peak_allocated = int(torch.cuda.max_memory_allocated())
+    restore_peak_reserved = int(torch.cuda.max_memory_reserved())
+    guard("restore")
+    torch.cuda.reset_peak_memory_stats()
+    accounting.complete("restore")
+
+    accounting.phase("features")
     caches = {"train": defaultdict(list), "eval": defaultdict(list)}
     box_desc, box_target, box_seen = [], [], set()
     calls = 0
-    torch.cuda.reset_peak_memory_stats()
     for k in range(137):
         batch_rows = data.records[4 * k:4 * k + 4]
         with TAP.EncoderTap(model) as tap:
             b = TAP.five_view_forward(data, batch_rows, model, tap=tap)
         calls += b["forward_calls"]
+        accounting.forwards(b["forward_calls"])
         for j, row in enumerate(batch_rows):
             image = row["stable_image_id"]
             pool = b["candidates"][j]
@@ -258,13 +402,21 @@ def run_stage1(inputs: dict, out: Path, gpu_check_result: dict, source_commit: s
                             box_target.append(hits[0][0] if hits else 0.0)
                             box_seen.add((image, ident))
             del bank
+        guard(f"features/batch-{k}")
     require(calls == 137 * 5, "stage-1 forward count differs")
     require(checkpoint.exact_equal(before, checkpoint.capture(engine, binding)), "feature pass changed the detector")
+    accounting.complete("features")
+
+    accounting.phase("cache")
     tensors = {}
     for split in ("train", "eval"):
         c = caches[split]
         tensors[split] = {k2: torch.cat(v) for k2, v in c.items() if k2 != "meta"}
         tensors[split]["meta"] = c["meta"]
+    train_meta_images = {row[0] for row in tensors["train"]["meta"]}
+    eval_meta_images = {row[0] for row in tensors["eval"]["meta"]}
+    require(train_meta_images <= train_images, "training sample holds a non-train image")
+    require(eval_meta_images <= eval_images, "eval diagnostics sample holds a non-eval image")
     cache_dir = out / "cache"
     cache_refs = {}
     for split in ("train", "eval"):
@@ -273,42 +425,105 @@ def run_stage1(inputs: dict, out: Path, gpu_check_result: dict, source_commit: s
     cache_refs["b_boxes"] = FEAT.save_cache(cache_dir / "train-boxes.pt",
                                             {"desc": torch.cat(box_desc), "target": torch.tensor(box_target)})
     total_cache = sum(ref["bytes"] for ref in cache_refs.values())
-    require(total_cache <= CACHE_CAP_BYTES, "descriptor cache exceeds the 8 GB cap")
+    require(total_cache <= CACHE_CAP_BYTES, "descriptor cache exceeds the 10 GiB cap")
     publish(out / "CACHE.json", {"refs": cache_refs, "bytes": total_cache,
                                  "train_pairs": int(tensors["train"]["s_i"].shape[0]),
                                  "eval_pairs": int(tensors["eval"]["s_i"].shape[0]),
                                  "b_boxes": len(box_target)})
     require(int(tensors["train"]["s_i"].shape[0]) == inputs["sampling"]["n_pair_total"], "train cache size differs from the manifest")
-    # fixed training
+    guard("cache")
+    accounting.complete("cache")
+
+    # fixed training -- train split only, freshly initialised arms, frozen update count
+    accounting.phase("train")
     train_reports = {}
     tr = tensors["train"]
     pdra_tensors = L.PairTensors(tr["s_i"], tr["s_j"], tr["geom"], tr["pref"], tr["abstain"])
     c_tensors = L.PairTensors(tr["w_i"], tr["w_j"], tr["geom"], tr["pref"], tr["abstain"])
-    train_reports["pdra_difference_strips"] = L.train_pair_arm(arms["arms"]["pdra_difference_strips"], pdra_tensors)
-    train_reports["c_whole_box_pairwise"] = L.train_pair_arm(arms["arms"]["c_whole_box_pairwise"], c_tensors)
-    train_reports["b_single_box_quality"] = L.train_quality_arm(arms["arms"]["b_single_box_quality"],
-                                                                torch.cat(box_desc), torch.tensor(box_target))
+
+    def progress_for(key):
+        def callback(record, _key=key):
+            accounting.update(_key)
+            update = int(record["update"])
+            if update == 1 or update % 2000 == 0:
+                guard(f"train/{_key}/update-{update}")
+        return callback
+
+    train_reports["pdra_difference_strips"] = L.train_pair_arm(
+        arms["arms"]["pdra_difference_strips"], pdra_tensors,
+        progress=progress_for("pdra_difference_strips"))
+    train_reports["c_whole_box_pairwise"] = L.train_pair_arm(
+        arms["arms"]["c_whole_box_pairwise"], c_tensors,
+        progress=progress_for("c_whole_box_pairwise"))
+    train_reports["b_single_box_quality"] = L.train_quality_arm(
+        arms["arms"]["b_single_box_quality"], torch.cat(box_desc), torch.tensor(box_target),
+        progress=progress_for("b_single_box_quality"))
     require(checkpoint.exact_equal(before, checkpoint.capture(engine, binding)), "training touched the detector")
+    L.assert_no_detector_grads(engine.model)
+    L.assert_no_detector_grads(engine.ema.module)
     arm_refs = {}
     for key, arm in arms["arms"].items():
         path = out / "arms" / f"{key}.pt"
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(arm.state_dict(), path)
         arm_refs[key] = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha(path)}
-    # eval diagnostics (labels come from the stage-0 rows, never from the decision path)
+    guard("train")
+    accounting.complete("train")
+
+    # eval diagnostics (labels come from the stage-0 rows, never from the decision path;
+    # diagnostics never gate the detection evaluation)
+    accounting.phase("diagnostics")
     diagnostics = evaluate_arms(arms["arms"], tensors["eval"], L, FEAT)
     publish(out / "DIAGNOSTICS.json", diagnostics)
+    guard("diagnostics")
+    accounting.complete("diagnostics")
     wall = time.monotonic() - started
+    peak_allocated = int(torch.cuda.max_memory_allocated())
+    peak_reserved = int(torch.cuda.max_memory_reserved())
+    runtime = {"wall_seconds": wall,
+               "peak_allocated_bytes": peak_allocated, "peak_reserved_bytes": peak_reserved,
+               "restore_peak_allocated_bytes": restore_peak_allocated,
+               "restore_peak_reserved_bytes": restore_peak_reserved,
+               "vm_hwm_bytes": G.rss_high_water(),
+               "memory_peaks_recorded_not_gated": True,
+               "memory_gate": ("none: no artificial CUDA threshold and no allocator quota; a real OOM "
+                               "is an exception -> STOP.json"),
+               "output_bytes": G.output_bytes(out), "caps": STAGE1_CAPS,
+               "constraints_enforced_during_run": ["wall_seconds", "output_bytes"],
+               "budget_observations": accounting.snapshot()["budget_observations"],
+               "within_caps": (wall <= STAGE1_CAPS["wall_seconds"]
+                               and G.output_bytes(out) <= STAGE1_CAPS["output_bytes"])}
+    require(runtime["within_caps"], f"stage-1 runtime caps exceeded: {runtime}")
     return {"status": "PASS", "task": out.parts[-2] if len(out.parts) > 1 else str(out),
             "source_commit": source_commit, "forward_calls": calls, "detector_updates": 0,
+            "arm_capacity": arms["report"], "capacity_control": plan_record["capacity_control"],
+            "criteria_sha256": plan_record["criteria_sha256"],
+            "arms_fresh": {"freshly_initialized": True, "state_loaded_from_disk": False,
+                           "optimizer_state_loaded": False, "arms": arm_init},
+            "split_use": {"train_images_in_updates": len(train_meta_images),
+                          "eval_images_in_diagnostics": len(eval_meta_images),
+                          "eval_images_in_updates": 0,
+                          "eval_used_for": "diagnostics only, after training",
+                          "used_for_tuning": False, "used_for_checkpoint_selection": False,
+                          "early_stopping": False, "fixed_updates": L.LEARNING_SPEC["updates"]},
             "training": train_reports, "arms": arm_refs, "cache": cache_refs,
-            "gates": diagnostics["gates"], "elapsed_seconds": wall,
-            "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
-            "peak_reserved_bytes": torch.cuda.max_memory_reserved()}
+            "diagnostics": diagnostics, "diagnostics_after_training": True,
+            "engineering_checks": {"train_split_only": True, "forward_count_exact": True,
+                                   "detector_unchanged": True,
+                                   "cache_within_cap": total_cache <= CACHE_CAP_BYTES},
+            "gt_use": GT_USE_STAGE1,
+            "runtime": runtime, "accounting": accounting.snapshot(),
+            "elapsed_seconds": wall,
+            "peak_allocated_bytes": peak_allocated, "peak_reserved_bytes": peak_reserved}
 
 
 def evaluate_arms(arms: dict, ev_t: dict, L, FEAT) -> dict:
-    """Per-arm eval diagnostics on the eval readable pref/abstain pairs, frozen buckets."""
+    """Per-arm eval diagnostics on the eval readable pref/abstain pairs, frozen buckets.
+
+    Diagnostic only (rev 7): the values are reported with the run; they gate nothing.  The
+    frozen final criteria are evaluated in the separate CPU scoring step on the actual
+    detection outputs.
+    """
     import torch
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     n = int(ev_t["s_i"].shape[0])
@@ -365,20 +580,34 @@ def evaluate_arms(arms: dict, ev_t: dict, L, FEAT) -> dict:
                         "coverage": v["voted"] / v["pairs"] if v["pairs"] else None,
                         "accuracy_counting_abstain_as_wrong": v["correct"] / v["pairs"] if v["pairs"] else None}
         report["arms"][key] = {"buckets": table, "cross_gt_pairs": abstain_pairs,
-                               "cross_gt_misarbitration_rate": (abstain_votes / abstain_pairs) if abstain_pairs else None}
+                               "cross_gt_misarbitration_rate": (abstain_votes / abstain_pairs) if abstain_pairs else None,
+                               "large_object_area_gt_9216": table.get("area:area_gt_9216")}
+
     def acc(key):
         return report["arms"][key]["buckets"].get("clear", {}).get("accuracy_counting_abstain_as_wrong")
+
     def mis(key):
         return report["arms"][key]["cross_gt_misarbitration_rate"]
-    main_gate = (acc("pdra_difference_strips") is not None and acc("b_single_box_quality") is not None
-                 and acc("c_whole_box_pairwise") is not None
-                 and acc("pdra_difference_strips") >= max(acc("b_single_box_quality"), acc("c_whole_box_pairwise")) + 0.05)
-    safety_gate = (mis("pdra_difference_strips") is not None and mis("c_whole_box_pairwise") is not None
-                   and mis("pdra_difference_strips") <= mis("c_whole_box_pairwise") + 0.02)
-    report["gates"] = {"main_clear_pairs_acc_pdra_ge_max_b_c_plus_5pp": main_gate,
-                       "safety_cross_gt_misarbitration_le_c_plus_2pp": safety_gate,
-                       "metric_definition": "accuracy counts abstentions as wrong (coverage reported separately)",
-                       "automatic_next_stage": False}
+    clear_acc = {key: acc(key) for key in report["arms"]}
+    cross_gt = {key: mis(key) for key in report["arms"]}
+    diagnostic_flag = (clear_acc["pdra_difference_strips"] is not None
+                       and clear_acc["b_single_box_quality"] is not None
+                       and clear_acc["c_whole_box_pairwise"] is not None
+                       and clear_acc["pdra_difference_strips"]
+                       >= max(clear_acc["b_single_box_quality"], clear_acc["c_whole_box_pairwise"]) + 0.05)
+    safety_flag = (cross_gt["pdra_difference_strips"] is not None
+                   and cross_gt["c_whole_box_pairwise"] is not None
+                   and cross_gt["pdra_difference_strips"] <= cross_gt["c_whole_box_pairwise"] + 0.02)
+    report["diagnostics_only"] = {
+        "statement": ("clear-pair accuracy, coverage and the cross-GT misarbitration rate are "
+                      "diagnostics: they never gate the detection evaluation.  The frozen final "
+                      "criteria (pdra_score.CRITERIA) are evaluated on the actual detection outputs "
+                      "in the separate CPU scoring step."),
+        "clear_pairs_acc_pdra_ge_max_b_c_plus_5pp": diagnostic_flag,
+        "cross_gt_misarbitration_le_c_plus_2pp": safety_flag,
+        "metric_definition": "accuracy counts abstentions as wrong (coverage reported separately)",
+        "automatic_next_stage": False,
+    }
     return report
 
 
@@ -389,7 +618,9 @@ def prediction(image_id, candidate) -> dict:
             "view_id": candidate.view_id, "view_candidate_rank": candidate.view_candidate_rank}
 
 
-def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, source_commit: str) -> dict:
+def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, source_commit: str, *,
+               stage1_result_path: Path | None = None, budget_started: float | None = None,
+               accounting: G.Accounting | None = None) -> dict:
     import torch
     import pdra_features as FEAT
     import pdra_learn as L
@@ -397,11 +628,35 @@ def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, s
     from slice_core import merge_candidates
     require(gpu_check_result.get("status") == "PASS" and gpu_check_result["feature_binding"]["verified"],
             "a PASSing GPU engineering check with a verified P3 binding is required")
-    started = time.monotonic()
+    started = time.monotonic() if budget_started is None else budget_started
+    accounting = G.Accounting("r18-pdra-stage2", "run-stage2") if accounting is None else accounting
+
+    def guard(label: str) -> dict:
+        return G.enforce_runtime(started=started, label=label, caps=STAGE2_CAPS, out=out,
+                                 torch_mod=torch, accounting=accounting)
+
+    accounting.phase("arms")
+    stage1_result = read(stage1_result_path) if stage1_result_path is not None else None
+    if stage1_result is not None:
+        require(stage1_result.get("status") == "PASS", "stage-1 result is not PASS")
     arms = L.build_arms()["arms"]
+    provenance = {}
     for key, arm in arms.items():
-        arm.load_state_dict(torch.load(str(arm_dir / f"{key}.pt"), map_location="cpu", weights_only=True))
+        path = arm_dir / f"{key}.pt"
+        require(path.is_file() and not path.is_symlink(), f"arm file missing: {path}")
+        entry = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha(path)}
+        if stage1_result is not None:
+            expect = stage1_result["arms"][key]
+            require(Path(expect["path"]) == path and expect["sha256"] == entry["sha256"]
+                    and expect["bytes"] == entry["bytes"],
+                    f"arm {key} differs from the stage-1 record")
+            entry["stage1_record_sha256_match"] = True
+        provenance[key] = entry
+        arm.load_state_dict(torch.load(str(path), map_location="cpu", weights_only=True))
         arm.to("cuda:0").eval()
+    accounting.complete("arms")
+
+    accounting.phase("restore")
     restored = TAP.restore_frozen_seed0_engine(
         training_source_root=inputs["training_root"], train_contract=inputs["training"],
         binding_path=inputs["binding_path"], checkpoint_path=inputs["checkpoint"]["path"],
@@ -411,19 +666,30 @@ def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, s
     from sparse_rtdetr.r0.evaluation_data import Development548
     data = Development548(inputs["data_spec"])
     before = checkpoint.capture(engine, binding)
+    restore_peak_reserved = int(torch.cuda.max_memory_reserved())
+    guard("restore")
+    torch.cuda.reset_peak_memory_stats()
+    accounting.complete("restore")
+
+    accounting.phase("inference")
     preds = {arm: {600: [], 300: []} for arm in ("a_original_c", "b_single_box_quality",
                                                  "c_whole_box_pairwise", "pdra_difference_strips")}
-    stats, calls, decision_seconds = [], 0, 0.0
+    stats, calls, decision_seconds, pairs_total = [], 0, 0.0, 0
+    decision_totals = {key: {"pairs": 0, "decided": 0, "abstained": 0, "infeasible": 0}
+                       for key in ("pdra_difference_strips", "c_whole_box_pairwise", "b_single_box_quality")}
     for k in range(137):
         batch_rows = data.records[4 * k:4 * k + 4]
         with TAP.EncoderTap(model) as tap:
             b = TAP.five_view_forward(data, batch_rows, model, tap=tap)
         calls += b["forward_calls"]
+        accounting.forwards(b["forward_calls"])
         for j, row in enumerate(batch_rows):
             image = row["stable_image_id"]
             pool = b["candidates"][j]
             affine_of = _affines(row, b["geometry"][j])
             bank = FEAT.FeatureBank({v: b["p3_maps"][v][j] for v in range(5)})
+            records = P.cluster_pair_records(pool)
+            pairs_total += len(records)
             original = merge_candidates(pool)
             for budget in (600, 300):
                 preds["a_original_c"][budget].extend(prediction(image, c) for c in original[f"top{budget}"])
@@ -431,29 +697,71 @@ def run_stage2(inputs: dict, out: Path, gpu_check_result: dict, arm_dir: Path, s
             adapters = {"pdra_difference_strips": L.PairBankAdapter.build(arms["pdra_difference_strips"], bank, pool, affine_of, "pdra"),
                         "c_whole_box_pairwise": L.PairBankAdapter.build(arms["c_whole_box_pairwise"], bank, pool, affine_of, "c"),
                         "b_single_box_quality": L.QualityBankAdapter.build(arms["b_single_box_quality"], bank, pool, affine_of)}
-            row_stats = {"image_id": image, "pool": len(pool), "clusters": original["kept_count"]}
+            for key, adapter in adapters.items():
+                require(len(adapter.table) == len(records),
+                        f"{key} adapter does not cover the complete cluster-internal pair set")
+            row_stats = {"image_id": image, "pool": len(pool), "clusters": original["kept_count"],
+                         "pairs": len(records)}
             for key, adapter in adapters.items():
                 merged = L.merge(pool, affine_of, adapter)
+                for name in decision_totals[key]:
+                    decision_totals[key][name] += int(merged["decision_stats"][name])
                 for budget in (600, 300):
                     preds[key][budget].extend(prediction(image, c) for c in merged[f"top{budget}"])
                 row_stats[key] = {k2: merged[k2] for k2 in ("substitutions", "all_abstain_clusters",
-                                                             "rank_shifted_members", "budget_membership_delta_vs_C")}
+                                                             "rank_shifted_members", "budget_membership_delta_vs_C",
+                                                             "decision_stats")}
             decision_seconds += time.perf_counter() - d0
             stats.append(row_stats)
             del bank
+        guard(f"inference/batch-{k}")
     require(calls == 137 * 5, "stage-2 forward count differs")
     require(checkpoint.exact_equal(before, checkpoint.capture(engine, binding)), "inference changed the detector")
+    summary = read(G.STAGE0_DIR / "STAGE0_SUMMARY.json")
+    pairs_expected = int(summary["scale"]["all"]["pairs"])
+    require(pairs_total == pairs_expected,
+            f"decided pair count {pairs_total} differs from the stage-0 total {pairs_expected}")
+    accounting.complete("inference")
+
+    accounting.phase("publish")
     refs = {}
     for key, budgets_ in preds.items():
         refs[key] = {}
         for budget, items in budgets_.items():
             refs[key][str(budget)] = publish(out / f"{key}-top{budget}-predictions.json", items)
-    publish(out / "REPLACEMENT_STATS.json", {"images": stats, "decision_seconds": decision_seconds})
-    return {"status": "PASS", "source_commit": source_commit, "forward_calls": calls, "detector_updates": 0,
-            "predictions": refs, "decision_seconds": decision_seconds,
-            "scoring": "not run here; score each arm/budget with the frozen evaluator in a separate CPU step",
-            "elapsed_seconds": time.monotonic() - started,
-            "peak_allocated_bytes": torch.cuda.max_memory_allocated()}
+    publish(out / "REPLACEMENT_STATS.json", {"images": stats, "decision_seconds": decision_seconds,
+                                             "decision_stats_totals": decision_totals,
+                                             "pairs_decided": pairs_total, "gt_use": GT_USE_STAGE2})
+    guard("publish")
+    accounting.complete("publish")
+    wall = time.monotonic() - started
+    peak_allocated = int(torch.cuda.max_memory_allocated())
+    peak_reserved = int(torch.cuda.max_memory_reserved())
+    runtime = {"wall_seconds": wall, "peak_allocated_bytes": peak_allocated,
+               "peak_reserved_bytes": peak_reserved,
+               "restore_peak_reserved_bytes": restore_peak_reserved,
+               "vm_hwm_bytes": G.rss_high_water(),
+               "memory_peaks_recorded_not_gated": True,
+               "memory_gate": ("none: no artificial CUDA threshold and no allocator quota; a real OOM "
+                               "is an exception -> STOP.json"),
+               "output_bytes": G.output_bytes(out), "caps": STAGE2_CAPS,
+               "constraints_enforced_during_run": ["wall_seconds", "output_bytes"],
+               "budget_observations": accounting.snapshot()["budget_observations"],
+               "within_caps": (wall <= STAGE2_CAPS["wall_seconds"]
+                               and G.output_bytes(out) <= STAGE2_CAPS["output_bytes"])}
+    require(runtime["within_caps"], f"stage-2 runtime caps exceeded: {runtime}")
+    return {"status": "PASS", "source_commit": source_commit, "forward_calls": calls,
+            "detector_updates": 0, "predictions": refs,
+            "pairs_decided": pairs_total, "pairs_expected": pairs_expected,
+            "complete_pair_domain": pairs_total == pairs_expected,
+            "decision_stats_totals": decision_totals,
+            "decision_seconds": decision_seconds,
+            "arms_provenance": provenance,
+            "gt_use": GT_USE_STAGE2,
+            "scoring": ("separate CPU step: pdra_score.py score (frozen criteria on the eval split; "
+                        "train split diagnostic)"),
+            "runtime": runtime, "accounting": accounting.snapshot(),
+            "elapsed_seconds": wall}
 
 
 def main(argv=None) -> int:
@@ -463,6 +771,8 @@ def main(argv=None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--gpu-check", type=Path, default=None, help="RESULT.json of the PASSing GPU check")
     parser.add_argument("--arms", type=Path, default=None, help="stage-1 arms directory (stage 2)")
+    parser.add_argument("--stage1-result", type=Path, default=None,
+                        help="stage-1 RESULT.json; arm files are verified against its SHA record (stage 2)")
     parser.add_argument("--source-commit", default="UNRECORDED")
     args = parser.parse_args(argv)
     out = args.out.resolve()
@@ -471,30 +781,46 @@ def main(argv=None) -> int:
         require(any(part.startswith(prefix) for part in out.parts), "output must sit inside the authorized task directory")
     out.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
+    task = "r18-pdra-stage1" if args.mode != "run-stage2" else "r18-pdra-stage2"
+    accounting = G.Accounting(task, args.mode)
     publish(out / "START.json", {"mode": args.mode, "pid": os.getpid(), "started_unix": time.time(),
-                                 "source_commit": args.source_commit})
+                                 "source_commit": args.source_commit,
+                                 "caps": STAGE1_CAPS if args.mode != "run-stage2" else STAGE2_CAPS})
     try:
         inputs = G.resolve_inputs(args.parent, G.FROZEN_BATCHES)
         if args.mode == "plan":
             import torch
             result = plan(inputs, out)
             require(not torch.cuda.is_initialized(), "plan initialized CUDA")
+            G.enforce_runtime(started=started, label="plan", caps=STAGE1_CAPS, out=out,
+                              accounting=accounting)
+            result["accounting"] = accounting.snapshot()
         else:
             require(args.gpu_check is not None, "--gpu-check is required")
             gpu_check_result = read(args.gpu_check)
             if args.mode == "run-stage1":
-                result = run_stage1(inputs, out, gpu_check_result, args.source_commit)
+                result = run_stage1(inputs, out, gpu_check_result, args.source_commit,
+                                    budget_started=started, accounting=accounting)
             else:
                 require(args.arms is not None, "--arms is required for stage 2")
-                result = run_stage2(inputs, out, gpu_check_result, args.arms.resolve(), args.source_commit)
+                result = run_stage2(inputs, out, gpu_check_result, args.arms.resolve(), args.source_commit,
+                                    stage1_result_path=(args.stage1_result.resolve()
+                                                        if args.stage1_result is not None else None),
+                                    budget_started=started, accounting=accounting)
         result["elapsed_seconds"] = time.monotonic() - started
         ref = publish(out / "RESULT.json", result)
         publish(out / "CLOSED.json", {"result": ref, "returncode": 0, "automatic_retry": False})
         print(json.dumps({"status": result["status"], "result": ref}), flush=True)
         return 0
-    except Exception:
-        publish(out / "STOP.json", {"traceback": traceback.format_exc(),
-                                    "elapsed_seconds": time.monotonic() - started, "automatic_retry": False})
+    except Exception as exc:
+        stop = {"status": "FAIL", "mode": args.mode, "out": str(out),
+                "source_commit": args.source_commit,
+                "exception": {"type": type(exc).__name__, "message": str(exc),
+                              "observation": getattr(exc, "observation", None)},
+                "traceback": traceback.format_exc(),
+                "elapsed_seconds": time.monotonic() - started,
+                "accounting": accounting.snapshot(), "automatic_retry": False}
+        publish(out / "STOP.json", stop)
         traceback.print_exc()
         return 2
 

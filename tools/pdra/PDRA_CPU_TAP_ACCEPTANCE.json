@@ -26,9 +26,9 @@
     "last_budget_observation": {
       "cuda_peak_allocated_bytes": null,
       "cuda_peak_reserved_bytes": null,
-      "elapsed_seconds": 10.052,
+      "elapsed_seconds": 10.011,
       "label": "learn",
-      "output_bytes": 462
+      "output_bytes": 461
     },
     "mode": "cpu-tap-acceptance",
     "phase": "learn",
@@ -49,17 +49,17 @@
     "arms": {
       "b_single_box_quality": {
         "batch": 256,
-        "digest_after": "dfe5e40e7225611f3df877da3d49f0e322fe8776e5daf243e280f497a1a9f563",
-        "digest_before": "3ca9f14ab36865441f3fe3457c557232e7a16b3a8c4a03084133f4ae3c68a082",
+        "digest_after": "9905f7c6a3749d3c1c32dcff7a77f34a353ce618c6f33cdc25ecc5cb738156c2",
+        "digest_before": "f9290b542a217eede6be5ca0ebdf934af69605148c107d618a98a6a3f1d2afac",
         "first_losses": [
-          0.047227,
-          0.033206,
-          0.023092,
-          0.019986,
-          0.015881,
-          0.014156,
-          0.015063,
-          0.015764
+          0.051159,
+          0.022153,
+          0.01444,
+          0.018259,
+          0.019226,
+          0.016107,
+          0.015094,
+          0.013091
         ],
         "gradient": {
           "all_with_finite_nonzero_gradient": true,
@@ -99,25 +99,25 @@
           }
         },
         "material_rows": 344,
-        "mean_loss": 0.021930294577032328,
+        "mean_loss": 0.019765589851886034,
         "parameters_changed": true,
-        "seconds": 0.008840898983180523,
+        "seconds": 0.01916986098513007,
         "steps_exactly_allocated": true,
         "updates": 10
       },
       "c_whole_box_pairwise": {
         "batch": 256,
-        "digest_after": "0d27805ba3dc08f8e77330a46a414b29118de9f7adbca86228dd50f8bb223b2b",
-        "digest_before": "d98779cb46cfa41c76edfa5dae0cdd24dc7b6708f7f2a15bec9d2c7480500ad1",
+        "digest_after": "ebc84295cdb6f091ce3d1c107f6f38e67e02d2c64fe683592e5edad161196c93",
+        "digest_before": "bf0a0d5a759c99f415c209cf8c46a3d9ee9e06b280373464377ba1108b519903",
         "first_losses": [
-          1.410332,
-          1.348658,
-          1.302818,
-          1.263752,
-          1.222408,
-          1.175613,
-          1.125388,
-          1.078964
+          1.387527,
+          1.287724,
+          1.203118,
+          1.122682,
+          1.029286,
+          0.942107,
+          0.856715,
+          0.786019
         ],
         "gradient": {
           "all_with_finite_nonzero_gradient": true,
@@ -172,9 +172,9 @@
           }
         },
         "material_rows": 1225,
-        "mean_loss": 1.1955001890659331,
+        "mean_loss": 1.0099780321121217,
         "parameters_changed": true,
-        "seconds": 0.023676459211856127,
+        "seconds": 0.0685820379294455,
         "steps_exactly_allocated": true,
         "updates": 10
       },
@@ -247,7 +247,7 @@
         "material_rows": 1225,
         "mean_loss": 0.7283209423224132,
         "parameters_changed": true,
-        "seconds": 0.21129718399606645,
+        "seconds": 0.20942841097712517,
         "steps_exactly_allocated": true,
         "updates": 30
       }
@@ -260,9 +260,9 @@
     },
     "batch_pairs": 256,
     "labelled_pairs": 1225,
-    "seconds": 0.5741832267958671,
+    "seconds": 0.6315341950394213,
     "small_batch_fallback_used": false,
-    "spec_sha256": "b36627f32dadeeae507446676e569dba691a2352c5d81ec71fde5804ad8223f8",
+    "spec_sha256": "e00d0d75cc37db00064a849c9c1b897ba362b9c69ff3697840e92100f1e99eb2",
     "total_updates": 50
   },
   "decisions": {
@@ -294,7 +294,7 @@
       "abstain_head": 10154,
       "infeasible_read": 1625
     },
-    "seconds": 4.359046849887818,
+    "seconds": 4.366758076939732,
     "stage0_pairs_for_image": 11779
   },
   "detector_frozen_evidence": {
@@ -315,7 +315,7 @@
     ],
     "note": "no backward counter (the rev-4 no-op is removed); evidenced by measured parameter gradients and the weight digest"
   },
-  "elapsed_seconds": 10.075469149975106,
+  "elapsed_seconds": 10.03392957802862,
   "feature_binding": {
     "core_extent": [
       96,
@@ -340,7 +340,7 @@
       168
     ],
     "pools_identical_between_passes": true,
-    "seconds": 3.0656379419378936,
+    "seconds": 3.053038324927911,
     "tap_calls": 5,
     "views": [
       {
@@ -399,7 +399,7 @@
     "audited_restore": false,
     "cpu_only": true,
     "ema_updates": 36480,
-    "load_seconds": 0.6145243758801371,
+    "load_seconds": 0.5622538069728762,
     "scope": "formal_R18_seed0_e120"
   },
   "pooling": {
@@ -407,9 +407,9 @@
     "pairs": 11779,
     "pool": 3000,
     "readable": 10154,
-    "seconds": 0.37577125802636147,
+    "seconds": 0.3680823501199484,
     "strips": 40232,
-    "us_per_readable_pair": 37.00721469631293
+    "us_per_readable_pair": 36.249985239309474
   },
   "resources": {
     "caps": {
@@ -420,11 +420,11 @@
       "wall_seconds",
       "output_bytes"
     ],
-    "output_bytes": 462,
-    "vm_hwm_bytes": 1955971072
+    "output_bytes": 461,
+    "vm_hwm_bytes": 1978933248
   },
-  "revision": "cpu-tap-acceptance-rev6-20261031",
-  "source_commit": "WORKTREE-UNCOMMITTED-REV6",
+  "revision": "cpu-tap-acceptance-rev7-20261031",
+  "source_commit": "WORKTREE-UNCOMMITTED-REV7",
   "status": "PASS",
   "task": "r18-pdra-wiring-20261031-001"
 }
