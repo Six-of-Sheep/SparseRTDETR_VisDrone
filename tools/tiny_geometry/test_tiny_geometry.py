@@ -47,7 +47,8 @@ class Ops:
     @staticmethod
     def box_iou(a, b):
         import torchvision
-        return torchvision.ops.box_iou(a, b)
+        # the vendored box_ops returns (iou, union); mirror that contract for the stub
+        return torchvision.ops.box_iou(a, b), None
 
 
 def make_case(pred_rows, tgt_rows):

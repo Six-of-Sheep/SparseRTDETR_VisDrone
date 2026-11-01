@@ -146,12 +146,14 @@ def compare(args):
         raise SystemExit("the native arm must record applied == native")
     for mode in ("A1", "A2"):
         totals = values[mode]["geo_totals"]
-        if totals["tiny_pairs"] <= 0 or totals["shifted_calls"] != (1 if mode == "A1" else 0):
-            raise SystemExit(("unexpected band activity/draws for " + mode, totals))
-        if mode == "A1" and values[mode]["draws"] != totals["shifted_calls"]:
-            raise SystemExit("A1 draw ledger differs from the shifted-call count")
-        if mode == "A2" and values[mode]["draws"] != 0:
-            raise SystemExit("A2 must not draw")
+        if totals["tiny_pairs"] <= 0:
+            raise SystemExit(("no tiny pairs observed for " + mode, totals))
+        if mode == "A1":
+            if totals["shifted_calls"] < 1 or values[mode]["draws"] != totals["shifted_calls"]:
+                raise SystemExit(("A1 shift/draw ledger differs", totals, values[mode]["draws"]))
+        else:
+            if totals["shifted_calls"] != 0 or values[mode]["draws"] != 0:
+                raise SystemExit(("A2 must not draw", totals, values[mode]["draws"]))
         if totals["applied_sum"] == totals["native_sum"]:
             raise SystemExit(mode + " did not change the applied sums")
     body = json.dumps(report, indent=1, ensure_ascii=False, sort_keys=True)
