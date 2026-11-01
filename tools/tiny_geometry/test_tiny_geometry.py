@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from sparse_rtdetr.protocol_r18 import tiny_geometry as tg          # noqa: E402
 from sparse_rtdetr.protocol_r18 import tiny_geometry_arm as arm    # noqa: E402
 
-TEST_C = 0.01
+TEST_C = 0.1
 tg.CONSTANT_C = TEST_C
 arm.CONSTANT_C = TEST_C
 

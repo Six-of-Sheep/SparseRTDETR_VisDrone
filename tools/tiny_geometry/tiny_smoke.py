@@ -96,8 +96,8 @@ def main():
         checks = {"mode": mode, "update1_keys": sorted(len(row) for row in r1["microbatch_losses"]),
                   "finite1": bool(r1["finite"])}
         cp = ft.save(engine, out / ("SMOKE-%s-C1.pth" % mode))
-        expected = ft.capture(engine)
         r2 = engine.train_window(inputs[1][0], inputs[1][1], capture=True)
+        expected = ft.capture(engine)
         obs = observations(r2)
         obs1 = observations(r1)
         draws_after = None if term is None else int(term.state_dict()["draws"])
