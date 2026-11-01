@@ -1,0 +1,223 @@
+{
+  "version": "r18-tiny-positives-v1",
+  "revision": "r19 round (2026-11-02): tiny-band extra positive regression supervision; third arm restored as the count-matched band mass control; preparation only, no GPU",
+  "positioning": "practical initial screening of band-conditioned extra regression positives inside a frozen one-to-one NMS-free DETR (regression only, inference untouched); one-to-many positive assignment is a known family (dense/anchor-based positive assignment, auxiliary one-to-many heads); no originality claim",
+  "arms": [
+    "A0",
+    "A1",
+    "A2"
+  ],
+  "updates_per_arm": 3648,
+  "GPU_authorized": false,
+  "parent": {
+    "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757"
+  },
+  "arm_install": {
+    "A0": null,
+    "A1": null,
+    "A2": null
+  },
+  "pos_install": {
+    "A0": null,
+    "A1": "A1",
+    "A2": "A2"
+  },
+  "tiny_positives": {
+    "objective": "tiny_band_positive_multiplicity_v1",
+    "canvas_hw": [
+      768,
+      1344
+    ],
+    "band_area_px": 1024.0,
+    "band_area_threshold": 0.000992063492063492,
+    "iou_tau": 0.5,
+    "extras_per_gt": 1,
+    "require_best_gt": true,
+    "constants_sha256": "9b510600ba918dcb079e677315f85603181ccda1b3867d20fdaa132cb1083cfe"
+  },
+  "checkpoint_passes": [
+    0,
+    6,
+    12
+  ],
+  "ema_r": {
+    "updates_start": 0,
+    "decay": 0.9999,
+    "warmups": 2000
+  },
+  "ema_c": {
+    "updates_start": 36480,
+    "decay": 0.9999,
+    "warmups": 2000
+  },
+  "endpoint": {
+    "primary": "FT012_EMA_C",
+    "view": "A",
+    "batch_size": 4,
+    "images": 548,
+    "budgets": [
+      600,
+      300
+    ],
+    "note": "unchanged fixed endpoint and scoring policy; no selection, no tuning"
+  },
+  "acceptance": {
+    "updates": 4,
+    "cases": [
+      "A0",
+      "A1",
+      "A2",
+      "empty"
+    ],
+    "note": "one launch, at most 4 unique optimizer updates in total; stop on anomaly; the acceptance state is not usable for the formal training"
+  },
+  "gates": {
+    "units": "differences in percentage points (100 x (lhs - rhs))",
+    "A2_minus_A0": {
+      "lhs": "A2",
+      "rhs": "A0",
+      "meaning": "practical single-seed net benefit of the tiny-band extra positive supervision against the native arm at the fixed starting point and short schedule",
+      "conditions": [
+        {
+          "metric": "APS",
+          "budget": 600,
+          "op": ">=",
+          "threshold": 0.5
+        },
+        {
+          "metric": "AP75_small",
+          "budget": 600,
+          "op": ">=",
+          "threshold": 0.3
+        },
+        {
+          "metric": "AP",
+          "budget": 600,
+          "op": ">=",
+          "threshold": -0.1
+        },
+        {
+          "metric": "AP",
+          "budget": 300,
+          "op": ">=",
+          "threshold": -0.2
+        },
+        {
+          "metric": "APS",
+          "budget": 300,
+          "op": ">=",
+          "threshold": -0.2
+        },
+        {
+          "metric": "APM",
+          "budget": 600,
+          "op": ">=",
+          "threshold": -0.5
+        },
+        {
+          "metric": "APL",
+          "budget": 600,
+          "op": ">=",
+          "threshold": -0.5
+        }
+      ]
+    },
+    "A2_minus_A1": {
+      "lhs": "A2",
+      "rhs": "A1",
+      "meaning": "method-contribution reading: the information in admitting an additional real, geometrically supported box, against the count-matched band mass control that duplicates the native matched band pair instead",
+      "conditions": [
+        {
+          "metric": "APS",
+          "budget": 600,
+          "op": ">=",
+          "threshold": 0.3
+        },
+        {
+          "metric": "AP75_small",
+          "budget": 600,
+          "op": ">=",
+          "threshold": 0.2
+        },
+        {
+          "metric": "AP",
+          "budget": 600,
+          "op": ">=",
+          "threshold": -0.1
+        },
+        {
+          "metric": "AP",
+          "budget": 300,
+          "op": ">=",
+          "threshold": -0.2
+        },
+        {
+          "metric": "APS",
+          "budget": 300,
+          "op": ">=",
+          "threshold": -0.2
+        },
+        {
+          "metric": "APM",
+          "budget": 600,
+          "op": ">=",
+          "threshold": -0.5
+        },
+        {
+          "metric": "APL",
+          "budget": 600,
+          "op": ">=",
+          "threshold": -0.5
+        }
+      ]
+    },
+    "combination": {
+      "both": "initial_positive_net_and_increment",
+      "net_only": "single_seed_preliminary_net_benefit",
+      "net_fail": "closed_fixed_config",
+      "note": "single seed only; no multi-seed, no follow-on round, no metric-level selection, and no originality claim from a pass; the practical verdict is A2-A0 and the contribution reading is A2-A1"
+    }
+  },
+  "frozen_science": {
+    "mechanism": "inside every non-denoising loss_boxes call the positive set handed to the frozen native loss is augmented with one extra regression-only pair per tiny-band ground-truth box: the highest-overlap UNMATCHED query whose overlap clears IOU_TAU and whose own best-overlapping ground-truth box is that box; the extra pair carries the native L1 and native 1-GIoU at the native per-pair scale under the native keys; num_boxes, VFL, matcher, DN families, anchors, selection rule and inference are untouched; zero parameters and zero new loss keys",
+    "control": "A1 duplicates the native matched pair of every tiny-band ground-truth box in the same regression positive set: same plumbing, same extra-pair count, same normalisation, no new geometric information and no wrong supervision",
+    "band": "raw canvas area <= 1024 px^2 on the 768x1344 canvas (normalized area <= 1024/1032192), the same band as the D1 diagnostic and the r18 round; note this canvas-area band is different from the original-image-area APS grouping",
+    "regression_only": "the extra pairs receive no classification target, so the one-to-one score semantics and the NMS-free output are unchanged; the direct beneficiary box is normally discarded at inference and the declared in-training prediction is that the band's MATCHED pair improves (audited by pos_band_native_iou_sum and pos_band_pairs per family call)",
+    "training_budget": "3,648 updates per arm, three arms (A0 native, A1 mass control, A2 method), fixed endpoint FT012 EMA-C, no selection and no tuning",
+    "schedule_justification": "zero new parameters and no new module: the mechanism's gradient path is live from the first update, so the established 12-pass e120 platform measures the direction of the effect; an earlier start or a longer schedule is a separate question and is not used here"
+  },
+  "budget": {
+    "gpu_hours": 8.0,
+    "wall_hours": 24,
+    "server_new_bytes": 25769803776,
+    "return_bytes": 1048576,
+    "planned_updates": {
+      "acceptance": 4,
+      "formal_total": 10944,
+      "grand_total": 10948
+    },
+    "planned_batch_forwards": {
+      "training": 21888,
+      "acceptance": 8,
+      "inference": 465,
+      "total": 22361
+    },
+    "storage_declaration": {
+      "declared_total_bytes": 25769803776,
+      "preparation_incurred_measured_bytes": 0,
+      "items_cap_bytes": {
+        "release_tree_and_tar": 40000000,
+        "cpu_fixture_chain": 1700000000,
+        "formal_update_audits": 8200000000,
+        "formal_checkpoints_three_arms": 3500000000,
+        "gpu_acceptance_snapshots_and_c1_a2": 2000000000,
+        "endpoint_ema_files": 600000000,
+        "runtime_logs_predictions_plans_receipts": 1200000000,
+        "failure_scene_reserve_unused_zero": 2500000000
+      },
+      "note": "whole-round declaration for this round directory only; every preparation material of the earlier rounds stays where it is and is not duplicated"
+    },
+    "no_vram_quota": true,
+    "record_peak_memory": true
+  }
+}
