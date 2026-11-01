@@ -1,0 +1,88 @@
+{
+  "version": "r18-tiny-geometry-v1",
+  "arms": ["A0", "A1", "A2"],
+  "updates_per_arm": 3648,
+  "GPU_authorized": false,
+  "parent": {
+    "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757"
+  },
+  "arm_install": {"A0": null, "A1": null, "A2": null},
+  "geo_install": {"A0": null, "A1": "A1", "A2": "A2"},
+  "tiny_geometry": {
+    "objective": "tiny_band_normalized_wasserstein_geometry_v1",
+    "canvas_hw": [768, 1344],
+    "band_area_px": 1024.0,
+    "band_area_threshold": 0.0009920634920634921,
+    "constant_C": null,
+    "constants_sha256": null,
+    "calibration": "pre-registered median-parity rule on the fixed 16 train-side images (pass-1 windows 0..1, seed0, parent state, eval-mode CPU-FP32 forward) via tools/geometry_probe.py; constant_C and constants_sha256 are filled once and never tuned"
+  },
+  "checkpoint_passes": [0, 6, 12],
+  "ema_r": {"updates_start": 0, "decay": 0.9999, "warmups": 2000},
+  "ema_c": {"updates_start": 36480, "decay": 0.9999, "warmups": 2000},
+  "endpoint": {
+    "primary": "FT012_EMA_C",
+    "view": "A",
+    "batch_size": 4,
+    "images": 548,
+    "budgets": [600, 300],
+    "note": "unchanged fixed endpoint and scoring policy; no selection, no tuning"
+  },
+  "acceptance": {
+    "updates": 3,
+    "cases": ["A1", "A2", "empty"],
+    "note": "engine acceptance only; its state is not usable for the formal training"
+  },
+  "gates": {
+    "units": "differences in percentage points (100 x (lhs - rhs))",
+    "A2_minus_A0": {
+      "lhs": "A2", "rhs": "A0",
+      "meaning": "overall net benefit of the tiny-band geometry arm against the native arm",
+      "conditions": [
+        {"metric": "APS", "budget": 600, "op": ">=", "threshold": 0.50},
+        {"metric": "AP75_small", "budget": 600, "op": ">=", "threshold": 0.30},
+        {"metric": "AP", "budget": 600, "op": ">=", "threshold": -0.10},
+        {"metric": "AP", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APS", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APM", "budget": 600, "op": ">=", "threshold": -0.50},
+        {"metric": "APL", "budget": 600, "op": ">=", "threshold": -0.50}
+      ]
+    },
+    "A2_minus_A1": {
+      "lhs": "A2", "rhs": "A1",
+      "meaning": "increment from using the true matched tiny targets instead of the cyclically shifted ones",
+      "conditions": [
+        {"metric": "APS", "budget": 600, "op": ">=", "threshold": 0.30},
+        {"metric": "AP75_small", "budget": 600, "op": ">=", "threshold": 0.20},
+        {"metric": "AP", "budget": 600, "op": ">=", "threshold": -0.10},
+        {"metric": "AP", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APS", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APM", "budget": 600, "op": ">=", "threshold": -0.50},
+        {"metric": "APL", "budget": 600, "op": ">=", "threshold": -0.50}
+      ]
+    },
+    "combination": {
+      "both": "initial_positive",
+      "net_only": "geometry_pressure_only",
+      "net_fail": "closed_fixed_config",
+      "note": "no multi-seed, no follow-on round, and no metric-level selection is started automatically"
+    }
+  },
+  "frozen_science": {
+    "mechanism": "matched-pair geo slot replaced inside the tiny band only: 1-giou -> 1-exp(-sqrt(W2)/C); loss_bbox/L1, VFL, matcher, DN families, weights and normalization unchanged; zero parameters and zero new loss keys",
+    "control": "A1 uses the identical formula, pair set and aggregation with the tiny target cyclically shifted within the criterion call by one draw from the term's own CPU generator; n<2 tiny pairs consumes no draw",
+    "band": "raw canvas area <= 1024 px^2 on the 768x1344 canvas (normalized area <= 1024/1032192)",
+    "constant_C": "filled by the pre-registered median-parity calibration once, then frozen",
+    "training_budget": "3,648 updates per arm, three arms, fixed endpoint FT012 EMA-C, no selection and no tuning"
+  },
+  "budget": {
+    "gpu_hours": 8.0,
+    "wall_hours": 24,
+    "server_new_bytes": 25769803776,
+    "return_bytes": 1048576,
+    "planned_updates": {"acceptance": 3, "formal_total": 10944, "grand_total": 10947},
+    "planned_batch_forwards": {"training": 21888, "acceptance": 6, "inference": 465, "total": 22359},
+    "no_vram_quota": true,
+    "record_peak_memory": true
+  }
+}
