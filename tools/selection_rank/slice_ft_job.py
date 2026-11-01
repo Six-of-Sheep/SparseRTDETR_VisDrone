@@ -547,14 +547,41 @@ def accept_ranking(c,out,holder):
         require(getattr(e.model.decoder,'_select_topk',None) is not None,'FT acceptance wrapper absent')
         windows=list(loader(c,arm,1,limit=1));require(len(windows)==1,'FT acceptance window count differs')
         x,t,tr=windows[0]
-        targets=t
-        if not supervised:
+        targets=t;empty_audit=None
+        if supervised:
+            r=update(c,out,arm,1,0,e,x,targets,tr,holder,role)
+        else:
+            term=e.criterion.selection_rank
+            draws_before=int(term.state_dict()['draws'])
+            before=[len(row['gt_ids']) for row in t]
             targets=[{'boxes':row['boxes'][:0],'labels':row['labels'][:0],'raw_area':row['raw_area'][:0],
                       'gt_ids':[],**{k:v for k,v in row.items()
                                      if k not in ('boxes','labels','raw_area','gt_ids')}} for row in t]
-        r=update(c,out,arm,1,0,e,x,targets,tr,holder,role)
+            admit(c,out)
+            emptied={'ids':[a['image_id'] for a in tr],
+                     'traces':[{k:v for k,v in a.items() if k!='spawn_observer'} for a in tr],
+                     'target_sha256':output_digest(t),'image_sha256':tensor_digest([('pixels',x)]),
+                     'supervision_emptied':{'per_image_gt_before':before,
+                                            'per_image_gt_after':[0 for _ in before],
+                                            'audit_applied':False,
+                                            'frozen_augmentation_trace_audit':'not applied: the delivered targets are emptied after augmentation, so the frozen input_record comparison cannot hold for this case'}}
+            holder['input']={'images':x,'targets':targets,'metadata':emptied}
+            r=e.train_window(x,targets,capture=True);r['input']=emptied;r['input_sha256']=digest(emptied)
+            require(e.completed_updates==e.ema.updates==r['update'] and e.phase==0 and r['optimizer_steps']==r['ema_updates']==1 and r['finite'],'FT empty-case update clocks')
+            require(e.alt_ema.updates==r['update']+ft.ALT_OFFSET and r.get('ema_alt_updates')==1,'FT empty-case EMA-C update')
+            progress.save_audit(out,channel.binding(),r,role)
+            draws_after=int(term.state_dict()['draws'])
+            require(draws_after==draws_before,'FT empty supervision consumed an A1 draw')
+            empty_audit={'delivered':'targets emptied after augmentation',
+                         'frozen_input_record_audit_applied':False,
+                         'per_image_gt_before':before,'per_image_gt_after':[0 for _ in before],
+                         'term_draws_before':draws_before,'term_draws_after':draws_after,
+                         'target_sha256':emptied['target_sha256'],'image_sha256':emptied['image_sha256']}
         counts=[len(row) for row in r['microbatch_losses']]
-        require(sorted(set(counts))==[13,22],'FT acceptance loss-key pair differs: %s'%counts)
+        if supervised:
+            require(sorted(set(counts))==[13,22],'FT acceptance loss-key pair differs: %s'%counts)
+        else:
+            require(all(count in (13,22) for count in counts),'FT empty-case loss-key count differs: %s'%counts)
         require(all('loss_rank' in row for row in r['microbatch_losses']),'FT acceptance loss_rank missing')
         require(r['finite'] is True and r['gradient_norm_before_clip']>0.0,'FT acceptance gradient/finiteness differs')
         if not supervised:
@@ -562,6 +589,7 @@ def accept_ranking(c,out,holder):
                     'FT acceptance empty supervision produced a ranking loss')
         probe_result=probe(e,x,targets,case)
         checks={'case':case,'arm':arm,'supervised':supervised,'loss_key_counts':counts,
+                'empty_audit':empty_audit,
                 'loss_rank':[row['loss_rank'] for row in r['microbatch_losses']],
                 'gradient_norm_before_clip':r['gradient_norm_before_clip'],
                 'ranking_mode':getattr(e,'ranking_mode',None),'probe':probe_result,
