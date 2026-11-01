@@ -1,7 +1,11 @@
 {
-  "version": "r18-tiny-positives-v1",
-  "revision": "r19 round (2026-11-02): tiny-band extra positive regression supervision; third arm restored as the count-matched band mass control; preparation only, no GPU",
-  "positioning": "practical initial screening of band-conditioned extra regression positives inside a frozen one-to-one NMS-free DETR (regression only, inference untouched); one-to-many positive assignment is a known family (dense/anchor-based positive assignment, auxiliary one-to-many heads); no originality claim",
+  "version": "r18-tiny-positives-v2",
+  "revision": 2,
+  "revision_log": [
+    "1 (2026-11-02, preparation): tiny-band extra positive regression supervision; three arms A0/A1/A2; preparation only, no GPU",
+    "2 (2026-11-02, user revision): A1 redefined as the native matched-pair duplicated-regression control sharing the A2 admission gate; observation ledger extended (admissible instances, native-pair misses, appended-set digest); claim limits and count semantics registered; thresholds, schedule and budget cells unchanged"
+  ],
+  "positioning": "practical initial screening of band-conditioned extra regression positives inside a frozen one-to-one NMS-free DETR (regression only, inference untouched); one-to-many positive assignment is a known family (dense/anchor-based positive assignment, auxiliary one-to-many heads); no originality claim; this fixed experiment answers the practical net benefit and the A2-A1 increment only: no optimal tau, no optimal append count, no causal family attribution",
   "arms": [
     "A0",
     "A1",
@@ -69,7 +73,7 @@
       "A2",
       "empty"
     ],
-    "note": "one launch, at most 4 unique optimizer updates in total; stop on anomaly; the acceptance state is not usable for the formal training"
+    "note": "one launch, at most 4 unique optimizer updates in total; stop on anomaly; the acceptance state is not usable for the formal training; the A1 and A2 cases must record the same admission-gate ledger and the same appended-set digest list on the fixed fixture window"
   },
   "gates": {
     "units": "differences in percentage points (100 x (lhs - rhs))",
@@ -125,7 +129,7 @@
     "A2_minus_A1": {
       "lhs": "A2",
       "rhs": "A1",
-      "meaning": "method-contribution reading: the information in admitting an additional real, geometrically supported box, against the count-matched band mass control that duplicates the native matched band pair instead",
+      "meaning": "contrast reading: supervising an additional real, geometrically supported box (A2) against duplicating the supervision of the original matched pair (A1) on the same appended set; the two arms share the admission gate, the appended count, the normalisation and the loss coefficients, while loss values, gradient magnitudes and appended-pair regression quality are NOT claimed equal",
       "conditions": [
         {
           "metric": "APS",
@@ -175,16 +179,38 @@
       "both": "initial_positive_net_and_increment",
       "net_only": "single_seed_preliminary_net_benefit",
       "net_fail": "closed_fixed_config",
-      "note": "single seed only; no multi-seed, no follow-on round, no metric-level selection, and no originality claim from a pass; the practical verdict is A2-A0 and the contribution reading is A2-A1"
+      "note": "single seed only; no multi-seed, no follow-on round, no metric-level selection, and no originality claim from a pass; the practical verdict is A2-A0 and the contrast reading is A2-A1; the family decomposition is descriptive, not a causal attribution"
     }
   },
   "frozen_science": {
     "mechanism": "inside every non-denoising loss_boxes call the positive set handed to the frozen native loss is augmented with one extra regression-only pair per tiny-band ground-truth box: the highest-overlap UNMATCHED query whose overlap clears IOU_TAU and whose own best-overlapping ground-truth box is that box; the extra pair carries the native L1 and native 1-GIoU at the native per-pair scale under the native keys; num_boxes, VFL, matcher, DN families, anchors, selection rule and inference are untouched; zero parameters and zero new loss keys",
-    "control": "A1 duplicates the native matched pair of every tiny-band ground-truth box in the same regression positive set: same plumbing, same extra-pair count, same normalisation, no new geometric information and no wrong supervision",
+    "control": "A1, the native matched-pair duplicated-regression control: it shares A2's admission gate exactly (a band ground-truth box qualifies only when an unmatched query reaches IOU_TAU with it and this box is that query's own best-overlapping partner); for every qualifying box A1 appends that box's OWN native matched pair instead of the candidate, so the appended instance set, its count, the normalisation (num_boxes) and the loss coefficients agree with A2 on the same outputs, and neither arm appends when the gate finds no candidate; A1's appended instances carry the native pair's own (possibly low) regression quality, recorded in the ledger; no claim of equal loss values, gradient magnitudes or regression quality between the arms",
     "band": "raw canvas area <= 1024 px^2 on the 768x1344 canvas (normalized area <= 1024/1032192), the same band as the D1 diagnostic and the r18 round; note this canvas-area band is different from the original-image-area APS grouping",
-    "regression_only": "the extra pairs receive no classification target, so the one-to-one score semantics and the NMS-free output are unchanged; the direct beneficiary box is normally discarded at inference and the declared in-training prediction is that the band's MATCHED pair improves (audited by pos_band_native_iou_sum and pos_band_pairs per family call)",
-    "training_budget": "3,648 updates per arm, three arms (A0 native, A1 mass control, A2 method), fixed endpoint FT012 EMA-C, no selection and no tuning",
-    "schedule_justification": "zero new parameters and no new module: the mechanism's gradient path is live from the first update, so the established 12-pass e120 platform measures the direction of the effect; an earlier start or a longer schedule is a separate question and is not used here"
+    "regression_only": "the extra pairs receive no classification target, so the one-to-one score semantics and the NMS-free output are unchanged; the direct beneficiary box is normally discarded at inference and the declared in-training prediction is that the band's MATCHED pair improves (audited by pos_band_native_iou_sum and pos_band_pairs per family call); registered fact: the appended box under A2 is an unmatched query that keeps its native classification objective (background) - the mechanism adds and changes no classification supervision, and the appended instance itself is not trained to become a detection output",
+    "training_budget": "3,648 updates per arm, three arms (A0 native, A1 native matched-pair duplicated-regression control, A2 method), fixed endpoint FT012 EMA-C, no selection and no tuning",
+    "schedule_justification": "zero new parameters and no new module: the mechanism's gradient path is live from the first update, so the established 12-pass e120 platform measures the direction of the effect; an earlier start or a longer schedule is a separate question and is not used here",
+    "observation_protocol": {
+      "per_family_call_fields": [
+        "pos_pairs",
+        "pos_band_gt",
+        "pos_band_pairs",
+        "pos_band_zero_iou",
+        "pos_band_native_iou_sum",
+        "pos_band_native_l1_sum",
+        "pos_band_native_giou_sum",
+        "pos_extra_candidates",
+        "pos_extra_pairs",
+        "pos_band_gt_no_sibling",
+        "pos_extra_no_native",
+        "pos_extra_iou_sum",
+        "pos_extra_l1_sum",
+        "pos_extra_giou_sum",
+        "pos_extra_set_digest",
+        "pos_extra_mode"
+      ],
+      "count_semantics": "every pos_* count is a matched-pair/instance observation count per family and per criterion call (one ground-truth box contributes once per family per call), not an independent ground-truth count",
+      "post_fork_reporting": "after the training fork each arm's counts are reported from its own run by the closeout audit scan; the pre-fork set identity between A1 and A2 is verified on the fixed real input and the CPU fixture, and equality after the fork is not assumed"
+    }
   },
   "budget": {
     "gpu_hours": 8.0,
@@ -215,7 +241,7 @@
         "runtime_logs_predictions_plans_receipts": 1200000000,
         "failure_scene_reserve_unused_zero": 2500000000
       },
-      "note": "whole-round declaration for this round directory only; every preparation material of the earlier rounds stays where it is and is not duplicated"
+      "note": "whole-round declaration for this round directory only; every preparation material of the earlier rounds stays where it is and is not duplicated; revision 2 re-ran the affected preparation evidence (release-006, checks-006, one CPU fixture chain) inside the same declaration"
     },
     "no_vram_quota": true,
     "record_peak_memory": true

@@ -31,7 +31,7 @@ from . import checkpoint as native_state
 from .model import CommonEMA
 from . import tiny_positives_arm
 
-VERSION = 'r18-tiny-positives-v1'
+VERSION = 'r18-tiny-positives-v2'
 ARMS = ('A0', 'A1', 'A2')
 ARM_INSTALL = {'A0': None, 'A1': None, 'A2': None}
 POS_INSTALL = {'A0': None, 'A1': 'A1', 'A2': 'A2'}

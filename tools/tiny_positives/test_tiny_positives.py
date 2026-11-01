@@ -103,10 +103,50 @@ def main():
     src_best, tgt_best, ledger_best = tp.extra_pairs("A2", q_best, gt, bar_idx[0], bar_idx[1], module)
     check("A2.own_best_partner", src_best.numel() == 0 and ledger_best["pos_band_gt_no_sibling"] == 1, ledger_best)
 
-    # 6. A1 duplicates the native matched band pair
+    # 6. A1 and A2 share one admission gate: identical appended set on the same outputs
     src_a1, tgt_a1, ledger_a1 = tp.extra_pairs("A1", q, gt, indices[0][0], indices[0][1], module)
-    check("A1.duplicates", src_a1.tolist() == [0] and tgt_a1.tolist() == [0]
-          and ledger_a1["pos_extra_pairs"] == 1 and ledger_a1["pos_band_gt_no_sibling"] == 0, ledger_a1)
+    check("A1.gate_shared_appends_native_pair", src_a1.tolist() == [0] and tgt_a1.tolist() == [0]
+          and ledger_a1["pos_extra_pairs"] == 1 and ledger_a1["pos_extra_candidates"] == 1
+          and ledger_a1["pos_band_gt_no_sibling"] == 0 and ledger_a1["pos_extra_no_native"] == 0,
+          ledger_a1)
+    check("A1.A2_set_identical",
+          ledger_a1["pos_extra_pairs"] == ledger["pos_extra_pairs"]
+          and ledger_a1["pos_extra_candidates"] == ledger["pos_extra_candidates"]
+          and ledger_a1["pos_band_gt_no_sibling"] == ledger["pos_band_gt_no_sibling"]
+          and ledger_a1["pos_extra_set_digest"] == ledger["pos_extra_set_digest"], (ledger_a1, ledger))
+    check("A1.appended_quality_is_the_native_pair",
+          abs(ledger_a1["pos_extra_iou_sum"] - 1.0) < 1e-6 and ledger_a1["pos_extra_l1_sum"] == 0.0,
+          ledger_a1)
+    # no opportunity for the gate -> neither arm appends anything
+    src_a1_bar, tgt_a1_bar, ledger_a1_bar = tp.extra_pairs("A1", q_bar, gt, bar_idx[0], bar_idx[1], module)
+    check("A1.no_candidate_neither_appends", src_a1_bar.numel() == 0 and tgt_a1_bar.numel() == 0
+          and ledger_a1_bar["pos_extra_pairs"] == 0 and ledger_a1_bar["pos_extra_candidates"] == 0
+          and ledger_a1_bar["pos_band_gt_no_sibling"] == 1, ledger_a1_bar)
+
+    # 6b. two band ground truths, one with a legitimate extra box and one without
+    gt2 = boxes([[0.5000, 0.5000, 0.0200, 0.0200], [0.8000, 0.2000, 0.0200, 0.0200],
+                 [0.2000, 0.2000, 0.4000, 0.4000]])
+    q2 = torch.cat([boxes([[0.5000, 0.5000, 0.0200, 0.0200]]),      # matched to GT0
+                    boxes([[0.50649, 0.5000, 0.0200, 0.0200]]),     # admissible sibling of GT0
+                    boxes([[0.8000, 0.2000, 0.0200, 0.0200]]),      # matched to GT1
+                    boxes([[0.80685, 0.2000, 0.0200, 0.0200]]),     # IoU ~0.49 with GT1: below the bar
+                    boxes([[0.2000, 0.2000, 0.4000, 0.4000]])])     # matched to GT2
+    idx2 = (torch.tensor([0, 2, 4]), torch.tensor([0, 1, 2]))
+    src_a2_2, tgt_a2_2, ledger_a2_2 = tp.extra_pairs("A2", q2, gt2, idx2[0], idx2[1], module)
+    src_a1_2, tgt_a1_2, ledger_a1_2 = tp.extra_pairs("A1", q2, gt2, idx2[0], idx2[1], module)
+    check("gate.split_scene", src_a2_2.tolist() == [1] and tgt_a2_2.tolist() == [0]
+          and src_a1_2.tolist() == [0] and tgt_a1_2.tolist() == [0]
+          and ledger_a1_2["pos_extra_pairs"] == ledger_a2_2["pos_extra_pairs"] == 1
+          and ledger_a1_2["pos_band_gt_no_sibling"] == ledger_a2_2["pos_band_gt_no_sibling"] == 1
+          and ledger_a1_2["pos_extra_candidates"] == ledger_a2_2["pos_extra_candidates"] == 1
+          and ledger_a1_2["pos_extra_set_digest"] == ledger_a2_2["pos_extra_set_digest"],
+          (ledger_a1_2, ledger_a2_2))
+    # the structural corner: a qualifying ground truth without a native pair (crafted indices)
+    corner = tp.extra_pairs("A1", q2, gt2, torch.tensor([2, 4]), torch.tensor([1, 2]), module)
+    check("A1.no_native_pair_recorded", corner[0].numel() == 0 and corner[1].numel() == 0
+          and corner[2]["pos_extra_no_native"] == 1 and corner[2]["pos_extra_pairs"] == 0
+          and corner[2]["pos_extra_pairs"] + corner[2]["pos_band_gt_no_sibling"]
+              + corner[2]["pos_extra_no_native"] == corner[2]["pos_band_gt"], corner[2])
 
     # 7. degenerate inputs
     none_src, none_tgt, ledger_none = tp.extra_pairs("A2", q, torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64),
@@ -132,7 +172,8 @@ def main():
     expected_a1 = base(outputs, targets, aug_a1, num_boxes, None)
     term_a2 = tp.TinyPositivesTerm("A2")
     term_a1 = tp.TinyPositivesTerm("A1")
-    got_a2 = term_a2.loss_boxes(base, module, outputs, targets, indices, num_boxes, None, sink={})
+    sink_a2 = {}
+    got_a2 = term_a2.loss_boxes(base, module, outputs, targets, indices, num_boxes, None, sink=sink_a2)
     got_a1 = term_a1.loss_boxes(base, module, outputs, targets, indices, num_boxes, None, sink={})
     check("identity.A2_is_native_on_augmented_set",
           all(torch.equal(got_a2[k], expected_a2[k]) for k in expected_a2), (got_a2, expected_a2))
@@ -142,6 +183,11 @@ def main():
     check("identity.mass_increases",
           all(float(got_a2[k]) > float(native_loss[k]) for k in native_loss), (got_a2, native_loss))
     check("identity.counter", term_a2.state_dict()["extras"] == 1 and term_a1.state_dict()["extras"] == 1)
+    check("observation.new_fields",
+          all(key in sink_a2["final"] for key in ("pos_extra_candidates", "pos_extra_no_native",
+                                                  "pos_extra_set_digest"))
+          and sink_a2["final"]["pos_extra_set_digest"] == ledger["pos_extra_set_digest"],
+          sink_a2.get("final"))
 
     # 10. queries that are not admitted have no influence at all
     moved = q.clone()
@@ -247,6 +293,10 @@ def main():
               and declared.get("constants_sha256") == tp.constants_sha256(), declared)
         check("plan.arms", plan.get("arms") == ["A0", "A1", "A2"]
               and plan.get("pos_install") == {"A0": None, "A1": "A1", "A2": "A2"})
+        check("plan.revision", plan.get("revision") == 2
+              and plan.get("version") == "r18-tiny-positives-v2"
+              and "duplicated-regression control" in str(plan.get("frozen_science", {}).get("control", "")),
+              plan.get("revision"))
     else:
         check("plan.present", False, str(plan_path))
 

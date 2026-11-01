@@ -503,13 +503,19 @@ def accept_positives(c,out,holder):
     Per case: the production batch and precision configuration, every loss finite, the native
     loss-key count (the extra positive pairs add no loss key), a nonzero finite gradient norm, and
     the term's own observations recorded in the frozen diagnostics (band ground-truth count,
-    native matched band pairs, added extra pairs, admissible-sibling ledger, extra overlap and
-    extra term magnitudes).  The A0 case is native: no term object, no extra pair, no positives
-    mode.  The A1 case is the mass control: exactly one duplicated positive per native matched
-    band pair, no admission ledger.  The A2 case is the method: every band ground-truth box either
-    receives exactly one extra positive whose overlap clears the pre-registered bar or is recorded
-    as having no admissible sibling, and the case also saves a chain checkpoint whose restore into
-    a fresh engine must reproduce the full state and the term state exactly.
+    native matched band pairs, admissible instances, appended pairs, the admissible-sibling
+    ledger, native-pair misses, appended overlap, appended term magnitudes and the appended-set
+    digest).  The A0 case is native: no term object, no extra pair, no positives
+    mode.  The A1 case is the native matched-pair duplicated-regression control: it shares the A2
+    admission gate exactly, so every band ground-truth box that admits a legitimate extra box
+    receives one duplicated native matched pair instead, and neither arm appends anything when the
+    gate finds no candidate; the appended set, its count, the normalisation and the loss
+    coefficients must agree between the two arms on the same fixed window, while the loss values,
+    gradient magnitudes and appended-pair regression quality are NOT claimed equal.  The A2 case is
+    the method: every band ground-truth box either receives exactly one extra positive whose
+    overlap clears the pre-registered bar or is recorded as having no admissible sibling, and the
+    case also saves a chain checkpoint whose restore into a fresh engine must reproduce the full
+    state and the term state exactly.
     """
     started=time.monotonic();runtime=None
 
@@ -518,8 +524,15 @@ def accept_positives(c,out,holder):
         require(rows,'FT acceptance positives observations missing')
         require(all(isinstance(row['pos_pairs'],int) and isinstance(row['pos_band_gt'],int)
                     and isinstance(row['pos_band_pairs'],int) and isinstance(row['pos_extra_pairs'],int)
-                    and row['pos_band_pairs']<=row['pos_band_gt'] and row['pos_pairs']>=row['pos_band_pairs']>=0
+                    and isinstance(row['pos_extra_candidates'],int) and isinstance(row['pos_extra_no_native'],int)
+                    and (row['pos_extra_set_digest'] is None or isinstance(row['pos_extra_set_digest'],str))
+                    and row['pos_band_pairs']==row['pos_band_gt'] and row['pos_pairs']>=row['pos_band_pairs']>=0
                     for row in rows),'FT acceptance positives counts differ')
+        require(all(int(row['pos_extra_pairs'])+int(row['pos_band_gt_no_sibling'])+int(row['pos_extra_no_native'])
+                    ==int(row['pos_band_gt'])
+                    and (int(row['pos_extra_candidates'])>0)==(int(row['pos_extra_pairs'])>0)
+                    and int(row['pos_extra_candidates'])>=int(row['pos_extra_pairs'])
+                    for row in rows),'FT acceptance positives accounting differs')
         require(all(float(row['pos_extra_iou_sum'])>=0.0 and float(row['pos_extra_l1_sum'])>=0.0
                     and float(row['pos_extra_giou_sum'])>=0.0
                     and float(row['pos_band_native_iou_sum'])>=0.0 for row in rows),
@@ -529,12 +542,15 @@ def accept_positives(c,out,holder):
                 'band_gt_total':sum(int(row['pos_band_gt']) for row in rows),
                 'band_pairs_total':sum(int(row['pos_band_pairs']) for row in rows),
                 'band_zero_iou':sum(int(row['pos_band_zero_iou']) for row in rows),
+                'extra_candidates_total':sum(int(row['pos_extra_candidates']) for row in rows),
                 'extra_pairs_total':sum(int(row['pos_extra_pairs']) for row in rows),
                 'band_gt_no_sibling':sum(int(row['pos_band_gt_no_sibling']) for row in rows),
+                'extra_no_native_total':sum(int(row['pos_extra_no_native']) for row in rows),
                 'extra_iou_sum':sum(float(row['pos_extra_iou_sum']) for row in rows),
                 'extra_l1_sum':sum(float(row['pos_extra_l1_sum']) for row in rows),
                 'extra_giou_sum':sum(float(row['pos_extra_giou_sum']) for row in rows),
                 'band_native_iou_sum':sum(float(row['pos_band_native_iou_sum']) for row in rows),
+                'set_digests':[row['pos_extra_set_digest'] for row in rows],
                 'modes':sorted({row.get('pos_extra_mode') for row in rows},key=str)}
         return values
 
@@ -593,18 +609,20 @@ def accept_positives(c,out,holder):
                         'FT acceptance native arm added extra positives: '+case)
             elif mode=='A1':
                 require(ledger['modes']==['A1'],'FT acceptance A1 mode differs: '+case)
-                require(ledger['extra_pairs_total']==ledger['band_pairs_total']>0,
-                        'FT acceptance A1 must duplicate every native band pair: '+case)
-                require(ledger['band_gt_no_sibling']==0,'FT acceptance A1 has an admission ledger: '+case)
+                require(ledger['extra_pairs_total']+ledger['band_gt_no_sibling']+ledger['extra_no_native_total']
+                        ==ledger['band_gt_total'],'FT acceptance A1 must account for every tiny-band ground truth: '+case)
+                require(ledger['extra_no_native_total']==0,'FT acceptance A1 recorded a native-pair miss: '+case)
             else:
                 require(ledger['modes']==['A2'],'FT acceptance A2 mode differs: '+case)
-                require(ledger['extra_pairs_total']+ledger['band_gt_no_sibling']==ledger['band_gt_total'],
-                        'FT acceptance A2 must account for every tiny-band ground truth: '+case)
+                require(ledger['extra_pairs_total']+ledger['band_gt_no_sibling']+ledger['extra_no_native_total']
+                        ==ledger['band_gt_total'],'FT acceptance A2 must account for every tiny-band ground truth: '+case)
+                require(ledger['extra_no_native_total']==0,'FT acceptance A2 recorded a native-pair miss: '+case)
                 require(ledger['extra_iou_sum']>=TINY_IOU_TAU*ledger['extra_pairs_total'],
                         'FT acceptance A2 admitted an extra positive below the overlap bar: '+case)
         else:
             require(ledger['pairs_total']==0 and ledger['band_gt_total']==0,'FT acceptance empty supervision produced positives work')
-            require(ledger['extra_pairs_total']==0 and ledger['modes']==['A2'],
+            require(ledger['extra_pairs_total']==0 and ledger['extra_candidates_total']==0
+                    and ledger['extra_no_native_total']==0 and ledger['modes']==['A2'],
                     'FT acceptance empty supervision changed the positives ledger')
         checks={'case':case,'arm':arm,'supervised':supervised,'loss_key_counts':counts,
                 'empty_audit':empty_audit,'pos':ledger,
@@ -618,13 +636,21 @@ def accept_positives(c,out,holder):
     holder.pop('engine');holder.pop('input',None);del e0;gc.collect()
     if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
 
-    # case A1: mass control (one duplicated positive per native matched band pair)
+    # case A1: native matched-pair duplicated-regression control (shares the A2 admission gate)
     e1,_,checks_a1=one_case('A1','A1',True,'A1')
     holder.pop('engine');holder.pop('input',None);del e1;gc.collect()
     if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
 
     # case A2: the method, then the chain save/restore of the term state
     e2,_,checks_a2=one_case('A2','A2',True,'A2')
+    # the A1 control must share A2's admission gate exactly: on the same fixed window the gate
+    # ledger (band pairs, admissible instances, appended pairs, no-sibling and native-pair-miss
+    # counts) and the appended-set digest lists must coincide; the appended CONTENT and quality
+    # differ by construction and are recorded, never required equal
+    gate_keys=('band_gt_total','band_pairs_total','extra_candidates_total','extra_pairs_total',
+               'band_gt_no_sibling','extra_no_native_total','set_digests')
+    require(all(checks_a1['pos'][key]==checks_a2['pos'][key] for key in gate_keys),
+            'FT acceptance A1/A2 appended-set gate differs')
     cp=save(e2,out,'C1-A2.pth')
     expected_state=ft.capture(e2)
     term_before=e2.criterion.tiny_positives.state_dict()
@@ -651,6 +677,8 @@ def accept_positives(c,out,holder):
 
     publish(out/'RESULT.json',{'status':'PASS','actual_updates':4,'sequence':[1,1,1,1],
         'roles':['A0','A1','A2','empty'],'cases':{'A0':checks_a0,'A1':checks_a1,'A2':checks_a2,'empty':checks_empty},
+        'a1_a2_gate_consistent':True,'a1_a2_appended_pairs':checks_a1['pos']['extra_pairs_total'],
+        'a1_a2_appended_gate_exercised':bool(checks_a1['pos']['extra_pairs_total']>0),
         'initial_model_sha256':initial,'full_state_RNG_exact':True,'pos_state_restore_exact':True,
         'single_arm_acceptance_state_usable_for_formal':False,'state_usable_for_formal':False,
         'pos_install':{a:ft.POS_INSTALL[a] for a in ft.ARMS},
@@ -669,10 +697,10 @@ def evaluation_tiny_positives(c,out):
 
     Same scoring policy and budgets as the frozen chain (view A, batch 4, 548 development
     images, top600 primary and top300 secondary, FP32, no selection and no tuning).  Reports
-    the A2-A0 practical net-benefit gate and the A2-A1 information increment gate declared in
-    the plan, plus A1-A0, every trained arm against the certified parent and the retrained
-    native A0 against the original G0 readout of the same recipe, then the verdict from the
-    plan's combination rule.
+    the A2-A0 practical net-benefit gate and the A2-A1 contrast gate declared in the plan,
+    plus A1-A0, every trained arm against the certified parent and the retrained native A0
+    against the original G0 readout of the same recipe, then the verdict from the plan's
+    combination rule.
     """
     from ..r0.evaluation import score_budget,POLICY
     from infer_seed import bridge_values,_group,_prefix
@@ -751,17 +779,27 @@ def evaluation_tiny_positives(c,out):
        'verdict':verdict,'verdict_meaning':combination,'quality':verdict,'cost':costs,'cost_passed':cost_passed,
        'units':'point_scores0..1; deltas pp converted once','official_metrics_separate':metricrefs,
        'scope':'CPU_SYNTHETIC' if c['scope']=='CPU_FIXTURE' else 'seed0_development_exploratory',
-       'descriptive_note':('Three fixed arms from the same parent: A0 native, A1 the count-matched band mass '
-                           'control (the native matched band pair duplicated in the regression positive set) and '
-                           'A2 the tiny-band extra positive pair (one admissible unmatched box per tiny-band '
-                           'ground-truth box, regression only). Reporting only: A2-A0 is the practical '
-                           'single-seed net benefit at this starting point and this short schedule; A2-A1 isolates '
-                           'the information in choosing an additional real, geometrically supported box from the '
-                           'added regression mass alone; A1-A0 measures that mass alone. Every arm is also compared '
-                           'against the certified parent, and the retrained native A0 is compared against the '
-                           'original G0 readout of the same recipe (that readout difference is an EMA-C versus '
-                           'EMA-R endpoint difference, EXPLORATION_R1.md section 21.7). No selection, no tuning, no '
-                           'attribution beyond the pre-registered gates.')}
+       'descriptive_note':('Three fixed arms from the same parent: A0 native, A1 the native matched-pair '
+                           'duplicated-regression control (it shares A2\'s admission gate exactly: the native '
+                           'matched pair is duplicated precisely for the band ground-truth boxes that admit a '
+                           'legitimate extra box, so the appended set, its count, the normalisation and the loss '
+                           'coefficients agree between the arms; loss values, gradient magnitudes and '
+                           'appended-pair regression quality are NOT claimed equal) and A2 the tiny-band extra '
+                           'positive pair (one admissible unmatched box per tiny-band ground-truth box, '
+                           'regression only; the appended box keeps its native classification objective). '
+                           'Reporting only: A2-A0 is the practical single-seed net benefit at this starting '
+                           'point and this short schedule; A2-A1 compares supervising an additional real, '
+                           'geometrically supported box against duplicating the supervision of the original '
+                           'matched box on the same appended set; A1-A0 reports the duplicated-supervision '
+                           'effect alone. Training-period band counts are matched-pair observation counts '
+                           'recorded per family and per criterion call, reported separately per arm by the '
+                           'closeout audit scan, not independent ground-truth counts. This fixed experiment '
+                           'answers the net benefit and the A2-A1 increment only: it does not determine an '
+                           'optimal tau or an optimal append count, and the family decomposition is descriptive, '
+                           'not a causal attribution. Every arm is also compared against the certified parent, '
+                           'and the retrained native A0 is compared against the original G0 readout of the same '
+                           'recipe (that readout difference is an EMA-C versus EMA-R endpoint difference, '
+                           'EXPLORATION_R1.md section 21.7). No selection, no tuning.')}
     publish(out/'COMPARISON.json',comparison)
     table=io.StringIO();writer=csv.writer(table);writer.writerow(['comparison','budget','metric','delta_pp'])
     for name,_,_ in pairs:

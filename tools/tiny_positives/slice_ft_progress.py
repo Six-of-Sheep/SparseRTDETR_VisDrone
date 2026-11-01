@@ -4,7 +4,7 @@ from pathlib import Path
 from ..localization import channel
 from ..localization.runio import require,read,reference,digest,event,publish
 
-PROTOCOL='r18-tiny-positives-full-execution-v1'
+PROTOCOL='r18-tiny-positives-full-execution-v2'
 ARMS=('A0','A1','A2')
 EMAS=('C',)
 EVALUATION_ORDER=[(a,'A',z) for a in ARMS for z in (600,300)]

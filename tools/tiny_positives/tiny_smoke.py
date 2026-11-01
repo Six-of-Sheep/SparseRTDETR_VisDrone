@@ -1,14 +1,16 @@
 """Real-engine synthetic smoke for the tiny-band extra-positive term (CPU only; CUDA hidden).
 
-For each mode (native / A1 mass control / A2 method) two real ``FineTuneEngine.train_window``
-updates run on fixed synthetic windows (128x128, batch 1 x 2 micro-batches of 2 images, FP32),
-one chain checkpoint is saved after the first update, restored into a freshly built engine and
-replayed against the recorded second update: the full state and RNG must be bitwise exact and the
-term state (the deterministic extra-pair counter) must continue identically.  The loss-key family
-must stay native (12/21: the extra positive pairs add no loss key), the observations must be
-recorded for every non-DN family of every arm, the native arm must add no extra pair at all, the
-A1 arm must duplicate exactly the native matched band pairs, and the A2 arm must account for every
-tiny-band ground-truth box (admitted + no admissible sibling == band ground truth).
+For each mode (native / A1 the native matched-pair duplicated-regression control / A2 method) two
+real ``FineTuneEngine.train_window`` updates run on fixed synthetic windows (128x128, batch 1 x 2
+micro-batches of 2 images, FP32), one chain checkpoint is saved after the first update, restored
+into a freshly built engine and replayed against the recorded second update: the full state and
+RNG must be bitwise exact and the term state (the deterministic extra-pair counter) must continue
+identically.  The loss-key family must stay native (12/21: the extra positive pairs add no loss
+key), the observations must be recorded for every non-DN family of every arm, the native arm must
+add no extra pair at all, the A1 and A2 arms must record the SAME admission-gate ledger and the
+same appended set on the same fixed update-1 windows (both arms share the gate and append nothing
+when it finds no candidate), and the A2 arm must account for every tiny-band ground-truth box
+(appended + no admissible sibling + native-pair miss == band ground truth).
 
 usage: <frozen python> -I tools/tiny_smoke.py --source-root <release>/source --out <dir>
 """
@@ -50,9 +52,12 @@ def observations(result):
             "pairs": sum(int(row["pos_pairs"]) for row in rows),
             "band_gt": sum(int(row["pos_band_gt"]) for row in rows),
             "band_pairs": sum(int(row["pos_band_pairs"]) for row in rows),
+            "extra_candidates": sum(int(row["pos_extra_candidates"]) for row in rows),
             "extra_pairs": sum(int(row["pos_extra_pairs"]) for row in rows),
             "band_gt_no_sibling": sum(int(row["pos_band_gt_no_sibling"]) for row in rows),
+            "extra_no_native": sum(int(row["pos_extra_no_native"]) for row in rows),
             "extra_iou_sum": sum(float(row["pos_extra_iou_sum"]) for row in rows),
+            "set_digests": [row["pos_extra_set_digest"] for row in rows],
             "modes": sorted({row.get("pos_extra_mode") for row in rows}, key=str)}
 
 
@@ -76,6 +81,7 @@ def main():
 
     config = Config(input_hw=(128, 128), physical_batch_size=1, amp_dtype="float32")
     report = {}
+    captured = {}
     for mode in ("A0", "A1", "A2"):
         started = time.monotonic()
         random.seed(0)
@@ -99,6 +105,7 @@ def main():
         inputs = windows(713)
         r1 = engine.train_window(inputs[0][0], inputs[0][1], capture=True)
         obs1 = observations(r1)
+        captured[mode] = obs1
         checks = {"mode": mode, "update1_keys": sorted(len(row) for row in r1["microbatch_losses"]),
                   "finite1": bool(r1["finite"])}
         cp = ft.save(engine, out / ("SMOKE-%s-C1.pth" % mode))
@@ -110,12 +117,15 @@ def main():
         checks["observations_recorded"] = obs["rows"] > 0 and obs1["rows"] > 0
         if mode == "A0":
             checks["native_adds_nothing"] = (obs["extra_pairs"] + obs1["extra_pairs"]) == 0 \
+                and (obs["extra_candidates"] + obs1["extra_candidates"]) == 0 \
                 and extras is None and obs["modes"] == [None]
         if mode == "A1":
-            checks["a1_duplicates_every_band_pair"] = (
-                (obs1["extra_pairs"] + obs["extra_pairs"]) == (obs1["band_pairs"] + obs["band_pairs"])
-                and (obs1["band_pairs"] + obs["band_pairs"]) > 0)
-            checks["a1_no_admission_ledger"] = (obs1["band_gt_no_sibling"] + obs["band_gt_no_sibling"]) == 0
+            checks["a1_gate_accounting"] = (
+                (obs1["extra_pairs"] + obs["extra_pairs"] + obs1["band_gt_no_sibling"] + obs["band_gt_no_sibling"]
+                 + obs1["extra_no_native"] + obs["extra_no_native"]) == (obs1["band_gt"] + obs["band_gt"])
+                and (obs1["extra_no_native"] + obs["extra_no_native"]) == 0
+                and (obs1["extra_candidates"] > 0) == (obs1["extra_pairs"] > 0)
+                and (obs["extra_candidates"] > 0) == (obs["extra_pairs"] > 0))
         if mode == "A2":
             checks["a2_accounts_for_every_band_gt"] = (
                 (obs1["extra_pairs"] + obs["extra_pairs"] + obs1["band_gt_no_sibling"] + obs["band_gt_no_sibling"])
@@ -123,6 +133,7 @@ def main():
             checks["a2_overlap_bar"] = obs1["extra_iou_sum"] >= 0.5 * obs1["extra_pairs"] \
                 and obs["extra_iou_sum"] >= 0.5 * obs["extra_pairs"]
             checks["a2_mode_recorded"] = obs["modes"] == ["A2"]
+            checks["a2_no_native_miss"] = (obs1["extra_no_native"] + obs["extra_no_native"]) == 0
         if extras is not None:
             checks["counter_matches_ledger"] = extras == obs1["extra_pairs"] + obs["extra_pairs"]
         checks["band_active"] = (obs1["band_pairs"] + obs["band_pairs"]) > 0
@@ -146,6 +157,14 @@ def main():
         report[mode] = {"sha256": hashlib.sha256(encoded.encode()).hexdigest(), "checks": checks}
         print(json.dumps({"status": "SMOKE-OK", "mode": mode, "band_pairs": obs1["band_pairs"] + obs["band_pairs"],
                           "extras": extras, "sha256": report[mode]["sha256"]}))
+    # A1 and A2 share the admission gate exactly: on the SAME update-1 windows (pre-fork the two
+    # arms see identical predictions) the gate ledger and the appended-set digest must coincide
+    gate_keys = ("band_gt", "band_pairs", "extra_candidates", "extra_pairs", "band_gt_no_sibling",
+                 "extra_no_native", "set_digests")
+    a1, a2 = captured["A1"], captured["A2"]
+    assert all(a1[key] == a2[key] for key in gate_keys), \
+        ("A1/A2 update-1 admission-gate ledger differs", {k: (a1[k], a2[k]) for k in gate_keys})
+    print(json.dumps({"status": "SMOKE-GATE-OK", "update1_gate": {k: a1[k] for k in gate_keys}}))
     assert not torch.cuda.is_initialized()
     print(json.dumps({"status": "SMOKE-ALL-OK", "modes": sorted(report)}))
 

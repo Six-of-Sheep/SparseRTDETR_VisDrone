@@ -2,22 +2,28 @@
 
 One pre-fixed micro-batch (pass-1 window 0, first 8 images, seed0, the production training
 transform) is run through the real model and criterion once per mode with gradients enabled: the
-native arm (no term), the A1 mass control and the A2 method.  Each mode records the loss family,
-the band activity (band ground-truth count, native matched band pairs, native band overlap and
-band native term sums), the extra-positive ledger (admitted pairs, admissible-sibling misses,
-extra overlap and extra term sums) and the gradient digest.
+native arm (no term), the A1 native matched-pair duplicated-regression control and the A2 method.
+Each mode records the loss family, the band activity (band ground-truth count, native matched
+band pairs, native band overlap and band native term sums), the extra-positive ledger
+(admissible instances, appended pairs, admissible-sibling misses, native-pair misses, appended
+overlap and appended term sums, the appended-set digest) and the gradient digest.
 
 ``--compare`` then asserts, against the native arm:
 
 1. the loss key family is identical and the differing keys are exactly the non-denoising
    ``loss_bbox`` and ``loss_giou`` keys (the matcher, VFL, DN families and every other key are
    bitwise equal);
-2. the extra positive set is non-empty on real inputs and obeys its own declared admission rule
-   (overlap bar, own-best-partner accounting: admitted + no-sibling == band ground truth);
-3. the additional regression mass equals the recorded extra term sums divided by the frozen
+2. the appended set is non-empty on real inputs and obeys the shared admission rule (overlap
+   bar, own-best-partner accounting: appended + no-sibling + native-pair-miss == band ground
+   truth; every band ground truth carries its one native matched pair);
+3. A1 and A2 share the gate exactly: per family the appended count, the admissible-instance
+   count, the no-sibling count and the appended-set digest coincide between the two arms on
+   the same outputs (the appended CONTENT differs by construction and is recorded, not
+   compared as equal quality);
+4. the additional regression mass equals the recorded appended term sums divided by the frozen
    normaliser with the criterion's own per-family weights (the augmented-set identity);
-4. the mechanism reaches the parameters (gradient digests differ from the native arm);
-5. the native arm records no extra pair at all.
+5. the mechanism reaches the parameters (gradient digests differ from the native arm);
+6. the native arm records no extra pair, no admissible instance and no digest.
 
 usage:
   <frozen python> -I tools/positives_check.py --source-root <release>/source --contract <c.json> --mode A0 --out <dir>/A0.json
@@ -102,11 +108,14 @@ def build_once(root, contract, mode):
                             "band_native_iou_sum": sum(float(row["pos_band_native_iou_sum"]) for row in rows),
                             "band_native_l1_sum": sum(float(row["pos_band_native_l1_sum"]) for row in rows),
                             "band_native_giou_sum": sum(float(row["pos_band_native_giou_sum"]) for row in rows),
+                            "extra_candidates": sum(int(row["pos_extra_candidates"]) for row in rows),
                             "extra_pairs": sum(int(row["pos_extra_pairs"]) for row in rows),
                             "band_gt_no_sibling": sum(int(row["pos_band_gt_no_sibling"]) for row in rows),
+                            "extra_no_native": sum(int(row["pos_extra_no_native"]) for row in rows),
                             "extra_iou_sum": sum(float(row["pos_extra_iou_sum"]) for row in rows),
                             "extra_l1_sum": sum(float(row["pos_extra_l1_sum"]) for row in rows),
                             "extra_giou_sum": sum(float(row["pos_extra_giou_sum"]) for row in rows),
+                            "set_digests": [row["pos_extra_set_digest"] for row in rows],
                             "modes": sorted({row.get("pos_extra_mode") for row in rows}, key=str)},
              "extras": 0 if term is None else int(term.state_dict()["extras"]),
              "gradient": {"parameters_with_gradient": len([1 for p in model.parameters() if p.grad is not None]),
@@ -197,15 +206,19 @@ def compare(args):
             raise SystemExit(("the armed arm did not report its own mode", mode, totals["modes"]))
         if totals["extra_pairs"] <= 0:
             raise SystemExit(("the mechanism is inert on the fixed real input window: no admissible "
-                              "extra positive was added", mode, totals))
-        if totals["extra_pairs"] + totals["band_gt_no_sibling"] != totals["band_gt"]:
+                              "extra positive was appended", mode, totals))
+        if (totals["extra_pairs"] + totals["band_gt_no_sibling"] + totals["extra_no_native"]
+                != totals["band_gt"]):
             raise SystemExit(("the admission accounting does not close", mode, totals))
-        if totals["extra_iou_sum"] < 0.5 * totals["extra_pairs"]:
+        if totals["extra_no_native"] != 0:
+            raise SystemExit(("a qualifying band ground truth carried no native matched pair", mode, totals))
+        if (totals["extra_candidates"] > 0) != (totals["extra_pairs"] > 0) \
+                or totals["extra_candidates"] < totals["extra_pairs"]:
+            raise SystemExit(("the admissible-instance count contradicts the appended count", mode, totals))
+        if any(int(row["pos_band_pairs"]) != int(row["pos_band_gt"]) for row in other["pos_rows"]):
+            raise SystemExit(("a tiny-band ground truth without its one native matched pair appeared", mode))
+        if mode == "A2" and totals["extra_iou_sum"] < 0.5 * totals["extra_pairs"]:
             raise SystemExit(("an admitted extra positive is below the pre-registered overlap bar", mode, totals))
-        if mode == "A1" and totals["extra_pairs"] != totals["band_pairs"]:
-            raise SystemExit(("A1 must add exactly one duplicate per native band pair", totals))
-        if mode == "A1" and totals["band_gt_no_sibling"] != 0:
-            raise SystemExit(("A1 must not report an admission ledger", totals))
         # the augmented-set identity: the added regression mass is the recorded extra sums divided
         # by the frozen normaliser under the criterion's own per-family weights
         # the augmented-set identity, per family key: the added regression mass of one family is the
@@ -232,6 +245,29 @@ def compare(args):
                                   observed, expected_delta))
         report[mode + "_added_mass_total"] = sum(implied.values()) / other["num_boxes"]
         report[mode + "_added_mass_per_key"] = {k: v / other["num_boxes"] for k, v in sorted(implied.items())}
+    # A1 and A2 share the admission gate exactly: on the same outputs the appended set, its
+    # count, the admissible-instance count, the no-sibling count and the appended-set digest
+    # must coincide per family; the appended CONTENT (and therefore the appended quality and the
+    # gradient) differs by construction and is recorded, never required to be equal
+    a1_rows, a2_rows = values["A1"]["pos_rows"], values["A2"]["pos_rows"]
+    if len(a1_rows) != len(a2_rows):
+        raise SystemExit(("the two armed modes recorded a different number of family rows",
+                          len(a1_rows), len(a2_rows)))
+    for r1, r2 in zip(a1_rows, a2_rows):
+        for key in ("head", "pos_band_gt", "pos_band_pairs", "pos_extra_candidates",
+                    "pos_extra_pairs", "pos_band_gt_no_sibling", "pos_extra_no_native",
+                    "pos_extra_set_digest"):
+            if r1[key] != r2[key]:
+                raise SystemExit(("A1/A2 appended-set gate differs", key, r1[key], r2[key]))
+    a1_totals, a2_totals = values["A1"]["pos_totals"], values["A2"]["pos_totals"]
+    for key in ("band_gt", "band_pairs", "extra_candidates", "extra_pairs", "band_gt_no_sibling",
+                "extra_no_native", "set_digests"):
+        if a1_totals[key] != a2_totals[key]:
+            raise SystemExit(("A1 and A2 do not share the admission gate", key,
+                              a1_totals[key], a2_totals[key]))
+    report["A1_A2_gate_consistent"] = True
+    report["A1_extra_iou_mean"] = a1_totals["extra_iou_sum"] / a1_totals["extra_pairs"]
+    report["A2_extra_iou_mean"] = a2_totals["extra_iou_sum"] / a2_totals["extra_pairs"]
     diffs = {mode: base["gradient"]["sha256"] != values[mode]["gradient"]["sha256"]
              for mode in ("A1", "A2")}
     if not all(diffs.values()):
@@ -240,6 +276,11 @@ def compare(args):
     report["a0_pos_totals"] = base["pos_totals"]
     if base["pos_totals"]["extra_pairs"] != 0 or base["extras"] != 0:
         raise SystemExit("the native arm must not add any extra positive")
+    if base["pos_totals"]["extra_candidates"] != 0 or base["pos_totals"]["extra_no_native"] != 0:
+        raise SystemExit("the native arm must not record any admissible instance")
+    if any(digest is not None for digest in base["pos_totals"]["set_digests"]):
+        raise SystemExit(("the native arm must not record an appended-set digest",
+                          base["pos_totals"]["set_digests"]))
     if base["pos_totals"]["modes"] != [None]:
         raise SystemExit(("the native arm must report no positives mode", base["pos_totals"]["modes"]))
     if base["pos_totals"]["band_pairs"] <= 0 or base["pos_totals"]["band_native_iou_sum"] <= 0.0:

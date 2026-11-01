@@ -2,12 +2,12 @@
 
 Problem.  The D1 diagnostic (EXPLORATION_R1.md section 4) measured the single-view tiny-object
 gap in this carrier: 57.9 percent of small ground-truth boxes (raw canvas area <= 1024 px^2)
-have no candidate box reaching IoU 0.75 anywhere in the pool, the small-band matcher IoU is
-compressed (median 0.7126 against 0.8823 medium and 0.9346 large), and among the 300 selected
-tokens 64 percent carry no unique match while a matched instance has on average 1.82 selected
-tokens at IoU >= 0.5 near it.  The one-to-one Hungarian matching therefore gives every tiny
-ground-truth box exactly ONE regression positive, and that single positive is the worst of all
-bands.  Two consecutive rounds reshaped what that single pair's penalty is (r18 geometry
+have no candidate box reaching IoU 0.75 anywhere in the pool, the small-band matcher
+matched-pair overlap is the most compressed of the three bands at the group median (0.7126
+against 0.8823 medium and 0.9346 large; this is a between-group median comparison, not a
+per-instance claim), and among the 300 selected tokens 64 percent carry no unique match while
+a matched instance has on average 1.82 selected tokens at IoU >= 0.5 near it.  The one-to-one
+Hungarian matching therefore gives every tiny ground-truth box exactly ONE regression positive.  Two consecutive rounds reshaped what that single pair's penalty is (r18 geometry
 replacement) or ranked the near-cut partners (r17 ranking term); both left the number of
 regression positives unchanged and both returned no net benefit.  The unaddressed quantity is
 the NUMBER of regression positives per tiny ground-truth box.
@@ -34,17 +34,28 @@ testable in-training prediction is therefore that the band's MATCHED pair (the t
 carry the detection) improves; the audit rows record the band's matched-pair IoU sum, the
 extra-pair IoU sum and both extra terms' magnitudes on every criterion call.
 
-Control (arm A1).  Identical plumbing and identical extra-pair COUNT, but the extra pair is the
-band ground-truth box's OWN matched query with its own target: the native band regression
-contribution is added a second time.  Same normalisation, same keys, no new geometric
-information and no wrong supervision; A2 - A1 isolates the information in choosing an
-additional real, geometrically supported box.
+Control (arm A1, the native matched-pair duplicated-regression control).  A1 shares A2's
+admission gate exactly: for every tiny-band ground-truth box that admits a legitimate extra
+box, A1 appends that box's OWN native matched pair instead, so on the same outputs the
+appended instance set, its count, the normalisation (num_boxes) and the loss coefficients are
+identical to A2, and neither arm appends when the gate finds no candidate.  The contrast
+therefore compares supervising an additional real, geometrically supported box against
+duplicating the supervision of the original matched box; it does NOT claim equal loss values,
+gradient magnitudes or regression quality between the arms.  Registered fact: the appended box
+under A2 is an unmatched query that keeps its native classification objective (background);
+the mechanism adds and changes no classification supervision, and the appended instance itself
+is not trained to become a detection.
 
 Observation (all arms, including the unarmed native arm): per criterion call the term family
 records ``pos_pairs``, ``pos_band_gt``, ``pos_band_pairs``, ``pos_band_zero_iou``,
-``pos_band_native_iou_sum``, ``pos_extra_pairs``, ``pos_band_gt_no_sibling``,
-``pos_extra_iou_sum``, ``pos_extra_l1_sum`` and ``pos_extra_giou_sum`` into the frozen
-diagnostics rows (value-only, no-grad; the arithmetic is untouched).
+``pos_band_native_iou_sum``, ``pos_extra_candidates`` (admissible instances before the
+one-per-box pick), ``pos_extra_pairs``, ``pos_band_gt_no_sibling``, ``pos_extra_no_native``,
+``pos_extra_iou_sum``, ``pos_extra_l1_sum``, ``pos_extra_giou_sum`` and
+``pos_extra_set_digest`` into the frozen diagnostics rows (value-only, no-grad; the arithmetic
+is untouched).  Count semantics: every ``pos_*`` count is a matched-pair/instance OBSERVATION
+count per family and per criterion call (one ground-truth box contributes once per family per
+call), not an independent ground-truth count; after the training fork each arm's counts come
+from its own run and are reported separately.
 """
 from __future__ import annotations
 
@@ -133,46 +144,67 @@ def observation(pred_pairs, target_pairs, module, band_gt_count):
 def extra_pairs(mode, pred, target, matched_src, matched_tgt, module):
     """The declared extra positive pairs for one image; deterministic, no RNG.
 
-    A2: one admissible unmatched query per tiny-band ground-truth box (highest overlap, with
-    the pre-registered overlap bar and own-best-partner requirement).
-    A1: the tiny-band matched pair duplicated (count-matched mass control).
+    Both armed modes share the SAME admission gate, computed once here: a tiny-band
+    ground-truth box qualifies when at least one unmatched query reaches IOU_TAU with it and
+    this ground-truth box is that query's own best-overlapping partner.
+
+    A2: append the qualifying query with the highest overlap with that ground-truth box.
+    A1 (the native matched-pair duplicated-regression control): append that ground-truth box's
+    OWN native matched pair every time the gate qualifies it; the appended set, its count, the
+    normalisation and the loss coefficients are therefore identical to A2 on the same outputs,
+    and neither arm appends anything when the gate finds no candidate.  A1's appended instances
+    carry the native pair's own (possibly low) regression quality; this control does not claim
+    equal loss values, gradient magnitudes or regression quality against A2.
+
     Returns (src_idx, tgt_idx, ledger) with int64 index tensors into this image's queries.
     """
     require(mode in ("A1", "A2"), "unknown tiny-positives mode: " + str(mode))
     device = pred.device
     empty = torch.zeros(0, dtype=torch.int64, device=device)
     band = band_mask(target)
-    ledger = {"pos_extra_pairs": 0, "pos_band_gt_no_sibling": 0, "pos_extra_iou_sum": 0.0,
-              "pos_extra_l1_sum": 0.0, "pos_extra_giou_sum": 0.0,
+    ledger = {"pos_extra_pairs": 0, "pos_extra_candidates": 0, "pos_band_gt_no_sibling": 0,
+              "pos_extra_no_native": 0, "pos_extra_iou_sum": 0.0, "pos_extra_l1_sum": 0.0,
+              "pos_extra_giou_sum": 0.0,
+              "pos_extra_set_digest": hashlib.sha256(b"").hexdigest()[:16],
               "pos_band_gt": int(band.sum().item())}
-    if pred.shape[0] == 0 or target.shape[0] == 0 or not bool(band.any()):
-        return empty, empty, ledger
-    if mode == "A1":
-        keep = band[matched_tgt]
-        src, tgt = matched_src[keep], matched_tgt[keep]
-    else:
+    src, tgt = empty, empty
+    if pred.shape[0] and target.shape[0] and bool(band.any()):
         iou = _safe_iou(module, pred, target)
         best_gt = iou.argmax(dim=1)
         unmatched = torch.ones(pred.shape[0], dtype=torch.bool, device=device)
         unmatched[matched_src] = False
-        picks, targets = [], []
+        native_of = {int(t): int(s) for s, t in zip(matched_src.tolist(), matched_tgt.tolist())} \
+            if mode == "A1" else {}
+        picks, targets, appended = [], [], []
         for j in torch.nonzero(band, as_tuple=False).flatten().tolist():
             eligible = unmatched & (iou[:, j] >= IOU_TAU)
             if REQUIRE_BEST_GT:
                 eligible = eligible & (best_gt == j)
+            ledger["pos_extra_candidates"] += int(eligible.sum().item())
             if not bool(eligible.any()):
                 ledger["pos_band_gt_no_sibling"] += 1
                 continue
-            rows = torch.nonzero(eligible, as_tuple=False).flatten()
-            picks.append(rows[int(iou[rows, j].argmax().item())])
+            if mode == "A1":
+                native = native_of.get(j)
+                if native is None:
+                    # structurally unreachable under the frozen one-to-one matcher (every
+                    # ground truth carries exactly one native pair); recorded, never silently
+                    # dropped
+                    ledger["pos_extra_no_native"] += 1
+                    continue
+                picks.append(native)
+            else:
+                rows = torch.nonzero(eligible, as_tuple=False).flatten()
+                picks.append(int(rows[int(iou[rows, j].argmax().item())]))
             targets.append(j)
+            appended.append(j)
         if picks:
-            src = torch.stack(picks).to(torch.int64)
+            src = torch.tensor(picks, dtype=torch.int64, device=device)
             tgt = torch.tensor(targets, dtype=torch.int64, device=device)
-        else:
-            src, tgt = empty, empty
+        ledger["pos_extra_set_digest"] = hashlib.sha256(
+            ",".join(str(j) for j in appended).encode()).hexdigest()[:16]
     if src.numel():
-        iou_e = _safe_iou(module, pred, target)[src, tgt]
+        iou_e = iou[src, tgt]
         l1, giou = _pair_terms(pred[src], target[tgt], module)
         ledger.update({"pos_extra_pairs": int(src.numel()),
                        "pos_extra_iou_sum": float(iou_e.sum().item()),
@@ -181,11 +213,25 @@ def extra_pairs(mode, pred, target, matched_src, matched_tgt, module):
     return src, tgt, ledger
 
 
+def _combine_digest(left, right):
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return hashlib.sha256(("%s|%s" % (left, right)).encode()).hexdigest()[:16]
+
+
 def accumulate(ledger, row):
-    """Sum one image's ledger into an accumulated ledger (all keys are additive)."""
+    """Sum one image's ledger into an accumulated ledger; the set digest combines pair-wise."""
     if ledger is None:
         return dict(row)
-    return {k: (ledger[k] + row[k]) for k in ledger}
+    out = {}
+    for key in ledger:
+        if key == "pos_extra_set_digest":
+            out[key] = _combine_digest(ledger[key], row[key])
+        else:
+            out[key] = ledger[key] + row[key]
+    return out
 
 
 def pair_tensors(outputs, targets, indices):
@@ -257,8 +303,9 @@ class TinyPositivesTerm:
 def observe_call(pred_pairs, target_pairs, module, band_gt_count, family="final", sink=None):
     """The unarmed observation path used by the patched criterion (native arms)."""
     stats = observation(pred_pairs, target_pairs, module, band_gt_count)
-    stats.update({"pos_extra_pairs": 0, "pos_band_gt_no_sibling": 0, "pos_extra_iou_sum": 0.0,
-                  "pos_extra_l1_sum": 0.0, "pos_extra_giou_sum": 0.0, "pos_extra_mode": None})
+    stats.update({"pos_extra_pairs": 0, "pos_extra_candidates": 0, "pos_band_gt_no_sibling": 0,
+                  "pos_extra_no_native": 0, "pos_extra_iou_sum": 0.0, "pos_extra_l1_sum": 0.0,
+                  "pos_extra_giou_sum": 0.0, "pos_extra_set_digest": None, "pos_extra_mode": None})
     if sink is not None:
         sink[family] = dict(stats)
     return stats

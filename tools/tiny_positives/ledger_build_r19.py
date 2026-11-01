@@ -88,7 +88,8 @@ def main():
                  "batches are 4 images; the planned ledger is 3 x 3648 training updates (21,888 forwards) + up to 4 "
                  "acceptance updates (8 forwards) + 3 x 155 inference forwards = 22,361; the positives term and the "
                  "second EMA add no model forward and no training-RNG draw; all stage wall seconds count toward the "
-                 "8 GPU-hour budget"),
+                 "8 GPU-hour budget; the positives observation counts in the acceptance cases are matched-pair/"
+                 "instance observation counts per family and per criterion call, not independent ground-truth counts"),
     }
     body = json.dumps(ledger, indent=1, ensure_ascii=False, sort_keys=True)
     out.write_bytes(body.encode("utf-8"))
