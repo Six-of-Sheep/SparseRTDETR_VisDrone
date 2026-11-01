@@ -94,12 +94,13 @@ def main():
 
     # 4. overlap bar: a query just below the bar is not admitted, and the admissible one wins
     q_bar = torch.cat([near, low, far, big])
-    src_bar, tgt_bar, ledger_bar = tp.extra_pairs("A2", q_bar, gt, indices[0][0], indices[0][1], module)
+    bar_idx = (torch.tensor([0, 3]), torch.tensor([0, 1]))
+    src_bar, tgt_bar, ledger_bar = tp.extra_pairs("A2", q_bar, gt, bar_idx[0], bar_idx[1], module)
     check("A2.bar_rejects", src_bar.numel() == 0 and ledger_bar["pos_band_gt_no_sibling"] == 1, ledger_bar)
 
     # 5. own-best-partner rule: a query whose best ground truth is the out-of-band one is never used
     q_best = torch.cat([near, other, far, big])
-    src_best, tgt_best, ledger_best = tp.extra_pairs("A2", q_best, gt, indices[0][0], indices[0][1], module)
+    src_best, tgt_best, ledger_best = tp.extra_pairs("A2", q_best, gt, bar_idx[0], bar_idx[1], module)
     check("A2.own_best_partner", src_best.numel() == 0 and ledger_best["pos_band_gt_no_sibling"] == 1, ledger_best)
 
     # 6. A1 duplicates the native matched band pair
@@ -162,17 +163,22 @@ def main():
     total.backward()
     grad = qg.grad
     step = 1e-4
-    sign = []
+    pull = gt[0, :2] - q[1, :2]
+    direction = pull / float(pull.norm())
+    losses_probe = []
     for delta in (step, -step):
         probe = torch.cat([near, adm, low, other, far, big]).clone()
-        probe[1, 0] = probe[1, 0] + delta
-        probe[1, 1] = probe[1, 1] + delta
+        probe[1, :2] = probe[1, :2] + delta * direction
         outputs_p, _, _ = case(probe, gt, indices)
-        sign.append(float(sum(tp.TinyPositivesTerm("A2").loss_boxes(
+        losses_probe.append(float(sum(tp.TinyPositivesTerm("A2").loss_boxes(
             base, module, outputs_p, targets, indices, num_boxes, None, sink={}).values())))
-    check("gradient.extra_query_moves_towards_gt", sign[0] < sign[1] and float(grad[1].abs().sum()) > 0.0,
-          (sign, grad[1].tolist()))
-    check("gradient.autograd_sign_agrees", (float(grad[1, 0]) < 0.0) and (float(grad[1, 1]) < 0.0),
+    toward = float((grad[1, :2] * direction).sum())
+    check("gradient.extra_query_pulled_towards_gt",
+          toward > 0.0 and losses_probe[0] < losses_probe[1] and float(grad[1].abs().sum()) > 0.0,
+          (toward, losses_probe, grad[1].tolist()))
+    check("gradient.autograd_and_finite_difference_agree",
+          (toward > 0.0) == (losses_probe[0] < losses_probe[1]), (toward, losses_probe))
+    check("gradient.offset_is_central_axis_only", abs(float(grad[1, 1])) < abs(float(grad[1, 0])),
           grad[1].tolist())
     check("gradient.inert_queries_zero", float(grad[2].abs().sum()) == 0.0 and float(grad[3].abs().sum()) == 0.0
           and float(grad[4].abs().sum()) == 0.0, grad.tolist())
