@@ -515,7 +515,8 @@ def accept_ranking(c,out,holder):
             captured=getattr(e.criterion,'selection_rank',None)
             cache_before=None if captured is None else dict(captured._cache or {})
             model.train()
-            outputs=model(batch,targets=targets)
+            from ..baseline.training_v2b_engine import _move
+            outputs=model(batch.to(e.device),targets=_move(list(targets),e.device))
             cache=dict(captured._cache or {}) if captured is not None else {}
         require(captured is not None and set(cache)=={'pool_logits','pool_coord_unact','topk_indices'},
                 'FT acceptance ranking capture missing: '+label)
