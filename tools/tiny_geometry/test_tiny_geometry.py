@@ -199,6 +199,23 @@ def test_gradients():
     out3 = term3.loss_boxes(b3, Ops, o3, tg3, i3, n3, None, family="final")
     (out3["loss_bbox"] + out3["loss_giou"]).backward()
     check("grad.native_bitwise", torch.equal(g_native, o3["pred_boxes"].grad))
+    # exact-zero distance: the floored sqrt must keep the whole backward pass finite
+    pred4 = torch.tensor([[0.40, 0.40, 0.020, 0.020]])
+    tgt4 = torch.tensor([TINY])
+
+    def base4(outputs, targets, indices, num_boxes, boxes_weight=None):
+        p = outputs["pred_boxes"][0]
+        l1 = torch.nn.functional.l1_loss(p, tgt4, reduction="none").sum() / num_boxes
+        giou = torch.diag(Ops.generalized_box_iou(tg._xyxy(p), tg._xyxy(tgt4)))
+        return {"loss_bbox": l1, "loss_giou": (1 - giou).sum() / num_boxes}
+
+    outputs4 = {"pred_boxes": pred4.clone().unsqueeze(0).requires_grad_(True)}
+    term4 = tg.TinyGeometryTerm("A2")
+    out4 = term4.loss_boxes(base4, Ops, outputs4,
+                            [{"boxes": tgt4, "labels": torch.zeros(1, dtype=torch.long)}],
+                            [(torch.arange(1), torch.arange(1))], 1.0, None, family="final")
+    (out4["loss_bbox"] + out4["loss_giou"]).backward()
+    check("grad.zero_distance_finite", bool(torch.isfinite(outputs4["pred_boxes"].grad).all()))
 
 
 def test_state_and_deepcopy():

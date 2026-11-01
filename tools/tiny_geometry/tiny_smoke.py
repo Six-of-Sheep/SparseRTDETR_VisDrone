@@ -28,8 +28,10 @@ def make_targets():
     box = {"ignore_union": torch.empty(0, 4, dtype=torch.float64),
            "ignore_class_boxes": torch.empty(0, 4, dtype=torch.float64),
            "ignore_class_labels": torch.empty(0, dtype=torch.int64)}
-    first = {"boxes": torch.tensor([[0.40, 0.40, 0.02, 0.02], [0.60, 0.60, 0.30, 0.30]]),
-             "labels": torch.tensor([1, 2]), "gt_ids": ["synthetic/tiny", "synthetic/big"], **box}
+    first = {"boxes": torch.tensor([[0.40, 0.40, 0.02, 0.02], [0.30, 0.60, 0.02, 0.02],
+                                    [0.60, 0.60, 0.30, 0.30]]),
+             "labels": torch.tensor([1, 2, 3]),
+             "gt_ids": ["synthetic/tiny-a", "synthetic/tiny-b", "synthetic/big"], **box}
     second = {"boxes": torch.empty(0, 4), "labels": torch.empty(0, dtype=torch.int64),
               "gt_ids": [], **box}
     return [first, second]
@@ -102,7 +104,8 @@ def main():
         obs1 = observations(r1)
         draws_after = None if term is None else int(term.state_dict()["draws"])
         if mode == "A1":
-            checks["draw_ledger"] = draws_after == obs["shifted_calls"] + obs1["shifted_calls"]
+            checks["draw_ledger"] = (draws_after == obs["shifted_calls"] + obs1["shifted_calls"]
+                                     and draws_after >= 1)
         if mode == "A2":
             checks["no_draw"] = draws_after == 0 and obs["shifted_calls"] == 0
         if mode == "A0":

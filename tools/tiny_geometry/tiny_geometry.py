@@ -47,11 +47,17 @@ BAND_AREA_THRESHOLD = BAND_AREA_PX / float(CANVAS_HW[0] * CANVAS_HW[1])
 # Frozen at the pre-registered calibration (geometry_probe.py, median-parity rule); the
 # chain refuses to run while this is None (slice_finetune.read_plan).
 CONSTANT_C = 0.005500852969014606
+# Declared numerical boundary: the exact-zero distance has an infinite sqrt derivative, so
+# W2 is floored at 1e-12 before the root (minimum s = 1e-6).  Without the floor the
+# backward pass through the out-of-band branch of torch.where multiplies the unselected
+# zero by inf and poisons every gradient.
+W2_FLOOR = 1e-12
 
 
 def constants():
     return {"objective": OBJECTIVE, "canvas_hw": list(CANVAS_HW), "band_area_px": BAND_AREA_PX,
-            "band_area_threshold": BAND_AREA_THRESHOLD, "constant_C": CONSTANT_C}
+            "band_area_threshold": BAND_AREA_THRESHOLD, "constant_C": CONSTANT_C,
+            "w2_floor": W2_FLOOR}
 
 
 def constants_sha256():
@@ -70,9 +76,15 @@ def _xyxy(boxes):
 
 
 def wasserstein_sqrt(pred, target):
-    """sqrt(W2) of the two Gaussian boxes N(c, diag((w/2)^2, (h/2)^2)); FP32, no clamps."""
+    """sqrt(W2) of the two Gaussian boxes N(c, diag((w/2)^2, (h/2)^2)); FP32.
+
+    W2 is floored at W2_FLOOR before the root (declared numerical boundary): the
+    exact-zero distance has an infinite sqrt derivative, and 0 * inf would poison the
+    backward pass through the unselected branch of ``torch.where``.
+    """
     d = pred - target
-    return torch.sqrt(d[..., 0] ** 2 + d[..., 1] ** 2 + 0.25 * (d[..., 2] ** 2 + d[..., 3] ** 2))
+    w2 = d[..., 0] ** 2 + d[..., 1] ** 2 + 0.25 * (d[..., 2] ** 2 + d[..., 3] ** 2)
+    return torch.sqrt(torch.clamp(w2, min=W2_FLOOR))
 
 
 def tiny_mask(target):
