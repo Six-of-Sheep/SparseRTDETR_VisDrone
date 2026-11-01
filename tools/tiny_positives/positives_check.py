@@ -208,24 +208,30 @@ def compare(args):
             raise SystemExit(("A1 must not report an admission ledger", totals))
         # the augmented-set identity: the added regression mass is the recorded extra sums divided
         # by the frozen normaliser under the criterion's own per-family weights
+        # the augmented-set identity, per family key: the added regression mass of one family is the
+        # recorded extra sums of that family divided by the frozen normaliser under the criterion's
+        # own weight for that loss name (the chain applies one weight per loss name to every
+        # family), and must equal that key's loss difference up to float summation order
         weight_keys = values[mode]["family_weights"]
-        implied = {"loss_bbox": 0.0, "loss_giou": 0.0}
+        implied = {}
         for row in other["pos_rows"]:
             for base_name, sum_key in (("loss_bbox", "pos_extra_l1_sum"), ("loss_giou", "pos_extra_giou_sum")):
-                if family_key(row["head"], base_name) not in base["losses"]:
-                    raise SystemExit(("no loss key for family head", row["head"], base_name))
+                key = family_key(row["head"], base_name)
+                if key not in base["losses"]:
+                    raise SystemExit(("no loss key for family head", row["head"], key))
                 weight = weight_keys.get(base_name)
                 if weight is None:
                     raise SystemExit(("no criterion weight for loss name", base_name,
                                       sorted(weight_keys)))
-                implied[base_name] += weight * float(row[sum_key])
-        for base_name in ("loss_bbox", "loss_giou"):
-            implied[base_name] /= other["num_boxes"]
-            observed = other["losses"][base_name] - base["losses"][base_name]
-            if abs(observed - implied[base_name]) > 1e-3 * max(1.0, abs(observed)):
-                raise SystemExit(("the augmented-set identity does not hold", mode, base_name,
-                                  observed, implied[base_name]))
-        report[mode + "_added_mass"] = implied
+                implied[key] = implied.get(key, 0.0) + weight * float(row[sum_key])
+        for key, total in sorted(implied.items()):
+            expected_delta = total / other["num_boxes"]
+            observed = other["losses"][key] - base["losses"][key]
+            if abs(observed - expected_delta) > 1e-4 * max(1e-3, abs(expected_delta)):
+                raise SystemExit(("the augmented-set identity does not hold", mode, key,
+                                  observed, expected_delta))
+        report[mode + "_added_mass_total"] = sum(implied.values()) / other["num_boxes"]
+        report[mode + "_added_mass_per_key"] = {k: v / other["num_boxes"] for k, v in sorted(implied.items())}
     diffs = {mode: base["gradient"]["sha256"] != values[mode]["gradient"]["sha256"]
              for mode in ("A1", "A2")}
     if not all(diffs.values()):
