@@ -569,14 +569,16 @@ def accept_geometry(c,out,holder):
         ledger=geo_ledger(r,draws_before,draws_after)
         if supervised:
             require(ledger['tiny_total']>0,'FT acceptance fixed window has no tiny matched pairs: '+case)
+            if arm=='A1':
+                require(ledger['draws_delta']==ledger['shifted_calls'] and ledger['shifted_calls']>=1,
+                        'FT acceptance A1 draw ledger differs: '+case)
+            else:
+                require(ledger['draws_delta']==0 and ledger['shifted_calls']==0,
+                        'FT acceptance non-A1 draws differ: '+case)
         else:
             require(ledger['pairs_total']==0 and ledger['tiny_total']==0,'FT acceptance empty supervision produced geometry pairs')
-        if arm=='A1':
-            require(ledger['draws_delta']==ledger['shifted_calls'] and ledger['shifted_calls']>=1,
-                    'FT acceptance A1 draw ledger differs: '+case)
-        else:
             require(ledger['draws_delta']==0 and ledger['shifted_calls']==0,
-                    'FT acceptance non-A1 draws differ: '+case)
+                    'FT acceptance empty supervision moved the draw ledger')
         checks={'case':case,'arm':arm,'supervised':supervised,'loss_key_counts':counts,
                 'empty_audit':empty_audit,'geo':ledger,
                 'gradient_norm_before_clip':r['gradient_norm_before_clip'],
