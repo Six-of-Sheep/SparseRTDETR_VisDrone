@@ -544,8 +544,11 @@ def accept_ranking(c,out,holder):
                 'index_gather_exact':index_exact,'owner_checks_recorded':bool(stats)}
 
     def one_case(case,arm,supervised,role):
-        e,runtime0,initial=construct(c,out,arm,'gpu_acceptance',holder) if runtime is None else \
-            construct(c,out,arm,'gpu_acceptance',holder,runtime=runtime)
+        nonlocal runtime
+        if runtime is None:
+            e,runtime,initial=construct(c,out,arm,'gpu_acceptance',holder)
+        else:
+            e,_,initial=construct(c,out,arm,'gpu_acceptance',holder,runtime=runtime)
         require(getattr(e.model.decoder,'_select_topk',None) is not None,'FT acceptance wrapper absent')
         windows=list(loader(c,arm,1,limit=1));require(len(windows)==1,'FT acceptance window count differs')
         x,t,tr=windows[0]
