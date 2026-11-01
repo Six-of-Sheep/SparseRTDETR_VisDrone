@@ -539,7 +539,7 @@ def accept_geometry(c,out,holder):
         x,t,tr=windows[0]
         targets=t;empty_audit=None
         if supervised:
-            r=update(c,out,arm,1,0,e,targets,tr,holder,role)
+            r=update(c,out,arm,1,0,e,x,targets,tr,holder,role)
         else:
             before=[len(row['gt_ids']) for row in t]
             targets=[{'boxes':row['boxes'][:0],'labels':row['labels'][:0],'raw_area':row['raw_area'][:0],
