@@ -189,7 +189,8 @@ def main():
     state_before = m["tensor_digest"](model.state_dict().items())
     rng_before = torch.random.get_rng_state()
     model.eval()
-    require(model.training is False and not torch.is_grad_enabled(), "the scan is not in read-only mode")
+    require(model.training is False, "the scan did not switch the model to read-only eval mode")
+    grad_enabled_before = torch.is_grad_enabled()
 
     term_a2 = m["sr"].SelectionRankTerm("A2", seed=0, k=300)
     term_a2.attach(model, criterion, consumer=m["geo"])
@@ -203,6 +204,7 @@ def main():
     eligible_histogram = {}
     with torch.no_grad():
         for position, index, image_id in FROZEN_ROWS:
+            require(not torch.is_grad_enabled(), "the scan is not running under no_grad")
             pixels, target, trace = dataset[(FROZEN_EPOCH, position, index)]
             require(trace["image_id"] == image_id, ("the loaded image differs from the frozen row", image_id))
             images, targets, traces = m["collate_window"]([(pixels, target, trace)])
@@ -268,6 +270,7 @@ def main():
             print("IMAGE", position, image_id[:12], row_a2["instances"], row_a2["pairs"],
                   row_a2["choice_space"], flush=True)
 
+    require(torch.is_grad_enabled() is grad_enabled_before, "the scan changed the global grad mode")
     state_after = m["tensor_digest"](model.state_dict().items())
     rng_after = torch.random.get_rng_state()
     require(state_after == state_before, "the scan changed model parameters or buffers")
@@ -306,6 +309,7 @@ def main():
                   "note": "A1 draws uniformly from the same eligible set with its own CPU generator"},
         "read_only_invariants": {"model_state_unchanged": True, "training_rng_unchanged": True,
                                  "no_parameter_gradients": True, "no_optimizer_or_ema_constructed": True,
+                                 "grad_disabled_during_the_scan": True, "grad_mode_restored": True,
                                  "cuda_initialized": False},
         "decision_rule": DECISION_RULE,
         "choice_space_observed": observed,
