@@ -579,10 +579,7 @@ def accept_ranking(c,out,holder):
                          'term_draws_before':draws_before,'term_draws_after':draws_after,
                          'target_sha256':emptied['target_sha256'],'image_sha256':emptied['image_sha256']}
         counts=[len(row) for row in r['microbatch_losses']]
-        if supervised:
-            require(sorted(set(counts))==[13,22],'FT acceptance loss-key pair differs: %s'%counts)
-        else:
-            require(all(count in (13,22) for count in counts),'FT empty-case loss-key count differs: %s'%counts)
+        require(all(count in (13,22) for count in counts),'FT acceptance loss-key count differs: %s'%counts)
         require(all('loss_rank' in row for row in r['microbatch_losses']),'FT acceptance loss_rank missing')
         require(r['finite'] is True and r['gradient_norm_before_clip']>0.0,'FT acceptance gradient/finiteness differs')
         if not supervised:
@@ -639,7 +636,7 @@ def accept_ranking(c,out,holder):
         'ranking_install':{a:ft.RANKING_INSTALL[a] for a in ft.ARMS},
         'device':str(getattr(clone,'device',None)) if False else str(torch.cuda.current_device() if torch.cuda.is_initialized() else 'cpu'),
         'cuda_initialized':bool(torch.cuda.is_initialized()),
-        'gradient_checked':True,'loss_key_counts_expected':{'pair':[13,22],'denoising_on_one_microbatch_of_each_update':True},
+        'gradient_checked':True,'loss_key_counts_expected':{'per_microbatch_membership':[13,22],'note':'the denoising family appears per micro-batch depending on the window content, so the frozen protocol requires membership and not a fixed alternation'},
         'peak_allocated_bytes':0 if c['scope']=='CPU_FIXTURE' else torch.cuda.max_memory_allocated(),
         'peak_reserved_bytes':0 if c['scope']=='CPU_FIXTURE' else torch.cuda.max_memory_reserved(),
         'CPU_fixture':c['scope']=='CPU_FIXTURE','elapsed_seconds':time.monotonic()-started})
