@@ -39,9 +39,10 @@ def construct(c,out,arm,scope,holder,runtime=None):
     config=Config(input_hw=(128,128),physical_batch_size=1,amp_dtype='float32') if fixture else Config()
     model,criterion,_=build(config,synthetic=True)
     mode=ft.ARM_INSTALL[arm]
+    from . import selection_rank_arm
     ranking=ft.RANKING_INSTALL.get(arm)
+    criterion.selection_rank_declaration=selection_rank_arm.declaration(ranking)
     if ranking is not None:
-        from . import selection_rank_arm
         selection_rank_arm.install(model,criterion,ranking)
     if fixture:
         initial=tensor_digest(model.state_dict().items());parent_sha='a'*64
