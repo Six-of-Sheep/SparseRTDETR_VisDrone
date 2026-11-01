@@ -170,10 +170,24 @@ def compare(args):
             raise SystemExit("loss key family differs between " + mode + " and A0")
         differing = sorted(key for key in base["losses"]
                            if abs(base["losses"][key] - other["losses"][key]) > 0.0)
-        if differing != expected:
-            raise SystemExit(("differing loss keys are not exactly the non-DN box slots",
-                              mode, differing, expected))
+        if not set(differing) <= set(expected):
+            raise SystemExit(("a loss key outside the non-DN box slots changed", mode,
+                              sorted(set(differing) - set(expected))))
+        affected = set()
+        for row in other["pos_rows"]:
+            if int(row["pos_extra_pairs"]) <= 0:
+                continue
+            for base_name in ("loss_bbox", "loss_giou"):
+                key = family_key(row["head"], base_name)
+                if key not in base["losses"]:
+                    raise SystemExit(("no loss key for family head", row["head"], key,
+                                      sorted(base["loss_keys"])))
+                affected.add(key)
+        if not affected or not affected <= set(differing):
+            raise SystemExit(("a family with extra positives did not change its box slots",
+                              mode, sorted(affected), differing))
         report[mode + "_differing_keys"] = differing
+        report[mode + "_affected_keys"] = sorted(affected)
         report[mode + "_pos_totals"] = other["pos_totals"]
         report[mode + "_extras"] = other["extras"]
         totals = other["pos_totals"]
@@ -198,10 +212,11 @@ def compare(args):
         implied = {"loss_bbox": 0.0, "loss_giou": 0.0}
         for row in other["pos_rows"]:
             for base_name, sum_key in (("loss_bbox", "pos_extra_l1_sum"), ("loss_giou", "pos_extra_giou_sum")):
-                key = family_key(row["head"], base_name)
-                weight = weight_keys.get(key)
+                if family_key(row["head"], base_name) not in base["losses"]:
+                    raise SystemExit(("no loss key for family head", row["head"], base_name))
+                weight = weight_keys.get(base_name)
                 if weight is None:
-                    raise SystemExit(("no criterion weight for family key", row["head"], key,
+                    raise SystemExit(("no criterion weight for loss name", base_name,
                                       sorted(weight_keys)))
                 implied[base_name] += weight * float(row[sum_key])
         for base_name in ("loss_bbox", "loss_giou"):
