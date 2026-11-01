@@ -172,12 +172,15 @@ def main():
         outputs_p, _, _ = case(probe, gt, indices)
         losses_probe.append(float(sum(tp.TinyPositivesTerm("A2").loss_boxes(
             base, module, outputs_p, targets, indices, num_boxes, None, sink={}).values())))
-    toward = float((grad[1, :2] * direction).sum())
+    # "pulled towards its ground truth" means the descent direction (-gradient) points along
+    # ``direction``, so the gradient projected on ``direction`` is negative, and a finite step
+    # along ``direction`` lowers the loss
+    align = float((grad[1, :2] * direction).sum())
     check("gradient.extra_query_pulled_towards_gt",
-          toward > 0.0 and losses_probe[0] < losses_probe[1] and float(grad[1].abs().sum()) > 0.0,
-          (toward, losses_probe, grad[1].tolist()))
-    check("gradient.autograd_and_finite_difference_agree",
-          (toward > 0.0) == (losses_probe[0] < losses_probe[1]), (toward, losses_probe))
+          align < 0.0 and losses_probe[0] < losses_probe[1] and float(grad[1].abs().sum()) > 0.0,
+          (align, losses_probe, grad[1].tolist()))
+    check("gradient.descent_direction_and_finite_difference_agree",
+          (align < 0.0) == (losses_probe[0] < losses_probe[1]), (align, losses_probe))
     check("gradient.offset_is_central_axis_only", abs(float(grad[1, 1])) < abs(float(grad[1, 0])),
           grad[1].tolist())
     check("gradient.inert_queries_zero", float(grad[2].abs().sum()) == 0.0 and float(grad[3].abs().sum()) == 0.0
@@ -205,7 +208,7 @@ def main():
           and arm.declaration("A2")["constants_sha256"] == tp.constants_sha256())
     criterion.tiny_positives = None
     installed = arm.install(model, criterion, "A2")
-    check("install.armed", arm.installed(criterion) and arm.assert_installed(model, criterion, "A2")
+    check("install.armed", arm.assert_installed(model, criterion, "A2")
           and installed.state_dict()["extras"] == 0)
     try:
         arm.install(model, criterion, "A1")
@@ -223,6 +226,7 @@ def main():
     engine = type("E", (), {})()
     engine.criterion = criterion
     engine.pos_mode = "A2"
+    check("install.engine_reports_installed", arm.installed(engine) is True)
     check("state.engine_round_trip", arm.state(engine)["term"] == installed.state_dict())
     try:
         arm.load(engine, None)
