@@ -53,12 +53,12 @@ class Ops:
 def make_case(pred_rows, tgt_rows):
     pred = torch.tensor(pred_rows, dtype=torch.float32)
     tgt = torch.tensor(tgt_rows, dtype=torch.float32)
-    outputs = {"pred_boxes": pred}
+    outputs = {"pred_boxes": pred.unsqueeze(0)}
     targets = [{"boxes": tgt, "labels": torch.zeros(len(tgt_rows), dtype=torch.long)}]
     indices = [(torch.arange(len(tgt_rows)), torch.arange(len(tgt_rows)))]
 
     def base(outputs, targets, indices, num_boxes, boxes_weight=None):
-        p = outputs["pred_boxes"]
+        p = outputs["pred_boxes"][0]
         l1 = torch.nn.functional.l1_loss(p, tgt, reduction="none").sum() / num_boxes
         giou = torch.diag(Ops.generalized_box_iou(tg._xyxy(p), tg._xyxy(tgt)))
         return {"loss_bbox": l1, "loss_giou": (1 - giou).sum() / num_boxes}
@@ -122,10 +122,10 @@ def test_in_band_replaces():
         [[0.42, 0.40, 0.024, 0.018]], [TINY])
     term = tg.TinyGeometryTerm("A2")
     out = term.loss_boxes(base, Ops, outputs, targets, indices, num, None, family="final")
-    expected = manual_small(outputs["pred_boxes"], tgt).sum() / num
+    expected = manual_small(pred, tgt).sum() / num
     check("band.replaced", abs(float(out["loss_giou"]) - float(expected)) < 1e-6,
           (float(out["loss_giou"]), float(expected)))
-    native_sum = manual_native(outputs["pred_boxes"], tgt).sum() / num
+    native_sum = manual_native(pred, tgt).sum() / num
     check("band.differs_from_native", abs(float(out["loss_giou"]) - float(native_sum)) > 1e-9)
     check("band.stats", term.last_stats["geo_tiny_pairs"] == 1 and term.last_stats["geo_shift"] is None)
 
@@ -136,8 +136,8 @@ def test_mixed_pairs():
     pred, tgt, outputs, targets, indices, num, base = make_case(pred_rows, tgt_rows)
     term = tg.TinyGeometryTerm("A2")
     out = term.loss_boxes(base, Ops, outputs, targets, indices, num, None, family="final")
-    small = manual_small(outputs["pred_boxes"][:1], tgt[:1])
-    native = manual_native(outputs["pred_boxes"], tgt)
+    small = manual_small(pred[:1], tgt[:1])
+    native = manual_native(pred, tgt)
     expected = (small.sum() + native[1]).item() / num
     check("mixed.aggregate", abs(float(out["loss_giou"]) - expected) < 1e-6)
 
@@ -152,9 +152,9 @@ def test_a1_shift():
     offset = term.last_stats["geo_shift"]
     check("a1.shift_recorded", offset in (1, 2), offset)
     rotated = tgt[torch.tensor([(i + offset) % 3 for i in range(3)])]
-    expected = manual_small(outputs["pred_boxes"], rotated).sum() / num
+    expected = manual_small(pred, rotated).sum() / num
     check("a1.rotated_targets", abs(float(out["loss_giou"]) - float(expected)) < 1e-6)
-    native = manual_native(outputs["pred_boxes"], tgt).sum() / num
+    native = manual_native(pred, tgt).sum() / num
     check("a1.differs_from_native", abs(float(out["loss_giou"]) - float(native)) > 1e-9)
 
 
@@ -168,11 +168,10 @@ def test_a1_singleton_and_empty():
     check("a1.singleton_equals_a2", torch.equal(out1["loss_giou"], out2["loss_giou"]))
     empty = make_case([[0.5, 0.5, 0.1, 0.1]], [[0.5, 0.5, 0.1, 0.1]])
     _, _, o, t, i, n, b = empty
-    t["boxes"] = t["boxes"][:0]
+    t[0]["boxes"] = t[0]["boxes"][:0]
     i = [(torch.empty(0, dtype=torch.long), torch.empty(0, dtype=torch.long))]
     term = tg.TinyGeometryTerm("A1")
-    out = term.loss_boxes(b, Ops, o, [{"boxes": t["boxes"][:0], "labels": torch.empty(0, dtype=torch.long)}],
-                          i, 1.0, None, family="final")
+    out = term.loss_boxes(b, Ops, o, t, i, 1.0, None, family="final")
     check("empty.zero", float(out["loss_giou"]) == 0.0 and term.draws == 0)
 
 
@@ -180,7 +179,7 @@ def test_gradients():
     pred_rows = [[0.42, 0.40, 0.024, 0.018], [0.50, 0.50, 0.40, 0.30]]
     tgt_rows = [TINY, BIG]
     pred, tgt, outputs, targets, indices, num, base = make_case(pred_rows, tgt_rows)
-    outputs["pred_boxes"] = pred.clone().requires_grad_(True)
+    outputs["pred_boxes"] = pred.clone().unsqueeze(0).requires_grad_(True)
     term = tg.TinyGeometryTerm("A2")
     out = term.loss_boxes(base, Ops, outputs, targets, indices, num, None, family="final")
     total = out["loss_bbox"] + out["loss_giou"]
@@ -189,12 +188,12 @@ def test_gradients():
     check("grad.finite", bool(torch.isfinite(g).all()) and float(g.abs().sum()) > 0)
     # outside the band the armed path must reproduce the native gradient bitwise
     p2, t2, o2, tg2, i2, n2, b2 = make_case([[0.50, 0.50, 0.40, 0.30]], [BIG])
-    o2["pred_boxes"] = p2.clone().requires_grad_(True)
+    o2["pred_boxes"] = p2.clone().unsqueeze(0).requires_grad_(True)
     nat = b2(o2, tg2, i2, n2)
     (nat["loss_bbox"] + nat["loss_giou"]).backward()
     g_native = o2["pred_boxes"].grad.clone()
     p3, t3, o3, tg3, i3, n3, b3 = make_case([[0.50, 0.50, 0.40, 0.30]], [BIG])
-    o3["pred_boxes"] = p3.clone().requires_grad_(True)
+    o3["pred_boxes"] = p3.clone().unsqueeze(0).requires_grad_(True)
     term3 = tg.TinyGeometryTerm("A2")
     out3 = term3.loss_boxes(b3, Ops, o3, tg3, i3, n3, None, family="final")
     (out3["loss_bbox"] + out3["loss_giou"]).backward()

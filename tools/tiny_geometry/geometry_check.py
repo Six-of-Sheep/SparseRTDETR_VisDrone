@@ -68,7 +68,8 @@ def build_once(root, contract, mode):
     torch.manual_seed(20261101)
     outputs = model(batch, targets=subset)
     losses = criterion(fp32_outputs(outputs), subset)
-    rows = [row for diag in criterion.last_diagnostics for row in diag if "geo_pairs" in row]
+    rows = [row for row in criterion.last_diagnostics
+            if isinstance(row, dict) and "geo_pairs" in row]
     total = sum(losses.values())
     total.backward()
     digest = tensor_digest((name, p.grad) for name, p in model.named_parameters() if p.grad is not None)
