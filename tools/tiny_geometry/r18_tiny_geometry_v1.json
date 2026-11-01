@@ -12,9 +12,9 @@
     "objective": "tiny_band_normalized_wasserstein_geometry_v1",
     "canvas_hw": [768, 1344],
     "band_area_px": 1024.0,
-    "band_area_threshold": 0.0009920634920634921,
-    "constant_C": null,
-    "constants_sha256": null,
+    "band_area_threshold": 0.000992063492063492,
+    "constant_C": 0.005500852969014606,
+    "constants_sha256": "af8d40c6e586ba3ee4c9b11b695588e25861784d82e8dc9054afdb79068a43ff",
     "calibration": "pre-registered median-parity rule on the fixed 16 train-side images (pass-1 windows 0..1, seed0, parent state, eval-mode CPU-FP32 forward) via tools/geometry_probe.py; constant_C and constants_sha256 are filled once and never tuned"
   },
   "checkpoint_passes": [0, 6, 12],

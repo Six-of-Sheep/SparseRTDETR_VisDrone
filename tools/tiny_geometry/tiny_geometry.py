@@ -46,7 +46,7 @@ BAND_AREA_PX = 1024.0
 BAND_AREA_THRESHOLD = BAND_AREA_PX / float(CANVAS_HW[0] * CANVAS_HW[1])
 # Frozen at the pre-registered calibration (geometry_probe.py, median-parity rule); the
 # chain refuses to run while this is None (slice_finetune.read_plan).
-CONSTANT_C = None
+CONSTANT_C = 0.005500852969014606
 
 
 def constants():

@@ -89,7 +89,7 @@ class FixtureTrain(torch.utils.data.Dataset):
     def __getitem__(self,index):
         from PIL import Image
         pos=self.start*2+index
-        raw=parse_raw(b'30,30,20,25,1,1,0,0\n90,20,20,20,0,0,0,0\n' if pos%2==0 else b'','cpu-ft-'+str(pos))
+        raw=parse_raw(b'30,30,20,25,1,1,0,0\n8,8,4,4,1,2,0,0\n40,10,4,4,1,3,0,0\n90,20,20,20,0,0,0,0\n' if pos%2==0 else b'','cpu-ft-'+str(pos))
         x,t,tr=ft.Transform(self.arm,(128,128))(Image.fromarray(np.full((128,128,3),90+pos,np.uint8)),raw,
                     epoch=self.epoch,position=pos,image_id='cpu-ft-'+str(pos))
         tr['spawn_observer']={'pid':os.getpid(),'CUDA_initialized':torch.cuda.is_initialized()}
