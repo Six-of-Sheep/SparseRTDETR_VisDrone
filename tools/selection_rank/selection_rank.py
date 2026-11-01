@@ -32,6 +32,11 @@ top-k indices of the same forward: ``owner_pool = topk_indices[query]``.
                        module is installed, and the decoder's wrapper references the
                        term: the copy carries its own term (same identity, draws and
                        generator state) through an explicit ``__deepcopy__``
+    device contract    every created tensor follows the pool logits' device; the term has no
+                       parameter or buffer, so installation is device order independent
+    recorded evidence  per image: the selected top-k token set and the owner/partner legality
+                       checks (owner unique, in range, and, in the production path, selected;
+                       partner never a selected token and never an owner)
 
 FROZEN BEFORE LAUNCH (declared, never tuned on results)
 ------------------------------------------------------
@@ -96,6 +101,8 @@ DECLARATION = {
     },
     "control_A1": "identical eligibility/dedup/count/margin/loss; the partner is drawn uniformly from the eligible set with a per-term torch.Generator whose state is saved and restored with the checkpoint",
     "method_A2": "identical eligibility/dedup/count/margin/loss; the partner is the highest-q eligible token",
+    "device": "every mask, index, reduction and audit tensor is created on the device of the pool logits; the A1 draw uses a CPU torch.Generator and consumes no device RNG",
+    "recorded_per_image": "selected top-k token indices, eligible counts per instance, owners, and the owner/partner legality checks",
     "inference": "unchanged: same top-k rule, no module, no head, no parameter",
 }
 
@@ -116,7 +123,7 @@ def ranks_of(scores):
     _require(scores.dim() == 1, "ranks_of takes one token dimension")
     order = torch.argsort(scores, descending=True, stable=True)
     rank = torch.empty_like(order)
-    rank[order] = torch.arange(order.shape[0], dtype=order.dtype)
+    rank[order] = torch.arange(order.shape[0], dtype=order.dtype, device=order.device)
     return rank
 
 
@@ -360,7 +367,8 @@ class SelectionRankTerm:
                           if token not in pending["selected_tokens"]]
                 if not tokens:
                     continue
-                sub_rows = row.index_select(0, torch.tensor(tokens, dtype=torch.int64))
+                sub_rows = row.index_select(0, torch.tensor(tokens, dtype=torch.int64,
+                                                          device=row.device))
                 nonzero = torch.nonzero(sub_rows.abs() > 0.0)
                 audit["unselected_nonzero_truncated"] = bool(nonzero.shape[0] > 64)
                 for entry in nonzero[:64].tolist():
@@ -392,16 +400,22 @@ class SelectionRankTerm:
         constants = DECLARATION["constants"]
         scores = max_class_statistic(pool_logits)
         token_count, gt_count = pool_logits.shape[0], gt_boxes.shape[0]
+        selected_tokens = sorted(int(token) for token in topk[:self.k].tolist())
+        selected_set = set(selected_tokens)
         with torch.no_grad():
             rank = ranks_of(scores.detach())
-            selected = torch.zeros(token_count, dtype=torch.bool)
+            device = pool_logits.device
+            selected = torch.zeros(token_count, dtype=torch.bool, device=device)
             selected[topk[:self.k]] = True
-            matched_tokens = torch.zeros(token_count, dtype=torch.bool)
+            matched_tokens = torch.zeros(token_count, dtype=torch.bool, device=device)
             owner_of_gt = {}
             for token, gt in pairs:
                 token = int(token)
+                _require(0 <= token < token_count, 'owner token index is out of range')
                 matched_tokens[token] = True
                 owner_of_gt[gt] = token
+            _require(len(set(owner_of_gt.values())) == len(owner_of_gt),
+                     'two instances share the same owner token')
             coords = pool_coord.detach()
             if activate:
                 coords = torch.sigmoid(coords)
@@ -411,7 +425,7 @@ class SelectionRankTerm:
             if self._consumer is not None:
                 self._consumer.tensor("rank/quality", quality)
             areas_pool = (coords[:, 2] * coords[:, 3]).clamp_min(1e-12).detach()
-            size_error = torch.empty(token_count, gt_count)
+            size_error = torch.empty(token_count, gt_count, device=device)
             for g in range(gt_count):
                 area_g = float(gt_boxes[g, 2] * gt_boxes[g, 3])
                 _require(area_g > 0, "ground-truth box has no area")
@@ -423,7 +437,7 @@ class SelectionRankTerm:
                     continue
                 others = torch.cat([quality[:, :g], quality[:, g + 1:]], dim=1)
                 protected = ((others.max(dim=1).values <= constants["tau"]) if others.numel()
-                             else torch.ones(token_count, dtype=torch.bool))
+                             else torch.ones(token_count, dtype=torch.bool, device=device))
                 owner_quality = float(quality[owner_of_gt[g], g])
                 eligible[:, g] = (base & protected
                                   & (size_error[:, g] <= constants["B"])
@@ -463,10 +477,27 @@ class SelectionRankTerm:
                                "score_gap": gap, "quality_better": float(quality[partner, g]),
                                "active": bool(gap < margin)})
             records.append(record)
+        owner_tokens = set(owner_of_gt.values())
+        partner_tokens = [record["partner"] for record in records if record["partner"] is not None]
+        owner_checks = {"owners_unique": len(owner_tokens) == len(owner_of_gt),
+                        "owners_in_range": all(0 <= token < token_count for token in owner_tokens),
+                        "owners_selected": all(token in selected_set for token in owner_tokens),
+                        "partners_disjoint_from_selected": all(token not in selected_set
+                                                                for token in partner_tokens),
+                        "partners_disjoint_from_owners": all(token not in owner_tokens
+                                                              for token in partner_tokens)}
+        _require(owner_checks["owners_unique"] and owner_checks["owners_in_range"]
+                 and owner_checks["partners_disjoint_from_selected"]
+                 and owner_checks["partners_disjoint_from_owners"],
+                 ("illegal owner or partner in a pairing", owner_checks))
+        if activate:
+            _require(owner_checks["owners_selected"],
+                     "an owner token is not among the selected top-k tokens")
         info = {"gt": int(gt_count), "instances": len(owner_of_gt),
                 "pairs": sum(1 for record in records if record["partner"] is not None),
                 "choice_space": choice_space, "eligible_counts": eligible_counts,
-                "eligible": eligible_lists,
+                "eligible": eligible_lists, "selected": selected_tokens,
+                "owner_checks": owner_checks,
                 "owners": {int(g): int(token) for g, token in owner_of_gt.items()}}
         return records, info
 
