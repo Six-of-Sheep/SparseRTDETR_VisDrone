@@ -1,4 +1,4 @@
-"""Assemble the accurate r18 execution ledger (three geometry arms, one acceptance phase).
+"""Assemble the accurate r18 execution ledger (two geometry arms A0/A2, one acceptance phase).
 
 Read-only over published stage artifacts:
   python3 ledger_build_r18.py <job_root> <runtime_root> <out_ledger.json>
@@ -13,8 +13,8 @@ import json
 import sys
 from pathlib import Path
 
-ARMS = ("A0", "A1", "A2")
-PLANNED_FORWARDS = {"training": 2 * 3648 * 3, "acceptance": 6, "inference": 155 * 3}
+ARMS = ("A0", "A2")
+PLANNED_FORWARDS = {"training": 2 * 3648 * 2, "acceptance": 6, "inference": 155 * 2}
 GPU_HOURS_LIMIT = 8.0
 
 
@@ -85,8 +85,8 @@ def main():
         },
         "chain_exit": chain_exit,
         "note": ("batch forward = one model forward on one micro-batch (8 images) unless stated; endpoint inference "
-                 "batches are 4 images; the planned ledger is 3 x 3648 training updates (21,888 forwards) + 3 "
-                 "acceptance updates (6 forwards) + 3 x 155 inference forwards = 22,359; the geometry term and the "
+                 "batches are 4 images; the planned ledger is 2 x 3648 training updates (14,592 forwards) + up to 3 "
+                 "acceptance updates (6 forwards) + 2 x 155 inference forwards = 14,908; the geometry term and the "
                  "second EMA add no model forward and no training-RNG draw; all stage wall seconds count toward the "
                  "8 GPU-hour budget"),
     }

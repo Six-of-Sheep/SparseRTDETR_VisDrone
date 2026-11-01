@@ -32,7 +32,7 @@ from .model import CommonEMA
 from . import tiny_geometry_arm
 
 VERSION = 'r18-tiny-geometry-v1'
-ARMS = ('A0', 'A1', 'A2')
+ARMS = ('A0', 'A2')
 ARM_INSTALL = {'A0': None, 'A1': None, 'A2': None}
 GEO_INSTALL = {'A0': None, 'A1': 'A1', 'A2': 'A2'}
 UPDATES = 3648
@@ -69,10 +69,9 @@ def read_plan(path):
         raise ValueError('declared tiny-geometry constants differ')
     gates = p.get('gates') or {}
     if not isinstance(gates, dict) or not all(k in gates for k in
-            ('A2_minus_A0', 'A2_minus_A1', 'combination')):
+            ('A2_minus_A0', 'combination')):
         raise ValueError('declared gates differ')
-    if ((gates['A2_minus_A0'].get('lhs'), gates['A2_minus_A0'].get('rhs')) != ('A2', 'A0')
-            or (gates['A2_minus_A1'].get('lhs'), gates['A2_minus_A1'].get('rhs')) != ('A2', 'A1')):
+    if (gates['A2_minus_A0'].get('lhs'), gates['A2_minus_A0'].get('rhs')) != ('A2', 'A0'):
         raise ValueError('gate identity differs')
     if ((p.get('budget') or {}).get('gpu_hours') != 8.0 or (p.get('budget') or {}).get('wall_hours') != 24
             or (p.get('budget') or {}).get('server_new_bytes') != 25769803776):

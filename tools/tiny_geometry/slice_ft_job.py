@@ -491,19 +491,22 @@ def evaluation(c,out):
 
 
 def accept_geometry(c,out,holder):
-    """r18 engineering acceptance: exactly 3 optimizer updates covering A1, A2 and empty supervision.
+    """r18 engineering acceptance: exactly 3 optimizer updates covering A0, A2 and empty supervision.
 
-    Each case is an independent single-update sub-run built from the certified parent through the
-    frozen ``construct`` (which declares and installs the geometry arm before the model moves to
-    the device), so the acceptance state can never enter the formal training, which restarts from
-    the parent as well.  Per case: the production batch and precision configuration, every loss
-    finite, the native loss-key count (the geometry term adds no loss key), a nonzero finite
-    gradient norm, and the term's own observations recorded in the frozen diagnostics (pair and
-    tiny counts, native and applied sums, zero-IoU tiny count, shift).  The A1 case must consume
-    exactly one draw per shifted micro-batch and the A2 case none; the empty-supervision case must
-    record zero pairs and must not move the draw counter.  The A1 case also saves a chain
-    checkpoint and restores it into a fresh engine: the full state must be exact and the A1
-    generator state (counter and stream) must continue identically.
+    One launch, at most three unique optimizer updates in total.  Each case is an independent
+    single-update sub-run built from the certified parent through the frozen ``construct`` (which
+    declares and installs the geometry arm before the model moves to the device), so the
+    acceptance state can never enter the formal training, which restarts from the parent as well.
+    Per case: the production batch and precision configuration, every loss finite, the native
+    loss-key count (the geometry term adds no loss key), a nonzero finite gradient norm, and the
+    term's own observations recorded in the frozen diagnostics (pair and tiny counts, native and
+    applied sums, zero-IoU tiny count, shift).  The A0 case is native: no term object, applied
+    sums exactly equal to the native sums, no draws and no shift.  The A2 case is armed: the
+    applied sum on the tiny band differs from native, no draws and no shift; it also saves a
+    chain checkpoint and restores it into a fresh engine, where the full state must be exact and
+    the A2 term state (zero draws and its own generator state) must survive.  The
+    empty-supervision case runs under A2: zero pairs and no draw.  The retained cyclic-shift
+    control (A1) is not run on GPU in this round.
     """
     started=time.monotonic();runtime=None
 
@@ -532,9 +535,15 @@ def accept_geometry(c,out,holder):
             e,runtime,initial=construct(c,out,arm,'gpu_acceptance',holder)
         else:
             e,_,initial=construct(c,out,arm,'gpu_acceptance',holder,runtime=runtime)
-        term=e.criterion.tiny_geometry
-        require(term is not None and term.mode==arm,'FT acceptance geometry term missing: '+case)
-        draws_before=int(term.state_dict()['draws'])
+        mode=ft.GEO_INSTALL.get(arm)
+        term=getattr(e.criterion,'tiny_geometry',None)
+        if mode is None:
+            require(term is None and getattr(e,'geo_mode',None) is None,
+                    'FT acceptance native arm carries a geometry term: '+case)
+            draws_before=0
+        else:
+            require(term is not None and term.mode==arm,'FT acceptance geometry term missing: '+case)
+            draws_before=int(term.state_dict()['draws'])
         windows=list(loader(c,arm,1,limit=1));require(len(windows)==1,'FT acceptance window count differs')
         x,t,tr=windows[0]
         targets=t;empty_audit=None
@@ -562,19 +571,21 @@ def accept_geometry(c,out,holder):
                          'frozen_input_record_audit_applied':False,
                          'per_image_gt_before':before,'per_image_gt_after':[0 for _ in before],
                          'target_sha256':emptied['target_sha256'],'image_sha256':emptied['image_sha256']}
-        draws_after=int(term.state_dict()['draws'])
+        draws_after=0 if term is None else int(term.state_dict()['draws'])
         counts=[len(row) for row in r['microbatch_losses']]
         require(all(count in (12,21) for count in counts),'FT acceptance loss-key count differs: %s'%counts)
         require(r['finite'] is True and r['gradient_norm_before_clip']>0.0,'FT acceptance gradient/finiteness differs')
         ledger=geo_ledger(r,draws_before,draws_after)
         if supervised:
             require(ledger['tiny_total']>0,'FT acceptance fixed window has no tiny matched pairs: '+case)
-            if arm=='A1':
-                require(ledger['draws_delta']==ledger['shifted_calls'] and ledger['shifted_calls']>=1,
-                        'FT acceptance A1 draw ledger differs: '+case)
+            require(ledger['draws_delta']==0 and ledger['shifted_calls']==0,
+                    'FT acceptance supervised draws differ: '+case)
+            if mode is None:
+                require(ledger['native_sum']==ledger['applied_sum'],
+                        'FT acceptance native arm applied sum differs: '+case)
             else:
-                require(ledger['draws_delta']==0 and ledger['shifted_calls']==0,
-                        'FT acceptance non-A1 draws differ: '+case)
+                require(ledger['applied_sum']!=ledger['native_sum'],
+                        'FT acceptance armed arm applied sum equals native: '+case)
         else:
             require(ledger['pairs_total']==0 and ledger['tiny_total']==0,'FT acceptance empty supervision produced geometry pairs')
             require(ledger['draws_delta']==0 and ledger['shifted_calls']==0,
@@ -586,44 +597,42 @@ def accept_geometry(c,out,holder):
                 'parameter_device':str(next(e.model.parameters()).device)}
         return e,initial,checks
 
-    # case A1: supervised update, then the chain save/restore of the term state
-    e1,initial,checks_a1=one_case('A1','A1',True,'A1')
-    cp=save(e1,out,'C1-A1.pth')
-    expected_state=ft.capture(e1)
-    term_before=e1.criterion.tiny_geometry.state_dict()
-    scratch=torch.Generator();scratch.set_state(term_before['generator'])
-    next_draws=[int(torch.randint(2**31,(1,),generator=scratch).item()) for _ in range(2)]
-    holder.pop('engine');holder.pop('input',None);del e1;gc.collect()
+    # case A0: native supervised update (no term object; observations via the patched criterion)
+    e0,initial,checks_a0=one_case('A0','A0',True,'A0')
+    holder.pop('engine');holder.pop('input',None);del e0;gc.collect()
     if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
-    clone,_,initial2=construct(c,out,'A1','gpu_acceptance',holder,runtime=runtime)
+
+    # case A2: armed supervised update, then the chain save/restore of the term state
+    e2,_,checks_a2=one_case('A2','A2',True,'A2')
+    cp=save(e2,out,'C1-A2.pth')
+    expected_state=ft.capture(e2)
+    term_before=e2.criterion.tiny_geometry.state_dict()
+    holder.pop('engine');holder.pop('input',None);del e2;gc.collect()
+    if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
+    clone,_,initial2=construct(c,out,'A2','gpu_acceptance',holder,runtime=runtime)
     require(initial==initial2,'FT acceptance independent initial bytes differ')
     restored=ft.restore(clone,cp)
     require(native_state.exact_equal(expected_state,ft.capture(clone)),'FT acceptance full state/RNG restore mismatch')
     term_after=clone.criterion.tiny_geometry
-    require(term_after is not None and int(term_after.state_dict()['draws'])==int(term_before['draws']),
-            'FT acceptance A1 draw counter differs after restore')
+    require(term_after is not None and term_after.mode=='A2','FT acceptance A2 term missing after restore')
+    require(int(term_after.state_dict()['draws'])==int(term_before['draws'])==0,
+            'FT acceptance A2 draw counter differs after restore')
     require(torch.equal(term_after.state_dict()['generator'],term_before['generator']),
-            'FT acceptance A1 generator state differs after restore')
-    continued=[int(torch.randint(2**31,(1,),generator=term_after.generator).item()) for _ in range(2)]
-    require(continued==next_draws,('FT acceptance A1 stream does not continue identically',continued,next_draws))
-    checks_a1['restore']={'full_state_RNG_exact':bool(restored.get('full_state_RNG_exact')),
-                          'a1_state_restore_exact':True,'draws_continue_identically':True,
-                          'draws':int(term_before['draws'])}
+            'FT acceptance A2 generator state differs after restore')
+    checks_a2['restore']={'full_state_RNG_exact':bool(restored.get('full_state_RNG_exact')),
+                          'a2_state_restore_exact':True,'draws':int(term_before['draws'])}
     holder.pop('engine');holder.pop('input',None);del clone;gc.collect()
     if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
 
-    # case A2 and the empty-supervision case
-    e2,_,checks_a2=one_case('A2','A2',True,'A2')
-    holder.pop('engine');holder.pop('input',None);del e2;gc.collect()
-    if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
-    e3,_,checks_empty=one_case('empty','A1',False,'empty')
-    checks_empty['note']='empty supervision runs under the A1 arm; the term must contribute zero pairs and no draw'
+    # case empty: supervision emptied after augmentation, under the A2 arm
+    e3,_,checks_empty=one_case('empty','A2',False,'empty')
+    checks_empty['note']='empty supervision runs under the A2 arm; the term must contribute zero pairs and no draw'
     holder.pop('engine');holder.pop('input',None);del e3;gc.collect()
     if c['scope']=='PRODUCTION':torch.cuda.empty_cache()
 
     publish(out/'RESULT.json',{'status':'PASS','actual_updates':3,'sequence':[1,1,1],
-        'roles':['A1','A2','empty'],'cases':{'A1':checks_a1,'A2':checks_a2,'empty':checks_empty},
-        'initial_model_sha256':initial,'full_state_RNG_exact':True,'a1_state_restore_exact':True,
+        'roles':['A0','A2','empty'],'cases':{'A0':checks_a0,'A2':checks_a2,'empty':checks_empty},
+        'initial_model_sha256':initial,'full_state_RNG_exact':True,'a2_state_restore_exact':True,
         'single_arm_acceptance_state_usable_for_formal':False,'state_usable_for_formal':False,
         'geo_install':{a:ft.GEO_INSTALL[a] for a in ft.ARMS},
         'gradient_checked':True,
@@ -637,12 +646,12 @@ def accept_geometry(c,out,holder):
 
 
 def evaluation_tiny_geometry(c,out):
-    """r18 fixed-endpoint evaluation: EMA-C only, three arms, the plan's pre-registered gates.
+    """r18 fixed-endpoint evaluation: EMA-C only, two arms (A0 native, A2 method), the plan's pre-registered gates.
 
     Same scoring policy and budgets as the frozen chain (view A, batch 4, 548 development
     images, top600 primary and top300 secondary, FP32, no selection and no tuning).  Reports
-    the A2-A0 net-benefit gate and the A2-A1 correspondence increment gate declared in the plan,
-    plus A1-A0, every arm against the certified parent and the retrained native A0 against the
+    the A2-A0 net-benefit gate declared in the plan,
+    plus every trained arm against the certified parent and the retrained native A0 against the
     original G0 readout of the same recipe, then the verdict from the plan's combination rule.
     """
     from ..r0.evaluation import score_budget,POLICY
@@ -674,8 +683,8 @@ def evaluation_tiny_geometry(c,out):
         parent=copy.deepcopy(values[arms[0]]['A']);g0=copy.deepcopy(values[arms[0]]['A'])
     refs={'original_G0':g0,'parent':parent}
     side={arm:values[arm]['A'] for arm in arms};side['parent']=parent;side['G0REF']=g0
-    pairs=[('A2_minus_A0','A2','A0'),('A2_minus_A1','A2','A1'),('A1_minus_A0','A1','A0'),
-           ('A0_minus_parent','A0','parent'),('A1_minus_parent','A1','parent'),('A2_minus_parent','A2','parent'),
+    pairs=[('A2_minus_A0','A2','A0'),
+           ('A0_minus_parent','A0','parent'),('A2_minus_parent','A2','parent'),
            ('A0_minus_original_G0','A0','G0REF')]
     comparisons={}
     for name,lhs,rhs in pairs:
@@ -697,11 +706,10 @@ def evaluation_tiny_geometry(c,out):
         gate_rows[name]={'lhs':spec['lhs'],'rhs':spec['rhs'],'meaning':spec.get('meaning'),
                          'passed':bool(passed),'detail':detail}
     net=bool(gate_rows.get('A2_minus_A0',{}).get('passed',False))
-    inc=bool(gate_rows.get('A2_minus_A1',{}).get('passed',False))
     combination=gates.get('combination') if isinstance(gates.get('combination'),dict) else {}
-    verdict=(combination.get('both','initial_positive') if (net and inc) else
-             (combination.get('net_only','ranking_pressure_only') if net else
-              combination.get('net_fail','closed_fixed_config')))
+    verdict=(combination.get('pass','single_seed_preliminary_net_benefit') if net else
+             (combination.get('fail','closed_fixed_config') if net else
+              combination.get('fail','closed_fixed_config')))
     acc=execution.complete(c,execution.ACCEPTANCE_PHASE)
     endp={arm:execution.complete(c,'formal-%s'%arm) for arm in arms}
     inf={arm:execution.complete(c,'infer-%s-A-emaC'%arm) for arm in arms}
@@ -722,15 +730,17 @@ def evaluation_tiny_geometry(c,out):
        'verdict':verdict,'verdict_meaning':combination,'quality':verdict,'cost':costs,'cost_passed':cost_passed,
        'units':'point_scores0..1; deltas pp converted once','official_metrics_separate':metricrefs,
        'scope':'CPU_SYNTHETIC' if c['scope']=='CPU_FIXTURE' else 'seed0_development_exploratory',
-       'descriptive_note':('Three fixed arms from the same parent: A0 native, A1 the same tiny-band penalty with '
-                           'cyclically shifted tiny targets (correspondence destroyed), A2 the tiny-band normalized '
-                           'penalty with the true matched targets. Reporting only: A2-A0 is the overall net benefit, '
-                           'A2-A1 the increment from the true correspondence, A1-A0 the effect of the same-shape '
-                           'shifted-target pressure, and every arm is also compared against the certified parent; '
-                           'the retrained native A0 is also compared against the original G0 readout of the same '
-                           'recipe (that readout difference is an EMA-C versus EMA-R endpoint difference, '
-                           'EXPLORATION_R1.md section 21.7). No selection, no tuning, no attribution beyond the '
-                           'pre-registered gates.')}
+       'descriptive_note':('Two fixed arms from the same parent: A0 native and A2 the tiny-band '
+                           'normalized penalty with the true matched targets (practical initial screening '
+                           'of an NWD-style in-band regression replacement; no originality claim). '
+                           'Reporting only: A2-A0 is the single-seed net benefit at this starting '
+                           'point and this short schedule, and both arms are also compared against the '
+                           'certified parent; the retrained native A0 is also compared against the '
+                           'original G0 readout of the same recipe (that readout difference is an '
+                           'EMA-C versus EMA-R endpoint difference, EXPLORATION_R1.md section 21.7). '
+                           'The cyclic-shift control (A1) is retained as code and CPU evidence only '
+                           'and is not trained on GPU, so no increment gate is evaluated. No selection, '
+                           'no tuning, no attribution beyond the pre-registered gate.')}
     publish(out/'COMPARISON.json',comparison)
     table=io.StringIO();writer=csv.writer(table);writer.writerow(['comparison','budget','metric','delta_pp'])
     for name,_,_ in pairs:

@@ -5,7 +5,7 @@ from ..localization import channel
 from ..localization.runio import require,read,reference,digest,event,publish
 
 PROTOCOL='r18-tiny-geometry-full-execution-v1'
-ARMS=('A0','A1','A2')
+ARMS=('A0','A2')
 EMAS=('C',)
 EVALUATION_ORDER=[(a,'A',z) for a in ARMS for z in (600,300)]
 
@@ -57,7 +57,7 @@ def install():
                 self.clock['_ft_epoch']=ep+1
             elif k=='update_complete':
                 if mode.startswith('accept-'):
-                    seq=[(1,'A1'),(1,'A2'),(1,'empty')];i=self.clock.get('_ft_accept',0)
+                    seq=[(1,'A0'),(1,'A2'),(1,'empty')];i=self.clock.get('_ft_accept',0)
                     require(i<3 and (p['update'],p['role'])==seq[i],'FT acceptance fixed3 order')
                     self.clock['_ft_accept']=i+1
                 else:

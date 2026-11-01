@@ -8,8 +8,8 @@ from . import slice_ft_progress as progress
 TASK='r18-tiny-geometry-20261101-001'
 ROOT=Path(__file__).resolve().parents[3]
 ACCEPTANCE_PHASE='accept-geometry'
-PHASES=('accept-geometry','formal-A0','formal-A1','formal-A2','infer-A0-A-emaC',
-        'infer-A1-A-emaC','infer-A2-A-emaC','evaluation')
+PHASES=('accept-geometry','formal-A0','formal-A2','infer-A0-A-emaC',
+        'infer-A2-A-emaC','evaluation')
 
 
 def install():
@@ -69,7 +69,7 @@ def prerequisites(c,phase):
     for prev in PHASES[:PHASES.index(phase)]:
         result=complete(c,prev)
         if prev.startswith('accept-'):
-            require(result['actual_updates']==3 and result['sequence']==[1,1,1] and result['full_state_RNG_exact'] and result['a1_state_restore_exact'] and result['state_usable_for_formal'] is False,'FT acceptance gate not exact')
+            require(result['actual_updates']==3 and result['sequence']==[1,1,1] and result['full_state_RNG_exact'] and result['a2_state_restore_exact'] and result['state_usable_for_formal'] is False,'FT acceptance gate not exact')
 
 
 def identity(c,phase):

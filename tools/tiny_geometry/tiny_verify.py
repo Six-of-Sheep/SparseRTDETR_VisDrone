@@ -2,17 +2,17 @@
 
 usage: python3 tools/tiny_verify.py <job_root> <out_json>
 
-Scans every published update audit of the three formal arms, aggregates the declared
+Scans every published update audit of the two trained arms (A0 native, A2 method), aggregates the declared
 observation fields per arm and per family class (final / aux / enc / dn), checks internal
 consistency (the native arm records applied == native and no shifts; A2 records no shifts;
-A1 records at least one shifted call) and writes the summary the closeout receipt embeds.
+the A1 branch below is retained code from the three-arm preparation and is unreachable this round) and writes the summary the closeout receipt embeds.
 """
 import hashlib
 import json
 import sys
 from pathlib import Path
 
-ARMS = ("A0", "A1", "A2")
+ARMS = ("A0", "A2")
 
 
 def load(path):
@@ -75,7 +75,7 @@ def main():
                         "totals": totals, "per_family": per_family}
     body = json.dumps({"schema": "r18-tiny-geometry-training-signal-v1", "arms": summary,
                        "note": ("observation-only fields from the frozen audit stream; the native arm records "
-                                "applied == native, A1 additionally records its shift ledger, and the DN families "
+                                "applied == native, the A1 branch is retained but not trained this round, and the DN families "
                                 "carry no observations by declaration")},
                       indent=1, ensure_ascii=False, sort_keys=True)
     out.write_bytes(body.encode("utf-8"))
