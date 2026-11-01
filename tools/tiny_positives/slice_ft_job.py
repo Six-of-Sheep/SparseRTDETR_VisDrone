@@ -528,10 +528,13 @@ def accept_positives(c,out,holder):
                     and (row['pos_extra_set_digest'] is None or isinstance(row['pos_extra_set_digest'],str))
                     and row['pos_band_pairs']==row['pos_band_gt'] and row['pos_pairs']>=row['pos_band_pairs']>=0
                     for row in rows),'FT acceptance positives counts differ')
-        require(all(int(row['pos_extra_pairs'])+int(row['pos_band_gt_no_sibling'])+int(row['pos_extra_no_native'])
-                    ==int(row['pos_band_gt'])
-                    and (int(row['pos_extra_candidates'])>0)==(int(row['pos_extra_pairs'])>0)
-                    and int(row['pos_extra_candidates'])>=int(row['pos_extra_pairs'])
+        # native rows carry the all-zero convention fields (no ledger); the closure is an
+        # armed-row invariant only
+        require(all((row.get('pos_extra_mode') is None)
+                    or (int(row['pos_extra_pairs'])+int(row['pos_band_gt_no_sibling'])+int(row['pos_extra_no_native'])
+                        ==int(row['pos_band_gt'])
+                        and (int(row['pos_extra_candidates'])>0)==(int(row['pos_extra_pairs'])>0)
+                        and int(row['pos_extra_candidates'])>=int(row['pos_extra_pairs']))
                     for row in rows),'FT acceptance positives accounting differs')
         require(all(float(row['pos_extra_iou_sum'])>=0.0 and float(row['pos_extra_l1_sum'])>=0.0
                     and float(row['pos_extra_giou_sum'])>=0.0
@@ -605,7 +608,8 @@ def accept_positives(c,out,holder):
         if supervised:
             require(ledger['band_gt_total']>0,'FT acceptance fixed window has no tiny-band ground truth: '+case)
             if mode is None:
-                require(ledger['extra_pairs_total']==0 and ledger['modes']==[None],
+                require(ledger['extra_pairs_total']==0 and ledger['extra_candidates_total']==0
+                        and ledger['extra_no_native_total']==0 and ledger['modes']==[None],
                         'FT acceptance native arm added extra positives: '+case)
             elif mode=='A1':
                 require(ledger['modes']==['A1'],'FT acceptance A1 mode differs: '+case)
