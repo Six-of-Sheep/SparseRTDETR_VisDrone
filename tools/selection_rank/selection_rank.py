@@ -431,7 +431,7 @@ class SelectionRankTerm:
                 _require(area_g > 0, "ground-truth box has no area")
                 size_error[:, g] = (areas_pool / area_g).sqrt().log().abs()
             base = (~selected) & (~matched_tokens) & (rank <= int(math.ceil(constants["alpha"] * self.k)))
-            eligible = torch.zeros(token_count, gt_count, dtype=torch.bool)
+            eligible = torch.zeros(token_count, gt_count, dtype=torch.bool, device=device)
             for g in range(gt_count):
                 if g not in owner_of_gt:
                     continue
