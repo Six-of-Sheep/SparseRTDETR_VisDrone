@@ -176,6 +176,7 @@ def run_arm(args, plan, contract, model, device, batch_size):
     device_type = "cuda" if device.startswith("cuda") else "cpu"
 
     main_lists, secondary_lists, raw_q300, raw_new, timings, image_records = [], [], [], [], [], []
+    new_anchor_indices = []
     counters = {"A0_300_equals_600_prefix": 0, "A0_300_prefix_violations": 0,
                 "E600_mutated_main": 0, "E600_mutated_secondary": 0,
                 "captured_topk_mismatch_batches": 0}
@@ -243,6 +244,7 @@ def run_arm(args, plan, contract, model, device, batch_size):
                 secondary_list, displaced_secondary, _key = merge_arm(a0_secondary, kept,
                                                                       budget_secondary)
                 raw_new.append([logits600[j].clone(), boxes600[j].clone()])
+                new_anchor_indices.append(list(selection["anchors"][j]))
                 added_main = [e for e in main_list if e["source"] == "new_query"]
                 added_secondary = [e for e in secondary_list if e["source"] == "new_query"]
                 mutated = 0
@@ -324,9 +326,7 @@ def run_arm(args, plan, contract, model, device, batch_size):
                     "image_ids": [row["stable_image_id"] for row in rows],
                     "pred_logits": [item[0] for item in raw_new],
                     "pred_boxes": [item[1] for item in raw_new],
-                    "anchor_indices": [c["anchors"] for c in
-                                       [{"anchors": record["selection_counters"]}
-                                        for record in image_records]]}, out / "new-queries.pth")
+                    "anchor_indices": new_anchor_indices}, out / "new-queries.pth")
     torch.save({"schema": "r22_expand600_q300_v1", "arm": args.arm,
                 "image_ids": [row["stable_image_id"] for row in rows],
                 "pred_logits": torch.stack(raw_q300), "query_ids": torch.arange(NUM_QUERIES)},

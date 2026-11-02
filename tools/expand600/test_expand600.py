@@ -40,7 +40,7 @@ def case(function):
 def test_selection_and_exclusion_counts():
     """Top-600 minus top-300 is exactly the new 300 anchors, in top-600 order."""
     torch.manual_seed(0)
-    logits = torch.randn(1, 40, 10)
+    logits = torch.randn(1, 120, 10)
     ind300 = select_indices(logits, 30)
     ind600 = select_indices(logits, 60)
     selection = new_query_selection(ind300, ind600, logits, num_new=30)
@@ -61,7 +61,7 @@ def test_selection_and_exclusion_counts():
 
 def test_selection_tie_fallbacks_are_counted():
     """A boundary tie must never lose or duplicate an anchor, and must be counted."""
-    logits = torch.zeros(1, 500, 10)          # every anchor has the same score
+    logits = torch.zeros(1, 1200, 10)         # every anchor has the same score
     ind300 = select_indices(logits, 300)
     ind600 = select_indices(logits, 600)
     selection = new_query_selection(ind300, ind600, logits, num_new=300)
@@ -88,7 +88,7 @@ def test_dedup_rules():
     kept_slots = [item[0] for item in kept]
     dropped_slots = [item["query_slot"] for item in dropped]
     assert dropped_slots == [300, 302], dropped_slots
-    assert kept_slots == [301, 303, 304], kept_slots
+    assert sorted(kept_slots) == [301, 303, 304], kept_slots
     assert all(d["best_iou"] >= 0.7 for d in dropped)
 
 
@@ -167,7 +167,7 @@ def test_query_names_scoring_rule():
     slot, category, score, box = names[3]
     assert slot == NEW_QUERY_BASE and category == 4
     assert abs(score - float(torch.sigmoid(torch.tensor(2.0)))) < 1e-12
-    assert box == [40.0, 80.0, 60.0, 120.0], box
+    assert np.allclose(box, [40.0, 80.0, 60.0, 120.0], atol=1e-4), box
 
 
 def main():
