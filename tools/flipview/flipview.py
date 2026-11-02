@@ -83,6 +83,9 @@ def fuse_view_boxes(boxes_original, boxes_mirrored, width, height, mode="best",
             "expected four coordinates")
     require(boxes_original.shape == boxes_mirrored.shape, "the two views have different shapes")
     require(mode in PAIRING_MODES, "unknown pairing mode %r" % (mode,))
+    require(boxes_mirrored.shape[0] >= 2,
+            "the pairing needs at least two mirrored queries (the second-highest-overlap control is "
+            "undefined with fewer), got %d" % int(boxes_mirrored.shape[0]))
     with torch.no_grad():
         original = pixel_boxes(boxes_original, width, height)
         mirrored = pixel_boxes(boxes_mirrored, width, height)

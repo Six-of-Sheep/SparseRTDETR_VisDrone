@@ -19,7 +19,8 @@ from tools.flipview.flipview import (NUM_QUERIES, PAIRING_MODES, PARTNER_IOU, SM
                                      pixel_boxes, xyxy_to_cxcywh)
 
 W, H = 1024.0, 512.0                       # powers of two, so every constructed corner is exact
-CHECKS = 22
+CHECKS = 23
+DUMMY = [[900.0, 400.0, 903.0, 403.0]]     # a far-away third query, so every fixture has a second row
 
 
 def boxes_from_pixels(rows):
@@ -27,6 +28,11 @@ def boxes_from_pixels(rows):
     pixels = torch.tensor(rows, dtype=torch.float32)
     scale = torch.tensor([W, H] * 2, dtype=torch.float32)
     return xyxy_to_cxcywh(pixels / scale)
+
+
+def with_dummy(boxes):
+    """Append one far-away mirrored query: the module requires at least two candidates."""
+    return torch.cat((boxes, boxes_from_pixels(DUMMY)), dim=0)
 
 
 def boxes_to_pixels(boxes):
@@ -55,8 +61,8 @@ def main():
     # 2. exact area boundary: 1024 px is outside the small band, 992.25 px is inside
     small_in = boxes_from_pixels([[0, 0, 31.5, 31.5]])            # 992.25 px
     small_out = boxes_from_pixels([[0, 0, 32.0, 32.0]])           # 1024.0 px exactly
-    _f_in, mask_in, counters_in = fuse_view_boxes(small_in, small_in.clone(), W, H)
-    _f_out, mask_out, counters_out = fuse_view_boxes(small_out, small_out.clone(), W, H)
+    _f_in, mask_in, counters_in = fuse_view_boxes(small_in, with_dummy(small_in), W, H)
+    _f_out, mask_out, counters_out = fuse_view_boxes(small_out, with_dummy(small_out), W, H)
     passed += check("area_boundary_992_is_treated",
                     bool(mask_in[0]) and counters_in["treated_queries"] == 1)
     passed += check("area_boundary_1024_is_not_treated", not bool(mask_out[0]))
@@ -70,15 +76,20 @@ def main():
     passed += check("constructed_iou_is_exactly_half",
                     float(iou_matrix(boxes_to_pixels(original), boxes_to_pixels(at_threshold))[0, 0])
                     == 0.5)
-    _f_half, mask_half, _c_half = fuse_view_boxes(original, at_threshold, W, H)
-    _f_below, mask_below, _c_below = fuse_view_boxes(original, below, W, H)
+    _f_half, mask_half, _c_half = fuse_view_boxes(original, with_dummy(at_threshold), W, H)
+    _f_below, mask_below, _c_below = fuse_view_boxes(original, with_dummy(below), W, H)
     passed += check("threshold_is_inclusive_at_half", bool(mask_half[0]))
     passed += check("below_threshold_is_untouched", not bool(mask_below[0]))
+    try:
+        fuse_view_boxes(original, at_threshold, W, H)
+        passed += check("single_mirrored_query_is_refused", False)
+    except ValueError:
+        passed += check("single_mirrored_query_is_refused", True)
 
     # 4. the fusion is the arithmetic mean in pixel space
     a = boxes_from_pixels([[0, 0, 4, 4]])
     b = boxes_from_pixels([[1, 0, 5, 4]])                         # IoU 0.6
-    fused, mask, _c = fuse_view_boxes(a, b, W, H)
+    fused, mask, _c = fuse_view_boxes(a, with_dummy(b), W, H)
     expected = boxes_from_pixels([[0.5, 0.0, 4.5, 4.0]])
     passed += check("fusion_is_the_arithmetic_mean",
                     bool(mask[0]) and bool(torch.allclose(fused, expected, atol=1e-6)))
