@@ -15,6 +15,7 @@ usage: run_zoom_refine.py --plan <plan.json> --arm control|method|baseline --out
 """
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -99,6 +100,21 @@ def main():
         if loaded != contract["initial_model_sha256"]:
             raise SystemExit("cpu-parent initial model digest differs from the contract")
     else:
+        # certified CUDA admission: resource sample, boot/storage identity, then the
+        # deterministic backend policy is fixed before any CUDA initialization
+        from sparse_rtdetr.protocol_r18.control import install_resources
+        from sparse_rtdetr.localization import guard, worker as base
+        want = contract["gpu_uuid"]
+        if os.environ.get("CUDA_VISIBLE_DEVICES") != want:
+            raise SystemExit("CUDA_VISIBLE_DEVICES must equal the frozen GPU UUID at process startup")
+        if os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
+            raise SystemExit("CUBLAS_WORKSPACE_CONFIG must be :4096:8 at process startup")
+        install_resources()
+        sample = guard.snapshot(str(out))
+        (out / "resource-entry.json").write_text(json.dumps(sample, ensure_ascii=False) + "\n")
+        # the certified worker reads the fresh on-disk sample when no runtime channel is bound
+        admission = {k: v for k, v in contract.items() if k != "runtime_root"}
+        runtime = base.prepare_cuda(admission, out)
         model, _criterion = job.native_twin(contract, out)
         model = model.eval()
     digest_before = torch_state_digest(model)
