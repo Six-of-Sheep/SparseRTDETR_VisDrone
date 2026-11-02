@@ -274,6 +274,7 @@ def trim(predictions, budget):
 
 
 def summarize(rows):
+    """Per-arm aggregates; coverage and repair_share are reported as means, never sums."""
     if not rows:
         return {}
     keys = ("windows", "band_points", "covered", "coverage")
@@ -286,6 +287,9 @@ def summarize(rows):
             if k in source:
                 totals[k] += float(source[k])
     totals["n"] = len(rows)
+    for k in ("coverage", "repair_share"):
+        if k in totals:
+            totals[k] = totals[k] / len(rows)
     if "windows" in keys:
         windows = sum(len(r.get("windows", [])) for r in rows)
         totals["windows"] = windows
@@ -319,7 +323,7 @@ def score_only(plan, contract, out, ev):
     rows, parsed = data.records, [data.raw(r) for r in data.records]
     KEYS = ("AP", "AP50", "AP75", "APS", "APM", "APL", "AP75_small")
     scores, metrics_refs = {}, {}
-    for arm in ("A0", "A1", "A2"):
+    for arm in ("A0", "A0r", "A1", "A2"):
         scores[arm] = {}
         for budget in plan["evaluation"]["budgets"]:
             if arm == "A0":
@@ -327,14 +331,14 @@ def score_only(plan, contract, out, ev):
                 metrics = json.loads(ref.read_text())["COCO_bridge"]["metrics"]
                 metrics_refs[arm] = {str(budget): {"path": str(ref), "sha256": sha(ref)}}
             else:
-                name = "control" if arm == "A1" else "method"
-                path = out / f"arm-{name}" / f"pred-top{budget}.json"
-                preds = json.loads(path.read_text())
+                name = {"A0r": "baseline", "A1": "control", "A2": "method"}[arm]
+                directory = out / name
+                preds = json.loads((directory / f"pred-top{budget}.json").read_text())
                 metrics = ev.score_budget(rows, parsed, preds, root)["COCO_bridge"]["metrics"]
-                (out / f"arm-{name}" / f"metrics-top{budget}.json").write_text(json.dumps(metrics, indent=1))
+                (directory / f"metrics-top{budget}.json").write_text(json.dumps(metrics, indent=1))
             scores[arm][str(budget)] = {k: metrics[k] for k in KEYS}
     deltas = {}
-    for lhs, rhs in (("A2", "A0"), ("A2", "A1"), ("A1", "A0")):
+    for lhs, rhs in (("A2", "A0"), ("A2", "A1"), ("A1", "A0"), ("A0r", "A0")):
         deltas[f"{lhs}_minus_{rhs}"] = {b: {k: (scores[lhs][b][k] - scores[rhs][b][k]) * 100 for k in KEYS}
                                         for b in scores[lhs]}
     gates = plan["gates"]
@@ -351,7 +355,7 @@ def score_only(plan, contract, out, ev):
         return {"passed": ok, "detail": rows_out}
     costs = {"A0_seconds": None, "A1_seconds": None, "A2_seconds": None}
     for arm, name in (("A0", "baseline"), ("A1", "control"), ("A2", "method")):
-        result = out / f"arm-{name}" / f"RESULT-{name}.json"
+        result = out / name / f"RESULT-{name}.json"
         if result.is_file():
             costs[f"{arm}_seconds"] = json.loads(result.read_text())["timing_total_seconds"]
     comparison = {
