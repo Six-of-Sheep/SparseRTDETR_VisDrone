@@ -53,6 +53,102 @@ def case(q_boxes, gt_boxes, indices):
     return outputs, targets, indices
 
 
+
+def device_regression(device):
+    """Real native criterion arithmetic/gradients; no detector forward or optimizer."""
+    import importlib.util
+    import time
+    start = time.monotonic()
+    torch.set_num_threads(2)
+    torch.use_deterministic_algorithms(True)
+    dev = torch.device(device)
+    if dev.type == "cuda":
+        assert torch.cuda.is_available() and torch.cuda.device_count() == 1
+        torch.cuda.reset_peak_memory_stats()
+    _, criterion, base, module = criterion_pair()
+    gt = boxes([[.50, .50, .02, .02], [.20, .20, .4, .4]]).to(dev)
+    q = boxes([[.502, .50, .02, .02], [.50649, .50, .02, .02],
+               [.9, .9, .01, .01], [.205, .20, .4, .4]]).to(dev)
+    index_devices = ("cpu", device) if dev.type == "cuda" else ("cpu",)
+    cases = 0
+    for index_device in index_devices:
+        for dtype in (torch.int64, torch.int32):
+            idx = [(torch.tensor([0, 3], dtype=dtype, device=index_device),
+                    torch.tensor([0, 1], dtype=dtype, device=index_device))]
+            for mode, extra in (("A1", 0), ("A2", 1)):
+                for scenario in ("admitted", "no_candidate", "empty_gt", "empty_queries", "mixed_empty"):
+                    a = q.clone().requires_grad_(True)
+                    targets = [{"boxes": gt}]
+                    indices = idx
+                    if scenario == "no_candidate":
+                        a = q[[0, 2, 2, 3]].clone().requires_grad_(True)
+                    if scenario in ("empty_gt", "empty_queries"):
+                        targets = [{"boxes": gt[:0]}]
+                        indices = [(idx[0][0][:0], idx[0][1][:0])]
+                    if scenario == "empty_queries":
+                        a = q[:0].clone().requires_grad_(True)
+                    out = {"pred_boxes": a.unsqueeze(0)}
+                    if scenario == "mixed_empty":
+                        out = {"pred_boxes": a.unsqueeze(0).expand(2, -1, -1)}
+                        targets.append({"boxes": gt[:0]})
+                        indices = idx + [(idx[0][0][:0], idx[0][1][:0])]
+                    augmented = list(indices)
+                    extra_count = int(scenario in ("admitted", "mixed_empty"))
+                    if extra_count:
+                        augmented[0] = (torch.cat([idx[0][0], torch.tensor([extra], dtype=dtype, device=index_device)]),
+                                        torch.cat([idx[0][1], torch.tensor([0], dtype=dtype, device=index_device)]))
+                    saved = []
+                    def native(o, t, ix, n, weight):
+                        saved.extend(ix)
+                        return base(o, t, ix, n, weight)
+                    cpu_rng = torch.random.get_rng_state().clone()
+                    gpu_rng = torch.cuda.get_rng_state().clone() if dev.type == "cuda" else None
+                    term = tp.TinyPositivesTerm(mode)
+                    got = term.loss_boxes(native, module, out, targets, indices, 2.0, None)
+                    expected = base(out, targets, augmented, 2.0, None)
+                    name = "%s.%s.%s.%s.%s" % (device, index_device, dtype, mode, scenario)
+                    check(name+".index", all(x.device == oldx.device and x.dtype == oldx.dtype
+                          and torch.equal(x, expx) for pair, old, exp in zip(saved, indices, augmented)
+                          for x, oldx, expx in zip(pair, old, exp)))
+                    check(name+".loss", all(torch.equal(got[k], expected[k]) and bool(torch.isfinite(got[k])) for k in got))
+                    grad = torch.autograd.grad(sum(got.values()), a, retain_graph=True)[0]
+                    grad_ref = torch.autograd.grad(sum(expected.values()), a)[0]
+                    check(name+".gradient", torch.equal(grad, grad_ref) and bool(torch.isfinite(grad).all()))
+                    check(name+".counter", term.extras == extra_count)
+                    check(name+".rng", torch.equal(cpu_rng, torch.random.get_rng_state()) and
+                          (gpu_rng is None or torch.equal(gpu_rng, torch.cuda.get_rng_state())))
+                    cases += 1
+    p0,t0 = tp.pair_tensors({"pred_boxes": q.unsqueeze(0)}, [], [])
+    check(device+".no_indices_shape", p0.shape == t0.shape == (0,4) and p0.device == t0.device == dev)
+    check(device+".no_indices_observation", tp.observation(p0,t0,module,0)["pos_pairs"] == 0)
+    if "--legacy-source-root" in sys.argv:
+        legacy_root = Path(sys.argv[sys.argv.index("--legacy-source-root")+1])
+        legacy_path = legacy_root / "src/sparse_rtdetr/protocol_r18/tiny_positives.py"
+        spec = importlib.util.spec_from_file_location("legacy_tp_regression",legacy_path)
+        legacy = importlib.util.module_from_spec(spec); spec.loader.exec_module(legacy)
+        if dev.type == "cuda":
+            for mode in ("A1", "A2"):
+                try:
+                    legacy.TinyPositivesTerm(mode).loss_boxes(base,module,{"pred_boxes":q.unsqueeze(0)},
+                          [{"boxes":gt}],[(torch.tensor([0,3]),torch.tensor([0,1]))],2.0,None)
+                except RuntimeError as exc:
+                    check("legacy."+mode+".mixed_device_reproduced", "device" in str(exc) and "cuda" in str(exc))
+                    print("EXPECTED_LEGACY_ERROR",mode,str(exc))
+                else:
+                    check("legacy."+mode+".mixed_device_reproduced",False)
+        lp,lt = legacy.pair_tensors({"pred_boxes":q.unsqueeze(0)},[],[])
+        check("legacy.empty_shape_defect", lp.shape == lt.shape == (0,0,4))
+    if dev.type == "cuda":
+        torch.cuda.synchronize()
+    summary = {"device":str(dev),"cases":cases,"checks":len(RESULTS),
+               "passed":sum(int(ok) for _,ok in RESULTS),"detector_forwards":0,"optimizer_updates":0,
+               "elapsed_seconds":time.monotonic()-start,
+               "peak_allocated":torch.cuda.max_memory_allocated() if dev.type=="cuda" else None,
+               "peak_reserved":torch.cuda.max_memory_reserved() if dev.type=="cuda" else None}
+    print("DEVICE_REGRESSION",json.dumps(summary,sort_keys=True))
+    if not all(ok for _,ok in RESULTS):
+        raise SystemExit(1)
+
 def main():
     if torch.cuda.is_initialized():
         raise SystemExit("CUDA must stay hidden for the unit checks")
@@ -293,7 +389,7 @@ def main():
               and declared.get("constants_sha256") == tp.constants_sha256(), declared)
         check("plan.arms", plan.get("arms") == ["A0", "A1", "A2"]
               and plan.get("pos_install") == {"A0": None, "A1": "A1", "A2": "A2"})
-        check("plan.revision", plan.get("revision") == 2
+        check("plan.revision", plan.get("revision") == (4 if plan.get("execution_resource_policy") else 2)
               and plan.get("version") == "r18-tiny-positives-v2"
               and "duplicated-regression control" in str(plan.get("frozen_science", {}).get("control", "")),
               plan.get("revision"))
@@ -310,4 +406,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--device" in sys.argv:
+        device_regression(sys.argv[sys.argv.index("--device")+1])
+    else:
+        main()

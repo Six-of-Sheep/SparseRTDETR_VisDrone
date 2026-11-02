@@ -1,10 +1,11 @@
 {
   "version": "r18-tiny-positives-v2",
-  "revision": 3,
+  "revision": 4,
   "revision_log": [
     "1 (2026-11-02, preparation): tiny-band extra positive regression supervision; three arms A0/A1/A2; preparation only, no GPU",
     "2 (2026-11-02, user revision): A1 redefined as the native matched-pair duplicated-regression control sharing the A2 admission gate; observation ledger extended (admissible instances, native-pair misses, appended-set digest); claim limits and count semantics registered; thresholds, schedule and budget cells unchanged",
-    "3 (2026-11-02, user execution-boundary amendment): resource estimates only; cancel artificial GPU/wall/storage/return caps; preserve real resource safety, fixed workload and zero automatic retry; computation release-007 unchanged"
+    "3 (2026-11-02, user execution-boundary amendment): resource estimates only; cancel artificial GPU/wall/storage/return caps; preserve real resource safety, fixed workload and zero automatic retry; computation release-007 unchanged",
+    "4 (2026-11-02, user engineering-repair authorization): each complete acceptance attempt retains four updates; failed/repeated acceptance work accumulates separately; evidence-based engineering repairs and new attempts authorized; formal interruption or scientific/material/resource changes still require user decision"
   ],
   "positioning": "practical initial screening of band-conditioned extra regression positives inside a frozen one-to-one NMS-free DETR (regression only, inference untouched); one-to-many positive assignment is a known family (dense/anchor-based positive assignment, auxiliary one-to-many heads); no originality claim; this fixed experiment answers the practical net benefit and the A2-A1 increment only: no optimal tau, no optimal append count, no causal family attribution",
   "arms": [
@@ -74,7 +75,7 @@
       "A2",
       "empty"
     ],
-    "note": "one launch, at most 4 unique optimizer updates in total; stop on anomaly; the acceptance state is not usable for the formal training; the A1 and A2 cases must record the same admission-gate ledger and the same appended-set digest list on the fixed fixture window"
+    "note": "Each complete acceptance attempt uses the same four independent one-update cases. Failed and repeated attempts accumulate actual updates and cost; no round-wide four-update cap. No acceptance state enters formal training. A1/A2 on the fixed identical input retain the same admission ledger and appended-set digest list."
   },
   "gates": {
     "units": "differences in percentage points (100 x (lhs - rhs))",
@@ -221,7 +222,8 @@
     "planned_updates": {
       "acceptance": 4,
       "formal_total": 10944,
-      "grand_total": 10948
+      "grand_total": 10948,
+      "semantics": "single successful chain estimate; add all failed and repeated acceptance updates separately"
     },
     "planned_batch_forwards": {
       "training": 21888,
@@ -272,8 +274,6 @@
       "stop on sustained no progress"
     ],
     "fixed_scope": {
-      "acceptance_launches": 1,
-      "acceptance_actual_optimizer_updates_max": 4,
       "arms": [
         "A0",
         "A1",
@@ -282,12 +282,22 @@
       "formal_updates_per_arm": 3648,
       "formal_updates_total": 10944,
       "score_budget_calls": 6,
-      "acceptance_state_for_formal": false
+      "acceptance_state_for_formal": false,
+      "complete_acceptance_updates_per_attempt": 4,
+      "failed_and_repeated_acceptance_work": "accumulate actual updates and cost; never reset or treat as first execution"
     },
     "automatic_retries": 0,
     "delete_to_meet_estimate": false,
     "cost_overrun_is_scientific_failure": false,
     "legacy_cost_fields": "numeric budget fields retained for the unchanged release parser; cost_passed/within_budget describe reference comparison only and never scientific quality or stop authority",
-    "return_policy": "necessary reports, metrics and audit summaries; no artificial byte cap; weights and complete predictions remain server-side by default"
+    "return_policy": "necessary reports, metrics and audit summaries; no artificial byte cap; weights and complete predictions remain server-side by default",
+    "engineering_repairs": {
+      "authorized": true,
+      "new_attempt_after_specific_fix": true,
+      "blind_restart": false,
+      "formal_interruption_requires_user_decision": true,
+      "scientific_change_requires_user_decision": true
+    },
+    "automatic_retries_semantics": "No automatic retry of an unchanged failed process; user authorizes separately frozen, evidence-based engineering repair attempts."
   }
 }

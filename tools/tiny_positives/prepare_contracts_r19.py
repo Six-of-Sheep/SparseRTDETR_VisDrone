@@ -1,6 +1,6 @@
 """r19 contract metadata caller.
 
-The release-007 detector/training/scoring source stays immutable. --execution-plan
+Every prior release stays immutable. --execution-plan
 allows only the user-authorized resource-semantics amendment. Legacy numeric
 budget keys remain for parser compatibility; effective policy is explicit.
 """
@@ -128,7 +128,7 @@ def build_gate(fixture_job):
             "acceptance": gate["acceptance"], "gate_bytes": path.stat().st_size}
 
 
-def build_contract(scope, gate_path, execution_plan=None):
+def build_contract(scope, gate_path, execution_plan=None, prior_costs=None):
     fixture = scope == "fixture"
     base = load(BASE_CONTRACT)
     manifest, source_sha, build = release_identity()
@@ -186,15 +186,33 @@ def build_contract(scope, gate_path, execution_plan=None):
         contract["CPU_gate"] = reference(Path(gate_path).resolve())
         gate = load(gate_path)
         assert gate["status"] == "PASS" and gate["source_sha256"] == source_sha, "the CPU gate is not valid for this release"
+    if prior_costs is not None:
+        history_path = Path(prior_costs).resolve()
+        history = load(history_path)
+        assert history["formal_updates"] == 0 and history["score_calls"] == 0, "formal interruption needs user decision"
+        contract["prior_attempt_costs"] = reference(history_path)
+        contract["materials"] = list(contract["materials"]) + [reference(history_path)]
     path = R / (("cpu-fixture-" + FIXTURE_SUFFIX + "-contract.json") if fixture else ("production-contract-" + PRODUCTION_SUFFIX + ".json"))
-    assert not path.exists(), "contract already exists: " + str(path)
+    token = R / (("cpu-fixture-" + FIXTURE_SUFFIX + "-token.json") if fixture else ("production-token-" + PRODUCTION_SUFFIX + ".json"))
+    assert not path.exists() and not token.exists(), "contract or token already exists"
+    assert not Path(contract["job_root"]).exists() and not Path(contract["runtime_root"]).exists(), "attempt output already exists"
     contract["contract_path"] = str(path)
     contract["contract_sha256"] = digest({k: v for k, v in contract.items() if k != "contract_sha256"})
-    path.write_bytes(json.dumps(contract, indent=1, ensure_ascii=False).encode("utf-8"))
+    policy = load(contract["plan"]).get("execution_resource_policy", {})
+    if policy:
+        contract["execution_resource_policy"] = policy
+        contract["budget_limits"]["semantics"] = "reference estimates only; no artificial resource caps"
+        contract["engineering_retry_authorization"] = policy.get("engineering_repairs", {})
+        contract["no_retry_semantics"] = "no blind process retry; authorized engineering fixes use new frozen attempts; formal interruption needs user decision"
+        contract["contract_sha256"] = digest({k: v for k, v in contract.items() if k != "contract_sha256"})
+    with path.open("xb") as stream:
+        stream.write(json.dumps(contract, indent=1, ensure_ascii=False).encode("utf-8"))
     token = R / (("cpu-fixture-" + FIXTURE_SUFFIX + "-token.json") if fixture else ("production-token-" + PRODUCTION_SUFFIX + ".json"))
-    token.write_bytes(json.dumps({"task_id": contract["task_id"],
+    token_value = {"task_id": contract["task_id"],
                                   "contract_sha256": contract["contract_sha256"],
-                                  "nonce": contract["launch_nonce"]}, indent=1).encode("utf-8"))
+                                  "nonce": contract["launch_nonce"]}
+    with token.open("xb") as stream:
+        stream.write(json.dumps(token_value, indent=1).encode("utf-8"))
     return {"status": "CONTRACT-PUBLISHED", "scope": contract["scope"], "contract": str(path),
             "contract_sha256": contract["contract_sha256"], "contract_bytes": path.stat().st_size,
             "token": str(token), "plan_sha256": contract["plan_sha256"], "source_sha256": source_sha,
@@ -210,6 +228,7 @@ def main():
     parser.add_argument("--scope", required=True, choices=("fixture", "gate", "production"))
     parser.add_argument("--fixture-job", default=None)
     parser.add_argument("--gate", default=None)
+    parser.add_argument("--prior-costs", default=None, help="retained failed acceptance costs; formal interruptions cannot be restarted here")
     parser.add_argument("--execution-plan", default=None, help="resource-semantics amendment; scientific projection must equal the release plan")
     parser.add_argument("--release-suffix", default="001")
     parser.add_argument("--suffix", default="001")
@@ -226,7 +245,7 @@ def main():
         emit(build_gate(args.fixture_job))
     elif args.scope == "production":
         assert args.gate, "--gate is required for the production scope"
-        emit(build_contract("production", args.gate, args.execution_plan))
+        emit(build_contract("production", args.gate, args.execution_plan, args.prior_costs))
     else:
         emit(build_contract("fixture", None))
 

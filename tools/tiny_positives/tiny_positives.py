@@ -237,9 +237,9 @@ def accumulate(ledger, row):
 def pair_tensors(outputs, targets, indices):
     """The native matched pairs as (pred, target) tensors gathered image by image."""
     pred = torch.cat([outputs["pred_boxes"][i][src] for i, (src, _) in enumerate(indices)]) \
-        if indices else outputs["pred_boxes"][:0, :0]
+        if indices else outputs["pred_boxes"].reshape(-1, 4)[:0]
     target = torch.cat([targets[i]["boxes"][tgt] for i, (_, tgt) in enumerate(indices)]) \
-        if indices else outputs["pred_boxes"][:0, :0]
+        if indices else outputs["pred_boxes"].reshape(-1, 4)[:0]
     return pred, target
 
 
@@ -285,6 +285,10 @@ class TinyPositivesTerm:
             extras_total += int(esrc.numel())
             ledger = accumulate(ledger, row)
             if esrc.numel():
+                # Hungarian indices are normally CPU int64; extras follow pred.device.
+                # Preserve the native index representation and all selected values/order.
+                esrc = esrc.to(device=src.device, dtype=src.dtype)
+                etgt = etgt.to(device=tgt.device, dtype=tgt.dtype)
                 augmented.append((torch.cat([src, esrc]), torch.cat([tgt, etgt])))
             else:
                 augmented.append((src, tgt))
