@@ -124,6 +124,7 @@ def main():
     window_candidates = int(plan["runner"]["window_candidates"])
     batch_size = int(plan["runner"]["batch_size"])
     records, predictions, plans, substitutions, timings = [], [], [], [], []
+    whole_sets, repaired_sets = [], []
 
     with torch.inference_mode():
         for start in range(0, len(rows), batch_size):
@@ -145,6 +146,7 @@ def main():
             for j, row in enumerate(chunk):
                 preds = ev.rank_candidates(logits[j], boxes[j], row, budget)
                 per_image.append(preds)
+            whole_image = [list(image_preds) for image_preds in per_image]   # pre-substitution snapshot
 
             window_tensors, window_index = [], []
             if args.arm in ("control", "method"):
@@ -210,6 +212,8 @@ def main():
                     stats["window_dets"] = len(per_image_window_dets.get(j, []))
                     substitutions.append(stats)
                     per_image[j] = fixed
+                whole_sets.extend(whole_image)
+                repaired_sets.extend(per_image)
 
             elapsed = time.perf_counter() - t0
             timings.append({"batch": len(timings) + 1, "images": len(chunk), "seconds": elapsed,
@@ -242,7 +246,11 @@ def main():
                                             "exact_match": bool(same), "certified_count": len(certified),
                                             "rerun_count": len(predictions)}
     if args.arm in ("control", "method"):
-        report["invariants"] = invariants_placeholder()
+        before = [p for image_preds in whole_sets for p in image_preds]
+        after = [p for image_preds in repaired_sets for p in image_preds]
+        report["invariants"] = invariants(before, after)
+        if not report["invariants"]["ok"]:
+            raise SystemExit(f"substitution invariants violated: {report['invariants']}")
     for name, payload in (("pred-top600", predictions), ("pred-top300", trim(predictions, 300))):
         path = out / f"{name}.json"
         path.write_text(json.dumps(payload, separators=(",", ":")))
@@ -257,10 +265,6 @@ def main():
     print("plan_stats", report["plan_stats"])
     print("substitution_stats", report["substitution_stats"])
     print("WROTE", out / f"RESULT-{args.arm}.json")
-
-
-def invariants_placeholder():
-    return {"checked_in_receipt": True}
 
 
 def trim(predictions, budget):
@@ -290,6 +294,8 @@ def summarize(rows):
     for k in ("coverage", "repair_share"):
         if k in totals:
             totals[k] = totals[k] / len(rows)
+    if "coverage" in totals or "repair_share" in totals:
+        totals["aggregation"] = "mean_per_image"
     if "windows" in keys:
         windows = sum(len(r.get("windows", [])) for r in rows)
         totals["windows"] = windows
@@ -337,6 +343,33 @@ def score_only(plan, contract, out, ev):
                 metrics = ev.score_budget(rows, parsed, preds, root)["COCO_bridge"]["metrics"]
                 (directory / f"metrics-top{budget}.json").write_text(json.dumps(metrics, indent=1))
             scores[arm][str(budget)] = {k: metrics[k] for k in KEYS}
+    invariants_from_artifacts = {}
+    for budget in plan["evaluation"]["budgets"]:
+        base_path = out / "baseline" / f"pred-top{budget}.json"
+        base_preds = json.loads(base_path.read_text()) if base_path.is_file() else None
+        per_arm = {}
+        for name in ("control", "method"):
+            path = out / name / f"pred-top{budget}.json"
+            if base_preds is None or not path.is_file():
+                per_arm[name] = {"checked": False, "reason": "missing prediction file"}
+                continue
+            preds = json.loads(path.read_text())
+            problem, changed = None, 0
+            if len(preds) != len(base_preds):
+                problem = f"prediction count differs: {len(preds)} vs {len(base_preds)}"
+            else:
+                for base_row, arm_row in zip(base_preds, preds):
+                    if any(base_row[key] != arm_row[key]
+                           for key in ("image_id", "query_id", "category_id", "score")):
+                        problem = f"non-geometry field changed at {base_row['image_id']} / {base_row['query_id']}"
+                        break
+                    if [float(v) for v in base_row["bbox_xyxy"]] != [float(v) for v in arm_row["bbox_xyxy"]]:
+                        changed += 1
+            per_arm[name] = {"checked": True, "ok": problem is None, "reason": problem,
+                             "changed_boxes": changed, "total": len(preds),
+                             "baseline": {"path": str(base_path), "sha256": sha(base_path)},
+                             "arm": {"path": str(path), "sha256": sha(path)}}
+        invariants_from_artifacts[str(budget)] = per_arm
     deltas = {}
     for lhs, rhs in (("A2", "A0"), ("A2", "A1"), ("A1", "A0"), ("A0r", "A0")):
         deltas[f"{lhs}_minus_{rhs}"] = {b: {k: (scores[lhs][b][k] - scores[rhs][b][k]) * 100 for k in KEYS}
@@ -367,6 +400,7 @@ def score_only(plan, contract, out, ev):
                  "ratio_A1_over_A0": (costs["A1_seconds"] / costs["A0_seconds"]) if costs["A0_seconds"] else None,
                  "maximum_ratio": gates["cost"]["maximum"]},
         "quality": None, "units": "pp = 100 x (lhs - rhs)", "metrics_refs": metrics_refs,
+        "substitution_invariants": invariants_from_artifacts,
     }
     main = comparison["gates"]["A2_minus_A0"]["passed"]
     mech = comparison["gates"]["A2_minus_A1"]["passed"]
@@ -386,6 +420,8 @@ def score_only(plan, contract, out, ev):
                       "A2_minus_A0": comparison["gates"]["A2_minus_A0"]["passed"],
                       "A2_minus_A1": comparison["gates"]["A2_minus_A1"]["passed"],
                       "cost": comparison["cost"]}, indent=1))
+    print(json.dumps({"substitution_invariants": {b: {n: v.get("ok") for n, v in arms.items()}
+                                                  for b, arms in invariants_from_artifacts.items()}}, indent=1))
     print(json.dumps(scores, indent=1))
 
 
