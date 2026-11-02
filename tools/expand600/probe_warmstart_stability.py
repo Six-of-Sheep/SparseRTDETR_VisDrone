@@ -32,8 +32,9 @@ import numpy as np
 import torch
 
 HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
+for _path in (str(HERE), str(HERE.parent / "explore"), str(HERE.parents[1])):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 import frozen_r18                                                       # noqa: E402
 from tools.expand600.expand600 import (NUM_QUERIES, capture_selection, find_decoder_module,
@@ -118,13 +119,11 @@ def main():
                 [row["width"], row["height"]] * 2)
 
             raw_rows = dev.raw(row)["rows"]
-            gt_boxes = [g["box"] for g in raw_rows if int(g["category"]) in range(1, 11)]
-            gt_areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in gt_boxes]
             for query in range(NUM_QUERIES):
                 best_class = int(scores1[query].argmax())
                 category = best_class + 1
-                same = [gt_boxes[i] for i, g in enumerate(raw_rows)
-                        if int(g["category"]) in range(1, 11) and int(g["category"]) == category]
+                same = [[float(v) for v in g["box"]] for g in raw_rows
+                        if int(g["category"]) == category]
                 if not same:
                     continue
                 box1 = xyxy1[query]
