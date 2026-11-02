@@ -20,7 +20,6 @@ from tools.flipview.flipview import (NUM_QUERIES, PAIRING_MODES, PARTNER_IOU, SM
 
 W, H = 1024.0, 512.0                       # powers of two, so every constructed corner is exact
 CHECKS = 23
-FAR = [[900.0, 200.0, 960.0, 260.0]]       # 3600 px and far away: never small, never a good partner
 
 
 def boxes_from_pixels(rows):
@@ -32,19 +31,6 @@ def boxes_from_pixels(rows):
 
 def boxes_to_pixels(boxes):
     return pixel_boxes(boxes, W, H)
-
-
-def two_view(original_rows, mirrored_rows):
-    """The module requires one row per query in both views; pad the shorter side with far boxes."""
-    original = boxes_from_pixels(original_rows)
-    mirrored = boxes_from_pixels(mirrored_rows)
-    if len(original_rows) < len(mirrored_rows):
-        pad = boxes_from_pixels(FAR * (len(mirrored_rows) - len(original_rows)))
-        original = torch.cat((original, pad), dim=0)
-    if len(mirrored_rows) < len(original_rows):
-        pad = boxes_from_pixels(FAR * (len(original_rows) - len(mirrored_rows)))
-        mirrored = torch.cat((mirrored, pad), dim=0)
-    return original, mirrored
 
 
 def check(name, condition):
@@ -67,10 +53,10 @@ def main():
                     and bool(torch.equal(once[:, 0], 1.0 - sample[:, 0])))
 
     # 2. exact area boundary: 1024 px is outside the small band, 992.25 px is inside
-    original, mirrored = two_view([[0, 0, 31.5, 31.5]], [[0, 0, 31.5, 31.5]])
-    _f_in, mask_in, counters_in = fuse_view_boxes(original, mirrored, W, H)
-    original, mirrored = two_view([[0, 0, 32.0, 32.0]], [[0, 0, 32.0, 32.0]])
-    _f_out, mask_out, counters_out = fuse_view_boxes(original, mirrored, W, H)
+    small_in = boxes_from_pixels([[0, 0, 31.5, 31.5]])            # 992.25 px
+    small_out = boxes_from_pixels([[0, 0, 32.0, 32.0]])           # 1024.0 px exactly
+    _f_in, mask_in, counters_in = fuse_view_boxes(small_in, small_in.clone(), W, H)
+    _f_out, mask_out, counters_out = fuse_view_boxes(small_out, small_out.clone(), W, H)
     passed += check("area_boundary_992_is_treated",
                     bool(mask_in[0]) and counters_in["treated_queries"] == 1)
     passed += check("area_boundary_1024_is_not_treated", not bool(mask_out[0]))
@@ -78,33 +64,33 @@ def main():
                     counters_in["small_band_queries"] == 1 and counters_out["small_band_queries"] == 0)
 
     # 3. exact threshold boundary: three-by-three boxes offset by one pixel give IoU exactly 0.5
-    original, at_threshold = two_view([[0, 0, 3, 3]], [[1, 0, 4, 3]])
+    original = boxes_from_pixels([[0, 0, 3, 3]])
+    at_threshold = boxes_from_pixels([[1, 0, 4, 3]])
+    below = boxes_from_pixels([[1.25, 0, 4.25, 3]])               # IoU 5.25/12.75 = 0.4118
     passed += check("constructed_iou_is_exactly_half",
                     float(iou_matrix(boxes_to_pixels(original), boxes_to_pixels(at_threshold))[0, 0])
                     == 0.5)
     _f_half, mask_half, _c_half = fuse_view_boxes(original, at_threshold, W, H)
-    _o_below, below = two_view([[0, 0, 3, 3]], [[1.25, 0, 4.25, 3]])   # IoU 5.25/12.75 = 0.4118
-    _f_below, mask_below, _c_below = fuse_view_boxes(_o_below, below, W, H)
+    _f_below, mask_below, _c_below = fuse_view_boxes(original, below, W, H)
     passed += check("threshold_is_inclusive_at_half", bool(mask_half[0]))
     passed += check("below_threshold_is_untouched", not bool(mask_below[0]))
-    single_original, single_mirrored = boxes_from_pixels([[0, 0, 3, 3]]), \
-        boxes_from_pixels([[1, 0, 4, 3]])
     try:
-        fuse_view_boxes(single_original, single_mirrored, W, H)
-        passed += check("single_mirrored_query_is_refused", False)
+        fuse_view_boxes(original, at_threshold, W, H, mode="second")
+        passed += check("second_mode_needs_two_mirrored_queries", False)
     except ValueError:
-        passed += check("single_mirrored_query_is_refused", True)
+        passed += check("second_mode_needs_two_mirrored_queries", True)
 
     # 4. the fusion is the arithmetic mean in pixel space
-    a, b = two_view([[0, 0, 4, 4]], [[1, 0, 5, 4]])                    # IoU 0.6
+    a = boxes_from_pixels([[0, 0, 4, 4]])
+    b = boxes_from_pixels([[1, 0, 5, 4]])                         # IoU 0.6
     fused, mask, _c = fuse_view_boxes(a, b, W, H)
-    expected = boxes_from_pixels([[0.5, 0.0, 4.5, 4.0]])
+    expected = boxes_from_pixels([[0.5, 0.0, 4.5, 4.0]])[0]
     passed += check("fusion_is_the_arithmetic_mean",
-                    bool(mask[0]) and bool(torch.allclose(fused, expected, atol=1e-6)))
+                    bool(mask[0]) and bool(torch.allclose(fused[0], expected, atol=1e-6)))
 
     # 5. untreated rows are bitwise identical to the input, treated rows differ
-    many, partner = two_view([[0, 0, 4, 4], [0, 0, 60, 60], [5, 5, 8, 8]],
-                            [[1, 0, 5, 4], [0, 0, 61, 61], [200, 200, 201, 201]])
+    many = boxes_from_pixels([[0, 0, 4, 4], [0, 0, 60, 60], [5, 5, 8, 8]])
+    partner = boxes_from_pixels([[1, 0, 5, 4], [0, 0, 61, 61], [200, 200, 201, 201]])
     fused, mask, counters_many = fuse_view_boxes(many, partner, W, H)
     passed += check("untreated_rows_bitwise_identical", bool(torch.equal(fused[~mask], many[~mask])))
     passed += check("large_original_is_never_treated",
@@ -129,14 +115,15 @@ def main():
                     bool((second_values <= best_values + 1e-6).all()))
 
     # 7. the second-highest partner is the one used by the sensitivity control
-    three, mirrored = two_view([[0, 0, 10, 10]],
-                              [[0, 0, 10, 10], [1, 0, 11, 10], [100, 100, 110, 110]])
+    three = boxes_from_pixels([[0, 0, 10, 10]])
+    mirrored = boxes_from_pixels([[0, 0, 10, 10], [1, 0, 11, 10], [100, 100, 110, 110]])
     best_box = fuse_view_boxes(three, mirrored, W, H, mode="best")[0]
     second_box = fuse_view_boxes(three, mirrored, W, H, mode="second")[0]
     passed += check("best_mode_uses_the_top_partner",
-                    bool(torch.allclose(best_box, boxes_from_pixels([[0, 0, 10, 10]]), atol=1e-6)))
+                    bool(torch.allclose(best_box[0], boxes_from_pixels([[0, 0, 10, 10]])[0], atol=1e-6)))
     passed += check("second_mode_uses_the_second_partner",
-                    bool(torch.allclose(second_box, boxes_from_pixels([[0.5, 0, 10.5, 10]]), atol=1e-6)))
+                    bool(torch.allclose(second_box[0], boxes_from_pixels([[0.5, 0, 10.5, 10]])[0],
+                                        atol=1e-6)))
 
     # 8. determinism, mode coverage and the structural ground-truth freedom
     again = fuse_view_boxes(many, partner, W, H)[0]

@@ -74,25 +74,28 @@ def fuse_view_boxes(boxes_original, boxes_mirrored, width, height, mode="best",
     """Fuse the small-band queries of one image with their highest-overlap mirrored partner.
 
     `boxes_original` are the certified normalized cxcywh boxes; `boxes_mirrored` are the mirrored
-    pass's normalized boxes ALREADY mapped back by `mirror_boxes`.  Returns the fused normalized
-    boxes (every untreated row bitwise identical to the input, by plain assignment), the treated
-    boolean mask, and JSON-friendly counters.  The treated set depends only on the original box area
-    and the highest overlap; mode "second" shares it exactly and only swaps the partner box.
+    pass's normalized boxes ALREADY mapped back by `mirror_boxes`.  The two views may carry different
+    numbers of queries: the pairing is a full overlap matrix, mode "best" needs at least one mirrored
+    query and mode "second" at least two.  Returns the fused normalized boxes (every untreated row
+    bitwise identical to the input, by plain assignment), the treated boolean mask, and JSON-friendly
+    counters.  The treated set depends only on the original box area and the highest overlap; mode
+    "second" shares it exactly and only swaps the partner box.
     """
-    require(boxes_original.shape[-1] == 4 and boxes_mirrored.shape[-1] == 4,
-            "expected four coordinates")
-    require(boxes_original.shape == boxes_mirrored.shape, "the two views have different shapes")
+    require(boxes_original.dim() == 2 and boxes_mirrored.dim() == 2
+            and boxes_original.shape[-1] == 4 and boxes_mirrored.shape[-1] == 4,
+            "expected (N, 4) and (M, 4) box matrices")
     require(mode in PAIRING_MODES, "unknown pairing mode %r" % (mode,))
-    require(boxes_mirrored.shape[0] >= 2,
-            "the pairing needs at least two mirrored queries (the second-highest-overlap control is "
-            "undefined with fewer), got %d" % int(boxes_mirrored.shape[0]))
+    candidates = int(boxes_mirrored.shape[0])
+    require(candidates >= 1, "the mirrored view has no query to pair with")
+    require(candidates >= 2 or mode == "best",
+            "the second-highest-overlap mode needs at least two mirrored queries, got %d" % candidates)
     with torch.no_grad():
         original = pixel_boxes(boxes_original, width, height)
         mirrored = pixel_boxes(boxes_mirrored, width, height)
         agreement = iou_matrix(original, mirrored)
-        ranked = torch.topk(agreement, 2, dim=1)
+        ranked = torch.topk(agreement, 2 if candidates >= 2 else 1, dim=1)
         best_iou, best_index = ranked.values[:, 0], ranked.indices[:, 0]
-        second_iou = ranked.values[:, 1]
+        second_iou = ranked.values[:, 1] if candidates >= 2 else None
         partner_index = best_index if mode == "best" else ranked.indices[:, 1]
         area = ((original[:, 2] - original[:, 0]).clamp(min=0.0)
                 * (original[:, 3] - original[:, 1]).clamp(min=0.0))
@@ -108,7 +111,8 @@ def fuse_view_boxes(boxes_original, boxes_mirrored, width, height, mode="best",
             "small_band_queries": int(small.sum()),
             "treated_queries": int(treated.sum()),
             "partner_iou_of_treated": [float(v) for v in best_iou[treated]],
-            "second_iou_of_treated": [float(v) for v in second_iou[treated]],
+            "second_iou_of_treated": ([float(v) for v in second_iou[treated]]
+                                      if second_iou is not None else []),
             "queries_with_overlap_tie": int(((agreement == best_iou[:, None]).sum(dim=1) > 1).sum()),
         }
     return fused, treated, counters

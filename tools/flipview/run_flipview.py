@@ -253,6 +253,9 @@ def run_arm(args, plan, contract, model, device, batch_size):
                 raw_mirrored.append(mirror_logits[j].clone())
                 raw_mirrored_boxes.append(mirror_boxes_raw[j].clone())
                 mapped = mirror_boxes(mirror_boxes_raw[j])
+                require(tuple(boxes[j].shape) == (NUM_QUERIES, 4)
+                        and tuple(mapped.shape) == (NUM_QUERIES, 4),
+                        "the two views must each carry exactly %d queries" % NUM_QUERIES)
                 mark = time.perf_counter()
                 fused_best, treated_best, counters_best = fuse_view_boxes(
                     boxes[j], mapped, row["width"], row["height"], mode="best")
