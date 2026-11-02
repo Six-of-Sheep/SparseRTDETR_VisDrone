@@ -110,7 +110,7 @@ def analyze_list(rows, parsed, predictions, ev):
             dets = sorted(det_group.get(key, []), key=lambda e: -e["score"])[:MAX_DETS_PER_CLASS]
             if not dets:
                 continue
-            other_class = [g["bbox"] for (image_id, category_id), group in other_by_image[key[0]]
+            other_class = [g["bbox"] for category_id, group in other_by_image[key[0]]
                            if category_id != key[1] for g in group]
             status, matched = match_group([d["bbox"] for d in dets], [d["score"] for d in dets],
                                           [g["bbox"] for g in gts], other_class, threshold)
@@ -159,8 +159,9 @@ def main():
     from sparse_rtdetr.protocol_r18 import slice_ft_job as job
     contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
     data = job.development(contract)
-    rows = data.records
-    require(len(rows) == 548, "expected the 548-image development set")
+    limit = int(sys.argv[6]) if len(sys.argv) > 6 else 548
+    rows = data.records[:limit]
+    require(len(rows) >= 8, "expected at least eight images")
     parsed = [data.raw(row) for row in rows]
 
     paths = {"r22_A0": Path(r22_dir) / "run-001/A0/pred-top600.json",
