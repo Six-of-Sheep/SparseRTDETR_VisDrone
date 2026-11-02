@@ -274,9 +274,14 @@ def run_arm(args, plan, contract, model, device, batch_size):
                     "new_names_above_lowest_a0": int(sum(1 for item in names if item[2] > lowest_a0)),
                     "dedup_kept": len(kept), "dedup_dropped": len(dropped),
                     "dedup_dropped_iou_max": max((d["best_iou"] for d in dropped), default=0.0),
-                    "added_at_600": len(added_main), "displaced_at_600": len(displaced_main),
+                    "added_at_600": len(added_main),
+                    "union_surplus_at_600": len(displaced_main),
+                    # the list length is fixed at the budget, so the number of certified entries the
+                    # new queries push out is exactly the number of new entries that got in
+                    "certified_pushed_out_at_600": len(added_main),
                     "added_at_300": len(added_secondary),
-                    "displaced_at_300": len(displaced_secondary),
+                    "union_surplus_at_300": len(displaced_secondary),
+                    "certified_pushed_out_at_300": len(added_secondary),
                     "added_at_600_gt_reach_0.5": gt_potential(added_main, raw_rows, 0.5),
                     "added_at_600_gt_reach_0.75": gt_potential(added_main, raw_rows, 0.75),
                     "new_names_gt_reach_0.5": gt_potential(
