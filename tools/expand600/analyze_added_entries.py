@@ -38,17 +38,27 @@ def require(condition, message):
 
 
 def iou_matrix(boxes_a, boxes_b):
+    """IoU between two stacks of xywh boxes, the convention the certified bridge uses."""
     a = np.asarray(boxes_a, dtype=np.float64).reshape(-1, 4)
     b = np.asarray(boxes_b, dtype=np.float64).reshape(-1, 4)
     if not len(a) or not len(b):
         return np.zeros((len(a), len(b)), dtype=np.float64)
-    lt = np.maximum(a[:, None, :2], b[None, :, :2])
-    rb = np.minimum(a[:, None, 2:], b[None, :, 2:])
-    wh = np.clip(rb - lt, 0.0, None)
-    inter = wh[..., 0] * wh[..., 1]
-    area_a = np.clip(a[:, 2], 0.0, None) * np.clip(a[:, 3], 0.0, None)
-    area_b = np.clip(b[:, 2], 0.0, None) * np.clip(b[:, 3], 0.0, None)
-    return inter / np.clip(area_a[:, None] + area_b[None, :] - inter, 1e-12, None)
+    aw, ah = np.clip(a[:, 2], 0.0, None), np.clip(a[:, 3], 0.0, None)
+    bw, bh = np.clip(b[:, 2], 0.0, None), np.clip(b[:, 3], 0.0, None)
+    inter = (np.clip(np.minimum(a[:, 0][:, None] + aw[:, None], b[:, 0][None, :] + bw[None, :])
+                     - np.maximum(a[:, 0][:, None], b[:, 0][None, :]), 0.0, None)
+             * np.clip(np.minimum(a[:, 1][:, None] + ah[:, None], b[:, 1][None, :] + bh[None, :])
+                       - np.maximum(a[:, 1][:, None], b[:, 1][None, :]), 0.0, None))
+    return inter / np.clip(aw[:, None] * ah[:, None] + bw[None, :] * bh[None, :] - inter, 1e-12, None)
+
+
+def iou_xyxy(box_a, box_b):
+    """IoU between two single pixel xyxy boxes, used only for the r20 box-change audit."""
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+    inter = max(0.0, min(ax2, bx2) - max(ax1, bx1)) * max(0.0, min(ay2, by2) - max(ay1, by1))
+    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
+    return inter / union if union > 0 else 0.0
 
 
 def match_group(det_boxes, det_scores, gt_boxes, other_boxes, threshold):
@@ -171,6 +181,10 @@ def main():
     for name, path in paths.items():
         require(path.is_file(), "missing %s at %s" % (name, path))
     loaded = {name: json.loads(path.read_text()) for name, path in paths.items()}
+    if limit < 548:
+        wanted = {row["stable_image_id"] for row in rows}
+        loaded = {name: [e for e in entries if e["image_id"] in wanted]
+                  for name, entries in loaded.items()}
 
     results = {}
     for name in ("r22_A0", "r22_E600", "r20_baseline", "r20_method"):
@@ -182,6 +196,10 @@ def main():
                  len(result["thresholds"]["0.5"]["tp_gt"]),
                  len(result["thresholds"]["0.75"]["tp_gt"])), flush=True)
 
+    for name, result in results.items():
+        count = len(result["thresholds"]["0.5"]["tp_gt"])
+        require(count >= 20 * len(rows),
+                "sanity floor: %s matched only %d ground truths at IoU 0.50" % (name, count))
     dataset, _det, _counts = ev.bridge_inputs(rows, parsed, [])
     class_of, area_of = {}, {}
     for annotation in dataset["annotations"]:
@@ -286,7 +304,8 @@ def main():
             continue
         if [float(v) for v in base["bbox_xyxy"]] != [float(v) for v in entry["bbox_xyxy"]]:
             changed += 1
-            value = float(iou_matrix([base["bbox_xyxy"]], [entry["bbox_xyxy"]])[0, 0])
+            value = iou_xyxy([float(v) for v in base["bbox_xyxy"]],
+                              [float(v) for v in entry["bbox_xyxy"]])
             ious.append(value)
             width = base["bbox_xyxy"][2] - base["bbox_xyxy"][0]
             height = base["bbox_xyxy"][3] - base["bbox_xyxy"][1]
