@@ -38,11 +38,12 @@ def summary(values):
             "min": float(array.min()), "max": float(array.max())}
 
 
-def boxes_of(predictions):
+def boxes_of(predictions, ids):
+    """Key by the bridge integer image id, the domain the matched statuses live in."""
     table = {}
     for entry in predictions:
         box = [float(v) for v in entry["bbox_xyxy"]]
-        table[(entry["image_id"], int(entry["query_id"]), int(entry["category_id"]))] = box
+        table[(ids[entry["image_id"]], int(entry["query_id"]), int(entry["category_id"]))] = box
     return table
 
 
@@ -87,7 +88,7 @@ def main():
         "matching": "certified bridge dataset and det filtering, greedy per class at IoU 0.50 and 0.75",
         "ground_truth_use": "offline analysis only; no prediction was chosen with it"}, "arms": {}}
     for name in ("A0", "E600"):
-        table = boxes_of(predictions[name])
+        table = boxes_of(predictions[name], ids)
         statuses = results[name]["thresholds"]["0.5"]["statuses"]
         tight_gt = tp(results[name], 0.75)
         buckets = defaultdict(list)
@@ -111,6 +112,8 @@ def main():
                          if det_box[3] > det_box[1] else float("nan"))
             if gt_ratio == gt_ratio and det_ratio == det_ratio:
                 aspect["%s/%s" % (tight, band)].append(det_ratio / gt_ratio)
+        if sum(len(value) for value in buckets.values()) == 0:
+            raise SystemExit("no true positive could be measured for %s: image id domain wrong" % name)
         report["arms"][name] = {
             "tp_total": len(tp(results[name], 0.5)),
             "det_over_gt_area": {key: summary(value) for key, value in sorted(buckets.items())},
@@ -120,7 +123,7 @@ def main():
     # the same split for the added entries only, to compare against the earlier figure
     entries_added = [e for e in predictions["E600"]
                      if e.get("source") == "new_query" or int(e["query_id"]) >= 300]
-    table = boxes_of(entries_added)
+    table = boxes_of(entries_added, ids)
     statuses = results["E600"]["thresholds"]["0.5"]["statuses"]
     tight_gt = tp(results["E600"], 0.75)
     buckets = defaultdict(list)
