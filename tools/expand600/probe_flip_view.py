@@ -81,6 +81,22 @@ def summary(values):
             "p10": float(np.percentile(array, 10)), "p90": float(np.percentile(array, 90))}
 
 
+def split_by_match(pairs, low, high=None):
+    """The decision-relevant slice: treated names whose original box already overlaps an annotation."""
+    selected = [row for row in pairs if row[0] >= low and (high is None or row[0] < high)]
+    if not selected:
+        return {"count": 0}
+    return {"count": len(selected),
+            "original_iou": summary([row[0] for row in selected]),
+            "delta_iou_treatment": summary([row[1] - row[0] for row in selected]),
+            "delta_iou_control": summary([row[2] - row[0] for row in selected]),
+            "delta_iou_mirror_view": summary([row[3] - row[0] for row in selected]),
+            "treatment_better": sum(1 for row in selected if row[1] > row[0] + 1e-6),
+            "treatment_worse": sum(1 for row in selected if row[1] < row[0] - 1e-6),
+            "control_better": sum(1 for row in selected if row[2] > row[0] + 1e-6),
+            "control_worse": sum(1 for row in selected if row[2] < row[0] - 1e-6)}
+
+
 def main():
     source, contract_path, checkpoint, manifest, out_path = sys.argv[1:6]
     limit = int(sys.argv[6]) if len(sys.argv) > 6 else 8
@@ -94,6 +110,7 @@ def main():
     torch.set_num_threads(8)
 
     partner_iou, treated, delta_treat, delta_control, mirror_only = [], [], [], [], []
+    pairs = []                                       # (original, treatment, control, mirror view) ious
     better, worse = 0, 0
     control_better, control_worse = 0, 0
     with torch.no_grad():
@@ -145,6 +162,7 @@ def main():
                 delta_treat.append(treat_iou - gt_iou)
                 delta_control.append(control_iou - gt_iou)
                 mirror_only.append(mirror_iou - gt_iou)
+                pairs.append((gt_iou, treat_iou, control_iou, mirror_iou))
                 better += treat_iou > gt_iou + 1e-6
                 worse += treat_iou < gt_iou - 1e-6
                 control_better += control_iou > gt_iou + 1e-6
@@ -175,7 +193,9 @@ def main():
         "delta_iou_control": summary(delta_control),
         "delta_iou_mirror_view_alone": summary(mirror_only),
         "treatment_better": int(better), "treatment_worse": int(worse),
-        "control_better": int(control_better), "control_worse": int(control_worse)}
+        "control_better": int(control_better), "control_worse": int(control_worse),
+        "matched_at_050": split_by_match(pairs, 0.5),
+        "loose_only_at_050": split_by_match(pairs, 0.5, 0.75)}
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(report, indent=1, ensure_ascii=False)[:4000])
