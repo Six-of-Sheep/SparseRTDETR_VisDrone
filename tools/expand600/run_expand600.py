@@ -2,14 +2,17 @@
 
 Arms
   A0    the pristine certified path: one whole-image forward per batch, no instrumentation at all;
-        predictions are the certified ranking of the 300 queries (rank_candidates).
+        predictions are the certified ranking of the 300 queries (rank_candidates) at both budgets.
   E600  the same forward with a read-only capture, plus ONE extra decoder pass over the encoder
         top-600 anchors.  Only the NEW 300 queries are admitted, after a same-class IoU 0.7 dedup
         against the certified 600-name prefix of the same image.  Every certified entry keeps its
         score and box; no score, box, category or ordering rule of the first stage is modified.
 
 The certified evaluation protocol is used unchanged for the main comparison: the category-0 raster
-ignore filter is applied AFTER the budget truncation and nothing is refilled.
+ignore filter is applied AFTER the budget truncation and nothing is refilled.  The 300-budget list of
+each arm is materialised on its own; for E600 it is NOT the prefix of the 600-budget list, because the
+dedup reference is the certified 600-name prefix while the competing set is the certified 300-name
+prefix.
 
 Reports written by --score
   anchor_reproduction      score the certified prediction file here and compare with the published
@@ -20,7 +23,7 @@ Reports written by --score
   gates / cost / per_class / deltas
 
 usage: run_expand600.py --plan <plan.json> --arm A0|E600 --out <dir> [--limit N] [--cpu-check]
-       run_expand600.py --plan <plan.json> --score --out <round_dir>
+       run_expand600.py --plan <plan.json> --score --out <round_dir>/run-001
 """
 from __future__ import annotations
 
@@ -28,8 +31,8 @@ import argparse
 import hashlib
 import json
 import os
-import time
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -81,7 +84,6 @@ def import_chain(plan):
     runner = plan["runner"]
     root = Path(runner["worktree_root"])
     src = Path(runner["release_source"])
-    import sys
     sys.path.insert(0, str(root))
     sys.path.insert(0, str(src / "src"))
     return root, src
@@ -153,6 +155,11 @@ def native_identity(model):
     return checks
 
 
+def trim(per_image_lists, budget):
+    """The first `budget` entries of each image's ranked list (the certified truncation rule)."""
+    return [entry for image_list in per_image_lists for entry in image_list[:budget]]
+
+
 def run_arm(args, plan, contract, model, device, batch_size):
     from sparse_rtdetr.r0 import evaluation as ev
     from sparse_rtdetr.protocol_r18 import slice_ft_job as job
@@ -168,8 +175,10 @@ def run_arm(args, plan, contract, model, device, batch_size):
     budget_main, budget_secondary = plan["runner"]["budgets"]
     device_type = "cuda" if device.startswith("cuda") else "cpu"
 
-    predictions, raw_q300, raw_new, per_image, timings = [], [], [], [], []
-    image_records = []
+    main_lists, secondary_lists, raw_q300, raw_new, timings, image_records = [], [], [], [], [], []
+    counters = {"A0_300_equals_600_prefix": 0, "A0_300_prefix_violations": 0,
+                "E600_mutated_main": 0, "E600_mutated_secondary": 0,
+                "captured_topk_mismatch_batches": 0}
     with torch.inference_mode():
         for start in range(0, len(rows), batch_size):
             chunk = rows[start:start + batch_size]
@@ -185,8 +194,9 @@ def run_arm(args, plan, contract, model, device, batch_size):
                     with capture_selection(decoder) as live:
                         z = model(x)
                     captured = live
-                    require(captured.get("recomputed_matches_production") is True,
-                            "captured top-k gather differs from the production gather")
+                    if captured.get("recomputed_matches_production") is not True:
+                        counters["captured_topk_mismatch_batches"] += 1
+                        require(False, "captured top-k gather differs from the production gather")
                     second_begin = time.perf_counter()
                     ind300 = select_indices(captured["enc_logits"], NUM_QUERIES)
                     ind600 = select_indices(captured["enc_logits"], NUM_QUERIES + NUM_NEW)
@@ -198,17 +208,17 @@ def run_arm(args, plan, contract, model, device, batch_size):
             logits = z["pred_logits"].detach().float().cpu()
             boxes = z["pred_boxes"].detach().float().cpu()
             if captured is not None:
-                legal = captured["enc_coords_unact"].detach().cpu()
                 valid = decoder.valid_mask.detach().cpu().reshape(-1)
                 boxes600 = boxes600.detach().float().cpu()
                 logits600 = logits600.detach().float().cpu()
-                enc_legal = [bool(valid[torch.tensor(selection["anchors"][j], dtype=torch.long)].all())
-                             for j in range(len(chunk))]
+                legal = []
+                for j in range(len(chunk)):
+                    index = torch.tensor(selection["anchors"][j], dtype=torch.long)
+                    legal.append(bool(valid[index].all()))
             else:
                 boxes600 = logits600 = None
-                enc_legal = [None] * len(chunk)
+                legal = [None] * len(chunk)
 
-            batch_predictions = []
             for j, row in enumerate(chunk):
                 require(logits[j].dtype == torch.float32 and boxes[j].dtype == torch.float32,
                         "prediction dtype is not FP32")
@@ -217,10 +227,13 @@ def run_arm(args, plan, contract, model, device, batch_size):
                 a0_secondary = ev.rank_candidates(logits[j].contiguous(), boxes[j].contiguous(), row,
                                                   budget_secondary)
                 raw_q300.append(logits[j].clone())
+                if a0_main[:len(a0_secondary)] == a0_secondary:
+                    counters["A0_300_equals_600_prefix"] += 1
+                else:
+                    counters["A0_300_prefix_violations"] += 1
                 if args.arm == "A0":
-                    batch_predictions.append(a0_main)
-                    if args.limit:
-                        image_records.append({"image_id": row["stable_image_id"], "arm": "A0"})
+                    main_lists.append(a0_main)
+                    secondary_lists.append(a0_secondary)
                     continue
 
                 names = query_names(boxes600[j], logits600[j], selection["positions"][j],
@@ -229,58 +242,61 @@ def run_arm(args, plan, contract, model, device, batch_size):
                 main_list, displaced_main, _key = merge_arm(a0_main, kept, budget_main)
                 secondary_list, displaced_secondary, _key = merge_arm(a0_secondary, kept,
                                                                       budget_secondary)
-                raw_new.append(torch.cat([logits600[j].clone().unsqueeze(0),
-                                          boxes600[j].clone().unsqueeze(0)], dim=0))
+                raw_new.append([logits600[j].clone(), boxes600[j].clone()])
                 added_main = [e for e in main_list if e["source"] == "new_query"]
                 added_secondary = [e for e in secondary_list if e["source"] == "new_query"]
-                reference = {(int(e["query_id"]), int(e["category_id"])): (e["score"], tuple(e["bbox_xyxy"]))
-                             for e in a0_main}
                 mutated = 0
-                for entry in main_list:
-                    if entry["source"] != "first_stage":
-                        continue
-                    want = reference.get((entry["query_id"], entry["category_id"]))
-                    if want is None or want[0] != entry["score"] or want[1] != tuple(entry["bbox_xyxy"]):
-                        mutated += 1
-                require(mutated == 0, "a certified entry changed score or box in the E600 list")
+                for reference, target in ((a0_main, main_list), (a0_secondary, secondary_list)):
+                    lookup = {(int(e["query_id"]), int(e["category_id"])):
+                              (e["score"], tuple(e["bbox_xyxy"])) for e in reference}
+                    for entry in target:
+                        if entry["source"] != "first_stage":
+                            continue
+                        want = lookup.get((entry["query_id"], entry["category_id"]))
+                        if want is None or want[0] != entry["score"] \
+                                or want[1] != tuple(entry["bbox_xyxy"]):
+                            mutated += 1
+                counters["E600_mutated_main"] += 0
+                counters["E600_mutated_secondary"] += mutated
+                require(mutated == 0, "a certified entry changed score or box in an E600 list")
                 lowest_a0 = min(float(e["score"]) for e in a0_main)
-                batch_predictions.append(main_list)
+                main_lists.append(main_list)
+                secondary_lists.append(secondary_list)
+                raw_rows = data.raw(row)["rows"]
                 image_records.append({
                     "image_id": row["stable_image_id"],
                     "new_anchors": int(len(selection["anchors"][j])),
-                    "new_anchors_all_legal": enc_legal[j],
+                    "new_anchors_all_legal": legal[j],
                     "selection_counters": selection["counters"][j],
                     "new_names": len(names),
                     "new_names_above_lowest_a0": int(sum(1 for item in names if item[2] > lowest_a0)),
                     "dedup_kept": len(kept), "dedup_dropped": len(dropped),
-                    "dedup_dropped_iou_max": (max((d["best_iou"] for d in dropped), default=0.0)),
+                    "dedup_dropped_iou_max": max((d["best_iou"] for d in dropped), default=0.0),
                     "added_at_600": len(added_main), "displaced_at_600": len(displaced_main),
                     "added_at_300": len(added_secondary),
                     "displaced_at_300": len(displaced_secondary),
-                    "added_at_600_gt_reach_0.5": gt_potential(added_main, data.raw(row)["rows"], 0.5),
-                    "added_at_600_gt_reach_0.75": gt_potential(added_main, data.raw(row)["rows"], 0.75),
+                    "added_at_600_gt_reach_0.5": gt_potential(added_main, raw_rows, 0.5),
+                    "added_at_600_gt_reach_0.75": gt_potential(added_main, raw_rows, 0.75),
                     "new_names_gt_reach_0.5": gt_potential(
                         [{"category_id": item[1], "bbox_xyxy": item[3]} for item in names],
-                        data.raw(row)["rows"], 0.5),
+                        raw_rows, 0.5),
                 })
             if device_type == "cuda":
                 torch.cuda.synchronize()
             elapsed = time.perf_counter() - begin
             timings.append({"batch": len(timings) + 1, "images": len(chunk), "seconds": elapsed,
                             "second_stage_seconds": second_seconds})
-            for j, row in enumerate(chunk):
-                predictions.append(batch_predictions[j])
-            print("batch %d/%d images=%d %.3fs" % (len(timings), (len(rows) + batch_size - 1) // batch_size,
+            print("batch %d/%d images=%d %.3fs" % (len(timings),
+                                                   (len(rows) + batch_size - 1) // batch_size,
                                                    len(chunk), elapsed), flush=True)
 
     digest_after = state_digest(model)
-    flat_main = [entry for image_list in predictions for entry in image_list]
-    secondary = [entry for image_list in predictions for entry in image_list][:0]
-    # the 300-budget list of the E600 arm is written by a second pass over the same dumps below
+    flat_main = trim(main_lists, budget_main)
+    flat_secondary = trim(secondary_lists, budget_secondary)
     report = {
         "arm": args.arm,
         "images": len(rows),
-        "budget_ranked": budget_main,
+        "budgets": [budget_main, budget_secondary],
         "batch_size": batch_size,
         "device": device,
         "inference_dtype": "float32",
@@ -291,25 +307,36 @@ def run_arm(args, plan, contract, model, device, batch_size):
         "timing_batches": timings,
         "second_stage_seconds": sum(t["second_stage_seconds"] for t in timings),
         "native_identity": identity,
-        "resource_entry": sha(out / "resource-entry.json") if (out / "resource-entry.json").is_file() else None,
+        "checks": counters,
+        "resource_entry": sha(out / "resource-entry.json")
+                          if (out / "resource-entry.json").is_file() else None,
     }
-    (out / f"pred-top{budget_main}.json").write_text(json.dumps(flat_main, separators=(",", ":")))
-    report[f"pred-top{budget_main}_sha256"] = sha(out / f"pred-top{budget_main}.json")
-    report[f"pred-top{budget_main}_bytes"] = (out / f"pred-top{budget_main}.json").stat().st_size
+    for budget, payload in ((budget_main, flat_main), (budget_secondary, flat_secondary)):
+        path = out / ("pred-top%d.json" % budget)
+        path.write_text(json.dumps(payload, separators=(",", ":")))
+        report["pred-top%d_sha256" % budget] = sha(path)
+        report["pred-top%d_bytes" % budget] = path.stat().st_size
     if args.arm == "E600":
-        (out / "image-records.json").write_text(json.dumps(image_records, indent=1, ensure_ascii=False))
+        (out / "image-records.json").write_text(json.dumps(image_records, indent=1,
+                                                           ensure_ascii=False))
         report["image_records_sha256"] = sha(out / "image-records.json")
         torch.save({"schema": "r22_expand600_new_queries_v1", "query_base": NEW_QUERY_BASE,
                     "image_ids": [row["stable_image_id"] for row in rows],
-                    "tensors": raw_new}, out / "new-queries.pth")
+                    "pred_logits": [item[0] for item in raw_new],
+                    "pred_boxes": [item[1] for item in raw_new],
+                    "anchor_indices": [c["anchors"] for c in
+                                       [{"anchors": record["selection_counters"]}
+                                        for record in image_records]]}, out / "new-queries.pth")
     torch.save({"schema": "r22_expand600_q300_v1", "arm": args.arm,
                 "image_ids": [row["stable_image_id"] for row in rows],
                 "pred_logits": torch.stack(raw_q300), "query_ids": torch.arange(NUM_QUERIES)},
                out / "raw-queries-q300.pth")
-    (out / f"RESULT-{args.arm}.json").write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n")
+    (out / ("RESULT-%s.json" % args.arm)).write_text(json.dumps(report, indent=1,
+                                                               ensure_ascii=False) + "\n")
     print(json.dumps({k: report[k] for k in ("arm", "images", "state_exact_equal", "params_have_grad",
-                                             "timing_total_seconds", "second_stage_seconds")}))
-    print("WROTE", out / f"RESULT-{args.arm}.json")
+                                             "timing_total_seconds", "second_stage_seconds",
+                                             "checks")}))
+    print("WROTE", out / ("RESULT-%s.json" % args.arm))
 
 
 def score_only(plan, contract, out):
@@ -321,7 +348,6 @@ def score_only(plan, contract, out):
     rows = data.records
     parsed = [data.raw(row) for row in rows]
     budgets = plan["evaluation"]["budgets"]
-    cached_metrics = {}
 
     def score_predictions(predictions):
         dataset, det, counts = ev.bridge_inputs(rows, parsed, predictions)
@@ -334,28 +360,29 @@ def score_only(plan, contract, out):
         evaluator.params.maxDets = [1, 10, 100]
         evaluator.evaluate()
         evaluator.accumulate()
-        stat_names = ("AP", "AP50", "AP75", "APS", "APM", "APL", "AR1", "AR10", "AR100",
-                      "AR_small", "AR_medium", "AR_large")
-        stats = {k: float(v) for k, v in zip(stat_names, evaluator.stats)}
-        stats["AP75_small"] = float(np.nanmean(evaluator.eval["precision"][5, :, :, 1, 2]))
+        names = ("AP", "AP50", "AP75", "APS", "APM", "APL", "AR1", "AR10", "AR100",
+                 "AR_small", "AR_medium", "AR_large")
+        stats = {k: float(v) for k, v in zip(names, evaluator.stats)}
+        small = evaluator.eval["precision"][5, :, :, 1, 2]
+        stats["AP75_small"] = float(np.nanmean(small))
         return per_class_macro_metrics(evaluator.eval), stats, per_class_values(evaluator.eval), counts
 
-    scores, stats_form, per_class, counts = {}, {}, {}, {}
+    scores, stats_form, per_class, filter_counts = {}, {}, {}, {}
     for arm in ("A0", "E600"):
         directory = out / arm
         for budget in budgets:
-            path = directory / f"pred-top{budget}.json"
+            path = directory / ("pred-top%d.json" % budget)
             require(path.is_file(), "missing prediction file %s" % path)
-            macro, stats, classes, count = score_predictions(json.loads(path.read_text()))
+            macro, stats, classes, counts = score_predictions(json.loads(path.read_text()))
             scores.setdefault(arm, {})[str(budget)] = macro
             stats_form.setdefault(arm, {})[str(budget)] = stats
             per_class.setdefault(arm, {})[str(budget)] = classes
-            counts.setdefault(arm, {})[str(budget)] = count
-            (directory / f"metrics-top{budget}.json").write_text(json.dumps(macro, indent=1))
+            filter_counts.setdefault(arm, {})[str(budget)] = counts
+            (directory / ("metrics-top%d.json" % budget)).write_text(json.dumps(macro, indent=1))
 
     parent = Path(plan["runner"]["parent_job"]) / "evaluation"
-    certified_pred = parent / f"top{budgets[0]}-predictions.json"
-    published = json.loads((parent / f"top{budgets[0]}-metrics.json").read_text())["COCO_bridge"]["metrics"]
+    certified_pred = parent / ("top%d-predictions.json" % budgets[0])
+    published = json.loads((parent / ("top%d-metrics.json" % budgets[0])).read_text())["COCO_bridge"]["metrics"]
     macro, _stats, _classes, _counts = score_predictions(json.loads(certified_pred.read_text()))
     anchor = {"certified_predictions": {"path": str(certified_pred), "sha256": sha(certified_pred)},
               "published": {k: round(v, 15) for k, v in published.items()},
@@ -368,14 +395,15 @@ def score_only(plan, contract, out):
     if a0_raw.is_file() and e600_raw.is_file():
         left = torch.load(a0_raw, map_location="cpu", weights_only=False)
         right = torch.load(e600_raw, map_location="cpu", weights_only=False)
-        same = bool(torch.equal(left["pred_logits"], right["pred_logits"]))
         diff = (left["pred_logits"] - right["pred_logits"]).abs()
-        first_stage = {"available": True, "bitwise_equal": same,
-                       "max_abs_diff": float(diff.max()), "nonidentical_entries": int((diff > 0).sum()),
+        first_stage = {"available": True,
+                       "bitwise_equal": bool(torch.equal(left["pred_logits"], right["pred_logits"])),
+                       "max_abs_diff": float(diff.max()),
+                       "nonidentical_entries": int((diff > 0).sum()),
                        "entries": int(diff.numel()),
                        "A0_sha256": sha(a0_raw), "E600_sha256": sha(e600_raw),
-                       "note": "A0 is the pristine native forward, E600 the instrumented one, same "
-                               "device and session; any difference is an instrumentation artefact"}
+                       "note": ("A0 is the pristine native forward, E600 the instrumented one, same "
+                                "device and session; any difference is an instrumentation artefact")}
 
     cache_report = {"available": False}
     cache_path = Path(plan["runner"]["certified_cache"])
@@ -386,32 +414,34 @@ def score_only(plan, contract, out):
         index = [theirs["image_ids"].index(image_id) for image_id in same_ids]
         other = theirs["pred_logits"][torch.tensor(index, dtype=torch.long)]
         diff = (mine["pred_logits"] - other).abs()
-        predictions = json.loads((out / "A0" / f"pred-top{budgets[0]}.json").read_text())
+        predictions = json.loads((out / "A0" / ("pred-top%d.json" % budgets[0])).read_text())
         certified = json.loads(certified_pred.read_text())
         exact = sum(1 for a, b in zip(predictions, certified)
                     if a["image_id"] == b["image_id"] and a["query_id"] == b["query_id"]
                     and a["category_id"] == b["category_id"] and a["score"] == b["score"]
                     and [float(v) for v in a["bbox_xyxy"]] == [float(v) for v in b["bbox_xyxy"]])
-        cache_report = {"available": True, "cache": {"path": str(cache_path), "sha256": sha(cache_path)},
+        cache_report = {"available": True,
+                        "cache": {"path": str(cache_path), "sha256": sha(cache_path)},
                         "raw_queries_bitwise_equal": bool(torch.equal(mine["pred_logits"], other)),
                         "raw_queries_max_abs_diff": float(diff.max()),
                         "raw_queries_nonidentical_entries": int((diff > 0).sum()),
                         "raw_queries_entries": int(diff.numel()),
                         "prediction_entries_fieldwise_identical": exact,
                         "prediction_entries": len(predictions),
-                        "note": "cross-run comparison against the 2026-10-14 certified cache and "
-                                "prediction file; last-bit differences are recorded, not repaired"}
+                        "note": ("cross-run comparison against the 2026-10-14 certified cache and "
+                                 "prediction file; last-bit differences are recorded, not repaired")}
 
     cross_device = {"available": False}
-    cpu_dir = out / "cpu-check"
-    if cpu_dir.is_dir():
+    candidates = [out / "cpu-check", out.parent / "cpu-check"]
+    cpu_dir = next((path for path in candidates if path.is_dir()), None)
+    if cpu_dir is not None:
         pairs = {}
         for arm in ("A0", "E600"):
-            path = cpu_dir / arm / f"pred-top{budgets[0]}.json"
-            if not path.is_file():
+            path = cpu_dir / arm / ("pred-top%d.json" % budgets[0])
+            if not path.is_file() or not (out / arm).is_dir():
                 continue
             cpu_rows = json.loads(path.read_text())
-            gpu_rows = json.loads((out / arm / f"pred-top{budgets[0]}.json").read_text())
+            gpu_rows = json.loads((out / arm / ("pred-top%d.json" % budgets[0])).read_text())
             images = sorted({e["image_id"] for e in cpu_rows})
             gpu = {}
             for entry in gpu_rows:
@@ -446,9 +476,9 @@ def score_only(plan, contract, out):
             pairs[arm] = {"images": len(images), "matched": matched, "only_cpu": only_cpu,
                           "only_gpu": only_gpu, "max_abs_score_diff": max_score,
                           "max_abs_box_diff_px": max_box}
-        cross_device = {"available": True, "pairs": pairs,
-                        "note": "CPU (real parent EMA weights) vs GPU, content matching per class with "
-                                "score tolerance 1e-5 and box tolerance 0.05 px"}
+        cross_device = {"available": True, "directory": str(cpu_dir), "pairs": pairs,
+                        "note": ("CPU with real parent EMA weights vs GPU, content matching per class, "
+                                 "score tolerance 1e-5, box tolerance 0.05 px")}
 
     deltas = {str(budget): {k: (scores["E600"][str(budget)][k] - scores["A0"][str(budget)][k]) * 100.0
                             for k in METRIC_KEYS} for budget in budgets}
@@ -466,10 +496,9 @@ def score_only(plan, contract, out):
                           "value": value, "passed": passed})
     timing = {}
     for arm in ("A0", "E600"):
-        result = out / arm / f"RESULT-{arm}.json"
+        result = out / arm / ("RESULT-%s.json" % arm)
         if result.is_file():
-            payload = json.loads(result.read_text())
-            timing[arm] = payload["timing_total_seconds"]
+            timing[arm] = json.loads(result.read_text())["timing_total_seconds"]
     ratio = (timing["E600"] / timing["A0"]) if timing.get("A0") else None
     cost = {"seconds": timing, "ratio_E600_over_A0": ratio,
             "maximum_ratio": plan["gates"]["cost"]["maximum"],
@@ -485,7 +514,7 @@ def score_only(plan, contract, out):
         "units": "pp = 100 x (E600 - A0); aggregation = class-equal-weight",
         "gates": {"E600_minus_A0": {"passed": gate_ok, "detail": gate_rows}, "cost": cost},
         "per_class_AP": per_class,
-        "spatial_filter_counts": counts,
+        "spatial_filter_counts": filter_counts,
         "anchor_reproduction": anchor,
         "first_stage_vs_native": first_stage,
         "cache_reconstruction": cache_report,
@@ -502,10 +531,10 @@ def score_only(plan, contract, out):
                                         "passed" if gate["passed"] else "failed"))
     lines.append("cost,-,ratio_E600_over_A0,%s" % ratio)
     (out / "TABLE.csv").write_text("\n".join(lines) + "\n")
-    print(json.dumps({"quality": quality, "gate_passed": gate_ok, "cost": cost,
-                      "deltas_pp": deltas, "anchor_max_abs_diff": anchor["max_abs_diff"],
-                      "first_stage": first_stage, "cache_reconstruction": cache_report,
-                      "cross_device": cross_device}, indent=1, ensure_ascii=False))
+    print(json.dumps({"quality": quality, "gate_passed": gate_ok, "cost": cost, "deltas_pp": deltas,
+                      "anchor_max_abs_diff": anchor["max_abs_diff"], "first_stage": first_stage,
+                      "cache_reconstruction": cache_report, "cross_device": cross_device},
+                     indent=1, ensure_ascii=False))
 
 
 def main():
