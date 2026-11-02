@@ -1,9 +1,10 @@
 {
   "version": "r18-tiny-positives-v2",
-  "revision": 2,
+  "revision": 3,
   "revision_log": [
     "1 (2026-11-02, preparation): tiny-band extra positive regression supervision; three arms A0/A1/A2; preparation only, no GPU",
-    "2 (2026-11-02, user revision): A1 redefined as the native matched-pair duplicated-regression control sharing the A2 admission gate; observation ledger extended (admissible instances, native-pair misses, appended-set digest); claim limits and count semantics registered; thresholds, schedule and budget cells unchanged"
+    "2 (2026-11-02, user revision): A1 redefined as the native matched-pair duplicated-regression control sharing the A2 admission gate; observation ledger extended (admissible instances, native-pair misses, appended-set digest); claim limits and count semantics registered; thresholds, schedule and budget cells unchanged",
+    "3 (2026-11-02, user execution-boundary amendment): resource estimates only; cancel artificial GPU/wall/storage/return caps; preserve real resource safety, fixed workload and zero automatic retry; computation release-007 unchanged"
   ],
   "positioning": "practical initial screening of band-conditioned extra regression positives inside a frozen one-to-one NMS-free DETR (regression only, inference untouched); one-to-many positive assignment is a known family (dense/anchor-based positive assignment, auxiliary one-to-many heads); no originality claim; this fixed experiment answers the practical net benefit and the A2-A1 increment only: no optimal tau, no optimal append count, no causal family attribution",
   "arms": [
@@ -241,9 +242,52 @@
         "runtime_logs_predictions_plans_receipts": 1200000000,
         "failure_scene_reserve_unused_zero": 2500000000
       },
-      "note": "whole-round declaration for this round directory only; every preparation material of the earlier rounds stays where it is and is not duplicated; revision 2 re-ran the affected preparation evidence (release-006, checks-006, one CPU fixture chain) inside the same declaration"
+      "note": "whole-round estimate includes all preparation and retained failure scenes; no deletion; no artificial stop at this estimate; actual free-disk safety remains",
+      "items_cap_bytes_semantics": "item estimates, not hard caps"
     },
     "no_vram_quota": true,
-    "record_peak_memory": true
+    "record_peak_memory": true,
+    "semantics": "cost references and legacy parser compatibility only; no artificial resource stop caps",
+    "return_bytes_semantics": "legacy parser compatibility value only; return hard cap canceled"
+  },
+  "execution_resource_policy": {
+    "version": "r19-resource-reference-only-v1",
+    "cost_references": {
+      "gpu_hours": 8.0,
+      "wall_hours": 24,
+      "whole_round_storage_bytes": 25769803776
+    },
+    "hard_resource_caps": {
+      "gpu_seconds": null,
+      "wall_seconds": null,
+      "whole_round_storage_bytes": null,
+      "return_bytes": null,
+      "vram_bytes": null
+    },
+    "actual_resource_safety": [
+      "stop on insufficient disk headroom for the next stage",
+      "stop on OOM",
+      "stop on nonfinite numeric values",
+      "stop on process failure",
+      "stop on sustained no progress"
+    ],
+    "fixed_scope": {
+      "acceptance_launches": 1,
+      "acceptance_actual_optimizer_updates_max": 4,
+      "arms": [
+        "A0",
+        "A1",
+        "A2"
+      ],
+      "formal_updates_per_arm": 3648,
+      "formal_updates_total": 10944,
+      "score_budget_calls": 6,
+      "acceptance_state_for_formal": false
+    },
+    "automatic_retries": 0,
+    "delete_to_meet_estimate": false,
+    "cost_overrun_is_scientific_failure": false,
+    "legacy_cost_fields": "numeric budget fields retained for the unchanged release parser; cost_passed/within_budget describe reference comparison only and never scientific quality or stop authority",
+    "return_policy": "necessary reports, metrics and audit summaries; no artificial byte cap; weights and complete predictions remain server-side by default"
   }
 }
