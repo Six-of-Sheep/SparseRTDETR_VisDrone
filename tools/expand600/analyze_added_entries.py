@@ -153,7 +153,8 @@ def group_predictions(predictions):
 
 def main():
     source, contract_path, r22_dir, r20_dir, out_path = sys.argv[1:6]
-    sys.path.insert(0, source + "/src")
+    sys.path.insert(0, source)              # root level modules such as slice_core
+    sys.path.insert(0, source + "/src")     # the frozen package
     from sparse_rtdetr.r0 import evaluation as ev
     from sparse_rtdetr.protocol_r18 import slice_ft_job as job
     contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
