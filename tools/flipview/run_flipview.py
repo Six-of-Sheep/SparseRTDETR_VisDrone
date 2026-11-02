@@ -174,6 +174,21 @@ def boxes_of(entries):
     return [[float(v) for v in e["bbox_xyxy"]] for e in entries]
 
 
+def changed_entries(variant, reference):
+    """Entries whose box differs from the pristine list at the same position, and their query ids.
+
+    One treated query carries up to ten class names, so the number of changed entries is bounded by ten
+    times the treated queries, not by the treated queries themselves; the exact invariant is that every
+    changed entry's query belongs to the treated set.
+    """
+    count, queries = 0, set()
+    for entry, base in zip(variant, reference):
+        if [float(v) for v in entry["bbox_xyxy"]] != [float(v) for v in base["bbox_xyxy"]]:
+            count += 1
+            queries.add(int(entry["query_id"]))
+    return count, queries
+
+
 def summarize(values):
     if not values:
         return {"count": 0}
@@ -207,8 +222,11 @@ def run_arm(args, plan, contract, model, device, batch_size):
              "reference_build": 0.0, "r23_build": 0.0, "r23c_build": 0.0, "a0_build": 0.0}
     counters = {"name_score_identity_violations": 0, "untreated_box_changes": 0,
                 "treated_set_mismatches": 0, "changed_above_treated": 0,
-                "treated_total": 0, "small_band_total": 0, "changed_at_600_total": 0,
-                "changed_at_300_total": 0, "control_changed_at_600_total": 0}
+                "treated_total": 0, "small_band_total": 0,
+                "changed_entries_at_600_total": 0, "changed_queries_at_600_total": 0,
+                "changed_entries_at_300_total": 0, "changed_queries_at_300_total": 0,
+                "control_changed_entries_at_600_total": 0,
+                "control_changed_queries_at_600_total": 0}
     with torch.inference_mode():
         for start in range(0, len(rows), batch_size):
             chunk = rows[start:start + batch_size]
@@ -290,23 +308,29 @@ def run_arm(args, plan, contract, model, device, batch_size):
                             or identity_of(variant_secondary) != identity_of(a0_secondary):
                         counters["name_score_identity_violations"] += 1
                         require(False, "the fused list changed names or scores")
-                    changed_main = sum(1 for left, right in zip(boxes_of(variant_main), boxes_of(a0_main))
-                                       if left != right)
-                    changed_secondary = sum(
-                        1 for left, right in zip(boxes_of(variant_secondary), boxes_of(a0_secondary))
-                        if left != right)
-                    if changed_main > counters_best["treated_queries"]:
+                    changed_main, queries_main = changed_entries(variant_main, a0_main)
+                    changed_secondary, queries_secondary = changed_entries(variant_secondary,
+                                                                          a0_secondary)
+                    if not all(bool(treated_best[q]) for q in queries_main | queries_secondary):
+                        counters["untreated_box_changes"] += 1
+                        require(False, "a box changed for a query outside the treated set")
+                    if len(queries_main) > counters_best["treated_queries"]:
                         counters["changed_above_treated"] += 1
-                        require(False, "more boxes changed than queries were treated")
+                        require(False, "more queries changed than were treated")
                     if name == "R23":
-                        counters["changed_at_600_total"] += changed_main
-                        counters["changed_at_300_total"] += changed_secondary
-                        record["changed_at_600"] = changed_main
-                        record["changed_at_300"] = changed_secondary
+                        counters["changed_entries_at_600_total"] += changed_main
+                        counters["changed_queries_at_600_total"] += len(queries_main)
+                        counters["changed_entries_at_300_total"] += changed_secondary
+                        counters["changed_queries_at_300_total"] += len(queries_secondary)
+                        record["changed_entries_at_600"] = changed_main
+                        record["changed_queries_at_600"] = len(queries_main)
+                        record["changed_entries_at_300"] = changed_secondary
+                        record["changed_queries_at_300"] = len(queries_secondary)
                     else:
-                        counters["control_changed_at_600_total"] += changed_main
-                        record["control_changed_at_600"] = changed_main
-                        record["control_changed_at_300"] = changed_secondary
+                        counters["control_changed_entries_at_600_total"] += changed_main
+                        counters["control_changed_queries_at_600_total"] += len(queries_main)
+                        record["control_changed_entries_at_600"] = changed_main
+                        record["control_changed_queries_at_600"] = len(queries_main)
                     lists[name]["main"].append(variant_main)
                     lists[name]["secondary"].append(variant_secondary)
                 image_records.append(record)
