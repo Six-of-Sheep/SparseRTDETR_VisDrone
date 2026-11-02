@@ -335,7 +335,7 @@ def score_only(plan, contract, out, ev):
             if arm == "A0":
                 ref = Path(plan["runner"]["parent_job"]) / f"evaluation/top{budget}-metrics.json"
                 metrics = json.loads(ref.read_text())["COCO_bridge"]["metrics"]
-                metrics_refs[arm] = {str(budget): {"path": str(ref), "sha256": sha(ref)}}
+                metrics_refs.setdefault(arm, {})[str(budget)] = {"path": str(ref), "sha256": sha(ref)}
             else:
                 name = {"A0r": "baseline", "A1": "control", "A2": "method"}[arm]
                 directory = out / name
