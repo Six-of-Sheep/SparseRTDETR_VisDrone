@@ -377,15 +377,18 @@ def score_only(plan, contract, out, ev):
     gates = plan["gates"]
     def evaluate(spec, name):
         rows_out, ok = [], True
-        conditions = [{"metric": spec["metric"], "budget": spec["budget"], "op": spec["op"], "threshold": spec["threshold_pp"]}] + \
-                     [spec["and"]] + [spec["protection"][i] for i in range(len(spec["protection"]))]
-        for cond in conditions:
+        protection = spec["protection"]
+        if isinstance(protection, str):
+            protection = gates["A2_minus_A0"]["protection"]          # plan wording: "same five cells"
+        for cond in (spec, spec["and"], *protection):
+            threshold = cond["threshold_pp"]
             value = deltas[name][str(cond["budget"])][cond["metric"]]
-            passed = value >= cond["threshold"] if cond["op"] == ">=" else value <= cond["threshold"]
+            passed = value >= threshold if cond["op"] == ">=" else value <= threshold
             ok = ok and passed
             rows_out.append({"metric": cond["metric"], "budget": cond["budget"], "op": cond["op"],
-                             "threshold": cond["threshold"], "value": value, "passed": passed})
+                             "threshold": threshold, "value": value, "passed": passed})
         return {"passed": ok, "detail": rows_out}
+
     costs = {"A0_seconds": None, "A1_seconds": None, "A2_seconds": None}
     for arm, name in (("A0", "baseline"), ("A1", "control"), ("A2", "method")):
         result = out / name / f"RESULT-{name}.json"
