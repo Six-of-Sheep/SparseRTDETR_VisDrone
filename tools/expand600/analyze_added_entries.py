@@ -118,25 +118,21 @@ def align_queries(rows, predictions, det):
     """Recover (query_id, category_id) for every bridge detection by a two-pointer walk."""
     ids = {row["stable_image_id"]: index + 1 for index, row in enumerate(rows)}
     pred_by_image = group_predictions(predictions)
-    det_by_image = defaultdict(list)
-    for entry in det:
-        det_by_image[entry["image_id"]].append(entry)
-    query_of = {}
-    for stable_id, integer_id in ids.items():
-        walker, index = det_by_image.get(integer_id, []), 0
-        for entry in pred_by_image.get(stable_id, []):
-            if index >= len(walker):
+    query_of, index = {}, 0
+    for row in rows:
+        for entry in pred_by_image.get(row["stable_image_id"], []):
+            if index >= len(det):
                 break
-            target = walker[index]
+            target = det[index]
             box = [float(v) for v in entry["bbox_xyxy"]]
             expected = [box[0], box[1], box[2] - box[0], box[3] - box[1]]
             if (int(target["category_id"]) == int(entry["category_id"])
                     and float(target["score"]) == float(entry["score"])
                     and [float(v) for v in target["bbox"]] == expected):
-                query_of[(integer_id, index)] = (int(entry["query_id"]), int(entry["category_id"]))
+                query_of[index] = (int(entry["query_id"]), int(entry["category_id"]))
                 index += 1
-    require(len(query_of) == len(det),
-            "alignment lost detections: %d of %d" % (len(query_of), len(det)))
+    require(index == len(det),
+            "alignment lost detections: %d of %d" % (index, len(det)))
     return query_of, ids
 
 
@@ -171,7 +167,7 @@ def analyze_list(rows, parsed, predictions, ev):
                 tp_gt.add((key[0], gts[gt_index]["raw_annotation_id"]))
             for det_index, (kind, gt_index, value) in enumerate(status):
                 bridge_index, entry = indexed[det_index]
-                query, category = query_of[(key[0], bridge_index)]
+                query, category = query_of[bridge_index]
                 statuses[(key[0], query, category)] = {
                     "kind": kind, "iou": value, "category_id": category, "score": entry["score"],
                     "gt_raw_id": (gts[gt_index]["raw_annotation_id"]
