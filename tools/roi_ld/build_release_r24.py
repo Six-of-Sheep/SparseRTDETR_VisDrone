@@ -75,6 +75,21 @@ def main():
             raise SystemExit("base source file differs: %s" % row["path"])
         verified += 1
 
+    # Drop the compiled caches the base carries: their bytes are rewritten by any import without
+    # -B, so binding them would make the frozen release self-invalidating while adding nothing
+    # scientific.  The manifest binds only source; the chain itself runs with
+    # PYTHONDONTWRITEBYTECODE set.
+    pruned = []
+    for directory in sorted(out_src.glob("**/__pycache__")):
+        if directory.is_dir():
+            pruned.extend(str(p.relative_to(out_src)) for p in sorted(directory.rglob("*")) if p.is_file())
+            shutil.rmtree(directory)
+    for leftover in sorted(out_src.glob("**/*.py[co]")):
+        if leftover.is_file():
+            pruned.append(str(leftover.relative_to(out_src))); leftover.unlink()
+    if any(p in (row["path"] for row in base_manifest["source_files"]) for p in pruned):
+        raise SystemExit("a pruned artifact is not a compiled cache")
+
     # Layer 1: anchored patches to the frozen protocol files.
     patches = roi_ld_patch_r24.apply(out_src)
 
@@ -140,6 +155,7 @@ def main():
              "patched_files": len(patches), "base_manifest_sha256": sha(base_manifest_path),
              "manifest": str(manifest_path), "manifest_sha256": sha(manifest_path),
              "plan_sha256": sha(plan_target), "plan": str(plan_target),
+             "pruned_artifacts": pruned, "pruned_count": len(pruned),
              "derived_head": commit.stdout.strip(), "commit": commit.stdout.strip(),
              "branch": branch.stdout.strip(), "patches": patches}
     (out_dir / "BUILD.json").write_text(json.dumps(build, indent=1, ensure_ascii=False) + "\n")
