@@ -148,7 +148,7 @@ class FixtureTrain(torch.utils.data.Dataset):
         from PIL import Image
         pos=self.start*2+index
         raw=parse_raw(FIXTURE_ANNOTATION if pos%2==0 else b'','cpu-ft-'+str(pos))
-        x,t,tr=ft.Transform(self.arm,FIXTURE_INPUT_HW)(Image.fromarray(np.full(FIXTURE_RAW_HW,90+pos,np.uint8)),raw,
+        x,t,tr=ft.Transform(self.arm,FIXTURE_INPUT_HW)(Image.fromarray(np.full(FIXTURE_RAW_HW+(3,),90+pos,np.uint8)),raw,
                     epoch=self.epoch,position=pos,image_id='cpu-ft-'+str(pos))
         if self.roi_mode is not None:fixture_roi_target(self.roi_mode,t)
         tr['spawn_observer']={'pid':os.getpid(),'CUDA_initialized':torch.cuda.is_initialized()}
