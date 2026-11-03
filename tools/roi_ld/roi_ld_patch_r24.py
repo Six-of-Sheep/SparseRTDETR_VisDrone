@@ -188,7 +188,8 @@ PATCHES = {
     "src/sparse_rtdetr/protocol_r18/slice_finetune.py": [
         ("VERSION = 'r18-tiny-positives-v2'", "VERSION = 'r24-roi-ld-v1'"),
         ("from . import tiny_positives_arm\n",
-         "from . import tiny_positives_arm\nfrom . import roi_ld_arm\nfrom . import roi_ld_data\n"),
+         "from . import tiny_positives_arm\nfrom . import roi_ld\nfrom . import roi_ld_arm\n"
+         "from . import roi_ld_data\n"),
         ("ARM_INSTALL = {'A0': None, 'A1': None, 'A2': None}\n"
          "POS_INSTALL = {'A0': None, 'A1': 'A1', 'A2': 'A2'}\n",
          "ARM_INSTALL = {'A0': None, 'A1': None, 'A2': None}\n"

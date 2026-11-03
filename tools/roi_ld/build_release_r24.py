@@ -62,6 +62,10 @@ def main():
     out_src = out_dir / "source"
     if out_src.exists():
         raise SystemExit("release output already exists; refusing to overwrite")
+    # The manifest name follows the release version so a repaired rebuild cannot collide with the
+    # binding the contract caller derives from --release-suffix.
+    out_manifest_name = ("execution-source-%s.json" % out_dir.name[len("execution-release-"):]
+                         if out_dir.name.startswith("execution-release-") else OUT_MANIFEST_NAME)
     shutil.copytree(base_dir / "source", out_src)
 
     verified = 0
@@ -129,7 +133,7 @@ def main():
                  "science plan.  The retired r19 tiny-positives item keeps its modules and is installed "
                  "by no arm.  No scientific constant, threshold, schedule or evaluation budget changes."),
     }
-    manifest_path = out_dir / OUT_MANIFEST_NAME
+    manifest_path = out_dir / out_manifest_name
     manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")
     build = {"status": "BUILT", "release": str(out_dir), "files": len(entries),
              "base_verified_files": verified, "overlay_files": len(overlay),

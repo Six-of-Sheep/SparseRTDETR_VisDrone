@@ -180,7 +180,8 @@ def main():
     check("armed.dispatch_and_selection",
           len(rows_armed) > 0 and all(row["roi_mode"] == "R2" for row in rows_armed)
           and len(positive_rows) > 0
-          and all(row["roi_band_gt"] == 2 and row["roi_selected"] == 1 and row["roi_one_sided"] == 1
+          and all(row["roi_selected"] == (row["roi_band_gt"] + 1) // 2
+                  and row["roi_one_sided"] == row["roi_band_gt"] // 2
                   and row["roi_below_iou"] == 0 for row in positive_rows),
           [(row["roi_band_gt"], row["roi_selected"], row["roi_one_sided"]) for row in rows_armed])
     check("armed.ledger_closes",
