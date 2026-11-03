@@ -173,10 +173,16 @@ def main():
                                        and row["roi_band_gt"] >= 0 for row in rows_native),
           [row["roi_mode"] for row in rows_native])
     losses_armed, rows_armed = run("R2")
+    # Every non-denoising family call produces its own ledger row over the same targets, so the
+    # assertion is per row: a row that sees the fixture's two band rows must select exactly one
+    # (the common-support row) and record exactly one one-sided row (the mirrored row).
+    positive_rows = [row for row in rows_armed if row["roi_band_gt"] > 0]
     check("armed.dispatch_and_selection",
           len(rows_armed) > 0 and all(row["roi_mode"] == "R2" for row in rows_armed)
-          and sum(row["roi_selected"] for row in rows_armed) == 1
-          and sum(row["roi_one_sided"] for row in rows_armed) == 1, rows_armed)
+          and len(positive_rows) > 0
+          and all(row["roi_band_gt"] == 2 and row["roi_selected"] == 1 and row["roi_one_sided"] == 1
+                  and row["roi_below_iou"] == 0 for row in positive_rows),
+          [(row["roi_band_gt"], row["roi_selected"], row["roi_one_sided"]) for row in rows_armed])
     check("armed.ledger_closes",
           all(row["roi_selected"] + row["roi_below_iou"] + row["roi_no_candidate"] + row["roi_no_class"]
               + row["roi_one_sided"] + row["roi_unmatched_band_gt"] == row["roi_band_gt"]

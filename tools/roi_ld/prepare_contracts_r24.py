@@ -227,7 +227,7 @@ def build_contract(scope):
         "materials": list(contract["materials"]) + [reference(TEACHER_INDEX), reference(REV1_PLAN),
                                                     reference(REV2_PLAN), reference(PLAN_AMENDMENT)]
                      + [reference(PREP_DIR / name) for name in
-                        ("ENGINE_CHECKS.json", "COMPARE.json", "A0.json", "A1.json", "A2.json")
+                        ("ENGINE_CHECKS.log", "COMPARE.json", "A0.json", "A1.json", "A2.json")
                         if (PREP_DIR / name).is_file()],
     })
     contract.update(blocks)

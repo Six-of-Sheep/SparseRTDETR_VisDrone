@@ -102,7 +102,10 @@ PLAN_OLD = """def read_plan(path):
 
 PLAN_NEW = """def read_plan(path):
     p = json.loads(Path(path).read_text(encoding='utf-8'))
-    if p['version'] != VERSION or p['arms'] != list(ARMS) or p['schedule']['updates_per_arm'] != UPDATES:
+    # The plan's ``arms`` entry is prose for the reader; the machine-readable arm set is the
+    # install map, and the schedule lives under ``schedule``.
+    if (p['version'] != VERSION or sorted(p.get('arm_install') or {}) != sorted(ARMS)
+            or int(p['schedule']['updates_per_arm']) != UPDATES):
         raise ValueError('different fixed fine-tune plan')
     if p['parent']['checkpoint_sha256'] != PARENT_SHA or p['parent'].get('ema_only') is not True:
         raise ValueError('frozen parent declaration differs')
