@@ -377,7 +377,12 @@ def inference(c,out,phase,holder):
 
 
 def roi_ledger(r):
-    """Aggregate the ROI observations of one update; the ledger identity must close."""
+    """Aggregate the ROI observations of one update.
+
+    The accounting closure is an ARMED-row invariant.  The native arm reports the band count as an
+    observation with every accounting counter zero (roi_selected = 0), which is not a selection
+    ledger and must not be required to close; what IS required of it is that it selects nothing.
+    """
     rows=[row for diag in r['normalizers'] for row in diag if isinstance(row,dict) and 'roi_band_gt' in row]
     require(rows,'FT acceptance roi observations missing')
     keys=('roi_band_gt','roi_eligible','roi_selected','roi_no_candidate','roi_no_class','roi_below_iou','roi_one_sided','roi_unmatched_band_gt')
@@ -390,7 +395,17 @@ def roi_ledger(r):
     totals['modes']=sorted({row.get('roi_mode') for row in rows},key=str)
     totals['identity']=(totals['roi_selected']+totals['roi_below_iou']+totals['roi_no_candidate']
                         +totals['roi_no_class']+totals['roi_one_sided']+totals['roi_unmatched_band_gt'])
-    require(totals['identity']==totals['roi_band_gt'],'FT acceptance roi ledger does not account every band row')
+    armed=[row for row in rows if row.get('roi_mode') is not None]
+    totals['armed_rows']=len(armed)
+    totals['armed_band_gt']=sum(int(row['roi_band_gt']) for row in armed)
+    totals['armed_identity']=sum(int(row['roi_selected'])+int(row['roi_below_iou'])+int(row['roi_no_candidate'])
+                                +int(row['roi_no_class'])+int(row['roi_one_sided'])+int(row['roi_unmatched_band_gt'])
+                                for row in armed)
+    if armed:
+        require(totals['armed_identity']==totals['armed_band_gt'],'FT acceptance roi ledger does not account every band row')
+    else:
+        require(all(int(row['roi_selected'])==0 and int(row['roi_below_iou'])==0 and int(row['roi_one_sided'])==0
+                    for row in rows),'FT acceptance native roi rows selected something')
     return totals
 
 
