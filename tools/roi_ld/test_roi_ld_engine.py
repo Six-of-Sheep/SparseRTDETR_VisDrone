@@ -46,6 +46,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", required=True)
     parser.add_argument("--receipt", default=None)
+    parser.add_argument("--report", default=None)
     args = parser.parse_args()
     root = Path(args.source_root).resolve()
     for path in (root, root / "src", root / "vendor/rtdetrv2_pytorch/src"):
@@ -208,6 +209,16 @@ def main():
     check("cuda.not_initialized", not torch.cuda.is_initialized())
     passed = sum(1 for _, ok, _ in RESULTS if ok)
     print("TESTS %d/%d PASS" % (passed, len(RESULTS)))
+    if args.report:
+        # A machine-readable receipt, so the frozen contract can bind a JSON material (the engine
+        # re-reads and parses every material at load time).  Written even on failure.
+        report = {"schema": "r24-engine-checks-v1",
+                  "status": "PASS" if passed == len(RESULTS) else "FAIL",
+                  "tests": len(RESULTS), "passed": passed, "failed": len(RESULTS) - passed,
+                  "source_root": str(root), "plan": str(plan_path),
+                  "checks": [{"name": name, "passed": bool(ok)} for name, ok, _ in RESULTS]}
+        Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+        print("REPORT", args.report)
     if passed != len(RESULTS):
         raise SystemExit(1)
 

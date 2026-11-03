@@ -227,7 +227,7 @@ def build_contract(scope):
         "materials": list(contract["materials"]) + [reference(TEACHER_INDEX), reference(REV1_PLAN),
                                                     reference(REV2_PLAN), reference(PLAN_AMENDMENT)]
                      + [reference(PREP_DIR / name) for name in
-                        ("ENGINE_CHECKS.log", "COMPARE.json", "A0.json", "A1.json", "A2.json")
+                        ("ENGINE_CHECKS.json", "COMPARE.json", "A0.json", "A1.json", "A2.json")
                         if (PREP_DIR / name).is_file()],
     })
     contract.update(blocks)
@@ -252,6 +252,10 @@ def build_contract(scope):
                       else ("production-token-" + PRODUCTION_SUFFIX + ".json"))
     assert not path.exists() and not token_path.exists(), "contract or token already exists"
     assert not Path(contract["job_root"]).exists() and not Path(contract["runtime_root"]).exists(), "attempt output already exists"
+    # The engine's load() re-reads and PARSES every material, so a plain-text receipt would make the
+    # frozen contract unusable at launch.  Refuse it here instead of discovering it on the GPU node.
+    for row in contract["materials"]:
+        json.loads(Path(row["path"]).read_text(encoding="utf-8"))
     contract["contract_path"] = str(path)
     contract["contract_sha256"] = digest({k: v for k, v in contract.items() if k != "contract_sha256"})
     with path.open("xb") as stream:
