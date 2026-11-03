@@ -496,9 +496,14 @@ def accept_roi(c,out,holder):
                  'roi_unmatched_band_gt')
     require(all(checks_a1['roi'][key]==checks_a2['roi'][key] for key in shared_keys),
             'FT acceptance A1/A2 common-support ledger differs')
-    require(checks_a1['roi']['roi_below_iou']==checks_a2['roi']['roi_one_sided']
-            and checks_a1['roi']['roi_one_sided']==checks_a2['roi']['roi_below_iou'],
-            'FT acceptance A1/A2 below-bar and one-sided counters are not the expected mirror')
+    # The below-bar and one-sided counters are NOT mirror images on real data: a row whose two
+    # groups are BOTH below the bar is one-sided for each arm and below-bar for neither.  The exact
+    # structural identity is therefore a1.one_sided - a2.below == a2.one_sided - a1.below, and that
+    # common value is the number of rows with both groups below the bar (zero on the fixture).
+    both_below=(checks_a1['roi']['roi_one_sided']-checks_a2['roi']['roi_below_iou'])
+    require(both_below==(checks_a2['roi']['roi_one_sided']-checks_a1['roi']['roi_below_iou'])
+            and both_below>=0,
+            'FT acceptance A1/A2 one-sided and below-bar counters violate the band-bar identity')
     require(checks_a1['loss_key_sets']==checks_a2['loss_key_sets']==checks_a0['loss_key_sets'],
             'FT acceptance loss-key family differs across arms')
     require(checks_a1['roi']['set_digests']!=checks_a2['roi']['set_digests'],
@@ -532,7 +537,8 @@ def accept_roi(c,out,holder):
         'a1_a2_common_support':True,'a1_a2_selected':checks_a1['roi']['roi_selected'],
         'a1_a2_control_below_bar_rows':checks_a1['roi']['roi_below_iou'],
         'a1_a2_method_one_sided_rows':checks_a2['roi']['roi_one_sided'],
-        'a1_a2_ledger_mirrored':True,'a1_a2_selected_boxes_differ':True,'native_records_zero_selected':True,
+        'a1_a2_ledger_identity':True,'a1_a2_both_groups_below_bar_rows':both_below,
+        'a1_a2_selected_boxes_differ':True,'native_records_zero_selected':True,
         'initial_model_sha256':initial,'full_state_RNG_exact':True,'roi_state_restore_exact':True,
         'state_usable_for_formal':False,'single_arm_acceptance_state_usable_for_formal':False,
         'roi_install':{a:ft.ROI_INSTALL[a] for a in ft.ARMS},
