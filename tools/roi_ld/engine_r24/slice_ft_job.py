@@ -35,6 +35,15 @@ ALT_OFFSET=ft.ALT_OFFSET
 # different boxes and the two ledgers mirror each other.
 FIXTURE_SHIFT=0.25
 FIXTURE_FAR=1.0
+# CPU-fixture geometry.  The fixture runs on the PRODUCTION canvas so its band rows are real band
+# rows under the frozen band definition (canvas area <= 1024 px^2 on 768x1344): at 128x128 the same
+# rows sit on the band boundary and the strong augmentation can push them out, so the fixture would
+# prove only the plumbing.  The raw fixture image is 540x960 with 10 px boxes, which the resize
+# turns into roughly 14 px, i.e. about 196 px^2 - comfortably inside the band and comfortably above
+# the 1 px drop floor, so a moderate zoom/crop variation cannot move a row out of the band.
+FIXTURE_INPUT_HW=(768,1344)
+FIXTURE_RAW_HW=(540,960)
+FIXTURE_ANNOTATION=b'300,300,200,250,1,1,0,0\n100,100,10,10,1,2,0,0\n400,120,10,10,1,3,0,0\n700,200,200,200,0,0,0,0\n'
 
 
 def admit(c,out):
@@ -51,7 +60,7 @@ def construct(c,out,arm,scope,holder,runtime=None):
             require(not torch.cuda.is_initialized(),'CPU fixture CUDA');torch.set_num_threads(2);torch.use_deterministic_algorithms(True)
             runtime={'scope':'CPU_SYNTHETIC','torch':str(torch.__version__)}
         else:runtime=base.prepare_cuda(c,out)
-    config=Config(input_hw=(128,128),physical_batch_size=1,amp_dtype='float32') if fixture else Config()
+    config=Config(input_hw=FIXTURE_INPUT_HW,physical_batch_size=1,amp_dtype='float32') if fixture else Config()
     model,criterion,_=build(config,synthetic=True)
     mode=ft.ARM_INSTALL[arm]
     pos=ft.POS_INSTALL.get(arm)
@@ -138,8 +147,8 @@ class FixtureTrain(torch.utils.data.Dataset):
     def __getitem__(self,index):
         from PIL import Image
         pos=self.start*2+index
-        raw=parse_raw(b'30,30,20,25,1,1,0,0\n8,8,4,4,1,2,0,0\n40,10,4,4,1,3,0,0\n90,20,20,20,0,0,0,0\n' if pos%2==0 else b'','cpu-ft-'+str(pos))
-        x,t,tr=ft.Transform(self.arm,(128,128))(Image.fromarray(np.full((128,128,3),90+pos,np.uint8)),raw,
+        raw=parse_raw(FIXTURE_ANNOTATION if pos%2==0 else b'','cpu-ft-'+str(pos))
+        x,t,tr=ft.Transform(self.arm,FIXTURE_INPUT_HW)(Image.fromarray(np.full(FIXTURE_RAW_HW,90+pos,np.uint8)),raw,
                     epoch=self.epoch,position=pos,image_id='cpu-ft-'+str(pos))
         if self.roi_mode is not None:fixture_roi_target(self.roi_mode,t)
         tr['spawn_observer']={'pid':os.getpid(),'CUDA_initialized':torch.cuda.is_initialized()}
@@ -159,7 +168,7 @@ def loader(c,arm,epoch,start=0,limit=None):
 def native_twin(c,out):
     """Parent-loaded native twin used by the installed-arm acceptance probe."""
     fixture=c['scope']=='CPU_FIXTURE'
-    config=Config(input_hw=(128,128),physical_batch_size=1,amp_dtype='float32') if fixture else Config()
+    config=Config(input_hw=FIXTURE_INPUT_HW,physical_batch_size=1,amp_dtype='float32') if fixture else Config()
     twin,criterion,_=build(config,synthetic=True)
     if not fixture:
         binding=execution.verified(c['parent_binding']);r=c['parent_checkpoint']
@@ -273,9 +282,9 @@ def view_pixels(c,data,rows,sliced):
     groups=[[] for _ in range(5 if sliced else 1)]
     for row in rows:
         image=Image.fromarray(np.full((384,512,3),100,np.uint8))
-        groups[0].append(TF.pil_to_tensor(TF.resize(image,[128,128])).float()/255.)
+        groups[0].append(TF.pil_to_tensor(TF.resize(image,list(FIXTURE_INPUT_HW))).float()/255.)
         if sliced:
-            for tile in tile_windows(384,512):groups[tile.view_id].append(TF.pil_to_tensor(TF.resize(image.crop(tile.crop_box),[128,128])).float()/255.)
+            for tile in tile_windows(384,512):groups[tile.view_id].append(TF.pil_to_tensor(TF.resize(image.crop(tile.crop_box),list(FIXTURE_INPUT_HW))).float()/255.)
     return groups,None
 
 
@@ -464,10 +473,17 @@ def accept_roi(c,out,holder):
 
     # A2: the method (raw-pixel-tile boxes), then the chain save/restore of the term state
     e2,_,checks_a2=one_case('A2','A2',True,'A2')
-    gate_keys=('roi_band_gt','roi_eligible','roi_selected','roi_no_candidate','roi_no_class','roi_below_iou',
-               'roi_one_sided','roi_unmatched_band_gt')
-    require(all(checks_a1['roi'][key]==checks_a2['roi'][key] for key in gate_keys),
+    # Common support fixes the same rows and the same pair count for both armed arms.  The
+    # below-bar and one-sided counters are DESIGNED to mirror rather than to agree: the control
+    # arm's group carries the box the method arm's group lacks, and vice versa.  They are asserted
+    # as a mirror, and the group-agnostic counters as an equality.
+    shared_keys=('roi_band_gt','roi_eligible','roi_selected','roi_no_candidate','roi_no_class',
+                 'roi_unmatched_band_gt')
+    require(all(checks_a1['roi'][key]==checks_a2['roi'][key] for key in shared_keys),
             'FT acceptance A1/A2 common-support ledger differs')
+    require(checks_a1['roi']['roi_below_iou']==checks_a2['roi']['roi_one_sided']
+            and checks_a1['roi']['roi_one_sided']==checks_a2['roi']['roi_below_iou'],
+            'FT acceptance A1/A2 below-bar and one-sided counters are not the expected mirror')
     require(checks_a1['loss_key_sets']==checks_a2['loss_key_sets']==checks_a0['loss_key_sets'],
             'FT acceptance loss-key family differs across arms')
     require(checks_a1['roi']['set_digests']!=checks_a2['roi']['set_digests'],
@@ -501,7 +517,7 @@ def accept_roi(c,out,holder):
         'a1_a2_common_support':True,'a1_a2_selected':checks_a1['roi']['roi_selected'],
         'a1_a2_control_below_bar_rows':checks_a1['roi']['roi_below_iou'],
         'a1_a2_method_one_sided_rows':checks_a2['roi']['roi_one_sided'],
-        'a1_a2_selected_boxes_differ':True,'native_records_zero_selected':True,
+        'a1_a2_ledger_mirrored':True,'a1_a2_selected_boxes_differ':True,'native_records_zero_selected':True,
         'initial_model_sha256':initial,'full_state_RNG_exact':True,'roi_state_restore_exact':True,
         'state_usable_for_formal':False,'single_arm_acceptance_state_usable_for_formal':False,
         'roi_install':{a:ft.ROI_INSTALL[a] for a in ft.ARMS},

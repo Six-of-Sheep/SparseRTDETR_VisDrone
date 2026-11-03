@@ -123,8 +123,9 @@ def main():
             path.write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
             check("plan.refuses." + name, refused(lambda q=path: ft.read_plan(q)))
 
-    # 6. the patched criterion carries the roi declaration, native or armed
-    config = Config(input_hw=(128, 128), physical_batch_size=1, amp_dtype="float32")
+    # 6. the patched criterion carries the roi declaration, native or armed.  The fixture runs on
+    # the production canvas, so the check uses the same input geometry.
+    config = Config(input_hw=job.FIXTURE_INPUT_HW, physical_batch_size=1, amp_dtype="float32")
     model, criterion, _ = build(config, synthetic=True)
     check("criterion.native_recipe",
           criterion.recipe()["roi_ld"] == roi_ld_arm.NATIVE_DECLARATION, criterion.recipe()["roi_ld"])
@@ -138,20 +139,12 @@ def main():
           roi_ld_arm.state(type("E", (), {"criterion": criterion})())["mode"] == "R2"
           and roi_ld_arm.state(type("E", (), {"criterion": criterion})())["targets"] == int(term.targets))
 
-    # 7/8. one real forward-lite through the patched criterion, native then armed with the fixture
+    # 7/8. one real forward through the patched criterion, native then armed, on the fixture the
+    # chain itself uses: production canvas, deterministic band rows, roi boxes attached for A2
     def build_batch(mode):
-        from PIL import Image
-        images, targets = [], []
-        for position in (0, 1):
-            raw = ft.parse_raw(b"30,30,20,25,1,1,0,0\n8,8,4,4,1,2,0,0\n40,10,4,4,1,3,0,0\n"
-                               if position % 2 == 0 else b"", "engine-check-%d" % position)
-            x, t, _ = ft.Transform("A0", (128, 128))(Image.fromarray(np.full((128, 128, 3), 90 + position, np.uint8)),
-                                                     raw, epoch=1, position=position,
-                                                     image_id="engine-check-%d" % position)
-            if mode is not None:
-                job.fixture_roi_target(mode, t)
-            images.append(x); targets.append(t)
-        return torch.stack(images), targets
+        dataset = job.FixtureTrain("A2" if mode is not None else "A0", 1, 0, 1)
+        items = [dataset[index] for index in range(len(dataset))]
+        return torch.stack([row[0] for row in items]), [row[1] for row in items]
 
     def run(mode):
         m, c, _ = build(config, synthetic=True)
