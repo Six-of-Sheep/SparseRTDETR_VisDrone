@@ -1,0 +1,82 @@
+{
+  "task_id": "r25-cached-error-channels-20261105-001",
+  "scope": "descriptive decomposition of closed historical predictions; zero model forward, zero CUDA, zero training; does not authorize any further run",
+  "python": "/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python",
+  "parent_contract": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-softnms-fixed-20261017-001/revision-007/execution-contract.json",
+    "sha256": "b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28"
+  },
+  "seed0_A_raw_cache": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/rtdetrv2-r18-common-protocol-seed0-e120-20261013-001/e088-io-20261014-001/inference/raw-queries-native-R18-e120.pth",
+    "bytes": 9250900,
+    "sha256": "27d0df7c2f09a816ef12a35e356a618fe00b945013f910a29860ba72edc28b3e"
+  },
+  "c_stage": {
+    "root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-c-stage-audit-20261018-001",
+    "source": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-c-stage-audit-20261018-001/release-002/source/tools",
+    "return_index": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-c-stage-audit-20261018-001/RETURN_INDEX.json",
+    "core_sha256": "30cbf592e0696a51f24f0a4196d4f9eb7c491d89571049cafbc47bacd2ab9744",
+    "audit_sha256": "0592a54f436732c57eacca5da0e903c14f790f1be8bf6f6354292c0d6be13c99",
+    "definition": "bridge GT with iscrowd 0 and 0 < raw area <= 1024; first stage whose max continuous IoU falls below the threshold; raw geometry is class-agnostic"
+  },
+  "r20": {
+    "release_source": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/execution-release-r20-005/source",
+    "release_commit": "f5fa0eda4b8b73560d84728765d642fe047a8a8d",
+    "release_manifest_sha256": "ca6987fca3fd91345b43a39ceeeeacd33f0b8b055a3e494a461aaecaea8f8ca9",
+    "code": {
+      "zoom_refine": "tools/zoom_refine/zoom_refine.py",
+      "run_zoom_refine": "tools/zoom_refine/run_zoom_refine.py"
+    },
+    "zoom_refine_sha256": "6e81aa61edf5ad6c528843622af6857a0bead986052f4378ba785a3b9d1d8cf9",
+    "run_zoom_refine_sha256": "e070b318b7f348559296a26e3f399e9a825cc2590a1116bacd8d39b58e023789",
+    "comparison": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/run-003/COMPARISON.json",
+    "comparison_sha256": "a4c14acbdb30b49b217c938218a27668fc7468b7430dadcb7ed1aaba04657412",
+    "arms": {
+      "A0r": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/run-003/baseline/pred-top600.json",
+        "bytes": 73757093,
+        "sha256": "0b2101b778a153fa2538572d94da92ecc4035bc7bd89bf0c38e3061d53f96b6e"
+      },
+      "A1": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/run-003/control/pred-top600.json",
+        "bytes": 73946593,
+        "sha256": "5bc00de64232153eb78d93c29087a313e9f64024f0f98b644e45ed9d166c8dd0"
+      },
+      "A2": {
+        "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/run-003/method/pred-top600.json",
+        "bytes": 73948375,
+        "sha256": "50bc9a40fabd9bee2691df6b43b161dcca2f7498b41ecf8fa65ae3ec5a4ffe61"
+      }
+    },
+    "receipts": {
+      "A1": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/run-003/control/RESULT-control.json",
+      "A2": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/run-003/method/RESULT-method.json"
+    },
+    "probe_002": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r20-zoom-refine-20261102-001/probe-002/RESULT.json",
+      "sha256": "2c2d71e093351c67e3040cf60b34535e9605a002992f312582252656a668e5b0"
+    }
+  },
+  "tide": {
+    "repository": "https://github.com/dbolya/tide",
+    "commit": "49a5d2a4aeb56795e93a3ed7cc7e6d25757bb4c1",
+    "license": "MIT",
+    "root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r25-cached-error-channels-20261105-001/third_party/tide-49a5d2a",
+    "files": {
+      "tidecv/ap.py": "c690360576b3c18d8e3e670f10595a651b8f50fb5d60a786676a1c3f683125aa",
+      "tidecv/data.py": "75fec02808c990904ec73b0ccd0e1ad45884be24665c67ac2a4f1f6397df1e32",
+      "tidecv/functions.py": "8e1504413fb8ad6ec04df477c04952be438fd5eaf7949493c281a1b32214ec40",
+      "tidecv/quantify.py": "4234e3cbb26ec22a057d473463e75b0fb36f31e9e6bfdca6d190c44113c9e533",
+      "tidecv/errors/error.py": "37d0a6019b29942f96d840d894a2b9d20192577d301134ac3ace182d298c0b41",
+      "tidecv/errors/main_errors.py": "306feaf50fa5b10a7440e9bfe8a6fe8b78b21a9df7a428a6cf282b0c3422f145",
+      "tidecv/errors/qualifiers.py": "f2464174f4885a48c7a13e0f353ca83dde603c16f31d65be8b3fe71107706960",
+      "LICENSE": "e421d46e2319e1d796d0954ea6e979dab01ca78e86aa653624e9180233db39fc"
+    }
+  },
+  "excluded": [
+    "running R25 A1/A2 predictions, checkpoints and endpoint scores",
+    "holdout and the 1602 set",
+    "oracle prediction files and probe outputs used as predictions",
+    "any model construction, forward pass or CUDA use"
+  ]
+}
