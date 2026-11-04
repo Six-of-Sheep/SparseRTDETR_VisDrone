@@ -145,6 +145,19 @@
         -0.0019060879541954456,
         -0.11774518943879486
       ]
+    },
+    {
+      "id": "r25-cached-error-channels-20261105-001",
+      "role": "cached_error_channel_decomposition_exploratory",
+      "result_status": "COMPLETE_DESCRIPTIVE_NO_VERDICT",
+      "seed_count": 3,
+      "plan": "configs/r25_cached_error_channels.json",
+      "report_project_relative": "workspace_management/delivery/research/r25-query-local-regression-20261104-001/cached-error-channels-001/REPORT_CACHED_ERROR_CHANNELS_001.md",
+      "source_commit": "12a9a92e88e1c6a130022f4c8c4efa0f1a382296",
+      "supplement_commit": "6b98e6495e8dd470cf5a84d1fb67e28b1d555424",
+      "GPU_authorized": false,
+      "GPU_forward_calls": 0,
+      "model_constructions": 0
     }
   ],
   "consolidated_results": "manifests/frozen_abc_results_20261019.json"
