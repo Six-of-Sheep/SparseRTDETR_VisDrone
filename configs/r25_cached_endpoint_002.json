@@ -1,0 +1,12 @@
+{
+  "task": "TASK_CACHED_FOLLOWUP_002 A",
+  "task_sha256": "2bd77cc0ffd371ede580ca57f6d48a0f0bbd1fffa3939339ca1fbd643c4677bb",
+  "python": "/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python",
+  "context_config": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/development/worktrees/r25-cached-followup-002/configs/r25_cached_error_channels.json",
+  "formal_root": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r25-query-local-regression-20261104-001/formal-001",
+  "core_sha256": {
+    "core.py": "79594448596ac78922fbbf43a62cbd4fe385530a9ba4eba9fc0452999c5d2689",
+    "aggregate.py": "ba0961b74620900e5c97349e2860f2459d496a553b8c76354e58b1602be6f61c",
+    "run_channels.py": "d2ae67b5a9adf3cbb2f8f084db9453a076b21dfaaaf3077daad2cd31c6ef59a8"
+  }
+}

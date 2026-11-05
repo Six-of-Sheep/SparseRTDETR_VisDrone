@@ -1,0 +1,65 @@
+{
+  "task_id": "r25-cached-followup-002",
+  "task_file": "D:/Lzy_CV/workspace_management/delivery/research/r25-query-local-regression-20261104-001/TASK_CACHED_FOLLOWUP_002.md",
+  "task_sha256": "2bd77cc0ffd371ede580ca57f6d48a0f0bbd1fffa3939339ca1fbd643c4677bb",
+  "scope": "task B: one fixed horizontal shift of closed cached top600 lists; zero model forward, zero CUDA, zero training; does not authorize any further run or change any verdict, certified output or inference default",
+  "python": "/home/lyy/.cache/r0-seed0-e120-20261010-001/environment/bin/python",
+  "parent_contract": {
+    "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/sahi-softnms-fixed-20261017-001/revision-007/execution-contract.json",
+    "sha256": "b2ac33e7a99cfa4e8ea3ccce7297f5088272d839f98fae7b7e13c4e2a7f46c28"
+  },
+  "shift": {
+    "dx_px": -0.25,
+    "dy_px": 0.0,
+    "dw_px": 0.0,
+    "dh_px": 0.0,
+    "fixed_by": "TASK_CACHED_FOLLOWUP_002 section 3, before any derived score existed"
+  },
+  "baseline_run": {
+    "dir": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r25-cached-error-channels-20261105-001/run-001",
+    "commit": "12a9a92e88e1c6a130022f4c8c4efa0f1a382296",
+    "sha256": {
+      "list-A-seed0.json": "484e01a79f1383359651578b8f921e24d9632b44bc1013ef56401cb666c58cae",
+      "list-A-seed1.json": "90f24355f1d43f4c0b1f413c3007a758f80e019da68a0c863dc2a8cfed6faeb5",
+      "list-A-seed2.json": "7ffcbd3537cf2c061f8a06ab67ba0670a3d06692a2bf71e4192c4c3f4bb2f34a",
+      "list-C-seed0.json": "f034a025821a2ca59498400e960f54a9abe367865d70f7e95678c5f83f89be8a",
+      "list-C-seed1.json": "7b8b0fb62732465f34fd0d673c6c9d189473b4a29d7c4f4a89fb35915e579ff5",
+      "list-C-seed2.json": "c42adfa474606e6b3bf3248c5812a603c4e827944696f47075ddd2de9020a8a1",
+      "list-A-seed0.npz": "5b508da4d76a22d0222e150ec094dc185a211e23d2e6116a4f22c4c540547aa7",
+      "list-A-seed1.npz": "3f84548647465502e69c51a93d18afe26ce5ee65491533c17ae3741f6b18e84f",
+      "list-A-seed2.npz": "0967e5fb57febea92e9afb0ac2e67212516fd2617cc9d6606051e6214671699d",
+      "list-C-seed0.npz": "a104a7d81a15fd334f3849fd002837b9c32abe03e3382bf0c26aad75beb7599e",
+      "list-C-seed1.npz": "801d5c758ca4d2fd6738e27508f39a11a54303f0d7d7eb144c9164041bdb4c9a",
+      "list-C-seed2.npz": "b353af36baab62dc9a198c62f5d521b2dce0e35ede94c290eb61bb56941b00f1"
+    }
+  },
+  "r23": {
+    "release_source": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/execution-release-r23-004/source",
+    "release_manifest": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/execution-release-r23-004/execution-source-r23-001.json",
+    "release_manifest_sha256": "941bde03527d85e3ab4d4ead6abd538756cc1593a64d9b30db27dc769db78ce4",
+    "release_commit": "d2bc19b4b1595eea68bcecbdc1015972fc8397e0",
+    "comparison": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/run-001/COMPARISON.json",
+    "comparison_sha256": "0ac153c9ce236a3bbfa3d02d6d88d52f1ce6ec912fb53a07a7fea0e45ceebaed",
+    "image_records": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/run-001/FLIP/image-records.json",
+    "image_records_sha256": "e04fc170f0e4455463a8e9d2a51fb992750285cba9b88ee062d0de52e3dac549",
+    "flip_result": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/run-001/FLIP/RESULT-FLIP.json",
+    "flip_result_sha256": "df579a66aeb9aca0a14abbf899ed417279028882d0beafdc73dbfaa15792fa0a",
+    "receipt_note": "COMPARISON, RESULT-FLIP and image-records SHA equal the server_sha256 entries of the local SHA_RECEIPT_r23.json; A0 list SHA is recorded in RESULT-A0.json; the R23 list SHA has no earlier receipt",
+    "A0": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/run-001/A0/pred-top600.json",
+      "bytes": 73757649,
+      "sha256": "aed913431dd994480777ebbb3a328fe34dc72b92bbd1bae21bea6c72efbb8a87"
+    },
+    "R23": {
+      "path": "/media/lyy/Data/JupyterLab/LiuZhiyang/SparseRTDETR_Workspace/experiments/localization-distribution/r23-flipview-20261103-001/run-001/FLIP/R23/pred-top600.json",
+      "bytes": 73715808,
+      "sha256": "c1607823f62f9968ed75aff1aaba98cece80535725a5b26106ec473b04638ed2"
+    }
+  },
+  "excluded": [
+    "R25 predictions, checkpoints, endpoints and scores (task B never shifts or reads an R25 list)",
+    "holdout and the 1602 set",
+    "any model construction, forward pass or CUDA use",
+    "any other shift magnitude, direction, width or height change"
+  ]
+}
