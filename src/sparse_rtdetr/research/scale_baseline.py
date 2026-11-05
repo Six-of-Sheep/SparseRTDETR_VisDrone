@@ -9,7 +9,8 @@ copied from the 768x1344 parent: the parent copies are first proven to be the ex
 Optional ``activation_checkpoint`` is a memory implementation only: it recomputes selected
 backbone/encoder blocks during backward and restores BatchNorm running statistics around the
 recomputation so that every BN updates exactly once per forward, as without checkpointing.
-It is off by default and must be proven bitwise-equal on CPU before any use.
+It is off by default.  CPU off/on equality (prep-cpu-003) and the TASK_S15_EXECUTE_001 CUDA
+complete-state acceptance (768x1344 A0 off/on) must both pass before formal use.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ import contextlib
 import copy
 import functools
 import os
+import time
 from pathlib import Path
 
 import torch
@@ -102,6 +104,16 @@ def _bridge_state(parent_state, model, label):
 
 
 # ---------------------------------------------------------------- activation checkpointing
+# Block recomputation accounting (not model state).  ``timed`` adds device synchronisation
+# around each recomputation; acceptance may enable it, formal training only counts calls.
+RECOMPUTE = {"calls": 0, "seconds": 0.0, "timed": False}
+
+
+def _sync():
+    if torch.cuda.is_initialized():
+        torch.cuda.synchronize()
+
+
 class _BNStatGuard:
     """Restore BN running buffers after recomputation: exactly one update per forward."""
 
@@ -109,6 +121,10 @@ class _BNStatGuard:
         self.bns = [m for m in module.modules() if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)]
 
     def __enter__(self):
+        RECOMPUTE["calls"] += 1
+        if RECOMPUTE["timed"]:
+            _sync()
+            self.started = time.perf_counter()
         self.saved = [(m.running_mean.clone(), m.running_var.clone(), m.num_batches_tracked.clone())
                       if m.track_running_stats else None for m in self.bns]
 
@@ -117,6 +133,9 @@ class _BNStatGuard:
             for m, s in zip(self.bns, self.saved):
                 if s is not None:
                     m.running_mean.copy_(s[0]); m.running_var.copy_(s[1]); m.num_batches_tracked.copy_(s[2])
+        if RECOMPUTE["timed"]:
+            _sync()
+            RECOMPUTE["seconds"] += time.perf_counter() - self.started
         return False
 
 
