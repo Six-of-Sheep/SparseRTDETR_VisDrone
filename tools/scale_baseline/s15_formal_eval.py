@@ -390,7 +390,7 @@ def cpu_checks(contract, out):
                           ("memory mode", {**payload, "activation_checkpoint": not flag})):
         try:
             _load_model(broken, "EMA", "cpu", flag)
-        except ValueError:
+        except (ValueError, RuntimeError):  # runio.require raises RuntimeError
             refused.append(label)
         else:
             raise AssertionError("S15 evaluation accepted " + label)
