@@ -34,7 +34,11 @@ from ..localization.data import RawAugmentation
 
 VERSION = "S15-scale-baseline-v1"
 ARM = "S15"
-PARENT_SHA = "a2b6412e3c85de7592829f24aff09e355fdd11cb53798bc498bd04b882e1bf8a"
+PARENT_SHA = "a2b6412e3c85de7592829f24aff09e355fdd11cb53798bc498bd04b882e1bf8a"  # seed0 (TASK_S15_EXECUTE_001)
+# Each seed continues only from its own certified native e060 complete state (TASK_S15_SEED12_REPLICATION_001).
+PARENT_SHAS = {0: PARENT_SHA,
+               1: "6f8fd316a4e508b9cc8a76be2a18f7c5aaa0beb1b5bd809fd27cb83a1de05234",
+               2: "c36e3c1fd4e5ad05cbbf8367d3e2b2c465858e0d69a233839c833ef29a200dd6"}
 PARENT_UPDATE = 18240
 PARENT_HW = (768, 1344)
 S15_HW = (1152, 2016)
@@ -42,8 +46,8 @@ SIZE_CACHE_BUFFERS = ("anchors", "valid_mask")
 CHECKPOINT_SEGMENTS = ("backbone.res_layers", "encoder.fpn_blocks", "encoder.pan_blocks")
 
 
-def production_config():
-    return Config(seed=0, input_hw=S15_HW)
+def production_config(seed=0):
+    return Config(seed=seed, input_hw=S15_HW)
 
 
 def require(ok, message):
@@ -53,14 +57,14 @@ def require(ok, message):
 
 def validate_production(cfg):
     """Only the canvas may differ from the frozen common recipe."""
-    require(type(cfg) is Config and cfg == production_config(), "S15 production recipe differs")
-    parent = Config(seed=0).binding()
+    require(type(cfg) is Config and cfg == production_config(cfg.seed), "S15 production recipe differs")
+    parent = Config(seed=cfg.seed).binding()
     mine = cfg.binding()
     require({k for k in parent if parent[k] != mine[k]} == {"input_hw"}, "S15 binding differs beyond canvas")
 
 
 def binding(cfg, *, activation_checkpoint=False):
-    return {"version": VERSION, "arm": ARM, "config": cfg.binding(), "parent_sha256": PARENT_SHA,
+    return {"version": VERSION, "arm": ARM, "config": cfg.binding(), "parent_sha256": PARENT_SHAS[cfg.seed],
             "parent_input_hw": list(PARENT_HW), "size_caches": "native regeneration at config.input_hw",
             "activation_checkpoint": bool(activation_checkpoint),
             "checkpoint_segments": list(CHECKPOINT_SEGMENTS) if activation_checkpoint else []}
@@ -173,17 +177,25 @@ def remove_activation_checkpoint(model):
 
 
 # ---------------------------------------------------------------- construction from the parent
-def create(parent, device="cpu", config=None, *, fixture=False, activation_checkpoint=False):
-    """Bridge the R25 e060 complete state into an S15 engine; no parameter is added or reset."""
-    cfg = config or production_config()
+def create(parent, device="cpu", config=None, *, seed=0, fixture=False, activation_checkpoint=False):
+    """Bridge the seed's own native e060 complete state into an S15 engine; no parameter is added or reset.
+
+    ``seed`` selects the only admissible parent (PARENT_SHAS) and recipe seed; a parent of another
+    seed, or a config of another seed, is refused before any state is loaded into the engine.
+    """
+    require(seed in PARENT_SHAS, "S15 seed has no certified parent")
+    cfg = config or production_config(seed)
+    require(cfg.seed == seed, "S15 config seed differs from the parent seed")
     if fixture:
-        require(cfg.input_hw == S15_HW and cfg != production_config(), "fixture must be S15 canvas")
+        require(cfg.input_hw == S15_HW and cfg != production_config(seed), "fixture must be S15 canvas")
     else:
         validate_production(cfg)
+    require(native.file_sha(parent) == PARENT_SHAS[seed], "S15 parent identity (file of another seed or altered)")
     s = torch.load(parent, map_location="cpu", weights_only=True)
-    require(native.file_sha(parent) == PARENT_SHA and s["engine"]["completed_updates"] == PARENT_UPDATE,
-            "S15 parent identity")
-    require(s["binding"]["config"] == Config(seed=0).binding(), "S15 parent recipe is not the common 768x1344")
+    require(s["engine"]["completed_updates"] == PARENT_UPDATE, "S15 parent clock")
+    require(s["binding"]["config"] == Config(seed=seed).binding()
+            and s["engine"].get("config", s["binding"]["config"]) == Config(seed=seed).binding(),
+            "S15 parent recipe is not the common 768x1344 of this seed")
     model, criterion, info = build(cfg, synthetic=True)
     require(_layout_without_size_caches(native.old._model_layout(model)) ==
             _layout_without_size_caches(s["model_layout"]), "S15 native model layout differs beyond size caches")
@@ -221,7 +233,7 @@ def create(parent, device="cpu", config=None, *, fixture=False, activation_check
     e.completed_updates = s["engine"]["completed_updates"]
     e.parameter_steps = {n: s["engine"]["parameter_optimizer_steps"][n] for n in e.parameter_steps}
     e.r25_arm = ARM
-    e.r25_parent = PARENT_SHA
+    e.r25_parent = PARENT_SHAS[seed]
     e.s15_activation_checkpoint = bool(activation_checkpoint)
     wrapped = install_activation_checkpoint(model) if activation_checkpoint else []
     validate_geometry(model); validate_geometry(ema.module)
@@ -301,10 +313,10 @@ def restore(e, path, sha):
 
 
 # ---------------------------------------------------------------- data
-def train_dataset(train_core_binding, hw=S15_HW):
+def train_dataset(train_core_binding, hw=S15_HW, seed=0):
     r = train_core_binding["roots"]
     return BoundDataset(role="train_core", manifest_path=train_core_binding["manifest"], images_path=r["images"],
-                        annotations_path=r["annotations"], seed=0, root_binding=r, input_hw=hw)
+                        annotations_path=r["annotations"], seed=seed, root_binding=r, input_hw=hw)
 
 
 def development(binding, hw=S15_HW):

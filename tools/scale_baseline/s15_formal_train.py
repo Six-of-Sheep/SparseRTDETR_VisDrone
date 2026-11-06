@@ -1,21 +1,25 @@
-"""S15 formal training, CUDA engineering acceptance and complete restart state (TASK_S15_EXECUTE_001).
+"""S15 seed1/seed2 replication: training, CUDA restore acceptance and complete restart state
+(TASK_S15_SEED12_REPLICATION_001; seed0 version: commit 61646b3 / S15 release-002).
+
+Every action is bound to one seed of the contract (``--seed``): its own native e060 parent, recipe
+seed, sampler/augmentation seed and A0 reference.  The formal loop is the seed0 loop unchanged.
 
 actions (always launched by s15_formal_run.py from a frozen release with a bound contract):
-  cpu     CUDA hidden.  Production e060 bridge on CPU, formal-binding save/load/exact restore and
-          refusals, audit prefix, and the real formal loop on a 1152x2016 FP32 bs1x2 fixture:
-          2 updates with checkpoints, then a resumed run that replays the second update exactly.
-  accept  CUDA.  (4.1) 768x1344 A0 plain vs activation-checkpoint, 2 real production updates each,
-          complete per-tensor comparison; (4.2) S15 checkpoint mode 2 updates, save u1, fresh engine
-          restore + replay u2 (complete state exact), 6 timing updates, 4 EMA FP32 inference forwards.
+  cpu     CUDA hidden.  Production e060 bridge on CPU, formal-binding save/load/exact restore,
+          scope and cross-seed refusals, science projection, the bound loader against the seed's
+          own historical 768 audit at two pre-registered windows, audit prefix, and the real formal
+          loop on a 1152x2016 FP32 bs1x2 fixture (2 updates, then a resume replaying the second).
+  accept  CUDA.  1152 production 8x2/BF16 checkpoint mode: u1, u2 from the seed's e060, save u1,
+          fresh engine restore + replay u2; result and complete state/RNG exact.  3 updates,
+          6 training forwards.  The 768 plain/checkpoint equivalence of seed0 is reused, not redone.
           Acceptance states are never formal.
-  train   CUDA.  Formal S15 e061-e120 from the certified e060 parent (or exact restart).
+  train   CUDA.  Formal S15 e061-e120 from the seed's certified e060 parent (or exact restart).
 """
 from __future__ import annotations
 
 import os
 os.environ.setdefault("MKL_THREADING_LAYER", "GNU")
 import argparse
-import contextlib
 import gc
 import hashlib
 import json
@@ -34,8 +38,8 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools" / "query_local"), str(ROOT
 import torch
 
 from r25_run import setup
+import formal_data
 from formal_data import END_UPDATE, PARENT_UPDATE, WINDOWS_PER_EPOCH, cursor, windows
-from formal_data import train_dataset as native_train_dataset
 from sparse_rtdetr.protocol_r18 import checkpoint as ck
 from sparse_rtdetr.protocol_r18.engine import assert_healthy, learning_rate
 from sparse_rtdetr.protocol_r18.model import Config
@@ -44,13 +48,13 @@ from sparse_rtdetr.research import scale_baseline as S
 
 ARM = "S15"
 SAVE_EPOCHS = (60, 75, 90, 105, 120)
-SCHEMA = "s15-complete-state-v1"
-FIXTURE = Config(seed=0, input_hw=S.S15_HW, physical_batch_size=1, amp_dtype="float32")
+SCHEMA = "s15-seed-complete-state-v1"
 FIXTURE_STOP = PARENT_UPDATE + 2
 BLOCKS = 8                       # 4 backbone stages + 2 FPN + 2 PAN blocks
 RECOMPUTES_PER_UPDATE = 2 * BLOCKS
-A0_UPDATES, S15_FIRST, S15_REPLAY, S15_TIMING = 2, 2, 1, 6
-EVAL_IMAGES, EVAL_BATCH = 8, 4
+S15_FIRST, S15_REPLAY = 2, 1
+# Pre-registered loader windows compared with the seed's own historical 768 audit (e061 w0, e118 w0).
+LOADER_CHECK_UPDATES = (PARENT_UPDATE, 117 * WINDOWS_PER_EPOCH)
 # Declared non-scientific fields excluded from equality: timing and the implementation flag.
 EXCLUDED_RESULT_FIELDS = ("elapsed_seconds",)
 PHASE = {"phase": "initialize"}
@@ -112,16 +116,36 @@ def _reset_peak():
         torch.cuda.reset_peak_memory_stats()
 
 
+# ---------------------------------------------------------------- seed binding
+def bind_seed(seed):
+    """Bind the unchanged formal_data loader/cursor (byte-identical to R25/seed0) to one seed.
+
+    formal_data reads its module constant SEED at call time in train_dataset/cursor/windows; the
+    binding is set once per process and can never be switched to another seed afterwards.
+    """
+    S.require(seed in S.PARENT_SHAS, "S15 seed has no certified parent")
+    bound = getattr(formal_data, "_s15_bound_seed", None)
+    S.require(bound in (None, seed), f"process already bound to seed {bound}")
+    formal_data.SEED = seed
+    formal_data._s15_bound_seed = seed
+    S.require(cursor(PARENT_UPDATE)["seed"] == seed, "formal cursor seed binding failed")
+
+
+def fixture_config(seed):
+    return Config(seed=seed, input_hw=S.S15_HW, physical_batch_size=1, amp_dtype="float32")
+
+
 # ---------------------------------------------------------------- state binding
-def _cfg(fixture):
-    return FIXTURE if fixture else S.production_config()
+def _cfg(c, fixture):
+    return fixture_config(c["seed"]) if fixture else S.production_config(c["seed"])
 
 
 def _state_binding(c, update, scope, audit, fixture=False):
-    return {"schema": SCHEMA, "scope": scope, "arm": ARM, "formal_identity": c["formal_identity"],
+    S.require(formal_data.SEED == c["seed"], "loader seed is not bound to the contract seed")
+    return {"schema": SCHEMA, "scope": scope, "arm": ARM, "seed": c["seed"], "formal_identity": c["formal_identity"],
             "contract_sha256": c["contract_sha256"], "global_update": update,
             "parent_sha256": c["parent"]["sha256"], "cursor": cursor(update), "audit": audit,
-            "config": _cfg(fixture).binding(), "activation_checkpoint": c["workload"]["activation_checkpoint"],
+            "config": _cfg(c, fixture).binding(), "activation_checkpoint": c["workload"]["activation_checkpoint"],
             "torch": str(torch.__version__)}
 
 
@@ -157,7 +181,7 @@ def _load(c, path, scope, *, endpoint=False, fixture=False):
     s = torch.load(path, map_location="cpu", weights_only=True)
     S.require(s.pop("formal_binding_sha256") == hashlib.sha256(ck.canonical(binding)).hexdigest()
               and s["version"] == S.VERSION and s["arm"] == ARM and s["parent_sha256"] == c["parent"]["sha256"]
-              and s["config"] == _cfg(fixture).binding()
+              and s["config"] == _cfg(c, fixture).binding()
               and s["activation_checkpoint"] == c["workload"]["activation_checkpoint"]
               and s["engine"]["completed_updates"] == update and s["ema"]["updates"] == update
               and s["engine"]["next_epoch"] == side["cursor"]["next_epoch"]
@@ -228,26 +252,6 @@ def _bn_counts(model):
     return {n: int(m.num_batches_tracked) for n, m in _bn(model)}
 
 
-@contextlib.contextmanager
-def _pre_clip_gradients(e):
-    """Record every parameter gradient exactly as handed to the native clip (CPU copies)."""
-    names = {id(p): n for n, p in e.model.named_parameters()}
-    original = torch.nn.utils.clip_grad_norm_
-    seen = {}
-
-    def wrapper(parameters, *args, **kwargs):
-        params = list(parameters)
-        for p in params:
-            seen[names[id(p)]] = None if p.grad is None else p.grad.detach().cpu().clone()
-        return original(params, *args, **kwargs)
-
-    torch.nn.utils.clip_grad_norm_ = wrapper
-    try:
-        yield seen
-    finally:
-        torch.nn.utils.clip_grad_norm_ = original
-
-
 def _differences(a, b, path="", out=None, limit=200):
     """Every differing leaf (tensor/scalar/structure) between two nested values."""
     out = [] if out is None else out
@@ -289,12 +293,12 @@ def _result_body(result):
 # ---------------------------------------------------------------- engines/data
 def _make(c, device, *, fixture=False):
     PHASE["phase"] = "S15:construct"
-    return S.create(c["parent"]["path"], device, _cfg(fixture) if fixture else None, fixture=fixture,
-                    activation_checkpoint=c["workload"]["activation_checkpoint"])
+    return S.create(c["parent"]["path"], device, _cfg(c, fixture) if fixture else None, seed=c["seed"],
+                    fixture=fixture, activation_checkpoint=c["workload"]["activation_checkpoint"])
 
 
 def _data(c):
-    return S.train_dataset(c["data"]["train_core"], S.S15_HW)
+    return S.train_dataset(c["data"]["train_core"], S.S15_HW, seed=c["seed"])
 
 
 def _update(e, images, targets, audit, *, exact=False):
@@ -368,8 +372,8 @@ def _formal(c, out, counts, resume, prior, *, fixture=False):
             S.require(prior["contract_sha256"] == c["contract_sha256"], "fixture resume uses the same contract")
         else:
             S.require(prior_ref == _file(prior["contract_path"])
-                      and Path(resume).resolve().parent == Path(prior["attempt_root"]) / "train-S15"
-                      and prior["formal_identity"] == c["formal_identity"]
+                      and Path(resume).resolve().parent == Path(prior["outputs"]["train"])
+                      and prior["formal_identity"] == c["formal_identity"] and prior["seed"] == c["seed"]
                       and prior["contract_sha256"] != c["contract_sha256"],
                       "S15 restart must preserve scientific identity with a distinct attempt")
         side, state = _load(prior, resume, scope, fixture=fixture)
@@ -476,17 +480,77 @@ def _formal(c, out, counts, resume, prior, *, fixture=False):
 
 
 # ---------------------------------------------------------------- CPU gate
-def _cpu(c, out):
+def _historical_receipt(c, update):
+    """Receipt fields of the seed's own historical 768 audit row, in the formal_data schema."""
+    from sparse_rtdetr.localization.runio import digest
+    ref = c["history"]["loader_check_audits"][str(update)]
+    row = json.loads(_pinned(ref).read_text())
+    S.require(row["seed"] == c["seed"] and row["update"] == update and row["result"]["update"] == update,
+              "historical audit row identity")
+    h = row["result"]["input"]
+    return {"update": update, "epoch": row["result"]["epoch"], "window": row["result"]["window"],
+            "image_ids_sha256": digest(h["ids"]), "gt_ids_sha256": digest(h["GT_ids"]),
+            "augmentation_trace_sha256": h["metadata_sha256"], "augmented_samples_sha256": digest(h["augmented_sha256"]),
+            "input_tensor_sha256": h["input_tensor_sha256"], "target_sha256": h["target_sha256"]}
+
+
+def _loader_check(c):
+    """The bound loader reproduces the seed's own native trajectory: at 768 every receipt field equals
+    the historical audit; at 1152 order/draw fields equal and canvas-dependent fields are counted."""
+    S.require(not torch.cuda.is_initialized(), "loader check before CUDA")
+    native = formal_data.train_dataset(c["data"]["train_core"])  # native 768x1344, bound seed
+    S.require(native.seed == c["seed"], "native dataset seed")
+    scaled = _data(c)
+    same = ("update", "epoch", "window", "image_ids_sha256", "augmentation_seeds_sha256", "augmentation_strong")
+    differs = ("gt_ids_sha256", "augmentation_trace_sha256", "augmented_samples_sha256", "input_tensor_sha256",
+               "target_sha256")
+    rows = []
+    for completed in LOADER_CHECK_UPDATES:
+        (_, _, a768), = list(windows(native, completed, limit=1))
+        (_, _, a1152), = list(windows(scaled, completed, limit=1))
+        hist = _historical_receipt(c, completed + 1)
+        exact768 = {k: a768[k] == v for k, v in hist.items()}
+        rows.append({"update": completed + 1, "native_768_equal_historical_audit": exact768,
+                     "S15_1152_order_draw_equal_768": {k: a1152[k] == a768[k] for k in same},
+                     "S15_1152_canvas_dependent_differs": {k: a1152[k] != a768[k] for k in differs},
+                     "receipt_768": a768, "receipt_1152": a1152})
+        S.require(all(exact768.values()), f"bound 768 loader differs from the seed's historical audit at {completed + 1}")
+        S.require(all(a1152[k] == a768[k] for k in same), "S15 order/draws differ from the native trajectory")
+    S.require(not torch.cuda.is_initialized(), "loader check initialized CUDA")
+    return rows
+
+
+def _science_projection(c):
+    """S15 seed config differs from seed0 S15 only in seed strings, and from the seed's native recipe
+    only in the canvas; the historical training binding carries the same native recipe."""
+    mine = S.production_config(c["seed"]).binding()
+    seed0 = S.production_config(0).binding()
+    native = Config(seed=c["seed"]).binding()
+    historical = json.loads(_pinned(c["history"]["formal_binding"]).read_text())["config"]
+    vs_seed0 = sorted(k for k in mine if mine[k] != seed0[k])
+    vs_native = sorted(k for k in mine if mine[k] != native[k])
+    S.require(vs_seed0 == (["initializer", "seed", "training_rng"] if c["seed"] else []), f"S15 seed recipe {vs_seed0}")
+    S.require(vs_native == ["input_hw"] and historical == native, "S15 recipe differs from the seed's native recipe")
+    return {"differs_from_seed0_S15": vs_seed0, "differs_from_native_seed_recipe": vs_native,
+            "historical_training_binding_equals_native_recipe": True, "config": mine}
+
+
+def _cpu(c, out, other):
     out = Path(out)
     S.require(not torch.cuda.is_initialized(), "S15 CPU gate initialized CUDA")
     t0, c0 = time.perf_counter(), time.process_time()
     S.require(c["workload"]["checkpoint_segments"] == list(S.CHECKPOINT_SEGMENTS)
               and c["workload"]["input_hw"] == list(S.S15_HW), "S15 contract memory segments or canvas differ")
+    S.require(other["seed"] != c["seed"] and other["contract_sha256"] == c["contract_sha256"], "cross-seed fixture")
+    projection = _science_projection(c)
+    loader = _loader_check(c)
+    loader_cost = {"wall_seconds": time.perf_counter() - t0, "cpu_seconds": time.process_time() - c0}
     # Production bridge and formal-binding save/load/exact restore on CPU.
     e, bridge = _make(c, "cpu")
-    S.require(e.config == S.production_config() and e.s15_activation_checkpoint is True
+    S.require(e.config == S.production_config(c["seed"]) and e.s15_activation_checkpoint is True
+              and e.r25_parent == c["parent"]["sha256"]
               and bridge["activation_checkpoint_segments"] and len(bridge["activation_checkpoint_segments"]) == BLOCKS,
-              "S15 production engine memory mode")
+              "S15 production engine seed/parent/memory mode")
     path = out / "cpu-production-state.pth"
     _save(e, c, path, "cpu-fixture")
     side, state = _load(c, path, "cpu-fixture")
@@ -494,13 +558,23 @@ def _cpu(c, out):
     del state, e
     gc.collect()
     refused = []
-    for scope, fixture in (("formal", False), ("acceptance", False), ("cpu-fixture", True)):
+    for label, view, scope, fixture in (("formal scope", c, "formal", False), ("acceptance scope", c, "acceptance", False),
+                                        ("fixture config", c, "cpu-fixture", True),
+                                        (f"seed{other['seed']} contract view", other, "cpu-fixture", False)):
         try:
-            _load(c, path, scope, fixture=fixture)
-        except (ValueError, KeyError):
-            refused.append({"scope": scope, "fixture_config": fixture})
+            _load(view, path, scope, fixture=fixture)
+        except (ValueError, KeyError) as exc:
+            refused.append({"case": label, "reason": repr(exc)[:300]})
         else:
-            raise AssertionError("S15 cross-scope or cross-config state accepted")
+            raise AssertionError("S15 cross-scope/config/seed state accepted: " + label)
+    for label, parent, seed in ((f"seed{other['seed']} parent bound as seed{c['seed']}", other["parent"]["path"], c["seed"]),
+                                (f"seed{c['seed']} parent bound as seed{other['seed']}", c["parent"]["path"], other["seed"])):
+        try:
+            S.create(parent, "cpu", seed=seed, activation_checkpoint=True)
+        except ValueError as exc:
+            refused.append({"case": label, "reason": repr(exc)[:300]})
+        else:
+            raise AssertionError("S15 accepted a parent of another seed: " + label)
     history = out / "fixture-UPDATES.jsonl"
     with history.open("xb") as stream:
         stream.write(b'{"input":{"update":18241}}\n')
@@ -533,159 +607,30 @@ def _cpu(c, out):
     rows2 = (second / "UPDATES.jsonl").read_text().splitlines()
     S.require(len(rows1) == 2 and rows2[0] == rows1[0] and json.loads(rows2[1])["loss"] == json.loads(rows1[1])["loss"],
               "S15 fixture ledgers differ")
+    # The fixture's first window is the same seed-bound 1152 window as the loader check (images sliced later).
+    S.require(json.loads(rows1[0])["input"] == loader[0]["receipt_1152"], "fixture loop window differs from loader check")
     del end1, end2
     loop_cost = {"wall_seconds": time.perf_counter() - t1, "cpu_seconds": time.process_time() - c1}
     S.require(not torch.cuda.is_initialized(), "S15 CPU gate initialized CUDA")
-    return {"production_bridge": bridge, "production_restore": restored, "refused": refused,
+    return {"seed": c["seed"], "science_projection": projection, "loader_check": loader,
+            "production_bridge": bridge, "production_restore": restored, "refused": refused,
             "audit_prefix_after_append_exact": True, "bad_audit_SHA_refused": True,
-            "fixture_formal_loop": {"config": FIXTURE.binding(), "first": run1, "first_counts": dict(counts1),
-                                    "resume": run2, "resume_counts": dict(counts2),
+            "fixture_formal_loop": {"config": fixture_config(c["seed"]).binding(), "first": run1,
+                                    "first_counts": dict(counts1), "resume": run2, "resume_counts": dict(counts2),
                                     "resumed_endpoint_complete_state_exact": True},
             "cpu_fixture_updates": counts1["actual_updates"] + counts2["actual_updates"],
             "cpu_fixture_training_forwards": counts1["forwards"] + counts2["forwards"],
-            "cost": {"bridge_and_state": bridge_cost, "fixture_loop": loop_cost},
+            "cost": {"loader_and_projection": loader_cost, "bridge_and_state_cumulative": bridge_cost,
+                     "fixture_loop": loop_cost},
             "CUDA_initialized": torch.cuda.is_initialized()}
 
 
-# ---------------------------------------------------------------- CUDA acceptance
-def _a0_reference(c):
-    ref = json.loads(_pinned(c["reference"]["A0_acceptance"]).read_text())
-    rows = []
-    with _pinned(c["reference"]["A0_updates"]).open() as f:
-        for _ in range(A0_UPDATES):
-            rows.append(json.loads(f.readline()))
-    return ref, rows
-
-
-def _a0_equivalence(c, out, counts):
-    """4.1: same parent, same two production windows; plain then checkpoint, sequentially resident."""
-    from sparse_rtdetr.research.query_local_runtime import capture as r25_capture, create as r25_create
-    ref, ref_rows = _a0_reference(c)
-    PHASE["phase"] = "A0-768:data"
-    started = time.perf_counter()
-    batches = list(windows(native_train_dataset(c["data"]["train_core"]), PARENT_UPDATE, limit=A0_UPDATES))
-    data_seconds = time.perf_counter() - started
-    arms, retained = {}, {}
-    for mode in ("plain", "checkpoint"):
-        _reset_peak()
-        PHASE["phase"] = f"A0-768-{mode}:construct"
-        t0 = time.perf_counter()
-        e, bridge = r25_create(c["parent"]["path"], "A0", "cuda:0")
-        wrapped = S.install_activation_checkpoint(e.model) if mode == "checkpoint" else []
-        _register_counts(e, counts, f"A0-768-{mode}")
-        parent_bn = _bn_counts(e.model)
-        rec0, sec0 = S.RECOMPUTE["calls"], S.RECOMPUTE["seconds"]
-        S.RECOMPUTE["timed"] = True
-        rows, keep = [], []
-        for x, t, inp in batches:
-            with _pre_clip_gradients(e) as grads:
-                r = _update(e, x, t, inp, exact=True)
-            S.require(len(grads) == sum(1 for _ in e.model.parameters()), "pre-clip gradient capture incomplete")
-            keep.append({"input": inp, "result": _result_body(r), "gradients": dict(grads), "state": r25_capture(e)})
-            rows.append({"update": r["update"], "loss": r["loss"], "lr": r["lr"],
-                         "gradient_norm_before_clip": r["gradient_norm_before_clip"],
-                         "gradient_sha256_before_clip": r["gradient_sha256_before_clip"],
-                         "update_seconds": r["elapsed_seconds"], **_memory()})
-        S.RECOMPUTE["timed"] = False
-        bn_delta = {n: v - parent_bn[n] for n, v in _bn_counts(e.model).items()}
-        recomputes = S.RECOMPUTE["calls"] - rec0
-        arms[mode] = {"bridge_shared_parameters_sha256": bridge["shared_parameters_sha256"],
-                      "wrapped_blocks": wrapped, "updates": rows, "block_recomputations": recomputes,
-                      "block_recompute_seconds_synchronized": S.RECOMPUTE["seconds"] - sec0,
-                      "BN_modules": len(bn_delta), "BN_num_batches_tracked_delta": sorted(set(bn_delta.values())),
-                      "stage_seconds": time.perf_counter() - t0, **_memory()}
-        S.require(set(bn_delta.values()) == {2 * A0_UPDATES}, f"A0 {mode} BN updates differ from native forward count")
-        S.require(recomputes == (RECOMPUTES_PER_UPDATE * A0_UPDATES if mode == "checkpoint" else 0),
-                  f"A0 {mode} recomputation count {recomputes}")
-        retained[mode] = keep
-        del e
-        gc.collect()
-        torch.cuda.empty_cache()
-    # Complete comparisons.
-    plain, ckpt = retained["plain"], retained["checkpoint"]
-    report = {"declared_excluded": {"result_fields": list(EXCLUDED_RESULT_FIELDS),
-                                    "other": "memory statistics, wall timings, recomputation counters"},
-              "compared": ["model outputs incl. aux/encoder/DN outputs (output_sha256 per micro-batch)",
-                           "DN noise (dn_noise_sha256)", "every per-term micro-batch loss", "normalizers",
-                           "each parameter's pre-clip gradient tensor", "clip norm", "LR",
-                           "post-update model state_dict incl. BN running_mean/var/num_batches_tracked",
-                           "AdamW exp_avg/exp_avg_sq/step", "EMA module and updates clock",
-                           "engine cursor/step ledger", "CPU/Python/NumPy/CUDA RNG"],
-              "updates": []}
-    failures = []
-    for i, (p, k) in enumerate(zip(plain, ckpt)):
-        row = {"update": p["result"]["update"], "input_equal": p["input"] == k["input"]}
-        row["result_differences"] = _differences(p["result"], k["result"])
-        grad_diff = _differences(p["gradients"], k["gradients"])
-        row["gradient_parameters_compared"] = len(p["gradients"])
-        row["gradient_differences"] = grad_diff
-        row["state_differences"] = _differences(p["state"], k["state"])
-        row["state_exact_equal"] = ck.exact_equal(p["state"], k["state"])
-        # Interface regression: plain equals the R25 A0 acceptance/formal records on the same input.
-        r25 = ref["updates"][i]
-        as_json = json.loads(json.dumps(p["result"], allow_nan=False))
-        row["plain_equal_R25_A0_acceptance_record"] = (
-            r25["input"] == p["input"] and _result_body(r25["update"]) == as_json)
-        if not row["plain_equal_R25_A0_acceptance_record"]:
-            row["R25_record_differences"] = _differences(_result_body(r25["update"]), as_json)
-        ledger = ref_rows[i]
-        row["plain_equal_R25_A0_formal_ledger"] = (
-            ledger["input"] == p["input"] and ledger["loss"] == p["result"]["loss"]
-            and ledger["lr"] == p["result"]["lr"]
-            and ledger["gradient_norm_before_clip"] == p["result"]["gradient_norm_before_clip"])
-        ok = (row["input_equal"] and not row["result_differences"] and not grad_diff
-              and not row["state_differences"] and row["state_exact_equal"]
-              and row["plain_equal_R25_A0_acceptance_record"] and row["plain_equal_R25_A0_formal_ledger"])
-        row["equivalent"] = ok
-        if not ok:
-            failures.append(row["update"])
-        report["updates"].append(row)
-    report.update(arms=arms, window_load_seconds=data_seconds, status="PASS" if not failures else "STOP")
-    _json(out / "A0_768_EQUIVALENCE.json", report)
-    del plain, ckpt, retained, batches
-    gc.collect()
-    S.require(not failures, f"A0 768x1344 plain/checkpoint complete state not equivalent at {failures}")
-    return {"status": "PASS", "file": _file(out / "A0_768_EQUIVALENCE.json"),
-            "updates": A0_UPDATES * 2, "training_forwards": 4 * A0_UPDATES,
-            "block_recomputations": arms["checkpoint"]["block_recomputations"],
-            "peak": {m: {"allocated": arms[m]["peak_allocated_bytes"], "reserved": arms[m]["peak_reserved_bytes"]}
-                     for m in arms},
-            "update_seconds": {m: [r["update_seconds"] for r in arms[m]["updates"]] for m in arms}}
-
-
-def _s15_inference(e, c):
-    from s15_formal_eval import development, forward_batch
-    data = development(c)
-    modes = {n: m.training for n, m in e.ema.module.named_modules()}
-    model = e.ema.module.eval()
-    rng = ck.capture_rng(e.device)
-    _reset_peak()
-    PHASE["phase"] = "S15:EMA-inference"
-    timings, forwards = [], 0
-    with torch.inference_mode():
-        for i in range(0, EVAL_IMAGES, EVAL_BATCH):
-            rows = data.records[i:i + EVAL_BATCH]
-            for repeat in range(2):  # first pass warm-up, second timed (2 warm-up + 2 timed batches)
-                _, timing = forward_batch(model, data, rows, e.device)
-                forwards += 1
-                timings.append({"batch": i // EVAL_BATCH, "warmup": repeat == 0, **timing})
-    S.require(ck.exact_equal(ck.capture_rng(e.device), rng), "S15 inference changed RNG")
-    for n, m in model.named_modules():
-        m.training = modes[n]
-    return {"images": EVAL_IMAGES, "batch": EVAL_BATCH, "fp32": True, "forwards": forwards, "timings": timings,
-            "predictions_written": False, "scored": False, **_memory()}
-
-
+# ---------------------------------------------------------------- CUDA acceptance (per seed)
 def _accept(c, out, counts):
+    """1152 production 8x2/BF16 checkpoint mode from the seed's e060: u1, u2, save u1, fresh engine
+    restore and replay u2; result record and complete state/RNG must be exact."""
     out = Path(out)
-    t0 = time.perf_counter()
-    equivalence = _a0_equivalence(c, out, counts)
-    S.require(counts["actual_updates"] == 2 * A0_UPDATES and counts["forwards"] == 4 * A0_UPDATES, "A0 acceptance count")
-    a0_seconds = time.perf_counter() - t0
-    # 4.2 S15 production checkpoint mode
     t1 = time.perf_counter()
-    folder = out / "S15"
-    folder.mkdir()
     _reset_peak()
     data = _data(c)
     e, bridge = _make(c, "cuda:0")
@@ -698,9 +643,10 @@ def _accept(c, out, counts):
     for i, (x, t, inp) in enumerate(windows(data, PARENT_UPDATE, limit=S15_FIRST), 1):
         r = _update(e, x, t, inp, exact=True)
         rows.append({"input": inp, "update": r, **_memory()})
-        print(json.dumps({"phase": "S15-first", "update": r["update"], "loss": r["loss"], **_memory()}), flush=True)
+        print(json.dumps({"phase": "S15-first", "seed": c["seed"], "update": r["update"], "loss": r["loss"],
+                          **_memory()}), flush=True)
         if i == 1:
-            one = folder / "u1.pth"
+            one = out / "u1.pth"
             saved = _save(e, c, one, "acceptance")
     S.RECOMPUTE["timed"] = False
     expected = S.capture(e)
@@ -710,6 +656,7 @@ def _accept(c, out, counts):
                                                  and v["input"] == "torch.float32" for v in seen)
               and criterion == [["torch.float32"]] * (2 * S15_FIRST), "S15 CUDA precision differs")
     first_peak = _memory()
+    first_recompute = {"calls": S.RECOMPUTE["calls"] - rec0, "seconds_synchronized": S.RECOMPUTE["seconds"] - sec0}
     del e
     gc.collect()
     torch.cuda.empty_cache()
@@ -727,53 +674,42 @@ def _accept(c, out, counts):
     S.require(inp == rows[1]["input"] and not replay_diff and ck.exact_equal(expected, replay_state),
               f"S15 CUDA replay differs: {replay_diff[:5]}")
     del expected, replay_state, x, t
-    timing = []
-    started = time.perf_counter()
-    for x, t, inp in windows(data, clone.completed_updates, limit=S15_TIMING):
-        r = _update(clone, x, t, inp)
-        timing.append({"update": r["update"], "update_seconds": r["elapsed_seconds"], "loss": r["loss"],
-                       "gradient_norm_before_clip": r["gradient_norm_before_clip"], **_memory()})
-        print(json.dumps({"phase": "S15-timing", **timing[-1]}), flush=True)
-    loader_inclusive = time.perf_counter() - started
-    train_peak = _memory()
+    replay_peak = _memory()
     recomputes = S.RECOMPUTE["calls"] - rec0
-    S.require(recomputes == RECOMPUTES_PER_UPDATE * (S15_FIRST + S15_REPLAY + S15_TIMING), f"S15 recomputation count {recomputes}")
-    infer = _s15_inference(clone, c)
-    s15_updates = S15_FIRST + S15_REPLAY + S15_TIMING
-    S.require(counts["actual_updates"] == 2 * A0_UPDATES + s15_updates
-              and counts["forwards"] == 2 * (2 * A0_UPDATES + s15_updates) and infer["forwards"] == 4,
-              "S15 acceptance count")
-    result = {"A0_768_equivalence": equivalence, "A0_stage_seconds": a0_seconds,
+    updates = S15_FIRST + S15_REPLAY
+    S.require(recomputes == RECOMPUTES_PER_UPDATE * updates, f"S15 recomputation count {recomputes}")
+    S.require(counts["actual_updates"] == updates and counts["forwards"] == 2 * updates, "S15 acceptance count")
+    result = {"seed": c["seed"],
               "S15": {"bridge": bridge, "first_updates": rows, "saved_u1": saved, "restore": restored,
+                      "replay_update": _result_body(replay),
                       "replay_complete_state_and_record_exact": True,
                       "replay_update_seconds": replay["elapsed_seconds"],
-                      "timing_updates": timing, "timing_loader_inclusive_seconds": loader_inclusive,
-                      "steady_update_seconds_mean": sum(r["update_seconds"] for r in timing) / len(timing),
-                      "first_phase_peak": first_peak, "replay_and_timing_peak": train_peak,
-                      "block_recomputations": recomputes,
-                      "block_recompute_seconds_synchronized_first_two_updates": S.RECOMPUTE["seconds"] - sec0,
+                      "first_phase_peak": first_peak, "replay_peak": replay_peak,
+                      "block_recomputations": recomputes, "block_recompute_first_two_updates": first_recompute,
                       "precision": {"model": seen, "criterion": criterion},
                       "BN_num_batches_tracked_delta_first_two_updates": bn_delta,
                       "stage_seconds": time.perf_counter() - t1},
-              "S15_EMA_inference": infer,
+              "reused_evidence": c["reused_evidence"],
               "totals": {"optimizer_updates": counts["actual_updates"], "training_forwards": counts["forwards"],
-                         "EMA_inference_forwards": infer["forwards"],
-                         "full_model_forwards": counts["forwards"] + infer["forwards"],
-                         "block_recomputations": equivalence["block_recomputations"] + recomputes},
+                         "EMA_inference_forwards": 0, "full_model_forwards": counts["forwards"],
+                         "block_recomputations": recomputes},
               "device_total_memory_bytes": torch.cuda.get_device_properties(0).total_memory,
               "allocator_conf": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
               "formal_state_usable": False}
-    S.require(result["totals"]["optimizer_updates"] == 13 and result["totals"]["full_model_forwards"] == 30,
+    acc = c["workload"]["acceptance"]
+    S.require(result["totals"]["optimizer_updates"] == acc["S15_updates_per_seed"]
+              and result["totals"]["full_model_forwards"] == acc["S15_training_forwards_per_seed"],
               "S15 acceptance success-path totals differ")
     return result
 
 
 # ---------------------------------------------------------------- CLI
 def main():
-    from s15_formal_run import load_contract
+    from s15_formal_run import load_contract, seed_view
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("cpu", "accept", "train"))
     parser.add_argument("--contract", required=True, type=Path)
+    parser.add_argument("--seed", required=True, type=int)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--prior-contract", type=Path)
@@ -787,13 +723,17 @@ def main():
     device = "cpu" if args.action == "cpu" else "cuda:0"
     c = None
     try:
-        c = load_contract(args.contract)
+        contract = load_contract(args.contract)
+        c = seed_view(contract, args.seed)
         S.require(Path(c["source_root"]).resolve() == ROOT.resolve(), "S15 trainer is not running from the bound release")
+        bind_seed(c["seed"])
         if device == "cpu":
             S.require(os.environ.get("CUDA_VISIBLE_DEVICES") == "", "S15 CPU gate requires hidden CUDA")
         else:
             S.require(os.environ.get("PYTORCH_CUDA_ALLOC_CONF") == c["workload"]["allocator_conf"],
                       "S15 allocator configuration differs from contract")
+        # Deterministic backend flags.  setup() also seeds the global RNGs, but every engine built
+        # afterwards replaces them by the parent (or exact restart) RNG; nothing re-seeds after that.
         setup(device)
         if device == "cpu":
             # Fixture-only CPU work; thread count is recorded, never used for formal numerics.
@@ -801,20 +741,21 @@ def main():
         else:
             torch.cuda.reset_peak_memory_stats()
         if args.action == "cpu":
-            result = _cpu(c, args.out)
+            other = seed_view(contract, next(s for s in contract["seed_order"] if s != c["seed"]))
+            result = _cpu(c, args.out, other)
         elif args.action == "accept":
             result = _accept(c, args.out, counts)
         else:
-            prior = load_contract(args.prior_contract) if args.prior_contract else None
+            prior = seed_view(load_contract(args.prior_contract), c["seed"]) if args.prior_contract else None
             result = _formal(c, args.out, counts, args.resume, prior)
-        _json(args.out / "CLOSED.json", {"status": "PASS", "action": args.action, **result,
+        _json(args.out / "CLOSED.json", {"status": "PASS", "action": args.action, **result, "seed": c["seed"],
                                         "contract_sha256": c["contract_sha256"], "counts": dict(counts),
                                         "elapsed_seconds": time.monotonic() - start,
                                         "process_cpu_seconds": time.process_time() - cpu0, **_memory()})
     except BaseException as exc:
         oom = isinstance(exc, torch.cuda.OutOfMemoryError)
         _json(args.out / "STOP.json", {"status": "STOP_CUDA_OOM" if oom else "STOP", "phase": PHASE["phase"],
-                                      "error": repr(exc)[:4000], "traceback": traceback.format_exc(),
+                                      "seed": args.seed, "error": repr(exc)[:4000], "traceback": traceback.format_exc(),
                                       "action": args.action, "counts": dict(counts),
                                       "attempted_forwards": counts["forward_attempts"],
                                       "completed_forwards": counts["forwards"],
