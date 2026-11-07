@@ -257,6 +257,7 @@ def contract(release_name, attempt, prior_name=None):
         prior = {"attempt": prior_name, "contract": ref(ROUND / f"{prior_name}-CONTRACT.json"),
                  "contract_sha256": old["contract_sha256"], "stop": ref(proot / "STOP.json"),
                  "reused_receipts": {k: ref(p) for k, p in receipts.items()},
+                 "failed_continuations": {p.parent.parent.name: ref(p) for p in sorted(ROUND.glob("diag-*/large/STOP.json"))},
                  "reason": "large stage STOP on a 1-ULP per-class APL difference; GPU/score stages reused unchanged"}
     value = {"version": CONTRACT_VERSION, "attempt": attempt, "contract_path": str(ROUND / f"{attempt}-CONTRACT.json"),
              "attempt_root": str(root), "task": task, "workload": WORKLOAD, "prior": prior,
@@ -1162,9 +1163,23 @@ def large(c, score_dir, out):
                             "not oracle TP, not query-pool recall, not an AP upper bound",
               "timings_seconds": timings, "wall_seconds": time.perf_counter() - started,
               "cpu_seconds": time.process_time() - cpu0, "peak_rss_bytes": _rss()}
-    write_new(out / "LARGE_DESCRIPTION.json", result)
-    write_new(out / "LARGE_GT_DETAIL.json", gt_detail)
+    write_new(out / "LARGE_DESCRIPTION.json", _plain(result))
+    write_new(out / "LARGE_GT_DETAIL.json", _plain(gt_detail))
     return result
+
+
+def _plain(value):
+    """diag-002 STOP: a numpy int64 reached the JSON writer; convert numpy scalars/arrays to Python values."""
+    import numpy as np
+    if isinstance(value, dict):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return _plain(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
 
 # ---------------------------------------------------------------- four-cell summary
@@ -1220,7 +1235,7 @@ def summary(c, score_dir, large_dir, out):
               "values": values, "official_VisDrone_style_AP_percent": official, "metrics": refs,
               "differences_pp": diff, "old_gate_distances_record_only": gates,
               "per_class_APL_top600_pp": pc_diff, "contract_sha256": c["contract_sha256"]}
-    write_new(out / "FOUR_CELL.json", result)
+    write_new(out / "FOUR_CELL.json", _plain(result))
     return result
 
 
