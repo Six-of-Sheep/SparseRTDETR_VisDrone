@@ -201,6 +201,14 @@ def prepare(_args):
                     "checkpoint_segments": ["backbone.res_layers", "encoder.fpn_blocks", "encoder.pan_blocks",
                                             "r27_local.res_layers"],
                     "allocator_conf": "expandable_segments:True"},
+         "resource_plan": {
+             "storage_estimate_bytes": {"acceptance_states": 3 * 350_000_000, "diagnostic_states": 4 * 350_000_000,
+                                        "formal_states": 2 * 13 * 350_000_000, "formal_audit": 2 * 200_000_000,
+                                        "predictions_and_metrics": 2 * 160_000_000, "logs_and_small": 100_000_000},
+             "disk_free_bytes_at_prepare": shutil.disk_usage(ROUND).free,
+             "gpu_time_reference": "task: 16-26 GPU h planning reference (not a cap); dev dry run measured about 1.92 s per "
+                                   "update -> about 19.5 h for 36480 formal updates plus saves/IO",
+             "development_smoke_outside_normal_ledger": "dev-round-001 (separate CHAIN-free dry run, reported separately)"},
          "outputs": str(ROUND), "formal_started": False}
     require(c["parent"]["sha256"] == PARENT_SHA and c["S15_endpoint"]["sha256"] == S15_ENDPOINT_SHA, "parent/S15 endpoint SHA")
     require(c["monitor_sha256"] == sha_bytes(canonical(c["monitor_ids"])) and len(c["monitor_ids"]) == OBS_IMAGES, "monitor ids")
@@ -652,9 +660,11 @@ def run_loop(c, e, out, stop, scope, counts, *, save_points, monitor_points=(), 
                         afile.flush()
                         _available(out)
                         ep = e.completed_updates // WINDOWS_PER_EPOCH
-                        if scope == "formal":
+                        if scope == "formal" and e.completed_updates % WINDOWS_PER_EPOCH == 0:
                             name = f"checkpoint-epoch-{ep:03d}.pth"
                             role = "formal_save" if ep in FORMAL_SAVE_EPOCHS else "recovery"
+                        elif scope == "formal":
+                            name, role = f"checkpoint-update-{e.completed_updates}.pth", "recovery"
                         else:
                             name, role = f"state-update-{e.completed_updates}.pth", scope
                         saves.append(save(c, e, out / name, scope, ref(history), role))
@@ -752,6 +762,7 @@ def cpu(c, out):
     from formal_data import windows
     require(os.environ.get("CUDA_VISIBLE_DEVICES") == "", "CPU checks hide CUDA")
     setup("cpu")
+    CPU = torch.device("cpu")
     torch.set_num_threads(int(os.environ.get("R27_CPU_THREADS", "16")))
     t0 = time.perf_counter()
     res = {}
@@ -778,13 +789,13 @@ def cpu(c, out):
     xl = R.to_low(x)
     for m in (ref_e.model, eng["C"].model, eng["P"].model):
         m.eval()
-    rng0 = ck.capture_rng("cpu")
+    rng0 = ck.capture_rng(CPU)
     with torch.no_grad():
         oN = ref_e.model(xl)
         oP = eng["P"].model(x)
         feed_keys(eng["C"], keys, ids, "eval", 0)
         oC = eng["C"].model(x)
-    require(ck.exact_equal(ck.capture_rng("cpu"), rng0), "eval forward consumed RNG")
+    require(ck.exact_equal(ck.capture_rng(CPU), rng0), "eval forward consumed RNG")
     zero["eval_P_equals_native_L"] = all(torch.equal(oN[k], oP[k]) for k in oN)
     zero["eval_C_equals_native_L"] = all(torch.equal(oN[k], oC[k]) for k in oN)
     require(zero["eval_P_equals_native_L"] and zero["eval_C_equals_native_L"], "zero-step eval output differs from native(I_L)")
@@ -812,11 +823,11 @@ def cpu(c, out):
     bn_global_before = {n: v.clone() for n, v in eng["P"].model.state_dict().items() if "running" in n and not n.startswith(R.LOCAL)}
     steps = {}
     for name, e, xx in (("N_L", ref_e, xl), ("P", eng["P"], x), ("C", eng["C"], x)):
-        ck.restore_rng(rng0, "cpu")
+        ck.restore_rng(rng0, CPU)
         if name == "C":
             feed_keys(e, keys, ids, "train", 61)
         steps[name] = micro_steps(e.model, e.criterion, xx, t, "cpu", "float32", old_names=old_names)
-        steps[name]["rng_after"] = ck.capture_rng("cpu")
+        steps[name]["rng_after"] = ck.capture_rng(CPU)
         if name != "N_L":
             drained(e)
     for a in ("P", "C"):
@@ -856,7 +867,7 @@ def cpu(c, out):
         routes = []
         for tg in (t, t_alt):
             sd = {n: v.clone() for n, v in mP.state_dict().items()}
-            ck.restore_rng(rng0, "cpu")
+            ck.restore_rng(rng0, CPU)
             mP(x[:1], targets=_move(tg[:1], torch.device("cpu")))
             r = ctx.records.pop()
             routes.append((r["tiles"].clone(), r["mass"].clone()))
@@ -872,11 +883,11 @@ def cpu(c, out):
     rows = {}
     for a in ("C", "P"):
         e = eng[a]
-        ck.restore_rng(rng0, "cpu")
+        ck.restore_rng(rng0, CPU)
         feed_keys(e, keys, ids, "train", 61)
         r = e.train_window(x, t, capture=True)
         drained(e)
-        rows[a] = {"loss": r["loss"], "outputs": r["output_sha256"], "dn": r["dn_noise_sha256"], "rng": ck.capture_rng("cpu")}
+        rows[a] = {"loss": r["loss"], "outputs": r["output_sha256"], "dn": r["dn_noise_sha256"], "rng": ck.capture_rng(CPU)}
     one = {"C_P_outputs_equal": rows["C"]["outputs"] == rows["P"]["outputs"], "C_P_DN_equal": rows["C"]["dn"] == rows["P"]["dn"],
            "C_P_loss": [rows["C"]["loss"], rows["P"]["loss"]],
            "C_P_RNG_after_equal": ck.exact_equal(rows["C"]["rng"], rows["P"]["rng"])}
@@ -904,9 +915,9 @@ def cpu(c, out):
             and all(l.r27_ctx is dc.r27_ctx for l in dc.decoder.decoder.layers), "deepcopy context identity")
     res["deepcopy_context_isolated"] = True
     # C route stateless: same key after save/restore gives the same tiles; RNG untouched by routing
-    rng1 = ck.capture_rng("cpu")
+    rng1 = ck.capture_rng(CPU)
     tiles_a = [R.route_c_one("train", keys[i], 61, 0) for i in ids]
-    require(ck.exact_equal(ck.capture_rng("cpu"), rng1), "C routing consumed RNG")
+    require(ck.exact_equal(ck.capture_rng(CPU), rng1), "C routing consumed RNG")
     st = Path(out) / "cpu-state-P.pth"
     side = save(c, e, st, "cpu-fixture")
     fresh, _ = make(c, "cpu", "P", fixture=True)
@@ -1253,7 +1264,7 @@ def cost(c, out, counts):
     del e
     sources = {"N": {"weights": "S15 bridge of the e060 online state (timing does not depend on values)"}}
     for arm in LEARN:
-        p = ROUND / f"diag-{arm}" / "state-update-18368.pth"
+        p = ROUND / f"diag-{arm}" / f"state-update-{18240 + DIAG_UPDATES}.pth"
         side, s = read_state(c, p, "diagnostic", arm)
         models[arm] = R.build_eval_model(arm, s["model"], "cuda:0")
         sources[arm] = {"state": side["file"], "weights": "u128 online"}
@@ -1272,7 +1283,7 @@ def final_cost(c, out, counts):
     torch = torch_mod()
     pinned(c["S15_endpoint"])
     s = torch.load(c["S15_endpoint"]["path"], map_location="cpu", weights_only=True)
-    require(s["engine"]["completed_updates"] == s["ema"]["updates"] == ENDPOINT and s["config"] == S.production_config(0).binding(),
+    require(s["engine"]["completed_updates"] == s["ema"]["updates"] == 36480 and s["config"] == S.production_config(0).binding(),
             "S15 e120 endpoint identity")
     m, _, _ = build(S.production_config(0), synthetic=True)
     m.load_state_dict(s["ema"]["module"], strict=True)
@@ -1281,7 +1292,7 @@ def final_cost(c, out, counts):
     sources = {"N": {"endpoint": c["S15_endpoint"], "weights": "S15 seed0 e120 EMA"}}
     del s
     for arm in LEARN:
-        side, st = read_state(c, ROUND / f"formal-{arm}" / "checkpoint-epoch-120.pth", "formal", arm)
+        side, st = read_state(c, endpoint_path(arm), "formal", arm)
         models[arm] = R.build_eval_model(arm, st["ema"]["module"], "cuda:0")
         sources[arm] = {"endpoint": side["file"], "weights": "e120 EMA"}
         del st
@@ -1403,6 +1414,13 @@ def formal(c, out, arm, counts, resume):
             "resumed": resume is not None, **loop}
 
 
+def endpoint_path(arm):
+    from formal_data import WINDOWS_PER_EPOCH
+    name = (f"checkpoint-epoch-{ENDPOINT // WINDOWS_PER_EPOCH:03d}.pth" if ENDPOINT % WINDOWS_PER_EPOCH == 0
+            else f"checkpoint-update-{ENDPOINT}.pth")
+    return ROUND / f"formal-{arm}" / name
+
+
 # ================================================================ evaluation (section 9)
 def evaluate(c, out, arm, counts):
     from infer_seed import bridge_values, load_original, pixels, _group, _prefix
@@ -1415,7 +1433,7 @@ def evaluate(c, out, arm, counts):
     from s15_formal_eval import per_class_large
     torch = torch_mod()
     out = Path(out)
-    path = ROUND / f"formal-{arm}" / "checkpoint-epoch-120.pth"
+    path = endpoint_path(arm)
     side, st = read_state(c, path, "formal", arm)
     require(side["global_update"] == ENDPOINT and st["engine"]["completed_updates"] == st["ema"]["updates"] == ENDPOINT, "e120 clocks")
     state = st["ema"]["module"]
