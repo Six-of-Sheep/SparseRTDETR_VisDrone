@@ -119,21 +119,23 @@ def source_manifest(root):
 
 def prepare(args):
     import subprocess
-    require(ROOT.resolve() == (ROUND / "release-001/source").resolve(), "prepare must run from the frozen release")
-    manifest = json.loads((ROUND / "release-001/MANIFEST.json").read_text())
+    require(ROOT.resolve().parent.parent == ROUND.resolve() and ROOT.name == "source", "prepare must run from a frozen release")
+    manifest = json.loads((ROOT.parent / "MANIFEST.json").read_text())
     require(manifest["files"] == source_manifest(ROOT), "release source differs from MANIFEST")
     s15 = json.loads(S15_CONTRACT.read_text())
     split = json.loads(SQC_SPLIT.read_text())
     require(len(split["validation"]) == 512, "SQC validation size")
     ids = monitor_ids(split["validation"])
-    c = {"version": "R26-001-contract-v1", "task": pinned({"path": str(TASK), **_tsize()}),
+    task = {"path": str(TASK), **_tsize()}
+    pinned(task)
+    c = {"version": "R26-001-contract-v1", "task": task,
          "parent": ref(PARENT), "parent_update": 18240,
          "S15_contract": ref(S15_CONTRACT), "S15_formal_identity": s15["formal_identity"],
          "S15_updates": ref(S15_UPDATES), "data": {"train_core": s15["data"]["train_core"]},
          "environment": s15["environment"], "python": PYTHON, "gpu_uuid": s15["gpu_uuid"],
          "SQC_split": ref(SQC_SPLIT), "monitor_rule": "SHA256('r26-monitor-v1:'+image_id) hex ascending, first 64 of the SQC 512 validation",
          "monitor_ids": ids, "monitor_sha256": sha_bytes(canonical(ids)),
-         "source_root": str(ROOT.resolve()), "source_manifest": ref(ROUND / "release-001/MANIFEST.json"),
+         "source_root": str(ROOT.resolve()), "source_manifest": ref(ROOT.parent / "MANIFEST.json"),
          "source_commit": manifest["commit"], "workload": WORKLOAD,
          "recipe": {"input_hw": [1152, 2016], "train_batch": 8, "accumulation": 2, "precision": "bfloat16", "clip": 0.1,
                     "optimizer": "native AdamW groups, global LR clock", "activation_checkpoint": True,
