@@ -26,6 +26,18 @@ def _free(torch):
     torch.cuda.empty_cache()
 
 
+def _low_reading(torch, R, x, xl, dev):
+    """Not gated, no model call: the explicit I_L of the reference is resampled on the CPU, L0 resamples on the model
+    device.  Records how far the two FP32 tensors are apart and whether they are equal after the BF16 input cast."""
+    rows = []
+    for i in (0, 8):
+        a, b = xl[i:i + 8].to(dev), R.to_low(x[i:i + 8].to(dev))
+        rows.append({"elements": a.numel(), "fp32_equal": bool(torch.equal(a, b)), "fp32_differing_elements": int((a != b).sum()),
+                     "fp32_max_abs": float((a.double() - b.double()).abs().max()),
+                     "bf16_cast_equal": bool(torch.equal(a.to(torch.bfloat16), b.to(torch.bfloat16)))})
+    return rows
+
+
 def zero(c, out, counts):
     import r27_run as R27  # micro_steps (pure) and native_l (reference constructor) only
     from sparse_rtdetr.protocol_r18 import checkpoint as ck
@@ -40,7 +52,7 @@ def zero(c, out, counts):
     res = {"stage": "cuda_zero_step", "workload": c["workload"]["cuda_zero_step"], "input": inp, "precision": "bfloat16",
            "microbatches": [8, 8], "I_H": list(x.shape), "I_L": list(xl.shape),
            "reference": "r27_run.native_l (native L network, same parent, S15 checkpoint segments) on explicit I_L = to_low(I_H)",
-           "informational_I_L_cpu_equals_to_low_on_device": [bool(torch.equal(R.to_low(x[i:i + 8].to(dev)).cpu(), xl[i:i + 8])) for i in (0, 8)]}
+           "informational_I_L_explicit_vs_on_device": _low_reading(torch, R, x, xl, dev)}
     # ---- reference
     K.PHASE["phase"] = "zero:reference"
     ref_e, _ = R27.native_l(c, dev, fixture=False)
