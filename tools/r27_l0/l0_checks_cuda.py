@@ -26,16 +26,42 @@ def _free(torch):
     torch.cuda.empty_cache()
 
 
-def _low_reading(torch, R, x, xl, dev):
-    """Not gated, no model call: the explicit I_L of the reference is resampled on the CPU, L0 resamples on the model
-    device.  Records how far the two FP32 tensors are apart and whether they are equal after the BF16 input cast."""
+def _low_on_device(torch, R, x, dev):
+    """Explicit I_L of the reference, as the task defines to_low: FP32, autocast disabled, on the model device, one
+    microbatch of 8 at a time (the same call L0 makes inside its forward).  The H copies are released at once."""
+    parts = []
+    for i in (0, 8):
+        h = x[i:i + 8].to(dev)
+        parts.append(R.to_low(h))
+        del h
+    low = torch.cat(parts)
+    K.require(low.device.type == "cuda" and low.dtype == torch.float32 and tuple(low.shape) == (16, 3, *R.L_HW), "explicit I_L")
+    return low
+
+
+def _low_reading(torch, R, x, low):
+    """Not gated, no model call: a CPU resampling of the same I_H against the on-device explicit I_L.  Records how far
+    the two FP32 tensors are apart and whether they are equal after the BF16 input cast."""
     rows = []
     for i in (0, 8):
-        a, b = xl[i:i + 8].to(dev), R.to_low(x[i:i + 8].to(dev))
+        a, b = R.to_low(x[i:i + 8]).to(low.device), low[i:i + 8]
         rows.append({"elements": a.numel(), "fp32_equal": bool(torch.equal(a, b)), "fp32_differing_elements": int((a != b).sum()),
                      "fp32_max_abs": float((a.double() - b.double()).abs().max()),
                      "bf16_cast_equal": bool(torch.equal(a.to(torch.bfloat16), b.to(torch.bfloat16)))})
+        del a
     return rows
+
+
+def _tap(model, sink):
+    """Forward pre-hook on the native backbone: digest of the tensor the native forward consumes.  It runs inside the
+    counted forwards (no additional forward) and only reads the tensor."""
+    from sparse_rtdetr.protocol_r18.engine import tensor_digest
+
+    def hook(_module, args):
+        v = args[0]
+        sink.append({"shape": list(v.shape), "dtype": str(v.dtype), "device": v.device.type,
+                     "sha256": tensor_digest([("I_L", v)])})
+    return model.backbone.register_forward_pre_hook(hook)
 
 
 def zero(c, out, counts):
@@ -48,11 +74,15 @@ def zero(c, out, counts):
     dev = "cuda:0"
     (x, t, inp), = _first_windows(c, 1)
     K.require(inp["update"] == K.PARENT_UPDATE + 1 and tuple(x.shape) == (16, 3, *R.H_HW), "zero-step window")
-    xl = R.to_low(x)
+    K.PHASE["phase"] = "zero:explicit I_L on the model device"
+    xl = _low_on_device(torch, R, x, dev)
+    explicit = [tensor_digest([("I_L", xl[i:i + 8])]) for i in (0, 8)]
     res = {"stage": "cuda_zero_step", "workload": c["workload"]["cuda_zero_step"], "input": inp, "precision": "bfloat16",
            "microbatches": [8, 8], "I_H": list(x.shape), "I_L": list(xl.shape),
-           "reference": "r27_run.native_l (native L network, same parent, S15 checkpoint segments) on explicit I_L = to_low(I_H)",
-           "informational_I_L_explicit_vs_on_device": _low_reading(torch, R, x, xl, dev)}
+           "reference": "r27_run.native_l (native L network, same parent, S15 checkpoint segments) on explicit "
+                        "I_L = to_low(I_H) computed FP32, autocast disabled, on the model device",
+           "explicit_I_L": {"device": xl.device.type, "dtype": str(xl.dtype), "microbatch_sha256": explicit},
+           "informational_I_L_cpu_resample_vs_on_device": _low_reading(torch, R, x, xl)}
     # ---- reference
     K.PHASE["phase"] = "zero:reference"
     ref_e, _ = R27.native_l(c, dev, fixture=False)
@@ -61,10 +91,13 @@ def zero(c, out, counts):
     old_names = [n for n, _ in ref_e.model.named_parameters()]
     rng0 = ck.capture_rng(ref_e.device)
     p_ref0, bn_ref0 = tensor_digest(ref_e.model.named_parameters()), H.bn_digest(ref_e.model)
+    ref_in = []
+    tap = _tap(ref_e.model, ref_in)
     nl = R27.micro_steps(ref_e.model, ref_e.criterion, xl, t, dev, "bfloat16", old_names=old_names)
+    tap.remove()
     nl_rng = ck.capture_rng(ref_e.device)
     p_ref1, bn_ref1 = tensor_digest(ref_e.model.named_parameters()), H.bn_digest(ref_e.model)
-    del ref_e
+    del ref_e, xl
     _free(torch)
     # ---- L0
     K.PHASE["phase"] = "zero:L0"
@@ -74,12 +107,21 @@ def zero(c, out, counts):
     start_rng_equal = ck.exact_equal(ck.capture_rng(e.device), rng0)
     ck.restore_rng(rng0, e.device)
     p0, bn0 = tensor_digest(e.model.named_parameters()), H.bn_digest(e.model)
+    l0_in = []
+    tap = _tap(e.model, l0_in)
     mine = R27.micro_steps(e.model, e.criterion, x, t, dev, "bfloat16", old_names=old_names)
+    tap.remove()
     mine_rng = ck.capture_rng(e.device)
     p1, bn1 = tensor_digest(e.model.named_parameters()), H.bn_digest(e.model)
     del e
     _free(torch)
-    eq = {"parameter_names_equal": names == old_names,
+    low_shape = {"shape": [8, 3, *R.L_HW], "dtype": "torch.float32", "device": "cuda"}
+    res["I_L_consumed_by_native_forward"] = {"reference": ref_in, "L0_internal_to_low": l0_in,
+                                             "captured_by": "forward pre-hook on the native backbone inside the counted forwards"}
+    eq = {"explicit_I_L_equals_L0_internal_to_low_fp32":
+              len(ref_in) == len(l0_in) == 2 and ref_in == l0_in and [r["sha256"] for r in ref_in] == explicit
+              and all({k: r[k] for k in low_shape} == low_shape for r in ref_in + l0_in),
+          "parameter_names_equal": names == old_names,
           "start_parameters_equal": p0 == p_ref0 == checks["old_parameters_sha256"],
           "start_BN_buffers_equal": bn0 == bn_ref0,
           "start_RNG_equal_after_construction": start_rng_equal,

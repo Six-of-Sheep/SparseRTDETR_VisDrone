@@ -43,9 +43,17 @@ def cpu(c, out, counts):
     K.require(os.environ.get("CUDA_VISIBLE_DEVICES") == "" and not torch.cuda.is_available(), "CPU checks hide CUDA")
     out = Path(out)
     setup("cpu")  # deterministic algorithms and seeds, as for the CUDA actions (l0_run calls it only for those)
-    torch.set_num_threads(int(os.environ.get("L0_CPU_THREADS", "16")))
+    threads = int(os.environ.get("L0_CPU_THREADS", "16"))
+    K.require(threads >= 1, "L0_CPU_THREADS")
+    torch.set_num_threads(threads)
+    K.require(torch.get_num_threads() == threads, f"intra-op threads {torch.get_num_threads()} != {threads}")
     t0 = time.perf_counter()
-    res = {"stage": "cpu_fixture", "workload": c["workload"]["cpu_fixture"]}
+    res = {"stage": "cpu_fixture", "workload": c["workload"]["cpu_fixture"],
+           "threads": {"L0_CPU_THREADS": os.environ.get("L0_CPU_THREADS"), "default": 16, "torch_num_threads": torch.get_num_threads(),
+                       "torch_num_interop_threads": torch.get_num_interop_threads(), "cpu_count": os.cpu_count(),
+                       "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS"), "MKL_NUM_THREADS": os.environ.get("MKL_NUM_THREADS"),
+                       "note": "the gate is the in-process restore/replay identity; fixture losses are not required to "
+                               "be bit-identical across processes"}}
     # 1. synthetic unit tests (subprocess; not counted here)
     K.PHASE["phase"] = "cpu:pytest"
     p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *[str(K.ROOT / t) for t in TESTS]],
@@ -126,7 +134,12 @@ def cpu(c, out, counts):
     K.require(counts["actual_updates"] == 3 and counts["forwards"] == counts["forward_attempts"] == 6, f"fixture counts {dict(counts)}")
     fx.update(saved_u1=side, full_state_exact=True, rng_exact=True, replay_result_exact=True,
               compared_result_fields=sorted(_result_body(replay)), loss=[r["loss"] for r in rows], replay_loss=replay["loss"],
-              output_sha256_u2=rows[1]["output_sha256"], elapsed_seconds=[r["elapsed_seconds"] for r in rows + [replay]])
+              output_sha256_u2=rows[1]["output_sha256"], elapsed_seconds=[r["elapsed_seconds"] for r in rows + [replay]],
+              cross_process_trace={"note": "informational: lets two processes be compared step by step (not gated)",
+                                   "output_sha256": [r["output_sha256"] for r in rows],
+                                   "dn_noise_sha256": [r["dn_noise_sha256"] for r in rows],
+                                   "gradient_sha256_before_clip": [r["gradient_sha256_before_clip"] for r in rows],
+                                   "gradient_norm_before_clip": [r["gradient_norm_before_clip"] for r in rows]})
     # 6. refusals
     K.PHASE["phase"] = "cpu:refusals"
     st = out / "cpu-fixture-u1.pth"
