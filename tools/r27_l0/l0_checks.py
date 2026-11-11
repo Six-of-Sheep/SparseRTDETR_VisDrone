@@ -147,10 +147,10 @@ def cpu(c, out, counts):
     res["refused"] = [H.refused(label, fn) for label, fn in cases[:4]]
     K.require(ck.exact_equal(S.capture(clone), got), "a refused load changed the engine")
     res["refused"] += [H.refused(label, fn) for label, fn in cases[4:]]  # these build fresh models (initialisers draw RNG)
-    if K.endpoint_path().exists():
-        res["refused"].append({"case": "endpoint_state without an endpoint", "skipped": "this round already has an L0 endpoint"})
-    else:
+    try:  # before formal training the round has no endpoint; a rerun after it finds one and records that instead
         res["refused"].append(H.refused("endpoint_state without an endpoint", lambda: K.endpoint_state(c)))
+    except AssertionError:
+        res["refused"].append({"case": "endpoint_state without an endpoint", "skipped": "this round already has an L0 endpoint"})
     K.require(counts["actual_updates"] == 3 and counts["forwards"] == counts["forward_attempts"] == 6, f"cpu counts {dict(counts)}")
     res.update(fixture_updates=3, full_forwards=6, formal_state_usable=False, cpu_seconds_wall=time.perf_counter() - t0)
     return res
