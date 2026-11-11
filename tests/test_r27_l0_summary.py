@@ -54,7 +54,7 @@ APL = {
            0.5254929910656874, 0.38129431439224676, 0.2776520509193776, 0.7611541718070195, 0.28749918258079676),
 }
 CLASSES = {a: [{"category_id": i + 1, "GT": GT[i], "APL": x} for i, x in enumerate(xs)] for a, xs in APL.items()}
-COUNTS = {"cpu_fixture": {"actual_updates": 3, "forwards": 6}, "cuda_zero_step": {"actual_updates": 0, "forwards": 4},
+COUNTS = {"cpu_fixture": {"actual_updates": 3, "forwards": 6}, "cuda_zero_step": {"actual_updates": 0, "forwards": 2, "reference_forwards": 2},
           "cuda_accept": {"actual_updates": 3, "forwards": 6}, "formal": {"actual_updates": 18240, "forwards": 36480},
           "evaluation": {"actual_updates": 0, "forwards": 141, "score_budget_calls": 2, "per_class_COCOeval_calls": 1},
           "cost4": {"actual_updates": 0, "forwards": 200}}
@@ -148,6 +148,11 @@ def test_workload_reconciliation_reports_differences():
     assert w["stages"]["formal"]["differs"] == ["forwards"] and w["stages"]["evaluation"]["differs"] == ["score_budget_calls"]
     assert w["normal_gpu_total"]["differs"] == ["forwards", "score_budget_calls"] and not w["normal_gpu_total"]["equal"]
     assert w["stages"]["cost4"]["equal"] and w["stages"]["formal"]["actual"]["forwards"] == 36478
+    assert w["stages"]["cuda_zero_step"]["actual"]["forwards"] == 4 and w["stages"]["cuda_zero_step"]["equal"]
+    resumed = copy.deepcopy(COUNTS)  # a resumed formal process closes with its own counts only: reported, not hidden
+    resumed["formal"] = {"actual_updates": 9120, "forwards": 18240}
+    w = M.workload(K.WORKLOAD, resumed, {"resumed": True, "start_update": 27360})
+    assert not w["all_equal"] and w["unequal_stages"] == ["formal"] and w["formal_chain"]["resumed"]
 
 
 def test_cost_is_copied_and_bound_to_the_evaluated_weights():

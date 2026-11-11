@@ -153,8 +153,17 @@ def summarize(c, out, counts):
     old = K.read_json(K.R27_RESULT)
     r27 = {"file": c["R27_result"], "label": old["label"], "E_passed": old["E_P_minus_S15"]["passed"],
            "I_passed": old["I_P_minus_C"]["passed"], "G_passed": old["G_P_minus_A0"]["passed"]}
+    f = closed["formal"]
+    others = [{"directory": d.name, "STOP": K.read_json(d / "STOP.json") if (d / "STOP.json").is_file() else None}
+              for d in sorted(K.ROUND.iterdir()) if d.is_dir() and d.name != formal and d.name.startswith("formal-L0")]
+    chain = {"closed_directory": formal, "resumed": f["resumed"], "start_update": f["plan"]["start_update"],
+             "stop_update": f["plan"]["stop_update"], "updates_in_closed_process": f["updates"],
+             "updates_before_the_resume_state": f["plan"]["start_update"] - K.PARENT_UPDATE, "ledger_rows": f["ledger_rows"],
+             "other_formal_directories": [{"directory": o["directory"], "status": (o["STOP"] or {}).get("status"),
+                                           "counts": (o["STOP"] or {}).get("counts")} for o in others]}
+    K.require(f["plan"]["stop_update"] == K.ENDPOINT and f["ledger_rows"] == K.ENDPOINT - K.PARENT_UPDATE, "formal coverage")
     K.PHASE["phase"] = "summarize/compute"
-    res = M.build(c, ev, cost_closed, {k: v["counts"] for k, v in closed.items()}, r27)
+    res = M.build(c, ev, cost_closed, {k: v["counts"] for k, v in closed.items()}, r27, chain)
     res["stages"] = {k: {"directory": name, "CLOSED": K.ref(K.ROUND / name / "CLOSED.json"),
                          "elapsed_seconds": closed[k]["elapsed_seconds"],
                          "process_cpu_seconds": closed[k].get("process_cpu_seconds")} for k, name in stages.items()}

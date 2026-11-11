@@ -105,22 +105,24 @@ def per_class(reference_apl, l0_apl, values):
             "large_GT_equal_across_arms": True}
 
 
-def workload(plan, actual):
-    """Planned (contract workload) against actual (CLOSED counts per stage); differences are reported, never hidden."""
+def workload(plan, actual, formal_chain=None):
+    """Planned (contract workload) against actual (CLOSED counts per stage); differences are reported, never hidden.
+    A resumed formal run closes with the counts of its own process only: it is then reported as unequal, with the chain."""
     K.require(set(actual) == set(STAGES), ("workload stages", sorted(actual)))
     stages = {}
     for s in STAGES:
         planned = {name: plan[s].get(pk, 0) for name, pk, _ in COUNT_KEYS}
         got = {name: actual[s].get(ck, 0) for name, _, ck in COUNT_KEYS}
+        got["forwards"] += actual[s].get("reference_forwards", 0)  # zero stage: native reference forwards are counted apart
         stages[s] = {"planned": planned, "actual": got, "equal": planned == got,
-                     "differs": [k for k in planned if planned[k] != got[k]]}
+                     "differs": [k for k in planned if planned[k] != got[k]], "CLOSED_counts": dict(actual[s])}
     names = [name for name, _, _ in COUNT_KEYS]
     total = {side: {k: sum(stages[s][side][k] for s in GPU_STAGES) for k in names} for side in ("planned", "actual")}
     K.require(all(total["planned"][k] == plan["normal_gpu_total"][k] for k in ("updates", "forwards")),
               "planned stage rows do not add up to the contract's normal_gpu_total")
     total.update(equal=total["planned"] == total["actual"], stages=list(GPU_STAGES),
                  differs=[k for k in names if total["planned"][k] != total["actual"][k]])
-    return {"stages": stages, "normal_gpu_total": total, "all_equal": all(v["equal"] for v in stages.values()) and total["equal"],
+    return {"stages": stages, "normal_gpu_total": total, "formal_chain": formal_chain, "all_equal": all(v["equal"] for v in stages.values()) and total["equal"],
             "unequal_stages": [s for s in STAGES if not stages[s]["equal"]],
             "note": "counts are complete model forwards / optimizer updates / scorer calls as recorded in each stage's "
                     "CLOSED.json; activation-checkpoint recomputation and failed or dev runs are not part of these rows"}
@@ -141,7 +143,7 @@ def cost(cost_closed, eval_weights, endpoints):
             "L0_weights_equal_to_evaluation": True}
 
 
-def build(c, ev, cost_closed, stage_counts, r27):
+def build(c, ev, cost_closed, stage_counts, r27, formal_chain=None):
     """RESULT.json body.  r27 = {"file": ref, "label": ..., "E_passed": ..., "I_passed": ..., "G_passed": ...} (quoted only)."""
     reference, l0 = c["reference"]["values"], ev["values"]
     K.require(ev["counts"].get("score_budget_calls") == 2 and ev["counts"].get("per_class_COCOeval_calls") == 1,
@@ -159,7 +161,7 @@ def build(c, ev, cost_closed, stage_counts, r27):
             "per_class_APL_top600": per_class(c["reference"]["per_class_APL_top600"], ev["per_class_APL_top600"],
                                               {**reference, "L0": l0}),
             "cost4": cost(cost_closed, ev["weights_sha256"], K.COST_ENDPOINTS),
-            "workload": workload(c["workload"], stage_counts),
+            "workload": workload(c["workload"], stage_counts, formal_chain),
             "R27_001": {"result_file": r27["file"], "label": r27["label"], "E_passed": r27["E_passed"],
                         "I_passed": r27["I_passed"], "G_passed": r27["G_passed"], "status": "unchanged (quoted, not recomputed)"},
             "statements": STATEMENTS}
