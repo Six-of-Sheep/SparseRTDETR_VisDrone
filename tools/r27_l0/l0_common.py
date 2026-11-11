@@ -261,13 +261,23 @@ def prepare(_args=None):
     return c
 
 
+def release_intact(root, manifest_files):
+    """The release tree must still be, file by file, the tree its MANIFEST.json lists (edits after prepare are refused)."""
+    now = source_manifest(root)
+    changed = sorted(k for k in set(now) | set(manifest_files) if now.get(k) != manifest_files.get(k))
+    require(not changed, f"release source differs from MANIFEST.json ({len(changed)} paths): {changed[:8]}")
+    return len(now)
+
+
 def load_contract(path=None):
     c = read_json(path or ROUND / "CONTRACT.json")
     body = {k: v for k, v in c.items() if k != "contract_sha256"}
     require(c["contract_sha256"] == sha_bytes(canonical(body)), "contract digest")
     require(Path(c["source_root"]).resolve() == ROOT.resolve(), "not running from the bound release")
     require(Path(c["outputs"]).resolve() == ROUND.resolve(), "contract bound to another round")
-    pinned(c["source_manifest"])
+    manifest = read_json(pinned(c["source_manifest"]))
+    require(manifest["commit"] == c["source_commit"], "MANIFEST commit differs from the contract")
+    release_intact(ROOT, manifest["files"])
     pinned(c["parent"])
     from sparse_rtdetr.research import r27_l0_control as L
     require(c["identity_sha256"] == L.IDENTITY_SHA256, "L0 behaviour identity differs from the contract")
