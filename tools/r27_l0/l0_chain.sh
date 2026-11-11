@@ -88,7 +88,7 @@ stage() {  # stage <directory name> <command...>
   [ -e "$R/$name" ] && stop "CHAIN STOP at $name (unclosed directory present; preserve it, then resume or rename)"
   keep_log "$name"
   log "START $name"
-  "$@" > "$R/$name.log" 2>&1
+  "$@" > "$R/$name.log" 2>&1 9>&-   # the stage does not inherit the chain lock
   rc=$?
   log "END $name rc=$rc"
   [ $rc -eq 0 ] || stop "CHAIN STOP at $name" $rc
