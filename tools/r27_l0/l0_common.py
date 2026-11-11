@@ -7,6 +7,7 @@ The round is the L0 round; a dev round is selected only through the L0_ROUND env
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -360,13 +361,33 @@ def load(c, e, path, scope):
     return side
 
 
-def endpoint_path():
-    return ROUND / "formal-L0" / f"checkpoint-epoch-{ENDPOINT // WINDOWS_PER_EPOCH:03d}.pth"
+FORMAL_DIR = re.compile(r"formal-L0(-r([2-9]|[1-9][0-9]+))?")
+
+
+def formal_dir(c=None):
+    """The one closed formal directory of this round: formal-L0 or (after a mid-run recovery) formal-L0-rN, whose
+    CLOSED.json is PASS, arm L0, under this contract.  Zero or several such directories are refused."""
+    digest = (c if c is not None else read_json(ROUND / "CONTRACT.json"))["contract_sha256"]
+    found = []
+    for d in sorted(ROUND.iterdir()) if ROUND.is_dir() else ():
+        if not (d.is_dir() and FORMAL_DIR.fullmatch(d.name) and (d / "CLOSED.json").is_file()):
+            continue
+        closed = read_json(d / "CLOSED.json")
+        if closed.get("status") == "PASS" and closed.get("arm") == ARM and closed.get("contract_sha256") == digest:
+            found.append(d)
+    require(len(found) == 1, f"exactly one closed PASS formal-L0 directory is required under {ROUND}: "
+                             f"{[d.name for d in found]}")
+    return found[0]
+
+
+def endpoint_path(c=None):
+    return formal_dir(c) / f"checkpoint-epoch-{ENDPOINT // WINDOWS_PER_EPOCH:03d}.pth"
 
 
 def endpoint_state(c):
-    """The only evaluation source: this round's formal-L0 e120 state, EMA module only (online weights are not returned)."""
-    path = endpoint_path()
+    """The only evaluation source: the e120 state of this round's closed formal-L0[-rN] directory, EMA module only
+    (online weights are not returned)."""
+    path = endpoint_path(c)
     require(path.is_file() and side_of(path).is_file(), f"L0 endpoint missing: {path}")
     side, s = read_state(c, path, "formal")
     require(side["global_update"] == ENDPOINT and s["engine"]["completed_updates"] == s["ema"]["updates"] == ENDPOINT,

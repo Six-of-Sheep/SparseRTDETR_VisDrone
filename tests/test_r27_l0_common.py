@@ -1,5 +1,6 @@
 """R27-002 L0 runner common layer: shared-field comparison and fixed constants (pure CPU, no model, no torch)."""
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -82,7 +83,6 @@ def test_gate_rotations_and_schedule_constants():
     assert (K.EVAL_BATCH, K.EVAL_WARMUP, K.EVAL_BATCHES, K.BUDGETS) == (4, 4, 137, (600, 300))
     assert (K.COST_BATCH, K.COST_WARMUP, K.COST_PASSES, K.COST_BATCHES_PER_PASS) == (4, 2, 3, 16)
     assert K.PARENT_SHA == "a2b6412e3c85de7592829f24aff09e355fdd11cb53798bc498bd04b882e1bf8a"
-    assert K.endpoint_path().name == "checkpoint-epoch-120.pth" and K.endpoint_path().parent.name == "formal-L0"
 
 
 def test_workload_totals():
@@ -102,3 +102,64 @@ def test_cells_reproduce_a_difference_in_pp():
     a0 = {"600": {"APS": 0.2217618575337924}}
     out = K.cells(p, a0, (("600", "APS", 0.50),))
     assert out["top600_APS"]["difference_pp"] == 1.148952720789989 and out["top600_APS"]["passed"]
+
+
+# ---------------------------------------------------------------- endpoint location (file system only)
+def closed_dir(root, name, *, status="PASS", arm="L0", digest="c" * 64, closed=True):
+    d = root / name
+    d.mkdir()
+    if closed:
+        (d / "CLOSED.json").write_text(json.dumps({"status": status, "arm": arm, "contract_sha256": digest}))
+    return d
+
+
+@pytest.fixture
+def round_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(K, "ROUND", tmp_path)
+    return tmp_path
+
+
+C = {"contract_sha256": "c" * 64}
+
+
+def test_formal_dir_refuses_a_round_without_a_closed_formal_directory(round_dir):
+    with pytest.raises(ValueError, match="exactly one closed PASS formal-L0"):
+        K.formal_dir(C)
+    closed_dir(round_dir, "formal-L0", closed=False)  # interrupted run: no CLOSED.json
+    closed_dir(round_dir, "formal-L0-r2", status="STOP")
+    with pytest.raises(ValueError, match="exactly one closed PASS formal-L0"):
+        K.endpoint_path(C)
+
+
+@pytest.mark.parametrize("name", ["formal-L0", "formal-L0-r2", "formal-L0-r13"])
+def test_formal_dir_finds_the_single_pass_directory(round_dir, name):
+    closed_dir(round_dir, "formal-L0", closed=False) if name != "formal-L0" else None
+    want = closed_dir(round_dir, name)
+    for other in ("formal-L0-r1", "formal-L0-r02", "formal-L0-dev", "formal-P", "accept", "xformal-L0"):
+        closed_dir(round_dir, other)  # names outside formal-L0 / formal-L0-rN (N>=2) are never candidates
+    assert K.formal_dir(C) == want
+    assert K.endpoint_path(C) == want / "checkpoint-epoch-120.pth"
+    (round_dir / "CONTRACT.json").write_text(json.dumps(C))
+    assert K.endpoint_path() == want / "checkpoint-epoch-120.pth"  # no argument: digest read from the round contract
+
+
+def test_formal_dir_refuses_two_pass_directories(round_dir):
+    closed_dir(round_dir, "formal-L0")
+    closed_dir(round_dir, "formal-L0-r2")
+    with pytest.raises(ValueError, match="formal-L0', 'formal-L0-r2"):
+        K.formal_dir(C)
+
+
+def test_formal_dir_ignores_another_contract_or_arm(round_dir):
+    closed_dir(round_dir, "formal-L0", digest="d" * 64)
+    closed_dir(round_dir, "formal-L0-r2", arm="P")
+    with pytest.raises(ValueError, match="exactly one closed PASS formal-L0"):
+        K.formal_dir(C)
+    want = closed_dir(round_dir, "formal-L0-r3")
+    assert K.formal_dir(C) == want  # the other-contract and other-arm directories do not count as a second one
+
+
+def test_endpoint_state_requires_the_e120_file_in_the_closed_directory(round_dir):
+    closed_dir(round_dir, "formal-L0-r2")
+    with pytest.raises(ValueError, match="L0 endpoint missing"):
+        K.endpoint_state(C)
