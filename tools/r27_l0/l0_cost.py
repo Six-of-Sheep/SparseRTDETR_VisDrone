@@ -210,6 +210,7 @@ def timing(c, counts, models):
 def cost4(c, out, counts):
     torch = K.torch_mod()
     K.PHASE["phase"] = "cost4:load"
+    K.stage_closed(c, "eval-L0")  # refuse before any model is loaded; load_l0 compares its weights_sha256
     models, sources = {}, {}
     for arm in K.COST_ENDPOINTS:
         models[arm], sources[arm] = LOADERS[arm](c, torch)
