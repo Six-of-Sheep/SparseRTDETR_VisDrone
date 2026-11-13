@@ -6,6 +6,7 @@
   precost | cost                  -> r28_cost
   formal                          -> r28_loop.formal(c, out, counts, resume)
   evaluate | summarize            -> r28_eval
+  dose                            -> r28_dose             (descriptive CPU table, run by hand after eval; not in the chain)
 
 Every stage function returns a dict that is merged into <out>/CLOSED.json; an exception writes <out>/STOP.json and
 is re-raised.
@@ -25,8 +26,8 @@ import r28_common as K  # noqa: E402
 DISPATCH = {"cpu": "r28_checks", "zero": "r28_checks", "accept": "r28_checks", "evalpath": "r28_checks",
             "demand": "r28_demand", "prior": "r28_demand", "g0": "r28_demand",
             "precost": "r28_cost", "cost": "r28_cost", "formal": "r28_loop",
-            "evaluate": "r28_eval", "summarize": "r28_eval"}
-CPU_ACTIONS = ("cpu", "prior", "summarize")
+            "evaluate": "r28_eval", "summarize": "r28_eval", "dose": "r28_dose"}
+CPU_ACTIONS = ("cpu", "prior", "summarize", "dose")
 
 
 def main(argv=None):

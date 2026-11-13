@@ -330,6 +330,7 @@ def g0(c, out, counts):
                 for n, a in enumerate(anns):
                     per_gt.append({"image": row["stable_image_id"], "raw_annotation_id": a["raw_annotation_id"],
                                    "category_id": a["category_id"], "area": a["area"],
+                                   "bbox_xyxy": [a["bbox"][0], a["bbox"][1], a["bbox"][0] + a["bbox"][2], a["bbox"][1] + a["bbox"][3]],
                                    **{k: float(v[n]) for k, v in g.items()}})
                 per_image.append({"image": row["stable_image_id"], "gt": len(anns), "demand_sum_predicted": float(d_pred[j].sum()),
                                   "demand_sum_gt": float(d_gt.sum()),

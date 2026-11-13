@@ -130,3 +130,24 @@ def test_a_rule_and_k_summary():
     r = E.summary_k(c, w_result, w, k_high, cost_k)
     assert not r["A_W_minus_K"]["passed"] and r["A_W_minus_K"]["label"] == "adaptive_increment_not_established"
     assert r["M_W_minus_L0_decision_unchanged"] == w_result["decision"]
+
+
+def test_dose_table_groups_small_gt_by_magnification():
+    import numpy as np
+    import r28_dose as D
+    gt = [{"image": "a", "category_id": 1, "area": 400.0, "predicted": g, "bbox_xyxy": [10.0 * k, 0.0, 10.0 * k + 8.0, 8.0]}
+          for k, g in enumerate((0.9, 1.1, 1.3, 1.5, 1.6))]
+    gt.append({"image": "a", "category_id": 1, "area": 5000.0, "predicted": 1.5, "bbox_xyxy": [0.0, 50.0, 80.0, 120.0]})  # not small
+    exact = lambda k: [10.0 * k, 0.0, 10.0 * k + 8.0, 8.0]
+    loose = lambda k: [10.0 * k, 0.0, 10.0 * k + 8.0, 5.0]           # IoU 0.625: recalled at 0.5 only
+    mine = {"a": {1: np.array([exact(3), exact(4), loose(0)]), 2: np.array([exact(1)])}}   # wrong class never recalls
+    theirs = {"a": {1: np.array([exact(0), loose(3)])}}
+    r = D.table(gt, mine, theirs)
+    assert r["small_GT"] == 5 and [b["n"] for b in r["bins"]] == [1, 1, 1, 2, 5]
+    low, high, total = r["bins"][0], r["bins"][3], r["bins"][4]
+    assert low["recall@0.5"] == {"arm": 1.0, "L0": 1.0, "difference_pp": 0.0}
+    assert low["recall@0.75"] == {"arm": 0.0, "L0": 1.0, "difference_pp": -100.0}
+    assert high["recall@0.5"] == {"arm": 1.0, "L0": 0.5, "difference_pp": 50.0}
+    assert high["recall@0.75"] == {"arm": 1.0, "L0": 0.0, "difference_pp": 100.0}
+    assert r["bins"][1]["recall@0.5"]["arm"] == 0.0 and abs(total["recall@0.5"]["arm"] - 0.6) < 1e-12
+    assert r["high_minus_low_difference_pp"] == {"recall@0.5": 50.0, "recall@0.75": 200.0}
