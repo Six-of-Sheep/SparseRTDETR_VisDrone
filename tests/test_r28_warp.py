@@ -4,13 +4,16 @@ The numpy functions below are the reference of evidence/warp_definition_check.py
 maps, tap table); the production module must agree with them inside [0, 1] and extend linearly outside.
 """
 import math
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 import torch.nn.functional as F
 
-from sparse_rtdetr.research import r28_warp as W
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from sparse_rtdetr.research import r28_warp as W  # noqa: E402
 
 HH, HW = W.H_HW
 LH, LW = W.L_HW
