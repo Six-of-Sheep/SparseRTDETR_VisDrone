@@ -97,6 +97,28 @@ LABELS = {
 }
 
 
+# ================================================================ follow-up rounds (TASK_R28_K_FOLLOWUP_003)
+FOLLOWUP_BASIS = "post_W_user_approved_K_followup"
+
+
+def followup(c):
+    """The follow-up block of a contract written by r28_followup.prepare, or None for the original R28 contract."""
+    fu = c.get("followup")
+    require(fu is None or (fu.get("authorization_basis") == c.get("authorization_basis") == FOLLOWUP_BASIS),
+            "follow-up contract without the registered authorization basis")
+    return fu
+
+
+def prior_contract(c):
+    """The contract of the closed R28 round a follow-up refers to (read-only; pinned by file SHA and inner digest)."""
+    fu = followup(c)
+    require(fu is not None, "not a follow-up contract")
+    c1 = read_json(pinned(fu["prior_contract"]))
+    body = {k: v for k, v in c1.items() if k != "contract_sha256"}
+    require(c1["contract_sha256"] == sha_bytes(canonical(body)) == fu["prior_contract_sha256"], "prior R28 contract digest")
+    return c1
+
+
 # ================================================================ L0 round (read-only input)
 def l0_contract(c=None):
     """The L0 contract, verified by file SHA and inner digest (it is not `loaded`: this is not the L0 release)."""
@@ -206,7 +228,16 @@ def load_contract(path=None):
 
 
 def stage_closed(c, name, arm=None):
-    """<round>/<name>/CLOSED.json must be PASS under this contract (and of the given arm, when one is given)."""
+    """<round>/<name>/CLOSED.json must be PASS under this contract (and of the given arm, when one is given).
+    In a follow-up round the stages of the closed R28 round are read from that round, each CLOSED.json pinned by the
+    follow-up contract and bound to the prior contract; such a name is never read from (or written to) the new round."""
+    fu = followup(c)
+    if fu is not None and name in fu["inherited"]:
+        require(not (ROUND / name).exists(), f"a follow-up round must not contain the inherited stage {name}")
+        closed = read_json(pinned(fu["inherited"][name]))
+        require(closed.get("status") == "PASS" and closed.get("contract_sha256") == fu["prior_contract_sha256"]
+                and (arm is None or closed.get("arm") == arm), f"inherited stage {name} is not PASS under the prior contract")
+        return closed
     path = ROUND / name / "CLOSED.json"
     require(path.is_file(), f"stage not closed: {path}")
     closed = read_json(path)
@@ -324,6 +355,7 @@ def formal_re(arm):
 
 
 def formal_dir(c, arm):
+    require(followup(c) is None or arm == "K", "a follow-up round has no formal directory of arm W")
     found = []
     for d in sorted(ROUND.iterdir()) if ROUND.is_dir() else ():
         if not (d.is_dir() and formal_re(arm).fullmatch(d.name) and (d / "CLOSED.json").is_file()):
@@ -352,7 +384,14 @@ def endpoint_name(stop):
 
 
 def endpoint_state(c, arm):
-    """The only evaluation source of an arm: the endpoint state of its closed formal directory, EMA module only."""
+    """The only evaluation source of an arm: the endpoint state of its closed formal directory, EMA module only.
+    In a follow-up round arm W is the pinned e120 state of the closed R28 round, read under the prior contract."""
+    fu = followup(c)
+    if fu is not None and arm == "W":
+        side, s = read_state(prior_contract(c), pinned(fu["W_endpoint"]), "formal", "W")
+        require(side["file"] == fu["W_endpoint"] and side["global_update"] == ENDPOINT
+                and s["engine"]["completed_updates"] == s["ema"]["updates"] == ENDPOINT, "prior W endpoint clocks")
+        return side, s["ema"]["module"]
     stop, _ = formal_stop()
     path = formal_dir(c, arm) / endpoint_name(stop)
     require(path.is_file() and side_of(path).is_file(), f"R28 endpoint missing: {path}")

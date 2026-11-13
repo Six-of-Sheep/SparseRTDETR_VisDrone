@@ -160,7 +160,17 @@ def guard(c, out, resume, arm):
     K.g0_passed(c)
     for stage in ("cpu", "zero", "evalpath", f"accept-{arm}"):
         K.stage_closed(c, stage)
-    if arm == "W":
+    fu = K.followup(c)
+    if fu is not None:
+        # TASK_R28_K_FOLLOWUP_003: the K run is authorised by the follow-up contract itself.  The W decision of the
+        # closed round stays K_trigger=false and is not consulted as a trigger; no dev flag is involved.
+        K.require(arm == "K", "a follow-up round only trains arm K")
+        K.stage_closed(c, "followup-check")
+        K.stage_closed(c, "accept-K", "K")
+        K.require(K.stage_closed(c, "summary-W", "W")["K_trigger"] is False and fu["prior_W_decision"]["K_trigger"] is False,
+                  "the follow-up was registered against a closed W decision with K_trigger=false")
+        K.require(os.environ.get("R28_DEV_FORCE_K") is None, "R28_DEV_FORCE_K is refused in a follow-up round")
+    elif arm == "W":
         K.require(K.stage_closed(c, "precost")["C_pre_passed"] is True or (K.DEV and os.environ.get("R28_DEV_IGNORE_COST") == "1"),
                   "the pre-launch cost check did not pass")
     else:

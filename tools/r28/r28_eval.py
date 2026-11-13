@@ -124,7 +124,7 @@ def evaluate(c, out, counts):
     _prefix(grouped[600], grouped[300], ids, whole=True)
     rows = data.records
     parsed = [data.raw(row) for row in rows]
-    values, metrics_refs, counts_gt, scoring, per_class = {}, {}, {}, [], None
+    values, metrics_refs, counts_gt, scoring, per_class, per_class_medium = {}, {}, {}, [], None, None
     K.PHASE["phase"] = "evaluate/scoring"
     epoch = side["global_update"] // K.WINDOWS_PER_EPOCH
     for b in K.BUDGETS:
@@ -140,14 +140,20 @@ def evaluate(c, out, counts):
         K.write_new(p, metrics)
         metrics_refs[str(b)] = K.ref(p)
         scoring.append({"budget": b, "seconds": time.perf_counter() - t})
-        if b == 600:
+        if b == 600 and K.followup(c) is not None:
+            # the same single COCOeval as per_class_large, with the medium rows read from the same precision tensor
+            import r28_followup as FU
+            per_class, per_class_medium = FU.per_class_sizes(rows, parsed, preds[b], metrics["COCO_bridge"])
+            counts.update(per_class_COCOeval_calls=1)
+        elif b == 600:
             per_class = per_class_large(rows, parsed, preds[b], metrics["COCO_bridge"])
             counts.update(per_class_COCOeval_calls=1)
     K.require(counts["score_budget_calls"] == 2 and counts["per_class_COCOeval_calls"] == 1, "scorer call counts")
     K.require(counts_gt == c["reference"]["GT_counts"], f"scored GT set differs from the L0 evaluation: {counts_gt}")
     return {"endpoint": side["file"], "formal_stage": formal, "weights_sha256": weights, "demand": side["demand"], "kind": "EMA",
             "epoch": epoch, "global_update": side["global_update"], "view": "A", "values": values, "metrics": metrics_refs,
-            "predictions": refs, "GT_counts": counts_gt, "per_class_APL_top600": per_class, "scoring": scoring, **timing}
+            "predictions": refs, "GT_counts": counts_gt, "per_class_APL_top600": per_class,
+            **({} if per_class_medium is None else {"per_class_APM_top600": per_class_medium}), "scoring": scoring, **timing}
 
 
 # ================================================================ summary arithmetic (pure)
@@ -250,6 +256,9 @@ def _other_directories():
 
 def summarize(c, out, counts):
     arm = K.ARM
+    if K.followup(c) is not None:
+        import r28_followup as FU
+        return FU.summarize(c, out, counts)
     K.PHASE["phase"] = "summarize/read"
     out = round_stage(out, f"summary-{arm}")
     ev_w, cost = K.stage_closed(c, "eval-W", "W"), K.stage_closed(c, "cost")

@@ -7,6 +7,8 @@
   formal                          -> r28_loop.formal(c, out, counts, resume)
   evaluate | summarize            -> r28_eval
   dose                            -> r28_dose             (descriptive CPU table, run by hand after eval; not in the chain)
+  prepare-followup                -> r28_followup.prepare (TASK_R28_K_FOLLOWUP_003: contract of an independent K round)
+  followup-check | medium         -> r28_followup         (CPU: affected-interface checks; descriptive medium tables)
 
 Every stage function returns a dict that is merged into <out>/CLOSED.json; an exception writes <out>/STOP.json and
 is re-raised.
@@ -26,22 +28,27 @@ import r28_common as K  # noqa: E402
 DISPATCH = {"cpu": "r28_checks", "zero": "r28_checks", "accept": "r28_checks", "evalpath": "r28_checks",
             "demand": "r28_demand", "prior": "r28_demand", "g0": "r28_demand",
             "precost": "r28_cost", "cost": "r28_cost", "formal": "r28_loop",
-            "evaluate": "r28_eval", "summarize": "r28_eval", "dose": "r28_dose"}
-CPU_ACTIONS = ("cpu", "prior", "summarize", "dose")
+            "evaluate": "r28_eval", "summarize": "r28_eval", "dose": "r28_dose",
+            "followup-check": "r28_followup", "medium": "r28_followup"}
+CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium")
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=("prepare",) + tuple(DISPATCH))
+    ap.add_argument("action", choices=("prepare", "prepare-followup") + tuple(DISPATCH))
     ap.add_argument("--out", type=Path)
     ap.add_argument("--resume", type=Path)
     args = ap.parse_args(argv)
     if args.action == "prepare":
         K.require(args.out is None and args.resume is None, "prepare takes no --out/--resume")
         return K.prepare(args)
+    if args.action == "prepare-followup":
+        K.require(args.out is None and args.resume is None, "prepare-followup takes no --out/--resume")
+        import r28_followup as FU
+        return FU.prepare(args)
     K.require(args.out is not None, "--out is required")
     K.require(args.resume is None or args.action == "formal", "--resume is only for formal")
-    run = getattr(importlib.import_module(DISPATCH[args.action]), args.action)
+    run = getattr(importlib.import_module(DISPATCH[args.action]), args.action.replace("-", "_"))
     c = K.load_contract()
     args.out.mkdir(parents=True, exist_ok=False)
     start, cpu0 = time.monotonic(), time.process_time()
