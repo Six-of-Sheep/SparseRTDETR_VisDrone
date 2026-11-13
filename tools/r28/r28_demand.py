@@ -131,7 +131,9 @@ def demand(c, out, counts):
 
 # ================================================================ deployment geometry from labels
 def deployment_xyxy(parsed, width, height):
-    """Normalised xyxy (FP64) of the GT a deployment rendering keeps: clipped to the image, positive area; resize only."""
+    """Normalised xyxy (FP64) of the GT a deployment rendering keeps: clipped to the image, positive area; resize only.
+    Label arithmetic in FP64, used for the informational readings of g0; the production FP32 boxes of the pipeline can
+    put a box centre on the other side of a grid-cell boundary, so the prior of arm K uses the pipeline itself."""
     import numpy as np
     torch = _torch()
     b = np.array([r["box"] for r in parsed["gt"]], dtype=np.float64).reshape(-1, 4)
@@ -148,8 +150,35 @@ def _annotation(data, row):
     return LD.parse_raw(raw, row["stable_image_id"], expected_rows=row["raw_annotation_rows"])
 
 
+class _PriorItems:
+    """Deployment rendering of one train_core image through the production transform (training=False: resize only).
+    Box geometry depends on the image size only, so a blank image of the bound size stands in for the pixels; the
+    first images are also rendered from their real pixels in `prior` and must give the same boxes bit for bit."""
+
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data.records)
+
+    def boxes(self, i, image=None):
+        from PIL import Image
+        row = self.data.records[i]
+        parsed = _annotation(self.data, row)
+        im = image if image is not None else Image.new("RGB", (row["width"], row["height"]))
+        _, target, trace = self.data.transform(im, parsed, epoch=120, seed=0, position=0, image_id=row["stable_image_id"], training=False)
+        K.require(not trace["geometry_steps"] and not trace["augmentation_strong"], "deployment rendering must be resize only")
+        return target["boxes"]
+
+    def __getitem__(self, i):
+        from sparse_rtdetr.research import r28_warp as W
+        b = self.boxes(i)
+        return W.demand_from_boxes(W.cxcywh_to_xyxy(b)), len(b)
+
+
 def prior(c, out, counts):
     from PIL import Image
+    from torch.utils.data import DataLoader
     from sparse_rtdetr.research import r28_warp as W
     from sparse_rtdetr.research import scale_baseline as S
     from sparse_rtdetr.protocol_r18.engine import tensor_digest
@@ -158,41 +187,41 @@ def prior(c, out, counts):
     K.require(out.resolve() == (K.ROUND / "prior").resolve(), "this action writes <round>/prior")
     data = S.train_dataset(c["data"]["train_core"], S.S15_HW, seed=0)
     K.require(len(data.records) == 4869, "train_core members")
-    total, empty, boxes, checked = torch.zeros(W.GRID, dtype=F64), 0, 0, []
-    K.PHASE["phase"] = "prior:labels"
-    for i, row in enumerate(data.records):
-        parsed = _annotation(data, row)
-        xyxy, _ = deployment_xyxy(parsed, row["width"], row["height"])
-        d = W.demand_from_boxes(xyxy)
-        if i < 32:  # the label-only rendering against the production pipeline in deployment mode (resize only)
-            image_bytes, _ = data.bound_bytes(row)
-            with Image.open(io.BytesIO(image_bytes)) as im:
-                im = im.convert("RGB")
-                _, target, trace = data.transform(im, parsed, epoch=120, seed=0, position=0, image_id=row["stable_image_id"], training=False)
-            K.require(not trace["geometry_steps"] and len(target["boxes"]) == len(xyxy), "deployment rendering of the pipeline")
-            dp = W.demand_from_boxes(W.cxcywh_to_xyxy(target["boxes"]))
-            diff = float((dp - d).abs().max())
-            K.require(diff <= 1e-3, f"label-only demand differs from the pipeline rendering: {diff}")
-            checked.append(diff)
-        total += d
-        empty += int(len(xyxy) == 0)
-        boxes += len(xyxy)
-    mean = total / len(data.records)
+    items = _PriorItems(data)
+    K.PHASE["phase"] = "prior:real-pixel rendering of the first images"
+    checked = 0
+    for i in range(32):
+        image_bytes, _ = data.bound_bytes(data.records[i])
+        with Image.open(io.BytesIO(image_bytes)) as im:
+            real = items.boxes(i, im.convert("RGB"))
+        K.require(torch.equal(real, items.boxes(i)), f"blank-image rendering differs from the real image rendering: {i}")
+        checked += 1
+    K.PHASE["phase"] = "prior:train_core"
+    total, empty, boxes, seen = torch.zeros(W.GRID, dtype=F64), 0, 0, 0
+    loader = DataLoader(items, batch_size=64, shuffle=False, num_workers=12, multiprocessing_context="spawn", timeout=600)
+    for d, n in loader:
+        K.require(d.dtype == F64 and tuple(d.shape[1:]) == W.GRID, "prior demand batch")
+        total += d.sum(0)
+        empty += int((n == 0).sum())
+        boxes += int(n.sum())
+        seen += len(n)
+    K.require(seen == len(data.records), "prior image count")
+    mean = total / seen
     K.require(bool(torch.isfinite(mean).all()) and bool((mean >= 0).all()) and float(mean.max()) > 0, "prior demand map")
     digest = tensor_digest([("demand", mean)])
     path = out / "prior.json"
     K.write_new(path, {"schema": "r28-fixed-demand-v1", "definition": W.DEFINITION, "demand": mean.tolist(),
-                       "state_sha256": digest, "images": len(data.records), "empty_images": empty, "boxes": boxes,
-                       "rule": "arithmetic mean over train_core of blur3(demand) of the deployment rendering (resize only); "
-                               "images without valid GT contribute a zero map; no eps in the stored map",
+                       "state_sha256": digest, "images": seen, "empty_images": empty, "boxes": boxes,
+                       "rule": "arithmetic mean over train_core of blur3(demand) of the deployment rendering (production "
+                               "transform, training=False: resize only); images without valid GT contribute a zero map; "
+                               "no eps in the stored map",
                        "contract_sha256": c["contract_sha256"]})
     K.require(tensor_digest([("demand", torch.tensor(K.read_json(path)["demand"], dtype=F64))]) == digest, "prior JSON round trip")
     plan = W.plan_from_demand(mean[None])
-    return {"stage": "prior", "file": K.ref(path), "state_sha256": digest, "images": len(data.records), "empty_images": empty,
+    return {"stage": "prior", "file": K.ref(path), "state_sha256": digest, "images": seen, "empty_images": empty,
             "boxes": boxes, "demand_sum": float(mean.sum()), "demand_max": float(mean.max()),
             "slopes": {"x": [float(plan.mx.min()), float(plan.mx.max())], "y": [float(plan.my.min()), float(plan.my.max())]},
-            "pipeline_rendering_check": {"images": len(checked), "max_abs_demand_difference": max(checked),
-                                         "note": "FP32 pipeline boxes against FP64 label boxes"},
+            "pipeline_rendering_check": {"images": checked, "blank_image_boxes_equal_real_image_boxes": True},
             "development_read": False}
 
 
