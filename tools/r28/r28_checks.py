@@ -26,7 +26,7 @@ import r28_common as K
 import l0_checks_state as H
 import r28_loop as LP
 
-TESTS = ("tests/test_r28_warp.py", "tests/test_r28_resample.py")
+TESTS = ("tests/test_r28_warp.py", "tests/test_r28_resample.py", "tests/test_r28_summary.py")
 SYNTHETIC = {"kind": "synthetic", "seed": 0}
 CONSTANT = {"kind": "constant"}
 

@@ -75,7 +75,7 @@ def demand(c, out, counts):
     per_epoch = limit or cfg["windows_per_epoch"]
     steps = epochs * per_epoch
     K.PHASE["phase"] = "demand:construct"
-    dev = torch.device("cuda:0")
+    dev = torch.device(K.device())
     torch.manual_seed(cfg["seed"])
     net = W.DemandNet().to(dev).train()
     params = sum(p.numel() for p in net.parameters())
@@ -125,8 +125,8 @@ def demand(c, out, counts):
         os.fsync(f.fileno())
     return {"stage": "demand", "weights": K.ref(path), "state_sha256": digest, "parameters": params, "epochs": epochs,
             "steps": steps, "pipeline_epochs": pipeline, "log": log, "train_wall_seconds": time.monotonic() - started,
-            "development_read": False, "endpoint": "last step", "dev_shortened": bool(limit),
-            "peak_cuda_bytes": torch.cuda.max_memory_allocated()}
+            "development_read": False, "endpoint": "last step", "dev_shortened": bool(limit), "device": str(dev),
+            "peak_cuda_bytes": torch.cuda.max_memory_allocated() if dev.type == "cuda" else None}
 
 
 # ================================================================ deployment geometry from labels
@@ -284,7 +284,7 @@ def g0(c, out, counts):
     out = Path(out)
     K.require(out.resolve() == (K.ROUND / "g0").resolve(), "this action writes <round>/g0")
     K.PHASE["phase"] = "g0:sources"
-    dev = torch.device("cuda:0")
+    dev = torch.device(K.device())
     net_ctx = R.Context(K.demand_source(c, "W")).to(dev)
     prior_ctx = R.Context(K.demand_source(c, "K"))
     prior_plan = W.plan_from_demand(prior_ctx.fixed[None])
@@ -309,7 +309,7 @@ def g0(c, out, counts):
                     imgs.append(pixels(data, image))
             x = torch.stack(imgs).to(dev)
             K.require(tuple(x.shape[-2:]) == tuple(S.S15_HW) and x.dtype == torch.float32, "G0 input is not the FP32 H canvas")
-            with torch.autocast("cuda", enabled=False):
+            with torch.autocast(dev.type, enabled=False):
                 d_pred = net_ctx.demand(x)
             counts.update(demand_forwards_development=1)
             plans = W.plan_from_demand(d_pred)
@@ -349,7 +349,7 @@ def g0(c, out, counts):
     loader = DataLoader(_TrainDeploy(train), batch_size=16, shuffle=False, num_workers=12, multiprocessing_context="spawn", timeout=600)
     with torch.inference_mode():
         for x, idx in loader:
-            with torch.autocast("cuda", enabled=False):
+            with torch.autocast(dev.type, enabled=False):
                 d = net_ctx.net(x.to(dev)).to(F64).cpu()
             counts.update(demand_forwards_train=1)
             plans = W.plan_from_demand(d)

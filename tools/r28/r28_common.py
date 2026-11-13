@@ -224,6 +224,14 @@ def demand_source(c, arm):
     return {"kind": "fixed", "file": stage_closed(c, "prior")["file"]}
 
 
+def device():
+    """cuda:0, or cpu for the light demand-side stages of a dev round (R28_DEV_CPU=1; refused elsewhere)."""
+    if os.environ.get("R28_DEV_CPU") == "1":
+        require(DEV, "R28_DEV_CPU is refused outside a dev round")
+        return "cpu"
+    return "cuda:0"
+
+
 def g0_passed(c):
     closed = stage_closed(c, "g0")
     require(closed["G0_passed"] is True or (DEV and os.environ.get("R28_DEV_IGNORE_G0") == "1"),

@@ -49,7 +49,7 @@ def main(argv=None):
         from r25_run import setup
         from s15_formal_train import bind_seed
         bind_seed(0)
-        if args.action in CPU_ACTIONS:
+        if args.action in CPU_ACTIONS or (args.action in ("demand", "g0") and K.device() == "cpu"):
             K.require(os.environ.get("CUDA_VISIBLE_DEVICES") == "", f"the {args.action} action requires CUDA_VISIBLE_DEVICES=\"\"")
             if args.action != "cpu":
                 setup("cpu")
