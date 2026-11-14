@@ -175,9 +175,10 @@ def prepare(_args=None):
 
 
 # ================================================================ per-class COCOeval (medium next to large)
-def per_class_sizes(rows, parsed, predictions, bridge):
+def per_class_sizes(rows, parsed, predictions, bridge, keep=None):
     """One COCOeval identical to s15_formal_eval.per_class_large; returns (large rows, medium rows).
-    The large rows have the format and the values of per_class_large; the medium rows are read from the same tensor."""
+    The large rows have the format and the values of per_class_large; the medium rows are read from the same tensor.
+    keep: a path that receives the accumulated tensors of this single COCOeval (so later tables need no rescoring)."""
     import contextlib
     import io
     import numpy as np
@@ -208,7 +209,25 @@ def per_class_sizes(rows, parsed, predictions, bridge):
         mean = float(np.mean([v[key] for v in values if v[key] is not None]))
         K.require(abs(mean - e.stats[stat]) < 1e-14, f"per-class {key} macro differs")
         out[key] = values
+    if keep is not None:
+        keep_tensors(e, dataset, keep)
     return out["APL"], out["APM"]
+
+
+def keep_tensors(e, dataset, path):
+    """The accumulated arrays of a finished COCOeval, with the axes needed to read them, as one .npz file."""
+    import numpy as np
+    path = Path(path)
+    K.require(not path.exists(), f"refusing to overwrite {path}")
+    p = e.params
+    gt = [[sum(1 for a in dataset["annotations"] if a["category_id"] == cat and not a.get("iscrowd") and lo <= a["area"] <= hi)
+           for lo, hi in p.areaRng] for cat in p.catIds]
+    with path.open("xb") as f:
+        np.savez(f, precision=e.eval["precision"], recall=e.eval["recall"], scores=e.eval["scores"], stats=np.asarray(e.stats),
+                 iouThrs=np.asarray(p.iouThrs), recThrs=np.asarray(p.recThrs), catIds=np.asarray(p.catIds),
+                 areaRng=np.asarray(p.areaRng, dtype=np.float64), areaRngLbl=np.asarray(p.areaRngLbl), maxDets=np.asarray(p.maxDets),
+                 gt_count=np.asarray(gt), axes=np.asarray(["iou", "recall", "category", "area", "maxDets"]))
+    return path
 
 
 def _development(c):

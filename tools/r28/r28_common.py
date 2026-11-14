@@ -1,6 +1,7 @@
 """R28 runner, shared layer: constants, contract, demand-source references, state guards.
 
-Arms W (frozen demand network) and K (fixed train_core mean demand); the arm of a process comes from R28_ARM.
+Arms W (frozen demand network), K (fixed train_core mean demand) and F (arm W's demand network with the FOVEA-style
+map, TASK_R28_FOVEA_MAPPING_CONTROL_004); the arm of a process comes from R28_ARM.
 Pure helpers (hashing, pinned references, ledger comparison) are the L0 ones, imported from tools/r27_l0/l0_common.py;
 nothing here writes into the L0 round.  The L0 round stays reachable through l0_common with its own default round,
 so the environment variable L0_ROUND must not be set in an R28 process.
@@ -31,9 +32,9 @@ require("L0_ROUND" not in os.environ, "L0_ROUND must not be set in an R28 proces
 LD_ROOT = B.LD_ROOT
 ROUND = Path(os.environ.get("R28_ROUND", str(LD_ROOT / "r28-budgeted-resampling-20261113-001")))
 DEV = ROUND.resolve().name.startswith("dev-round")
-ARMS = ("W", "K")
+ARMS = ("W", "K", "F")
 ARM = os.environ.get("R28_ARM", "W")
-require(ARM in ARMS, f"R28_ARM must be W or K, got {ARM!r}")
+require(ARM in ARMS, f"R28_ARM must be W, K or F, got {ARM!r}")
 SCHEMA = "r28-state-v1"
 
 L0_ROUND = LD_ROOT / "r27-l0-control-20261111-001"
@@ -65,9 +66,10 @@ DEMAND["steps"] = DEMAND["epochs"] * WINDOWS_PER_EPOCH
 
 PRECOST_ENDPOINTS = ("L0", "Wpre")
 PRECOST_ROTATIONS = (("L0", "Wpre"), ("Wpre", "L0"), ("L0", "Wpre"))
-COST_ENDPOINTS = {"cost": ("A0", "L0", "W", "S15"), "cost-K": ("L0", "W", "K")}
+COST_ENDPOINTS = {"cost": ("A0", "L0", "W", "S15"), "cost-K": ("L0", "W", "K"), "cost-F": ("L0", "W", "F")}
 COST_ROTATIONS = {"cost": (("A0", "L0", "W", "S15"), ("W", "S15", "A0", "L0"), ("L0", "A0", "S15", "W")),
-                  "cost-K": (("L0", "W", "K"), ("K", "L0", "W"), ("W", "K", "L0"))}
+                  "cost-K": (("L0", "W", "K"), ("K", "L0", "W"), ("W", "K", "L0")),
+                  "cost-F": (("L0", "W", "F"), ("F", "L0", "W"), ("W", "F", "L0"))}
 EVALPATH_EXTRA = 2                      # non-identity deployment batches: one wrapped and one manual forward each
 
 WORKLOAD = {
@@ -86,6 +88,7 @@ WORKLOAD = {
                    "per_class_APL_COCOeval_calls": 1},
     "cost": {"forwards": len(COST_ENDPOINTS["cost"]) * COST_PER_ENDPOINT},
     "cost-K": {"forwards": len(COST_ENDPOINTS["cost-K"]) * COST_PER_ENDPOINT},
+    "cost-F": {"forwards": len(COST_ENDPOINTS["cost-F"]) * COST_PER_ENDPOINT},
 }
 LABELS = {
     "G0_failed": "本固定需求预测未达到投入要求",
@@ -99,14 +102,33 @@ LABELS = {
 
 # ================================================================ follow-up rounds (TASK_R28_K_FOLLOWUP_003)
 FOLLOWUP_BASIS = "post_W_user_approved_K_followup"
+FOVEA_BASIS = "post_K_user_forwarded_mapping_control"       # TASK_R28_FOVEA_MAPPING_CONTROL_004
+FOLLOWUP_ARMS = {FOLLOWUP_BASIS: "K", FOVEA_BASIS: "F"}     # the only arm a round of each basis trains
 
 
 def followup(c):
-    """The follow-up block of a contract written by r28_followup.prepare, or None for the original R28 contract."""
+    """The follow-up block of a contract written by r28_followup.prepare or r28_fovea_control.prepare, or None for
+    the original R28 contract."""
     fu = c.get("followup")
-    require(fu is None or (fu.get("authorization_basis") == c.get("authorization_basis") == FOLLOWUP_BASIS),
+    require(fu is None or (fu.get("authorization_basis") == c.get("authorization_basis") and c.get("authorization_basis") in FOLLOWUP_ARMS
+                           and fu.get("arm") in (None, FOLLOWUP_ARMS[c["authorization_basis"]])),
             "follow-up contract without the registered authorization basis")
     return fu
+
+
+def followup_arm(c):
+    """The arm a follow-up round trains (K or F), or None for the original R28 contract."""
+    return None if followup(c) is None else FOLLOWUP_ARMS[c["authorization_basis"]]
+
+
+def arm_module(arm):
+    """The science module of an arm: r28_resample for W / K, r28_fovea for F (same create / build_eval_model interface)."""
+    require(arm in ARMS, f"arm {arm}")
+    if arm == "F":
+        from sparse_rtdetr.research import r28_fovea as M
+    else:
+        from sparse_rtdetr.research import r28_resample as M
+    return M
 
 
 def prior_contract(c):
@@ -222,7 +244,12 @@ def load_contract(path=None):
     pinned(c["parent"])
     from sparse_rtdetr.research import r28_resample as R
     from sparse_rtdetr.research import r28_warp as W
-    require(c["identity_sha256"] == R.IDENTITY_SHA256 and c["definition"] == W.DEFINITION,
+    want = dict(R.IDENTITY_SHA256)
+    if "F" in c["identity_sha256"]:
+        from sparse_rtdetr.research import r28_fovea as FV
+        want.update(FV.IDENTITY_SHA256)
+        require(c["fovea_definition"] == FV.DEFINITION and followup_arm(c) == "F", "R28-F mapping definition differs from the contract")
+    require(c["identity_sha256"] == want and c["definition"] == W.DEFINITION,
             "R28 behaviour identity differs from the contract")
     return c
 
@@ -235,7 +262,9 @@ def stage_closed(c, name, arm=None):
     if fu is not None and name in fu["inherited"]:
         require(not (ROUND / name).exists(), f"a follow-up round must not contain the inherited stage {name}")
         closed = read_json(pinned(fu["inherited"][name]))
-        require(closed.get("status") == "PASS" and closed.get("contract_sha256") == fu["prior_contract_sha256"]
+        # a stage inherited from another closed round than the W round names that round's contract explicitly
+        bound = fu.get("inherited_contracts", {}).get(name, fu["prior_contract_sha256"])
+        require(closed.get("status") == "PASS" and closed.get("contract_sha256") == bound
                 and (arm is None or closed.get("arm") == arm), f"inherited stage {name} is not PASS under the prior contract")
         return closed
     path = ROUND / name / "CLOSED.json"
@@ -249,7 +278,7 @@ def stage_closed(c, name, arm=None):
 # ================================================================ demand sources
 def demand_source(c, arm):
     """The formal demand source of an arm, read from the closed stage that produced it."""
-    if arm == "W":
+    if arm in ("W", "F"):                 # arm F reads the same frozen demand network file as arm W
         return {"kind": "network", "file": stage_closed(c, "demand")["weights"]}
     require(arm == "K", f"arm {arm}")
     return {"kind": "fixed", "file": stage_closed(c, "prior")["file"]}
@@ -355,7 +384,7 @@ def formal_re(arm):
 
 
 def formal_dir(c, arm):
-    require(followup(c) is None or arm == "K", "a follow-up round has no formal directory of arm W")
+    require(followup(c) is None or arm == followup_arm(c), f"this follow-up round has no formal directory of arm {arm}")
     found = []
     for d in sorted(ROUND.iterdir()) if ROUND.is_dir() else ():
         if not (d.is_dir() and formal_re(arm).fullmatch(d.name) and (d / "CLOSED.json").is_file()):

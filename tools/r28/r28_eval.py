@@ -35,9 +35,10 @@ def round_stage(out, name):
     return out
 
 
-def infer(c, model, counts, *, extra=None):
+def infer(c, model, counts, *, extra=None, limit=None):
     """4 warm-up + 137 batches over the frozen 548 images; returns predictions per budget and timings.
-    extra(x, rows, index) is called after each scored batch (used by the evaluation-path check)."""
+    extra(x, rows, index) is called after each scored batch (used by the evaluation-path check).
+    limit=(warm-up, batches) runs only that many batches for a wiring check; such predictions are never scored."""
     from infer_seed import load_original, pixels
     from sparse_rtdetr.research import scale_baseline as S
     from sparse_rtdetr.protocol_r18.geometry import forward_guards
@@ -72,26 +73,28 @@ def infer(c, model, counts, *, extra=None):
         return {600: [p for g in six for p in g], 300: [p for g in six for p in g[:300]]}
 
     started = time.perf_counter()
+    warm, scored = (K.EVAL_WARMUP, K.EVAL_BATCHES) if limit is None else limit
     with torch.inference_mode():
-        for i in range(K.EVAL_WARMUP):
+        for i in range(warm):
             batch(data.records[i * K.EVAL_BATCH:(i + 1) * K.EVAL_BATCH])
-        for n, off in enumerate(range(0, len(data.records), K.EVAL_BATCH)):
+        for n, off in enumerate(range(0, scored * K.EVAL_BATCH, K.EVAL_BATCH)):
             r = batch(data.records[off:off + K.EVAL_BATCH], n)
             for b in K.BUDGETS:
                 preds[b].extend(r[b])
-    K.require(all(len(preds[b]) == len(ids) * b for b in K.BUDGETS), "prediction record counts")
+    K.require(all(len(preds[b]) == scored * K.EVAL_BATCH * b for b in K.BUDGETS) and (limit is not None or scored * K.EVAL_BATCH == len(ids)),
+              "prediction record counts")
     return data, preds, {"inference_seconds": time.perf_counter() - started, "batch_seconds_median": statistics.median(timings)}
 
 
 def evaluate(c, out, counts):
     from infer_seed import bridge_values, _group, _prefix
-    from sparse_rtdetr.research import r28_resample as R
     from sparse_rtdetr.protocol_r18 import checkpoint as ck
     from sparse_rtdetr.protocol_r18.engine import tensor_digest
     from sparse_rtdetr.r0.evaluation import score_budget
     from s15_formal_eval import per_class_large
     torch = K.torch_mod()
     arm = K.ARM
+    R = K.arm_module(arm)
     K.PHASE["phase"] = "evaluate/guards"
     out = round_stage(out, f"eval-{arm}")
     formal = K.formal_dir(c, arm).name
@@ -124,7 +127,7 @@ def evaluate(c, out, counts):
     _prefix(grouped[600], grouped[300], ids, whole=True)
     rows = data.records
     parsed = [data.raw(row) for row in rows]
-    values, metrics_refs, counts_gt, scoring, per_class, per_class_medium = {}, {}, {}, [], None, None
+    values, metrics_refs, counts_gt, scoring, per_class, per_class_medium, tensors = {}, {}, {}, [], None, None, None
     K.PHASE["phase"] = "evaluate/scoring"
     epoch = side["global_update"] // K.WINDOWS_PER_EPOCH
     for b in K.BUDGETS:
@@ -143,7 +146,9 @@ def evaluate(c, out, counts):
         if b == 600 and K.followup(c) is not None:
             # the same single COCOeval as per_class_large, with the medium rows read from the same precision tensor
             import r28_followup as FU
-            per_class, per_class_medium = FU.per_class_sizes(rows, parsed, preds[b], metrics["COCO_bridge"])
+            keep = out / "cocoeval-top600.npz" if arm == "F" else None      # arm F keeps the tensors of its single COCOeval
+            per_class, per_class_medium = FU.per_class_sizes(rows, parsed, preds[b], metrics["COCO_bridge"], keep=keep)
+            tensors = None if keep is None else K.ref(keep)
             counts.update(per_class_COCOeval_calls=1)
         elif b == 600:
             per_class = per_class_large(rows, parsed, preds[b], metrics["COCO_bridge"])
@@ -153,7 +158,8 @@ def evaluate(c, out, counts):
     return {"endpoint": side["file"], "formal_stage": formal, "weights_sha256": weights, "demand": side["demand"], "kind": "EMA",
             "epoch": epoch, "global_update": side["global_update"], "view": "A", "values": values, "metrics": metrics_refs,
             "predictions": refs, "GT_counts": counts_gt, "per_class_APL_top600": per_class,
-            **({} if per_class_medium is None else {"per_class_APM_top600": per_class_medium}), "scoring": scoring, **timing}
+            **({} if per_class_medium is None else {"per_class_APM_top600": per_class_medium}),
+            **({} if tensors is None else {"cocoeval_top600_tensors": tensors}), "scoring": scoring, **timing}
 
 
 # ================================================================ summary arithmetic (pure)
@@ -256,6 +262,9 @@ def _other_directories():
 
 def summarize(c, out, counts):
     arm = K.ARM
+    if K.followup_arm(c) == "F":
+        import r28_fovea_control as FC
+        return FC.summarize(c, out, counts)
     if K.followup(c) is not None:
         import r28_followup as FU
         return FU.summarize(c, out, counts)

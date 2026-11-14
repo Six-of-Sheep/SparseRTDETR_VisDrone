@@ -130,10 +130,20 @@ class Observer:
             ep["l1"][b] += l1
             ep["giou"][b] += gi
         self.pairs = []
-        return {"g_small": geo(small), "g_medium": geo(medium), "g_large": geo(large), "n_small": int(small.sum()),
-                "small_g_lt_1": float((g[small] < 1.0).float().mean()) if bool(small.any()) else None,
-                "slope_min": min(r["slope_min"] for r in recs), "slope_max": max(r["slope_max"] for r in recs),
-                "identity_images": sum(r["identity_images"] for r in recs)}
+        row = {"g_small": geo(small), "g_medium": geo(medium), "g_large": geo(large), "n_small": int(small.sum()),
+               "small_g_lt_1": float((g[small] < 1.0).float().mean()) if bool(small.any()) else None,
+               "slope_min": min(r["slope_min"] for r in recs), "slope_max": max(r["slope_max"] for r in recs),
+               "identity_images": sum(r["identity_images"] for r in recs)}
+        if "fovea" in recs[0]:      # arm F: map and tap readings of the two forwards (no time, so a replay row is equal)
+            f = [r["fovea"] for r in recs]
+            taps = [v for r in f for v in (r["taps_x"], r["taps_y"]) if v is not None]
+            foot = [r["footprint_max_px"] for r in f if r["footprint_max_px"] is not None]
+            row["fovea"] = {"node_slope_min": min(r["node_slope_min"] for r in f), "node_slope_max": max(r["node_slope_max"] for r in f),
+                            "endpoint_error_max": max(r["endpoint_error_max"] for r in f),
+                            "clamped_nodes": sum(r["clamped_nodes"] for r in f), "clamp_max": max(r["clamp_max"] for r in f),
+                            "clamped_interior_nodes": sum(r["clamped_interior_nodes"] for r in f),
+                            "taps_max": max(taps) if taps else None, "footprint_max_px": max(foot) if foot else None}
+        return row
 
     def epoch_row(self, epoch):
         ep, self.epoch = self.epoch, self._zero()
@@ -157,11 +167,26 @@ def install_observer(e):
 
 
 def guard(c, out, resume, arm):
-    K.g0_passed(c)
-    for stage in ("cpu", "zero", "evalpath", f"accept-{arm}"):
-        K.stage_closed(c, stage)
     fu = K.followup(c)
-    if fu is not None:
+    if K.followup_arm(c) == "F":
+        # TASK_R28_FOVEA_MAPPING_CONTROL_004: the single F run is authorised by its own contract.  G0, the W cost gate
+        # and the closed W decision are not gates of arm F; the frozen demand network must be the closed round's.
+        K.require(arm == "F", "the mapping-control round only trains arm F")
+        K.require(not K.DEV, "a mapping-control dev round has no formal training")
+        K.stage_closed(c, "demand")
+        K.stage_closed(c, "fovea-check", "F")
+        K.stage_closed(c, "wire-F", "F")
+        K.stage_closed(c, "accept-F", "F")
+        K.require(not any(os.environ.get(v) for v in ("R28_DEV_FORCE_K", "R28_DEV_IGNORE_G0", "R28_DEV_IGNORE_COST")),
+                  "dev override flags are refused in the mapping-control round")
+    else:
+        K.require(arm in ("W", "K"), "arm F is trained only in the mapping-control round")
+        K.g0_passed(c)
+        for stage in ("cpu", "zero", "evalpath", f"accept-{arm}"):
+            K.stage_closed(c, stage)
+    if K.followup_arm(c) == "F":
+        pass
+    elif fu is not None:
         # TASK_R28_K_FOLLOWUP_003: the K run is authorised by the follow-up contract itself.  The W decision of the
         # closed round stays K_trigger=false and is not consulted as a trigger; no dev flag is involved.
         K.require(arm == "K", "a follow-up round only trains arm K")
@@ -300,8 +325,8 @@ def restore_files(side, src_dir, out, refs):
 
 
 def train(c, out, counts, resume, *, stop, save_points):
-    from sparse_rtdetr.research import r28_resample as R
     arm = K.ARM
+    R = K.arm_module(arm)
     K.PHASE["phase"] = f"{arm}:formal guard"
     out = Path(out)
     source = guard(c, out, resume, arm)

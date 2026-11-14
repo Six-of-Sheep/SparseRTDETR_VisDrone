@@ -222,12 +222,16 @@ def zero(c, out, counts):
 def accept(c, out, counts):
     from s15_formal_train import _bn_counts, _differences, _result_body
     from sparse_rtdetr.protocol_r18 import checkpoint as ck
-    from sparse_rtdetr.research import r28_resample as R
     from sparse_rtdetr.research import scale_baseline as S
     torch = K.torch_mod()
     arm = K.ARM
+    R = K.arm_module(arm)
     out = _stage(out, f"accept-{arm}")
-    K.g0_passed(c)
+    if arm == "F":      # G0 is arm W's investment gate, not a gate of the mapping control
+        K.require(K.followup_arm(c) == "F", "arm F is accepted only in the mapping-control round")
+        K.stage_closed(c, "fovea-check", "F")
+    else:
+        K.g0_passed(c)
     source = K.demand_source(c, arm)
     wins = _first_windows(c, 2)
     K.PHASE["phase"] = "accept:construct"
@@ -270,6 +274,13 @@ def accept(c, out, counts):
               f"replay differs {diff[:5]}")
     K.require(counts["actual_updates"] == 3 and counts["forwards"] == counts["forward_attempts"] == 6, f"acceptance counts {dict(counts)}")
     K.require(clone.r28_ctx.binding() == demand_digest, "demand source changed during acceptance")
+    extra = {}
+    if arm == "F":
+        import r28_fovea_control as FC
+        K.PHASE["phase"] = "accept:cross-state refusals"
+        extra["refused"] = FC.state_refusals(c, clone, out / "u1.pth", "acceptance")
+        K.require(ck.exact_equal(S.capture(clone), got), "a refused action changed the engine")
+        extra["fovea_readings"] = [r.get("fovea") for r in readings]
     K.PHASE["phase"] = "accept:shared fields"
     shared = {}
     for a in ("P", "C"):
@@ -284,7 +295,7 @@ def accept(c, out, counts):
             "observer_replay_exact": True, "replay_elapsed_seconds": replay["elapsed_seconds"], "BN_delta_two_updates": bn,
             "shared_fields": {"fields": list(K.SHARED_FIELDS), "rows": [1, 2], "R27_formal_P": True, "R27_formal_C": True},
             "peak_allocated_bytes": torch.cuda.max_memory_allocated(), "peak_reserved_bytes": torch.cuda.max_memory_reserved(),
-            "formal_state_usable": False}
+            "formal_state_usable": False, **extra}
 
 
 def _reference_inverse(knots, v):
