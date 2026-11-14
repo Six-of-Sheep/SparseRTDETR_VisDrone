@@ -705,6 +705,17 @@ def fovea_check(c, out, counts):
         H.refused("endpoint_state without an endpoint", lambda: K.endpoint_state(c, "F"))]
     K.require(ck.exact_equal(S.capture(clone), got) and not (out / "refused.pth").exists(), "a refused action changed the engine or wrote a file")
 
+    K.PHASE["phase"] = "fovea-check:ledger readings"
+    trial_dir = out / "trial-ledger"                       # the fixture's observer rows in the ledger layout (not a formal ledger)
+    trial_dir.mkdir()
+    with (trial_dir / "UPDATES.jsonl").open("x") as f:
+        for r, rd in zip(rows, readings):
+            f.write(json.dumps({"update_seconds": r["elapsed_seconds"], "r28": rd}, separators=(",", ":"), allow_nan=False) + "\n")
+    folded = formal_observations(trial_dir)
+    K.require(folded["updates"] == 2 and folded["taps_max"] >= 2 and folded["clamped_interior_nodes"] == 0
+              and folded["node_slope_min"] == min(rd["fovea"]["node_slope_min"] for rd in readings), f"folded fixture readings: {folded}")
+    res["ledger_readings_interface"] = {"rows": 2, "folded": folded, "note": "CPU fixture rows; interface check of the summary reader"}
+
     K.PHASE["phase"] = "fovea-check:summary arithmetic"
     trial = _trial_summary(c, None)
     res["summary_interface"] = {"trial": "summary_f with the stored W evaluation in the F slot (every W - F difference 0)",

@@ -239,6 +239,41 @@ def test_kept_tensors_give_the_per_class_values_back(tmp_path):
     assert t["macro"]["APS"] == pytest.approx(np.mean([p[:, :, k, 1, 2].mean() for k in range(3)]))
 
 
+def test_kept_tensors_of_a_real_cocoeval_reproduce_its_stats(tmp_path):
+    """pycocotools on a small synthetic data set (not a development image): the macro values read back from the kept
+    tensors are the scorer's own summary numbers."""
+    import contextlib
+    import io
+    from pycocotools.coco import COCO
+    from pycocotools.cocoeval import COCOeval
+    g = np.random.default_rng(1)
+    images = [{"id": i + 1, "width": 640, "height": 480} for i in range(6)]
+    gt, det = [], []
+    for im in images:
+        for k in range(12):
+            side = float(g.choice([14.0, 50.0, 130.0]))
+            x, y = float(g.uniform(0, 640 - side)), float(g.uniform(0, 480 - side))
+            cat = int(g.integers(1, 4))
+            gt.append({"id": len(gt) + 1, "image_id": im["id"], "category_id": cat, "bbox": [x, y, side, side], "area": side * side, "iscrowd": 0})
+            if g.random() < 0.8:
+                j = float(g.uniform(-0.12, 0.12)) * side
+                det.append({"image_id": im["id"], "category_id": cat, "bbox": [x + j, y - j, side, side], "score": float(g.random())})
+            if g.random() < 0.3:
+                det.append({"image_id": im["id"], "category_id": int(g.integers(1, 4)), "bbox": [x + side, y, side, side], "score": float(g.random())})
+    dataset = {"info": {}, "images": images, "categories": [{"id": i, "name": str(i)} for i in (1, 2, 3)], "annotations": gt}
+    with contextlib.redirect_stdout(io.StringIO()):
+        coco = COCO(); coco.dataset = dataset; coco.createIndex()
+        e = COCOeval(coco, coco.loadRes(det), "bbox")
+        e.params.maxDets = [1, 10, 100]
+        e.evaluate(); e.accumulate(); e.summarize()
+    t = FC.tensor_tables(FU.keep_tensors(e, dataset, tmp_path / "real.npz"))
+    for key, stat in (("AP", 0), ("AP50", 1), ("AP75", 2), ("APS", 3), ("APM", 4), ("APL", 5)):
+        assert t["macro"][key] == pytest.approx(float(e.stats[stat]), abs=1e-12), key
+    assert 0 < t["macro"]["AP"] < 1 and t["stats"] == [float(v) for v in e.stats] and t["maxDets"] == 100
+    assert sum(r["GT"]["all"] for r in t["classes"]) == len(gt) and all(r["GT"]["small"] + r["GT"]["medium"] + r["GT"]["large"] == r["GT"]["all"]
+                                                                        for r in t["classes"])
+
+
 def test_formal_observations_fold_the_ledger(tmp_path):
     def row(lo, hi, taps, foot, g_small, lt1, clamped=0):
         return {"update_seconds": 2.0, "r28": {"g_small": g_small, "g_medium": 1.0, "g_large": None, "small_g_lt_1": lt1, "identity_images": 0,
