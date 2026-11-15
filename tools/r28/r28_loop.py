@@ -29,18 +29,19 @@ def _bin(g):
     return 0 if g < 1.0 else 1 if g < 1.2 else 2 if g < 1.4 else 3
 
 
-def cal_row(recs, area):
-    """Arm FS: the GT of one update under arm FS and under arm W's allocation, the latter computed on the CPU from the
-    demand maps this update's two forwards already produced.  No image is rendered and no network runs.  Per raw-area
-    class: count, sum of log g (g = sqrt(ox oy)), counts in the four magnification bins and the anisotropy sums of
-    log(ox / oy).  A description only: nothing reads it back into training."""
+def cal_row(recs, area, arm="FS"):
+    """Arm FS / FG: the GT of one update under the arm's own map and under arm W's allocation, the latter computed on
+    the CPU from the demand maps this update's two forwards already produced.  No image is rendered and no network
+    runs.  Per raw-area class: count, sum of log g (g = sqrt(ox oy)), counts in the four magnification bins and the
+    anisotropy sums of log(ox / oy).  A description only: nothing reads it back into training."""
     torch = K.torch_mod()
     from sparse_rtdetr.research import r28_warp as W
-    parts = {"FS": ([], []), "W": ([], [])}
+    K.require(arm in ("FS", "FG"), f"calibration description of arm {arm}")
+    parts = {arm: ([], []), "W": ([], [])}
     for r in recs:
         wx, wy = W.magnification(W.plan_from_demand(r["demand"]), r["xyxy"])
         for i, k in enumerate(r["n"]):
-            parts["FS"][0].append(r["ox"][i, :k]); parts["FS"][1].append(r["oy"][i, :k])
+            parts[arm][0].append(r["ox"][i, :k]); parts[arm][1].append(r["oy"][i, :k])
             parts["W"][0].append(wx[i, :k]); parts["W"][1].append(wy[i, :k])
     area = area.to(torch.float64)
     K.require(all(len(torch.cat(v[0])) == len(area) for v in parts.values()), "calibration description: GT count")
@@ -48,11 +49,11 @@ def cal_row(recs, area):
     out = {}
     for name, sel in classes.items():
         cell = {"n": int(sel.sum())}
-        for arm, (ox, oy) in parts.items():
+        for key, (ox, oy) in parts.items():
             ox, oy = torch.cat(ox)[sel], torch.cat(oy)[sel]
             g = torch.sqrt(ox * oy)
             ratio = torch.log(ox / oy)
-            cell[arm] = {"sum_log_g": math.fsum(torch.log(g).tolist()),
+            cell[key] = {"sum_log_g": math.fsum(torch.log(g).tolist()),
                          "bins": [int((g < 1.0).sum()), int(((g >= 1.0) & (g < 1.2)).sum()), int(((g >= 1.2) & (g < 1.4)).sum()),
                                   int((g >= 1.4).sum())],
                          "sum_log_ox_over_oy": math.fsum(ratio.tolist()), "sum_abs_log_ox_over_oy": math.fsum(ratio.abs().tolist())}
@@ -175,8 +176,8 @@ class Observer:
                             "clamped_nodes": sum(r["clamped_nodes"] for r in f), "clamp_max": max(r["clamp_max"] for r in f),
                             "clamped_interior_nodes": sum(r["clamped_interior_nodes"] for r in f),
                             "taps_max": max(taps) if taps else None, "footprint_max_px": max(foot) if foot else None}
-        if "demand" in recs[0]:     # arm FS: the same GT under arm W's allocation of the same demand maps (description)
-            row["cal"] = cal_row(recs, area)
+        if "demand" in recs[0]:     # arm FS / FG: the same GT under arm W's allocation of the same demand maps (description)
+            row["cal"] = cal_row(recs, area, "FG" if getattr(self.e, "r28_arm", None) == "FG" else "FS")
         return row
 
     def epoch_row(self, epoch):
@@ -202,7 +203,20 @@ def install_observer(e):
 
 def guard(c, out, resume, arm):
     fu = K.followup(c)
-    if K.followup_arm(c) == "FS":
+    if K.followup_arm(c) == "FG":
+        # TASK_R28_STRONG_F_CONTROL_009: the single F_geo run is authorised by its own contract.  It needs the fixed
+        # selected width (the unmatched 006 reading, never a matched calibration), a valid geometry confirmation and
+        # the closed 10-update acceptance of the actual width.  A dev round may run a short span to shake out the loop.
+        K.require(arm == "FG", "the fixed-width strong mapping-control round only trains arm FG")
+        K.stage_closed(c, "demand")
+        for stage in ("geo-check", "geo-confirm", "wire-FG", "accept-FG"):
+            K.stage_closed(c, stage, "FG")
+        K.selected_width(c)
+        K.require(K.stage_closed(c, "geo-confirm", "FG").get("geometry_valid") is True,
+                  "the fixed width was not confirmed valid on the confirmation windows: arm FG is not trained")
+        K.require(not any(os.environ.get(v) for v in ("R28_DEV_FORCE_K", "R28_DEV_IGNORE_G0", "R28_DEV_IGNORE_COST")),
+                  "dev override flags are refused in the fixed-width strong mapping-control round")
+    elif K.followup_arm(c) == "FS":
         # TASK_R28_CALIBRATED_F_CONTROL_006: the single F* run is authorised by its own contract and needs the matched
         # calibration and the closed input-pipeline acceptance.  A dev round may run a short span to shake out the loop.
         K.require(arm == "FS", "the calibrated mapping-control round only trains arm FS")
@@ -224,11 +238,11 @@ def guard(c, out, resume, arm):
         K.require(not any(os.environ.get(v) for v in ("R28_DEV_FORCE_K", "R28_DEV_IGNORE_G0", "R28_DEV_IGNORE_COST")),
                   "dev override flags are refused in the mapping-control round")
     else:
-        K.require(arm in ("W", "K"), "arms F and FS are trained only in their mapping-control rounds")
+        K.require(arm in ("W", "K"), "arms F, FS and FG are trained only in their mapping-control rounds")
         K.g0_passed(c)
         for stage in ("cpu", "zero", "evalpath", f"accept-{arm}"):
             K.stage_closed(c, stage)
-    if K.followup_arm(c) in ("F", "FS"):
+    if K.followup_arm(c) in ("F", "FS", "FG"):
         pass
     elif fu is not None:
         # TASK_R28_K_FOLLOWUP_003: the K run is authorised by the follow-up contract itself.  The W decision of the
@@ -423,7 +437,7 @@ def train(c, out, counts, resume, *, stop, save_points):
             "save_points": {"planned": sorted(set(save_points)), "used_in_this_process": list(used),
                             "at_or_before_the_start": sorted(p for p in set(save_points) if p <= start)},
             "formal_save_epochs": list(K.FORMAL_SAVE_EPOCHS), "scope": "formal", "input_pipeline": pipeline,
-            **({"mapping": e.r28_mapping} if arm == "FS" else {})}
+            **({"mapping": e.r28_mapping} if arm in ("FS", "FG") else {})}
     loop = run_loop(c, e, out, stop, counts, save_points=set(used), refs=refs, prior_rows=prior_rows, first=first,
                     pipeline=pipeline)
     with (out / LEDGER).open() as f:

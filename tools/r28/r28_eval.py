@@ -103,7 +103,7 @@ def evaluate(c, out, counts):
     K.require(all(not v.is_floating_point() or v.dtype == torch.float32 for v in state.values()), "EMA not FP32")
     source = K.demand_source(c, arm)
     K.require(side["demand"]["file"] == source["file"], "the endpoint was trained with another demand source")
-    K.require(side.get("mapping") == (R.mapping(source) if arm == "FS" else None), "the endpoint was trained with another mapping width")
+    K.require(side.get("mapping") == (R.mapping(source) if arm in ("FS", "FG") else None), "the endpoint was trained with another mapping width")
     device = torch.device("cuda:0")
     model = R.build_eval_model(state, device, arm, source)
     K.require(R.is_wrapped(model) and not model.training and model.r28_ctx.binding() == side["demand"], "evaluation model")
@@ -137,7 +137,7 @@ def evaluate(c, out, counts):
         counts.update(score_budget_calls=1)
         metrics["R28_binding"] = {"contract_sha256": c["contract_sha256"], "arm": arm, "kind": "EMA", "view": "A", "epoch": epoch,
                                   "budget": b, "checkpoint": side["file"], "weights_sha256": weights, "demand": side["demand"],
-                                  "predictions": refs[str(b)], **({"mapping": side["mapping"]} if arm == "FS" else {})}
+                                  "predictions": refs[str(b)], **({"mapping": side["mapping"]} if arm in ("FS", "FG") else {})}
         values[str(b)] = bridge_values(metrics)
         counts_gt[str(b)] = {k: metrics["spatial_filter_counts"][k] for k in ("GT_before", "GT_after")}
         p = out / f"{arm}-EMA-A-top{b}-metrics.json"
@@ -147,7 +147,7 @@ def evaluate(c, out, counts):
         if b == 600 and K.followup(c) is not None:
             # the same single COCOeval as per_class_large, with the medium rows read from the same precision tensor
             import r28_followup as FU
-            keep = out / "cocoeval-top600.npz" if arm in ("F", "FS") else None   # F / FS keep the tensors of the single COCOeval
+            keep = out / "cocoeval-top600.npz" if arm in ("F", "FS", "FG") else None   # F / FS / FG keep the tensors of the single COCOeval
             per_class, per_class_medium = FU.per_class_sizes(rows, parsed, preds[b], metrics["COCO_bridge"], keep=keep)
             tensors = None if keep is None else K.ref(keep)
             counts.update(per_class_COCOeval_calls=1)
@@ -161,7 +161,7 @@ def evaluate(c, out, counts):
             "predictions": refs, "GT_counts": counts_gt, "per_class_APL_top600": per_class,
             **({} if per_class_medium is None else {"per_class_APM_top600": per_class_medium}),
             **({} if tensors is None else {"cocoeval_top600_tensors": tensors}),
-            **({"mapping": side["mapping"]} if arm == "FS" else {}), "scoring": scoring, **timing}
+            **({"mapping": side["mapping"]} if arm in ("FS", "FG") else {}), "scoring": scoring, **timing}
 
 
 # ================================================================ summary arithmetic (pure)
@@ -264,6 +264,9 @@ def _other_directories():
 
 def summarize(c, out, counts):
     arm = K.ARM
+    if K.followup_arm(c) == "FG":
+        import r28_geo_control as GC
+        return GC.summarize(c, out, counts)
     if K.followup_arm(c) == "FS":
         import r28_cal_control as CC
         return CC.summarize(c, out, counts)

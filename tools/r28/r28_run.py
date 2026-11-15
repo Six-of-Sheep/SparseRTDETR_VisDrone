@@ -15,6 +15,12 @@
   cal-check | cal-fixture         -> r28_cal_control      (CPU: affected interfaces and pure-data pipeline checks; CPU fixture)
   calibrate | cal-wire | pipeline -> r28_cal_control      (CUDA: width calibration with the demand network only; wiring of
                                      evaluation / five-arm timing; serial / overlapped input pipeline acceptance)
+  prepare-geo                     -> r28_geo_control.prepare (TASK_R28_STRONG_F_CONTROL_009: contract of the F_geo round)
+  geo-check | ledger-means        -> r28_geo_control      (CPU: affected interfaces of arm FG; per-update magnification
+                                     means of the stored W / K / F ledgers)
+  geo-confirm | geo-wire | geo-accept -> r28_geo_control  (CUDA: validity of the fixed width on epoch-118 windows with the
+                                     demand network only; wiring of evaluation / five-arm timing; the 4 + 4 + 2 update
+                                     acceptance of the actual width)
 
 Every stage function returns a dict that is merged into <out>/CLOSED.json; an exception writes <out>/STOP.json and
 is re-raised.
@@ -38,13 +44,16 @@ DISPATCH = {"cpu": "r28_checks", "zero": "r28_checks", "accept": "r28_checks", "
             "followup-check": "r28_followup", "medium": "r28_followup",
             "fovea-check": "r28_fovea_control", "wire": "r28_fovea_control",
             "cal-check": "r28_cal_control", "cal-fixture": "r28_cal_control", "calibrate": "r28_cal_control",
-            "cal-wire": "r28_cal_control", "pipeline": "r28_cal_control"}
-CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium", "fovea-check", "cal-check", "cal-fixture")
+            "cal-wire": "r28_cal_control", "pipeline": "r28_cal_control",
+            "geo-check": "r28_geo_control", "geo-confirm": "r28_geo_control", "geo-wire": "r28_geo_control",
+            "geo-accept": "r28_geo_control", "ledger-means": "r28_geo_control"}
+CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium", "fovea-check", "cal-check", "cal-fixture",
+               "geo-check", "ledger-means")
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=("prepare", "prepare-followup", "prepare-fovea", "prepare-cal") + tuple(DISPATCH))
+    ap.add_argument("action", choices=("prepare", "prepare-followup", "prepare-fovea", "prepare-cal", "prepare-geo") + tuple(DISPATCH))
     ap.add_argument("--out", type=Path)
     ap.add_argument("--resume", type=Path)
     args = ap.parse_args(argv)
@@ -63,6 +72,10 @@ def main(argv=None):
         K.require(args.out is None and args.resume is None, "prepare-cal takes no --out/--resume")
         import r28_cal_control as CC
         return CC.prepare(args)
+    if args.action == "prepare-geo":
+        K.require(args.out is None and args.resume is None, "prepare-geo takes no --out/--resume")
+        import r28_geo_control as GC
+        return GC.prepare(args)
     K.require(args.out is not None, "--out is required")
     K.require(args.resume is None or args.action == "formal", "--resume is only for formal")
     run = getattr(importlib.import_module(DISPATCH[args.action]), args.action.replace("-", "_"))

@@ -5,8 +5,8 @@ precost(c, out, counts)  before the formal W run: L0 (its e120 EMA) against Wpre
                          the R28 forward with the final frozen demand network.  The detector weights are identical, so
                          the ratio measures the added demand network, allocation, resampling and inverse mapping.
 cost(c, out, counts)     fixed endpoints: A0, L0, W, S15 (arm W), L0, W, K (arm K, <round>/cost-K), L0, W, F (arm F,
-                         <round>/cost-F) or L0, K, F, FS, W (arm FS, <round>/cost-FS; K and F are the stored endpoints
-                         of their rounds).
+                         <round>/cost-F), L0, K, F, FS, W (arm FS, <round>/cost-FS; K and F are the stored endpoints
+                         of their rounds) or L0, K, F, FG, W (arm FG, <round>/cost-FG, the same way).
 The timed interval of every endpoint is the whole model call; for W / K / F it contains the demand source, the
 allocation or map, the resampling and the inverse mapping.  No annotation is parsed while timing.
 
@@ -26,7 +26,7 @@ import r28_common as K
 import l0_cost as LC
 
 IMAGES = K.COST_BATCH * K.COST_BATCHES_PER_PASS
-CANVAS = {"A0": "L", "L0": "H", "S15": "H", "W": "H", "K": "H", "Wpre": "H", "F": "H", "FS": "H"}
+CANVAS = {"A0": "L", "L0": "H", "S15": "H", "W": "H", "K": "H", "Wpre": "H", "F": "H", "FS": "H", "FG": "H"}
 SUMS = LC.SUMS
 STAGES = ("demand", "map", "render", "detector", "unwarp", "other")
 
@@ -61,6 +61,7 @@ def instrument(models, probe):
     from sparse_rtdetr.research import r27_l0_control as L0
     from sparse_rtdetr.research import r28_fovea as FV
     from sparse_rtdetr.research import r28_fovea_cal as FS
+    from sparse_rtdetr.research import r28_fovea_geo as FG
     from sparse_rtdetr.research import r28_resample as R
     from sparse_rtdetr.research import r28_warp as W
     undo = []
@@ -81,7 +82,7 @@ def instrument(models, probe):
 
     kinds = {}
     for arm, m in models.items():
-        if FV.is_wrapped(m) or FS.is_wrapped(m):
+        if FV.is_wrapped(m) or FS.is_wrapped(m) or FG.is_wrapped(m):
             vars(m.r28_ctx)["probe"] = probe.mark
             undo.append((m.r28_ctx, "probe", None, False))
             kinds[arm] = "own marks of r28_fovea._forward" if FV.is_wrapped(m) else "own marks of r28_fovea_cal._forward"
@@ -320,11 +321,11 @@ def precost(c, out, counts):
 
 def cost(c, out, counts):
     arm = K.ARM
-    name = {"W": "cost", "K": "cost-K", "F": "cost-F", "FS": "cost-FS"}[arm]
+    name = {"W": "cost", "K": "cost-K", "F": "cost-F", "FS": "cost-FS", "FG": "cost-FG"}[arm]
     K.require(Path(out).resolve() == (K.ROUND / name).resolve(), f"this action writes <round>/{name}")
     torch = K.torch_mod()
     endpoints = K.COST_ENDPOINTS[name]
     loaders = {a: (lambda a=a: load_arm(c, a, torch) if a in K.ARMS else load_reference(c, a, torch)) for a in endpoints}
-    res = _run(c, counts, loaders, endpoints, K.COST_ROTATIONS[name], **({"stages": True} if arm in ("F", "FS") else {}))
+    res = _run(c, counts, loaders, endpoints, K.COST_ROTATIONS[name], **({"stages": True} if arm in ("F", "FS", "FG") else {}))
     K.require(counts["forwards"] == len(endpoints) * K.COST_PER_ENDPOINT, f"cost forwards {dict(counts)}")
     return {"label": f"fixed-endpoint joint timing ({', '.join(endpoints)})", **res}

@@ -51,8 +51,9 @@ def cal_contract(inherited=None):
 # ---------------------------------------------------------------- registration
 def test_basis_arm_module_and_five_arm_timing_order():
     assert K.CAL_BASIS == "post_F_user_forwarded_calibrated_mapping_control"
-    assert K.FOLLOWUP_ARMS == {"post_W_user_approved_K_followup": "K", "post_K_user_forwarded_mapping_control": "F", K.CAL_BASIS: "FS"}
-    assert K.ARMS == ("W", "K", "F", "FS") and K.arm_module("FS") is FS and K.arm_module("F") is FV and K.arm_module("W") is R
+    assert {k: v for k, v in K.FOLLOWUP_ARMS.items() if v != "FG"} == {"post_W_user_approved_K_followup": "K",
+                                                                       "post_K_user_forwarded_mapping_control": "F", K.CAL_BASIS: "FS"}
+    assert K.ARMS[:4] == ("W", "K", "F", "FS") and K.arm_module("FS") is FS and K.arm_module("F") is FV and K.arm_module("W") is R
     assert K.followup_arm(cal_contract()) == "FS"
     for bad in ({"authorization_basis": K.CAL_BASIS, "followup": {"authorization_basis": K.CAL_BASIS, "arm": "F"}},
                 {"authorization_basis": K.FOVEA_BASIS, "followup": {"authorization_basis": K.FOVEA_BASIS, "arm": "FS"}},
