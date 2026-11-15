@@ -95,6 +95,9 @@ def test_registered_identities_and_workload():
     assert CC.SCIENCE_ADDED == ("src/sparse_rtdetr/research/r28_fovea_cal.py",)
     assert set(CC.COST_PAIRS) <= {f"{a}/{b}" for a in CC.ARMS5 for b in CC.ARMS5 if a != b}
     assert CC.EXCLUDED and CC.COMPARED and not any("state" in e for e in CC.EXCLUDED)      # no state subtree is excluded
+    assert (CC.DEV_CAL, CC.DEV_PIPE, CC.DEV_TARGET) == ("R28_DEV_CAL_WINDOWS", "R28_DEV_PIPE", "R28_DEV_CAL_TARGET_WIDTH")
+    chain = (ROOT / "tools/r28/r28_cal_chain.sh").read_text()
+    assert "R28_DEV_* variables are refused outside a dev round" in chain and "needs --until" in chain
 
 
 def test_source_delta_lets_the_science_tree_only_gain_the_arm_fs_module():

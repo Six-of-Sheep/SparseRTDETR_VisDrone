@@ -16,7 +16,8 @@
 # in the environment keeps the serial reference path (nothing else is accepted in that variable).
 #
 # Dev flags: every R28_DEV_* variable is refused, except in a dev round (dev-round* inside the round directory), where
-# R28_DEV_CAL_WINDOWS, R28_DEV_PIPE and R28_DEV_SPAN shorten the calibration set, the acceptance and the formal span.
+# R28_DEV_CAL_WINDOWS, R28_DEV_PIPE and R28_DEV_SPAN shorten the calibration set, the acceptance and the formal span and
+# R28_DEV_CAL_TARGET_WIDTH replaces the calibration target by arm F's own reading at that width (wiring only).
 # A dev round needs --until and never evaluates or scores.
 # Log: <round>/CHAIN.log; every stage writes <round>/<stage>.log (an earlier log is kept as <stage>.log.<k>).
 #
@@ -54,8 +55,8 @@ DEVROUND=0
 case "$(basename "$R")" in dev-round*) DEVROUND=1 ;; esac
 if [ $DEVROUND -eq 1 ]; then
   [ -n "$UNTIL" ] || { echo "a dev round of the calibrated control needs --until (it never evaluates or scores)" >&2; exit 2; }
-  if env | grep '^R28_DEV_' | grep -qvE '^R28_DEV_(CAL_WINDOWS|PIPE|SPAN)='; then
-    echo "a dev round of the calibrated control only accepts R28_DEV_CAL_WINDOWS, R28_DEV_PIPE and R28_DEV_SPAN" >&2; exit 2
+  if env | grep '^R28_DEV_' | grep -qvE '^R28_DEV_(CAL_WINDOWS|CAL_TARGET_WIDTH|PIPE|SPAN)='; then
+    echo "a dev round of the calibrated control only accepts R28_DEV_CAL_WINDOWS, R28_DEV_CAL_TARGET_WIDTH, R28_DEV_PIPE and R28_DEV_SPAN" >&2; exit 2
   fi
 elif env | grep -q '^R28_DEV_'; then
   echo "R28_DEV_* variables are refused outside a dev round" >&2; exit 2

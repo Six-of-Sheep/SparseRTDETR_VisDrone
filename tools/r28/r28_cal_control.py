@@ -136,6 +136,7 @@ LABEL = "calibrated_mapping_control_completed"
 CONTRIBUTION = "not_established"
 DEV_CAL = "R28_DEV_CAL_WINDOWS"
 DEV_PIPE = "R28_DEV_PIPE"
+DEV_TARGET = "R28_DEV_CAL_TARGET_WIDTH"   # dev rounds only: the target is arm F's rule at this width (wiring, never a result)
 
 
 # ================================================================ release difference
@@ -767,6 +768,16 @@ def calibrate(c, out, counts):
     w_pool = _pool(w_logs, blocks, "small")
     K.require(w_pool["n"] > 0, "no small GT in the calibration windows")
     l_w = w_pool["L"]
+    dev_target = None
+    if os.environ.get(DEV_TARGET):
+        # A dev round shakes out the matched branch and the later stages with a target the rule can reach: the reading
+        # of arm F's rule at the given width on the same cache.  Such a calibration is wiring, never a result.
+        K.require(K.DEV, f"{DEV_TARGET} is refused outside a dev round")
+        dev_target = float(os.environ[DEV_TARGET])
+        ok, dev_logs, _, _ = geometry_h(blocks, dev_target)
+        K.require(ok, f"the dev target width {dev_target} is not valid on the dev calibration set")
+        l_w = _pool(dev_logs, blocks, "small")["L"]
+        del dev_logs
     updates = [b["update"] for b in blocks]
     w_history = against_ledger(blocks, w_pool, ledger_g_small(K.pinned(fu["W_ledger"]), updates))
 
@@ -800,6 +811,7 @@ def calibrate(c, out, counts):
                                 "every_window_equal_to_the_reference_ledger": True, "GT": int(sum(int(b["real"].sum()) for b in blocks)),
                                 "small_GT": w_pool["n"], "non_positive_boxes": non_positive, "demand_network": ctx.binding(),
                                 "dev_subset": os.environ.get(DEV_CAL)},
+            "L_W_of_arm_W": w_pool["L"], "dev_target_width": dev_target,
             "W": {"reading": reading(blocks, w_logs, w_aniso), "against_the_formal_W_ledger": w_history},
             "F_width_4": None if f4 is None else {"reading": reading(blocks, f4[0], f4[1]), "against_the_formal_F_ledger": f_history},
             "historical_caliber_note": "the reports' 1.267 (W) and 1.053 (F) are means over updates of per-update geometric means over "
@@ -808,7 +820,8 @@ def calibrate(c, out, counts):
     result = {"stage": "calibrate", "workload": c["workload"]["calibrate"], "calibration_status": status, "h_star": sel["h_star"],
               "h_star_hex": sel["h_star_hex"], "L_W": l_w, "L_h_star": sel["L_h_star"], "relative_error": sel["relative_error"],
               "widths_read": len(sel["readings"]), "invalid_widths": [r["h"] for r in sel["readings"] if not r["valid"]],
-              "interval": sel["interval"], "rule_applied": sel["rule_applied"]}
+              "interval": sel["interval"], "rule_applied": sel["rule_applied"], "dev_target_width": dev_target,
+              "closest_if_unmatched": sel.get("closest")}
     if status == "matched":
         h = sel["h_star"]
         valid, logs, aniso, _ = geometry_h(blocks, h)                               # the same pure computation, repeated
