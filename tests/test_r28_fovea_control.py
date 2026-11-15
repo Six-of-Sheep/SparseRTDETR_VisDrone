@@ -28,8 +28,8 @@ N = E.METRICS
 
 
 def test_bases_arms_and_modules():
-    assert K.FOLLOWUP_ARMS == {"post_W_user_approved_K_followup": "K", "post_K_user_forwarded_mapping_control": "F"}
-    assert K.ARMS == ("W", "K", "F") and K.arm_module("W") is R and K.arm_module("K") is R and K.arm_module("F") is FV
+    assert K.FOLLOWUP_ARMS["post_W_user_approved_K_followup"] == "K" and K.FOLLOWUP_ARMS["post_K_user_forwarded_mapping_control"] == "F"
+    assert K.ARMS[:3] == ("W", "K", "F") and K.arm_module("W") is R and K.arm_module("K") is R and K.arm_module("F") is FV
     with pytest.raises(ValueError):
         K.arm_module("L0")
     f = {"authorization_basis": K.FOVEA_BASIS, "followup": {"authorization_basis": K.FOVEA_BASIS, "arm": "F"}}

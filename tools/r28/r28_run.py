@@ -11,6 +11,10 @@
   followup-check | medium         -> r28_followup         (CPU: affected-interface checks; descriptive medium tables)
   prepare-fovea                   -> r28_fovea_control.prepare (TASK_R28_FOVEA_MAPPING_CONTROL_004: contract of the F round)
   fovea-check | wire              -> r28_fovea_control    (CPU affected-interface checks; CUDA wiring of evaluation / timing)
+  prepare-cal                     -> r28_cal_control.prepare (TASK_R28_CALIBRATED_F_CONTROL_006: contract of the F* round)
+  cal-check | cal-fixture         -> r28_cal_control      (CPU: affected interfaces and pure-data pipeline checks; CPU fixture)
+  calibrate | cal-wire | pipeline -> r28_cal_control      (CUDA: width calibration with the demand network only; wiring of
+                                     evaluation / five-arm timing; serial / overlapped input pipeline acceptance)
 
 Every stage function returns a dict that is merged into <out>/CLOSED.json; an exception writes <out>/STOP.json and
 is re-raised.
@@ -32,13 +36,15 @@ DISPATCH = {"cpu": "r28_checks", "zero": "r28_checks", "accept": "r28_checks", "
             "precost": "r28_cost", "cost": "r28_cost", "formal": "r28_loop",
             "evaluate": "r28_eval", "summarize": "r28_eval", "dose": "r28_dose",
             "followup-check": "r28_followup", "medium": "r28_followup",
-            "fovea-check": "r28_fovea_control", "wire": "r28_fovea_control"}
-CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium", "fovea-check")
+            "fovea-check": "r28_fovea_control", "wire": "r28_fovea_control",
+            "cal-check": "r28_cal_control", "cal-fixture": "r28_cal_control", "calibrate": "r28_cal_control",
+            "cal-wire": "r28_cal_control", "pipeline": "r28_cal_control"}
+CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium", "fovea-check", "cal-check", "cal-fixture")
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=("prepare", "prepare-followup", "prepare-fovea") + tuple(DISPATCH))
+    ap.add_argument("action", choices=("prepare", "prepare-followup", "prepare-fovea", "prepare-cal") + tuple(DISPATCH))
     ap.add_argument("--out", type=Path)
     ap.add_argument("--resume", type=Path)
     args = ap.parse_args(argv)
@@ -53,6 +59,10 @@ def main(argv=None):
         K.require(args.out is None and args.resume is None, "prepare-fovea takes no --out/--resume")
         import r28_fovea_control as FC
         return FC.prepare(args)
+    if args.action == "prepare-cal":
+        K.require(args.out is None and args.resume is None, "prepare-cal takes no --out/--resume")
+        import r28_cal_control as CC
+        return CC.prepare(args)
     K.require(args.out is not None, "--out is required")
     K.require(args.resume is None or args.action == "formal", "--resume is only for formal")
     run = getattr(importlib.import_module(DISPATCH[args.action]), args.action.replace("-", "_"))

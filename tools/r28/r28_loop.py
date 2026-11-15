@@ -20,12 +20,44 @@ import l0_loop as LL
 
 LEDGER = LL.LEDGER
 OBS = "OBS_EPOCH.jsonl"
+TIMING = "TIMING.jsonl"                 # per-update wall-clock segments of the input pipeline (engineering record)
 G_BINS = ((None, 1.0), (1.0, 1.2), (1.2, 1.4), (1.4, None))
 BIN_NAMES = ("g<1.0", "1.0<=g<1.2", "1.2<=g<1.4", "g>=1.4")
 
 
 def _bin(g):
     return 0 if g < 1.0 else 1 if g < 1.2 else 2 if g < 1.4 else 3
+
+
+def cal_row(recs, area):
+    """Arm FS: the GT of one update under arm FS and under arm W's allocation, the latter computed on the CPU from the
+    demand maps this update's two forwards already produced.  No image is rendered and no network runs.  Per raw-area
+    class: count, sum of log g (g = sqrt(ox oy)), counts in the four magnification bins and the anisotropy sums of
+    log(ox / oy).  A description only: nothing reads it back into training."""
+    torch = K.torch_mod()
+    from sparse_rtdetr.research import r28_warp as W
+    parts = {"FS": ([], []), "W": ([], [])}
+    for r in recs:
+        wx, wy = W.magnification(W.plan_from_demand(r["demand"]), r["xyxy"])
+        for i, k in enumerate(r["n"]):
+            parts["FS"][0].append(r["ox"][i, :k]); parts["FS"][1].append(r["oy"][i, :k])
+            parts["W"][0].append(wx[i, :k]); parts["W"][1].append(wy[i, :k])
+    area = area.to(torch.float64)
+    K.require(all(len(torch.cat(v[0])) == len(area) for v in parts.values()), "calibration description: GT count")
+    classes = {"small": area <= K.SMALL_AREA, "medium": (area >= K.SMALL_AREA) & (area <= K.LARGE_AREA), "large": area >= K.LARGE_AREA}
+    out = {}
+    for name, sel in classes.items():
+        cell = {"n": int(sel.sum())}
+        for arm, (ox, oy) in parts.items():
+            ox, oy = torch.cat(ox)[sel], torch.cat(oy)[sel]
+            g = torch.sqrt(ox * oy)
+            ratio = torch.log(ox / oy)
+            cell[arm] = {"sum_log_g": math.fsum(torch.log(g).tolist()),
+                         "bins": [int((g < 1.0).sum()), int(((g >= 1.0) & (g < 1.2)).sum()), int(((g >= 1.2) & (g < 1.4)).sum()),
+                                  int((g >= 1.4).sum())],
+                         "sum_log_ox_over_oy": math.fsum(ratio.tolist()), "sum_abs_log_ox_over_oy": math.fsum(ratio.abs().tolist())}
+        out[name] = cell
+    return out
 
 
 class Observer:
@@ -143,6 +175,8 @@ class Observer:
                             "clamped_nodes": sum(r["clamped_nodes"] for r in f), "clamp_max": max(r["clamp_max"] for r in f),
                             "clamped_interior_nodes": sum(r["clamped_interior_nodes"] for r in f),
                             "taps_max": max(taps) if taps else None, "footprint_max_px": max(foot) if foot else None}
+        if "demand" in recs[0]:     # arm FS: the same GT under arm W's allocation of the same demand maps (description)
+            row["cal"] = cal_row(recs, area)
         return row
 
     def epoch_row(self, epoch):
@@ -168,7 +202,17 @@ def install_observer(e):
 
 def guard(c, out, resume, arm):
     fu = K.followup(c)
-    if K.followup_arm(c) == "F":
+    if K.followup_arm(c) == "FS":
+        # TASK_R28_CALIBRATED_F_CONTROL_006: the single F* run is authorised by its own contract and needs the matched
+        # calibration and the closed input-pipeline acceptance.  A dev round may run a short span to shake out the loop.
+        K.require(arm == "FS", "the calibrated mapping-control round only trains arm FS")
+        K.stage_closed(c, "demand")
+        for stage in ("cal-check", "calibrate", "cal-fixture", "wire-FS", "pipeline"):
+            K.stage_closed(c, stage, "FS")
+        K.calibration(c)
+        K.require(not any(os.environ.get(v) for v in ("R28_DEV_FORCE_K", "R28_DEV_IGNORE_G0", "R28_DEV_IGNORE_COST")),
+                  "dev override flags are refused in the calibrated mapping-control round")
+    elif K.followup_arm(c) == "F":
         # TASK_R28_FOVEA_MAPPING_CONTROL_004: the single F run is authorised by its own contract.  G0, the W cost gate
         # and the closed W decision are not gates of arm F; the frozen demand network must be the closed round's.
         K.require(arm == "F", "the mapping-control round only trains arm F")
@@ -180,11 +224,11 @@ def guard(c, out, resume, arm):
         K.require(not any(os.environ.get(v) for v in ("R28_DEV_FORCE_K", "R28_DEV_IGNORE_G0", "R28_DEV_IGNORE_COST")),
                   "dev override flags are refused in the mapping-control round")
     else:
-        K.require(arm in ("W", "K"), "arm F is trained only in the mapping-control round")
+        K.require(arm in ("W", "K"), "arms F and FS are trained only in their mapping-control rounds")
         K.g0_passed(c)
         for stage in ("cpu", "zero", "evalpath", f"accept-{arm}"):
             K.stage_closed(c, stage)
-    if K.followup_arm(c) == "F":
+    if K.followup_arm(c) in ("F", "FS"):
         pass
     elif fu is not None:
         # TASK_R28_K_FOLLOWUP_003: the K run is authorised by the follow-up contract itself.  The W decision of the
@@ -218,8 +262,11 @@ def guard(c, out, resume, arm):
     return path, side
 
 
-def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=None):
-    from formal_data import windows, WINDOWS_PER_EPOCH
+def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=None, pipeline="serial"):
+    """pipeline: "serial" (the reference path) or "overlap" (r28_pipeline: the next window is fetched and audited
+    while this one trains).  Both deliver the same windows in the same order; the checks below are the same."""
+    import r28_pipeline as PL
+    from formal_data import WINDOWS_PER_EPOCH
     from sparse_rtdetr.research import scale_baseline as S
     arm, obs = e.r28_arm, e.r28_observer
     history = out / LEDGER
@@ -230,11 +277,22 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
     K.require(start < stop and all(start < p <= stop for p in save_points), "R28 loop span / save points")
     prior_rows = dict(prior_rows)
     saves, seen, replayed, compared, seconds, checked, epochs = [], {}, 0, 0, 0.0, [], []
+
+    def reference_check(inp):
+        """Runs where the window is audited (the producer thread on the overlapped path): a window whose input record
+        is not the reference ledger's is never delivered."""
+        K.require(inp["update"] in refs, f"window {inp['update']} is not an update of the schedule")
+        bad = LL.input_differences(inp, refs[inp["update"]]["input"])
+        K.require(not bad, f"input record differs from R27 formal-P before update {inp['update']} "
+                           f"(the model was not updated with this window): {bad}")
+
     wall = time.monotonic()
-    with history.open("a", buffering=1) as ledger, (out / OBS).open("a", buffering=1) as obs_file:
-        while e.completed_updates < stop:
-            begin = e.completed_updates
-            for x, t, inp in windows(data, begin, limit=min(stop - begin, WINDOWS_PER_EPOCH - begin % WINDOWS_PER_EPOCH)):
+    mark = time.perf_counter()
+    with PL.formal_stream(pipeline, data, start, stop, reference_check) as stream:
+        with history.open("a", buffering=1) as ledger, (out / OBS).open("a", buffering=1) as obs_file, \
+                (out / TIMING).open("a", buffering=1) as timing_file:
+            for item in stream:
+                x, t, inp = item.x, item.t, item.inp
                 ids = [tt["image_id"] for tt in t]
                 s_ = seen.setdefault(inp["epoch"], set())
                 K.require(len(set(ids)) == len(ids) and not (s_ & set(ids)), "R28 occurrence: image repeated within an epoch")
@@ -247,7 +305,9 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
                 K.require(not bad, f"input record differs from R27 formal-P before update {inp['update']} "
                                    f"(the model was not updated with this window): {bad}")
                 K.PHASE["phase"] = f"{arm}:update {e.completed_updates + 1}"
+                called = time.perf_counter()
                 res = e.train_window(x, t)
+                train_call = time.perf_counter() - called
                 K.require(res["update"] == inp["update"] and res["finite"] and e.ema.updates == e.completed_updates,
                           "R28 update clock/input")
                 row = {"input": inp, "gt_count": int(sum(len(v["labels"]) for v in t)), "loss": res["loss"],
@@ -284,12 +344,19 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
                     name = K.endpoint_name(e.completed_updates)
                     role = "formal_save" if not rest and ep in K.FORMAL_SAVE_EPOCHS else "recovery"
                     saves.append(K.save(c, e, out / name, "formal", {"ledger": K.ref(history), "observations": K.ref(out / OBS)}, role))
+                now = time.perf_counter()
+                timing_file.write(json.dumps({"update": res["update"], "cycle_s": now - mark, "wait_s": item.timing["wait_s"],
+                                              "train_call_s": train_call, "train_s": res["elapsed_seconds"],
+                                              "input": {k: item.timing.get(k) for k in ("next_s", "audit_s", "fetch_s", "reference_check_s")},
+                                              "prepared": stream.ready()}, separators=(",", ":")) + "\n")
                 if e.completed_updates % 16 == 0:
                     print(json.dumps({"arm": arm, "update": e.completed_updates, "loss": res["loss"],
-                                      "seconds": res["elapsed_seconds"], "g_small": row["r28"]["g_small"]}), flush=True)
-            K.require(e.completed_updates != begin, "R28 loader made no progress")
-        ledger.flush()
-        os.fsync(ledger.fileno())
+                                      "seconds": res["elapsed_seconds"], "cycle_seconds": now - mark,
+                                      "g_small": row["r28"]["g_small"]}), flush=True)
+                mark = now
+            ledger.flush()
+            os.fsync(ledger.fileno())
+        pipe = stream.account()
     wall = time.monotonic() - wall
     K.PHASE["phase"] = f"{arm}:loop accounting"
     done, hooks, rec = LL.account(e, counts, base)
@@ -300,6 +367,7 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
                    "increment_per_training_module": 2 * done, "one_update_per_training_forward": True},
             "saves": saves, "accounting_checked_before_saves_at": checked, "prior_rows_replayed_exact": replayed,
             "shared_rows_compared_live": compared, "observation_epochs_written": epochs,
+            "input_pipeline": pipe, "timing_file": TIMING,
             "loop_wall_seconds": wall, "update_seconds_sum": seconds,
             "peak_cuda_bytes": K.torch_mod().cuda.max_memory_allocated() if e.device.type == "cuda" else None}
 
@@ -331,6 +399,7 @@ def train(c, out, counts, resume, *, stop, save_points):
     out = Path(out)
     source = guard(c, out, resume, arm)
     refs, first = LL.reference_rows(c)
+    pipeline = K.pipeline_mode(c, arm)
     K.PHASE["phase"] = f"{arm}:construct"
     e, info = R.create(c["parent"]["path"], "cuda:0", arm, K.demand_source(c, arm))
     K.register_counts(e, counts)
@@ -353,8 +422,10 @@ def train(c, out, counts, resume, *, stop, save_points):
             "schedule_first_update": K.PARENT_UPDATE + 1, "demand": e.r28_ctx.binding(),
             "save_points": {"planned": sorted(set(save_points)), "used_in_this_process": list(used),
                             "at_or_before_the_start": sorted(p for p in set(save_points) if p <= start)},
-            "formal_save_epochs": list(K.FORMAL_SAVE_EPOCHS), "scope": "formal"}
-    loop = run_loop(c, e, out, stop, counts, save_points=set(used), refs=refs, prior_rows=prior_rows, first=first)
+            "formal_save_epochs": list(K.FORMAL_SAVE_EPOCHS), "scope": "formal", "input_pipeline": pipeline,
+            **({"mapping": e.r28_mapping} if arm == "FS" else {})}
+    loop = run_loop(c, e, out, stop, counts, save_points=set(used), refs=refs, prior_rows=prior_rows, first=first,
+                    pipeline=pipeline)
     with (out / LEDGER).open() as f:
         head = json.loads(f.readline())
         rows = 1 + sum(1 for _ in f)
