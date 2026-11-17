@@ -15,7 +15,6 @@ never changes the other seed's task.  Seed0 (TASK_S15_EXECUTE_001, commit 61646b
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import io
 import json
@@ -624,6 +623,8 @@ def latest_active():
 
 
 def lock_round():
+    import fcntl  # Linux execution only; fail before opening a file elsewhere.
+
     handle = (ROUND / ".s15-seed12.lock").open("a")
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

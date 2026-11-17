@@ -12,7 +12,6 @@ Native A0@L, S15@H and S15@L are pinned references; they are never re-inferred, 
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import io
 import json
@@ -541,6 +540,8 @@ def latest_active():
 
 
 def lock_round():
+    import fcntl  # Linux execution only; fail before opening a file elsewhere.
+
     handle = (ROUND / ".mix.lock").open("a")
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

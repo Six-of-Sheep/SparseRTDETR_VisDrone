@@ -3,7 +3,7 @@ on:
   push:
     branches: [main, 'codex/**', 'claude/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'claude/pr-stack-*', 'claude/r28-budgeted-resampling']
 permissions:
   contents: read
 jobs:
@@ -32,3 +32,11 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ''
         run: python -B tools/check_confirmation_ci.py
+      - run: python -m pip install -r environment/requirements-research-ci.txt
+      - name: Required research integration CPU regression (Linux, no skips)
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          PYTHONUTF8: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+          OMP_NUM_THREADS: '2'
+        run: python -B tools/check_research_ci.py
