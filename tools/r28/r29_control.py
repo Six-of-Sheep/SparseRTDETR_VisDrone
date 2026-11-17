@@ -430,7 +430,7 @@ def prepare(_args=None):
     # the science of this contract is the science of release-001: every key outside the named engineering keys is equal
     fu, fuh = c["followup"], ch["followup"]
     differs = {
-        "contract_keys": sorted(set(c) ^ set(ch)),
+        "contract_keys": sorted((set(c) ^ set(ch)) - {"contract_sha256"}),     # the digest of this contract is added below
         "contract_values": sorted(k for k in ch if k in c and k not in HOST_CONTRACT_DIFFERENT and c[k] != ch[k]),
         "followup_keys": sorted(set(fu) ^ (set(fuh) | set(host_refs))),
         "followup_values": sorted(k for k in fuh if k in fu and k not in HOST_FOLLOWUP_DIFFERENT and fu[k] != fuh[k]),
