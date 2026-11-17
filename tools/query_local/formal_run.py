@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import io
 import json
@@ -447,6 +446,10 @@ def latest_active():
 
 
 def lock_round():
+    # Read-only contract helpers are importable on Windows; actual launch still
+    # requires the real POSIX lock. Never substitute a no-op lock in production.
+    import fcntl
+
     handle = (ROUND / ".r25-formal.lock").open("a")
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

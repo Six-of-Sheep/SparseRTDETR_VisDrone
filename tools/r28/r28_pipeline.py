@@ -25,6 +25,7 @@ without delivering is detected instead of waiting forever.
 """
 import os
 import queue
+import sys
 import threading
 import time
 
@@ -347,6 +348,8 @@ class MemorySampler:
             self._halt.wait(self.interval)
 
     def __enter__(self):
+        if not sys.platform.startswith("linux"):
+            raise RuntimeError("MemorySampler requires Linux /proc; RSS/PSS are unavailable on this platform")
         self._thread.start()
         return self
 

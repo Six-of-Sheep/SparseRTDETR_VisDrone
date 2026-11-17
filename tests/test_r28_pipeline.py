@@ -236,6 +236,11 @@ def test_memory_plan_and_sampler():
     assert serial["windows_max"] == 1 + 4 + 2 and overlap["windows_max"] == serial["windows_max"] + 1
     assert overlap["prepared_by_the_producer"] == 1 and serial["prepared_by_the_producer"] == 0
     assert overlap["bytes_max"] == n * overlap["windows_max"] and overlap["loader_prefetch_windows_max"] == 4
+    if not sys.platform.startswith("linux"):
+        with pytest.raises(RuntimeError, match="requires Linux /proc"):
+            with PL.MemorySampler(0.05):
+                pytest.fail("unsupported sampler entered")
+        return
     with PL.MemorySampler(0.05) as m:
         mark = time.perf_counter()
         time.sleep(0.25)

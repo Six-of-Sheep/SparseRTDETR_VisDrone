@@ -1,5 +1,9 @@
 # 日常开发与版本管理
 
+R10–R28 历史研究代码的依赖、PR 合并顺序、平台限制与新增 CPU CI 覆盖见
+[RESEARCH_STACK.md](RESEARCH_STACK.md)。实验集成索引见
+`manifests/research_stack_20261117.json`；批次末端提交不冒充实际启动提交。
+
 ## 主线与短期分支
 
 main是经工程检查的集成入口。一个开发任务使用一个短期分支；修复继续追加提交，不为每次修改、每个seed或切换助手重复开分支。同源码多seed共用commit，以配置区分。

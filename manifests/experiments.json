@@ -1,5 +1,7 @@
 {
   "schema_version": 1,
+  "research_integration_index": "manifests/research_stack_20261117.json",
+  "research_integration_notes": "docs/RESEARCH_STACK.md",
   "as_of": "2026-10-16",
   "repository": "https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone",
   "report_root_relative_to_project": "workspace_management/delivery/experiments/localization-distribution",

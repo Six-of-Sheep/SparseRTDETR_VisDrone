@@ -48,6 +48,14 @@ def test_seed_table_is_complete_and_seed_specific():
 
 def test_head_initialisation_stays_seed0():
     assert Q.INIT_SEED == 0 == A.HEAD_INIT_SEED
+    # Frozen Linux initialization is a byte identity, not a cross-platform RNG
+    # promise. Windows torch 2.8 CPU differs; the production guard must reject it.
+    if sys.platform == "win32":
+        actual = Q.head_digest(Q.new_head(Q.initial_state()))
+        if actual != A.HEAD_INIT_SHA:
+            with pytest.raises(ValueError, match="head"):
+                A.verify_head_init()
+            return
     assert A.verify_head_init() == A.HEAD_INIT_SHA
     state = {k: v.clone() for k, v in Q.initial_state().items()}
     state["fc1.weight"][0, 0] += 1e-3

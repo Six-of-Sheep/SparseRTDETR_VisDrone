@@ -159,7 +159,7 @@ def source_manifest(root):
     files = {}
     for p in sorted(Path(root).rglob("*")):
         if p.is_file() and "__pycache__" not in p.parts and ".pytest_cache" not in p.parts:
-            files[str(p.relative_to(root))] = file_sha(p)
+            files[p.relative_to(root).as_posix()] = file_sha(p)
     return files
 
 

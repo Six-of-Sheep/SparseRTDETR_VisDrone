@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-11-17",
+  "kind": "navigation_only_not_launch_binding",
+  "scientific_verdicts": "unchanged; consult original reports",
+  "integration_base_commit": "e1c904f21ad08607871db401be90e2eff47c0465",
+  "release_overlay_dependency": {
+    "pr": 5,
+    "commit": "57ae4d1990ef059818825e6d8813435b04046505",
+    "scope": "older training/inference/ROI release overlays; not standalone imports"
+  },
+  "batches": [
+    {"pr": 35, "boundary_commit": "24ce30d3f74ca7c2b245bd7c29857163aa2e56ed", "scope": "r10-r19"},
+    {"pr": 36, "boundary_commit": "bae49a84cb18da860be835a8915f0bc2dbe7bcee", "scope": "r20-r24"},
+    {"pr": 37, "boundary_commit": "407f6816d09371de3e484088fa722a3c80ee7dd4", "scope": "R25/S15/MIX/SQC"},
+    {"pr": 38, "boundary_commit": "fac5f79dcec7f649a18392f29d3109a3db23f998", "scope": "R27/L0"},
+    {"pr": 34, "boundary_commit": "e1c904f21ad08607871db401be90e2eff47c0465", "scope": "R28"}
+  ],
+  "report_root_relative_to_project": "workspace_management/delivery/research",
+  "entries": [
+    {"id": "r10-r24", "code_root": "tools", "report": "r18-explore-20261031-001/EXPLORATION_R1.md", "layout": "release overlays and standalone tools; see per-directory README where present"},
+    {"id": "R25", "code_root": "tools/query_local", "report": "r25-query-local-regression-20261104-001/REPORT_R25_002.md"},
+    {"id": "S15", "code_root": "tools/scale_baseline", "report": "s15-scale-baseline-20261105-001/REPORT_S15_EXECUTE_001.md", "replication_report": "s15-scale-baseline-20261105-001/REPORT_S15_SEED12_REPLICATION_001.md"},
+    {"id": "MIX", "code_root": "tools/scale_baseline", "report": "mix-scale-baseline-20261108-001/REPORT_MIX_SCALE_001.md"},
+    {"id": "SQC", "code_root": "tools/scale_baseline", "report": "query-scale-classification-20261109-001/REPORT_SHARED_QUERY_CLASSIFICATION_001.md", "replication_report": "query-scale-classification-20261109-001/REPORT_SQC_SEED12_REPLICATION_002.md"},
+    {"id": "R27", "code_root": "tools/r27", "report": "r27-budgeted-local-memory-20261109-001/REPORT_R27_001.md"},
+    {"id": "L0", "code_root": "tools/r27_l0", "report": "r27-budgeted-local-memory-20261109-001/l0-control-002/REPORT_R27_L0_CONTROL_002.md"},
+    {"id": "R28", "code_root": "tools/r28", "report": "r28-budgeted-resampling-20261112-001/REPORT_R28_001.md", "strong_control_report": "r28-budgeted-resampling-20261112-001/strong-f-control-009/REPORT_R28_STRONG_F_CONTROL_009.md"}
+  ],
+  "excluded_branches": ["claude/r26-constrained-detail", "claude/r29-query-unzoom"]
+}
