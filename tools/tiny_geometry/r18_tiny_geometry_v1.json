@@ -1,0 +1,96 @@
+{
+  "version": "r18-tiny-geometry-v1",
+  "revision": "two-arm final authorization revision (2026-11-01): A1 removed from formal training and GPU (code and CPU evidence retained); formal comparison A0 vs A2; scoring 4 calls; acceptance one launch at most 3 updates (A0/A2/empty); storage declaration includes the preparation cost already incurred",
+  "positioning": "practical initial screening of an NWD-style in-band regression replacement; no originality claim",
+  "arms": ["A0", "A2"],
+  "updates_per_arm": 3648,
+  "GPU_authorized": false,
+  "parent": {
+    "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757"
+  },
+  "arm_install": {"A0": null, "A2": null},
+  "geo_install": {"A0": null, "A2": "A2"},
+  "retained_control": {"A1": "cyclic-shift control retained as code and CPU evidence only; not trained on GPU in this round"},
+  "tiny_geometry": {
+    "objective": "tiny_band_normalized_wasserstein_geometry_v1",
+    "canvas_hw": [768, 1344],
+    "band_area_px": 1024.0,
+    "band_area_threshold": 0.000992063492063492,
+    "constant_C": 0.005500852969014606,
+    "w2_floor": 1e-12,
+    "constants_sha256": "9be3b82ba3c12b3029314067e4329a40a52e80f526ab19252a09a843cd0c8edc",
+    "calibration": "pre-registered median-parity rule on the fixed 16 train-side images (pass-1 windows 0..1, seed0, parent state, eval-mode CPU-FP32 forward) via tools/geometry_probe.py; constant_C and constants_sha256 are filled once and never tuned"
+  },
+  "checkpoint_passes": [0, 6, 12],
+  "ema_r": {"updates_start": 0, "decay": 0.9999, "warmups": 2000},
+  "ema_c": {"updates_start": 36480, "decay": 0.9999, "warmups": 2000},
+  "endpoint": {
+    "primary": "FT012_EMA_C",
+    "view": "A",
+    "batch_size": 4,
+    "images": 548,
+    "budgets": [600, 300],
+    "note": "unchanged fixed endpoint and scoring policy; no selection, no tuning"
+  },
+  "acceptance": {
+    "updates": 3,
+    "cases": ["A0", "A2", "empty"],
+    "note": "one launch, at most 3 unique optimizer updates in total; stop on anomaly; the acceptance state is not usable for the formal training"
+  },
+  "gates": {
+    "units": "differences in percentage points (100 x (lhs - rhs))",
+    "A2_minus_A0": {
+      "lhs": "A2", "rhs": "A0",
+      "meaning": "single-seed net benefit of the tiny-band geometry arm against the native arm at the fixed starting point and short schedule",
+      "conditions": [
+        {"metric": "APS", "budget": 600, "op": ">=", "threshold": 0.50},
+        {"metric": "AP75_small", "budget": 600, "op": ">=", "threshold": 0.30},
+        {"metric": "AP", "budget": 600, "op": ">=", "threshold": -0.10},
+        {"metric": "AP", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APS", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APM", "budget": 600, "op": ">=", "threshold": -0.50},
+        {"metric": "APL", "budget": 600, "op": ">=", "threshold": -0.50}
+      ]
+    },
+    "combination": {
+      "pass": "single_seed_preliminary_net_benefit",
+      "fail": "closed_fixed_config",
+      "note": "single seed only; no multi-seed, no follow-on round, no metric-level selection, and no originality claim from a pass; the mechanism-increment gate is not evaluated because the retained cyclic-shift control is not trained"
+    }
+  },
+  "frozen_science": {
+    "mechanism": "matched-pair geo slot replaced inside the tiny band only: 1-giou -> 1-exp(-sqrt(W2)/C); loss_bbox/L1, VFL, matcher, DN families, weights and normalization unchanged; zero parameters and zero new loss keys",
+    "control": "A1 (identical formula with the tiny targets cyclically shifted inside the criterion call) is retained as code and CPU-fixture evidence only; it is not trained on GPU in this round, so no A2-A1 increment is measured",
+    "band": "raw canvas area <= 1024 px^2 on the 768x1344 canvas (normalized area <= 1024/1032192); note this canvas-area band is different from the original-image-area APS grouping",
+    "constant_C": "filled by the pre-registered median-parity calibration once, then frozen",
+    "training_budget": "3,648 updates per arm, two arms (A0 native, A2 method), fixed endpoint FT012 EMA-C, no selection and no tuning"
+  },
+  "budget": {
+    "gpu_hours": 8.0,
+    "wall_hours": 24,
+    "server_new_bytes": 25769803776,
+    "return_bytes": 1048576,
+    "planned_updates": {"acceptance": 3, "formal_total": 7296, "grand_total": 7299},
+    "planned_batch_forwards": {"training": 14592, "acceptance": 6, "inference": 310, "total": 14908},
+    "storage_declaration": {
+      "declared_total_bytes": 25769803776,
+      "preparation_incurred_measured_bytes": 11010771367,
+      "preparation_measured_note": "du -sb of the round directory on 2026-11-01 before the revision writes; every preparation material is retained",
+      "items_cap_bytes": {
+        "preparation_incurred_measured": 11010771367,
+        "release_010_tree_and_tar": 30000000,
+        "cpu_fixture_005_chain": 1700000000,
+        "formal_update_audits": 5400000000,
+        "formal_checkpoints_two_arms": 2300000000,
+        "gpu_acceptance_snapshots_and_c1_a2": 1500000000,
+        "endpoint_ema_files": 400000000,
+        "runtime_logs_predictions_plans_receipts": 1000000000,
+        "failure_scene_reserve_unused_zero": 1800000000
+      },
+      "write_time_check": "df -B1 available 1164416794624 bytes on /media/lyy/Data before the revision writes",
+      "note": "whole-round declaration including the preparation cost already incurred; nothing is deleted; the sum of item caps stays under the declared total"
+    },
+    "no_vram_quota": true,
+    "record_peak_memory": true
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "version": "r18-selection-rank-v1",
+  "arms": ["A0", "A1", "A2"],
+  "updates_per_arm": 3648,
+  "GPU_authorized": false,
+  "parent": {
+    "checkpoint_sha256": "13a35283a02d2b728e3449917586ded5cdf2d578ebe6847510748e0dc4d21757"
+  },
+  "arm_install": {"A0": null, "A1": null, "A2": null},
+  "ranking_install": {"A0": null, "A1": "A1", "A2": "A2"},
+  "checkpoint_passes": [0, 6, 12],
+  "ema_r": {"updates_start": 0, "decay": 0.9999, "warmups": 2000},
+  "ema_c": {"updates_start": 36480, "decay": 0.9999, "warmups": 2000},
+  "endpoint": {
+    "primary": "FT012_EMA_C",
+    "view": "A",
+    "batch_size": 4,
+    "images": 548,
+    "budgets": [600, 300],
+    "note": "unchanged fixed endpoint and scoring policy; no selection, no tuning"
+  },
+  "acceptance": {
+    "updates": 3,
+    "cases": ["A1", "A2", "empty"],
+    "note": "engine acceptance only; its state is not usable for the formal training"
+  },
+  "gates": {
+    "units": "differences in percentage points (100 x (lhs - rhs))",
+    "A2_minus_A0": {
+      "lhs": "A2", "rhs": "A0",
+      "meaning": "overall net benefit of the method arm against the native arm",
+      "conditions": [
+        {"metric": "APS", "budget": 600, "op": ">=", "threshold": 0.50},
+        {"metric": "AP75_small", "budget": 600, "op": ">=", "threshold": 0.30},
+        {"metric": "AP", "budget": 600, "op": ">=", "threshold": -0.10},
+        {"metric": "AP", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APS", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APM", "budget": 600, "op": ">=", "threshold": -0.50},
+        {"metric": "APL", "budget": 600, "op": ">=", "threshold": -0.50}
+      ]
+    },
+    "A2_minus_A1": {
+      "lhs": "A2", "rhs": "A1",
+      "meaning": "increment from always selecting the best eligible partner instead of a random one",
+      "conditions": [
+        {"metric": "APS", "budget": 600, "op": ">=", "threshold": 0.30},
+        {"metric": "AP75_small", "budget": 600, "op": ">=", "threshold": 0.20},
+        {"metric": "AP", "budget": 600, "op": ">=", "threshold": -0.10},
+        {"metric": "AP", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APS", "budget": 300, "op": ">=", "threshold": -0.20},
+        {"metric": "APM", "budget": 600, "op": ">=", "threshold": -0.50},
+        {"metric": "APL", "budget": 600, "op": ">=", "threshold": -0.50}
+      ]
+    },
+    "combination": {
+      "both": "initial_positive",
+      "net_only": "ranking_pressure_only",
+      "net_fail": "closed_fixed_config",
+      "note": "no multi-seed, no follow-on round, and no metric-level selection is started automatically"
+    }
+  },
+  "frozen_science": {
+    "thresholds": "unchanged from the record (B=0.7, q_floor=0.25, q_margin=0.10, tau=0.10, alpha=4.0, m0=1.0, s_ref=0.05, clamp 0.5..2.0)",
+    "loss_weight": "loss_rank weight 1.0, final family only, after the native losses, 1/N normalization",
+    "pairing": "unchanged (quality direction, coverage, neighbour protection, exclusivity, one pair per instance, empty allowed)",
+    "training_budget": "3,648 updates per arm, three arms, fixed endpoint FT012 EMA-C, no selection and no tuning"
+  },
+  "budget": {
+    "gpu_hours": 12.0,
+    "wall_hours": 72,
+    "server_new_bytes": 21474836480,
+    "return_bytes": 1048576,
+    "planned_updates": {"acceptance": 3, "formal_total": 10944, "grand_total": 10947},
+    "planned_batch_forwards": {"training": 21888, "acceptance": 6, "inference": 465, "total": 22359},
+    "no_vram_quota": true,
+    "record_peak_memory": true
+  }
+}
