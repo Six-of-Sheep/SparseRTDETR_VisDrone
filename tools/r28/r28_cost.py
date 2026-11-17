@@ -6,7 +6,10 @@ precost(c, out, counts)  before the formal W run: L0 (its e120 EMA) against Wpre
                          the ratio measures the added demand network, allocation, resampling and inverse mapping.
 cost(c, out, counts)     fixed endpoints: A0, L0, W, S15 (arm W), L0, W, K (arm K, <round>/cost-K), L0, W, F (arm F,
                          <round>/cost-F), L0, K, F, FS, W (arm FS, <round>/cost-FS; K and F are the stored endpoints
-                         of their rounds) or L0, K, F, FG, W (arm FG, <round>/cost-FG, the same way).
+                         of their rounds), L0, K, F, FG, W (arm FG, <round>/cost-FG, the same way) or FG, QC, QP
+                         (TASK_R29_001, <round>/cost-R29: N is the stored arm FG endpoint; the stage readings also
+                         split off the decoder read = the three cross-attention calls, and the GPU must hold no
+                         other compute process before and after the timing).
 The timed interval of every endpoint is the whole model call; for W / K / F it contains the demand source, the
 allocation or map, the resampling and the inverse mapping.  No annotation is parsed while timing.
 
@@ -26,16 +29,17 @@ import r28_common as K
 import l0_cost as LC
 
 IMAGES = K.COST_BATCH * K.COST_BATCHES_PER_PASS
-CANVAS = {"A0": "L", "L0": "H", "S15": "H", "W": "H", "K": "H", "Wpre": "H", "F": "H", "FS": "H", "FG": "H"}
+CANVAS = {"A0": "L", "L0": "H", "S15": "H", "W": "H", "K": "H", "Wpre": "H", "F": "H", "FS": "H", "FG": "H", "QP": "H", "QC": "H"}
 SUMS = LC.SUMS
 STAGES = ("demand", "map", "render", "detector", "unwarp", "other")
+READ_STAGES = ("demand", "map", "render", "detector", "read", "unwarp", "other")   # R29 timing: the decoder read apart
 
 
 class Probe:
     """CUDA events at the stage boundaries of one model call.  mark(name) closes the stage `name`."""
 
-    def __init__(self, torch):
-        self.torch, self.marks = torch, []
+    def __init__(self, torch, names=STAGES):
+        self.torch, self.marks, self.names = torch, [], tuple(names)
 
     def mark(self, name):
         ev = self.torch.cuda.Event(enable_timing=True)
@@ -49,7 +53,7 @@ class Probe:
     def stages(self, total_ms):
         """Milliseconds per stage of the last call (read after the device has finished); `other` is the remainder of
         the timed model interval."""
-        out = dict.fromkeys(STAGES, 0.0)
+        out = dict.fromkeys(self.names, 0.0)
         for (_, a), (name, b) in zip(self.marks, self.marks[1:]):
             out[name] += a.elapsed_time(b)
         out["other"] = total_ms - sum(v for k, v in out.items() if k != "other")
@@ -64,7 +68,8 @@ def instrument(models, probe):
     from sparse_rtdetr.research import r28_fovea_geo as FG
     from sparse_rtdetr.research import r28_resample as R
     from sparse_rtdetr.research import r28_warp as W
-    undo = []
+    from sparse_rtdetr.research import r29_unzoom as UZ
+    undo, handles = [], []
 
     def after(owner, name, stage, before=None):
         original = getattr(owner, name)
@@ -82,10 +87,18 @@ def instrument(models, probe):
 
     kinds = {}
     for arm, m in models.items():
-        if FV.is_wrapped(m) or FS.is_wrapped(m) or FG.is_wrapped(m):
+        if FV.is_wrapped(m) or FS.is_wrapped(m) or FG.is_wrapped(m) or UZ.is_wrapped(m):
             vars(m.r28_ctx)["probe"] = probe.mark
             undo.append((m.r28_ctx, "probe", None, False))
-            kinds[arm] = "own marks of r28_fovea._forward" if FV.is_wrapped(m) else "own marks of r28_fovea_cal._forward"
+            kinds[arm] = ("own marks of r28_fovea._forward" if FV.is_wrapped(m) else "own marks of r29_unzoom._forward"
+                          if UZ.is_wrapped(m) else "own marks of r28_fovea_cal._forward")
+            if "read" in probe.names:
+                # the decoder read of N, C and P alike: the interval of each of the three cross-attention calls
+                # (value projection, offset / weight heads, sampling, output projection); the hooks only record events
+                for layer in m.decoder.decoder.layers:
+                    handles.append(layer.cross_attn.register_forward_pre_hook(lambda *_: probe.mark("detector")))
+                    handles.append(layer.cross_attn.register_forward_hook(lambda *_: probe.mark("read")))
+                kinds[arm] += "; read = hooks around the three decoder cross-attention calls"
         elif R.is_wrapped(m):
             after(m.r28_ctx, "demand", "demand")
             after(m.r28_ctx, "plan", "map")
@@ -101,6 +114,8 @@ def instrument(models, probe):
         after(L0, "to_low", "render")
 
     def remove():
+        for handle in handles:
+            handle.remove()
         for owner, name, original, had in reversed(undo):
             if had:
                 setattr(owner, name, original)
@@ -152,7 +167,7 @@ def load_wpre(c, torch):
                    "input": "H 1152x2016; final demand network, allocation, resampling and inverse mapping inside the model"}
 
 
-def stage_table(passes, endpoints, images):
+def stage_table(passes, endpoints, images, names=STAGES):
     """Per endpoint: the median over the passes of each stage's pass total (ms), its share of the model GPU time of
     the same pass set, and the per-image value.  Endpoints without stage readings are left out."""
     out = {}
@@ -160,7 +175,7 @@ def stage_table(passes, endpoints, images):
         ps = [p for p in passes if p["endpoint"] == a and p.get("stage_ms_total") is not None]
         if not ps:
             continue
-        med = {s: statistics.median(p["stage_ms_total"][s] for p in ps) for s in STAGES}
+        med = {s: statistics.median(p["stage_ms_total"][s] for p in ps) for s in names}
         total = statistics.median(p["model_gpu_ms_total"] for p in ps)
         out[a] = {"stage_ms_median_pass": med, "per_image_ms": {s: v / images for s, v in med.items()},
                   "share_of_model_gpu": {s: v / total for s, v in med.items()},
@@ -190,9 +205,11 @@ def aggregate(passes, endpoints, rotations):
     return med, total, per_pass
 
 
-def timing(c, counts, models, endpoints, rotations, *, warmup=K.COST_WARMUP, batches_per_pass=K.COST_BATCHES_PER_PASS, stages=False):
+def timing(c, counts, models, endpoints, rotations, *, warmup=K.COST_WARMUP, batches_per_pass=K.COST_BATCHES_PER_PASS, stages=False,
+           names=STAGES):
     """warmup / batches_per_pass / the number of rotations are the fixed protocol unless a wiring check shortens them
-    (its readings are not a cost result).  stages=True adds the stage readings to every timed call."""
+    (its readings are not a cost result).  stages=True adds the stage readings to every timed call; names=READ_STAGES
+    also splits the decoder read off the detector interval."""
     from sparse_rtdetr.research import scale_baseline as S
     from sparse_rtdetr.research import shared_query_cls as Q
     import sparse_rtdetr.localization.data as LD
@@ -211,7 +228,7 @@ def timing(c, counts, models, endpoints, rotations, *, warmup=K.COST_WARMUP, bat
     per_endpoint = warmup + len(rotations) * batches_per_pass
     K.require(not fixed or per_endpoint == K.COST_PER_ENDPOINT, "fixed cost protocol count")
     done = Counter()
-    probe = Probe(torch) if stages else None
+    probe = Probe(torch, names) if stages else None
     kinds, remove = instrument(models, probe) if stages else ({}, lambda: None)
 
     def run(arm, idx):
@@ -259,7 +276,7 @@ def timing(c, counts, models, endpoints, rotations, *, warmup=K.COST_WARMUP, bat
                 torch.cuda.synchronize(); torch.cuda.reset_peak_memory_stats()
                 recs = [run(arm, b) for b in batches]
                 passes.append({"pass": p, "endpoint": arm, "canvas": CANVAS[arm], "batches": recs, **LC.pass_totals(recs),
-                               "stage_ms_total": ({s: sum(r["stage_ms"][s] for r in recs) for s in STAGES}
+                               "stage_ms_total": ({s: sum(r["stage_ms"][s] for r in recs) for s in names}
                                                   if all("stage_ms" in r for r in recs) else None),
                                "peak_allocated": torch.cuda.max_memory_allocated()})
     finally:
@@ -276,7 +293,7 @@ def timing(c, counts, models, endpoints, rotations, *, warmup=K.COST_WARMUP, bat
            "order_executed": [list(r) for r in rotations], "forwards_per_endpoint": dict(done),
            "annotation_parse_during_timing": "refused (LD.parse_raw replaced); none occurred"}
     if stages:
-        res["stages"] = {"names": list(STAGES), "boundaries": kinds, "table": stage_table(passes, endpoints, images),
+        res["stages"] = {"names": list(names), "boundaries": kinds, "table": stage_table(passes, endpoints, images, names),
                          "note": "CUDA event intervals inside the timed model call; `other` is the remainder of the model GPU "
                                  "time (for arm W the detector interval also contains nothing else; for L0 the detector is the "
                                  "call after to_low); demand of W / F includes the 384x672 reduction and the device-to-host copy "
@@ -321,11 +338,19 @@ def precost(c, out, counts):
 
 def cost(c, out, counts):
     arm = K.ARM
-    name = {"W": "cost", "K": "cost-K", "F": "cost-F", "FS": "cost-FS", "FG": "cost-FG"}[arm]
+    name = {"W": "cost", "K": "cost-K", "F": "cost-F", "FS": "cost-FS", "FG": "cost-FG", "QP": "cost-R29", "QC": "cost-R29"}[arm]
     K.require(Path(out).resolve() == (K.ROUND / name).resolve(), f"this action writes <round>/{name}")
+    K.require((name == "cost-R29") == K.r29(c), "cost-R29 is the timing stage of the R29 round, and its only one")
     torch = K.torch_mod()
     endpoints = K.COST_ENDPOINTS[name]
     loaders = {a: (lambda a=a: load_arm(c, a, torch) if a in K.ARMS else load_reference(c, a, torch)) for a in endpoints}
-    res = _run(c, counts, loaders, endpoints, K.COST_ROTATIONS[name], **({"stages": True} if arm in ("F", "FS", "FG") else {}))
+    if name == "cost-R29":
+        import r29_control as RC
+        before = RC.exclusive_gpu("before the timing")
+        res = _run(c, counts, loaders, endpoints, K.COST_ROTATIONS[name], stages=True, names=READ_STAGES)
+        res["exclusive_gpu"] = {"before": before, "after": RC.exclusive_gpu("after the timing"),
+                                "rule": "no compute process other than this one on the GPU before and after the timing"}
+    else:
+        res = _run(c, counts, loaders, endpoints, K.COST_ROTATIONS[name], **({"stages": True} if arm in ("F", "FS", "FG") else {}))
     K.require(counts["forwards"] == len(endpoints) * K.COST_PER_ENDPOINT, f"cost forwards {dict(counts)}")
     return {"label": f"fixed-endpoint joint timing ({', '.join(endpoints)})", **res}
