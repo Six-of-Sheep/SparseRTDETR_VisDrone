@@ -439,6 +439,29 @@ def test_identity_image_of_a_mixed_batch_reads_natively(mode):
     sink = []
     again = run_read(mode, plan, value, SHAPES, ref, off, aw, audit=sink)
     assert torch.equal(again, got) and sink[0]["identity_images"] == 1 and sink[0]["normal"]["queries"] == 6
+    kinds = sink[0]["dtypes"]
+    assert kinds["geometry"] == "torch.float64" and kinds["sampling_positions"] == kinds["native_positions"] == "torch.float32"
+    assert kinds["rebuilt_value"] == (None if mode == "direct" else "torch.float32") and kinds["autocast"] is None
+
+
+@pytest.mark.parametrize("arm", ["QP", "QC"])
+def test_mixed_identity_batch_through_the_model(built, arm):
+    """One image with a constant demand map next to a warped one: the identity image is read natively inside the model."""
+    x = images(3)
+    src = {"kind": "synthetic", "seed": 6}
+    model, fg = wrapped(built, src, arm), wrapped_fg(built, src)
+    d = model.r28_ctx.demand(x).clone()
+    d[1] = 0.0
+    for m in (model, fg):
+        vars(m.r28_ctx)["demand"] = lambda _x, d=d: d.clone()
+    assert FG.plan_from_demand(d).identity.tolist() == [False, True]
+    sink = vars(model.r28_ctx)["r29_audit"] = []
+    with torch.no_grad():
+        a, n = model(x), fg(x)
+    assert not installed(model) and sink[0]["identity_batch"] is False and [layer["identity_images"] for layer in sink[0]["layers"]] == [1, 1, 1]
+    assert torch.equal(a["pred_logits"][1], n["pred_logits"][1]) and torch.equal(a["pred_boxes"][1], n["pred_boxes"][1])
+    assert float((a["pred_logits"][0] - n["pred_logits"][0]).abs().max()) > 1e-4
+    assert all(layer["normal"]["queries"] == model.decoder.num_queries for layer in sink[0]["layers"])     # readings over the warped image only
 
 
 # ---------------------------------------------------------------- synthetic detector
@@ -711,6 +734,7 @@ def test_training_forward_audit_and_gradients(built, arm):
     assert not installed(model)
     for layer in rec["layers"]:
         assert layer["location_gradient"]["finite"] is True and layer["location_gradient"]["abs_max"] > 0
+        assert layer["dtypes"]["geometry"] == "torch.float64" and layer["dtypes"]["sampling_positions"] == "torch.float32"
     for layer in model.decoder.decoder.layers:
         ca = layer.cross_attn
         for p in (ca.sampling_offsets.bias, ca.value_proj.weight, ca.attention_weights.weight, ca.output_proj.weight):

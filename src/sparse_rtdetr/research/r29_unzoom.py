@@ -251,6 +251,12 @@ def read(attn, reader, index, query_dtype, value, shapes, reference_points, samp
         out = core(u, shapes, locations, attention_weights, points)
     if audit:
         rec = audit_layer(attn, reader, index, value, u, shapes, reference_points, p_o, p_w, native, attention_weights)
+        device_type = value.device.type
+        rec["dtypes"] = {"autocast": str(torch.get_autocast_dtype(device_type)) if torch.is_autocast_enabled(device_type) else None,
+                         "query": str(query_dtype), "reference": str(reference_points.dtype), "sampling_offsets": str(sampling_offsets.dtype),
+                         "attention_weights": str(attention_weights.dtype), "value": str(value.dtype), "geometry": str(p_o.dtype),
+                         "native_positions": str(native.dtype), "sampling_positions": str(locations.dtype),
+                         "rebuilt_value": None if mode != "dense" else str(u.dtype), "read_output": str(out.dtype)}
         if locations.requires_grad:
             def grad_record(g, rec=rec):
                 rec["location_gradient"] = {"finite": bool(torch.isfinite(g).all()), "abs_max": float(g.abs().max()),

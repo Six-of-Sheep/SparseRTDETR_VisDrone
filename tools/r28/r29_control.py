@@ -706,6 +706,12 @@ def _displacement(audit, key="max"):
     return max(vals) if vals else 0.0
 
 
+def _dtypes(audits):
+    """The distinct dtype records of the audited reads (one per arm is expected)."""
+    seen = {json.dumps(layer["dtypes"], sort_keys=True) for a in audits for fwd in a["forwards"] for layer in fwd["layers"]}
+    return [json.loads(s) for s in sorted(seen)]
+
+
 def _read_summary(audits):
     """Compact per-layer means over the audited acceptance forwards (ordinary / dn apart); a description, not a gate."""
     out = {}
@@ -883,6 +889,7 @@ def r29_accept(c, out, counts):
                    and full[0]["result"]["microbatch_losses"] != stored[0]["result"]["microbatch_losses"])
         active[arm] = bool(moved > 0 and differs)
         reads[arm] = {"max_displacement_feature_px_first_update": moved, "first_update_outputs_differ_from_N": differs,
+                      "dtypes": _dtypes([r["r29"] for r in full + resumed]),
                       "summary_over_the_acceptance_forwards": _read_summary([r["r29"] for r in full])}
         first_loss[arm] = [r["result"]["loss"] for r in full]
     cross = sci(paths["QP-full"])[0]["result"]["output_sha256"] != sci(paths["QC-full"])[0]["result"]["output_sha256"]
@@ -913,6 +920,13 @@ def r29_accept(c, out, counts):
     K.require(all(plan_equal.values()), f"input / plan readings differ from the arm FG receipts: {plan_equal}")
     K.require(all(active.values()) and cross,
               f"the read of an arm did not act (read_active {active}, QP and QC outputs differ {cross}): check the wiring before any formal run")
+    # task section 2.4: geometry FP64, sampling coordinates FP32, one dtype pattern per arm, the same in both arms up to the rebuilt memory
+    kinds = {a: reads[a]["dtypes"] for a in ARMS}
+    K.require(all(len(v) == 1 and v[0]["geometry"] == "torch.float64" and v[0]["sampling_positions"] == v[0]["native_positions"] == "torch.float32"
+                  and v[0]["autocast"] == "torch.bfloat16" for v in kinds.values())
+              and kinds["QC"][0]["rebuilt_value"] == "torch.float32" and kinds["QP"][0]["rebuilt_value"] is None
+              and {k: v for k, v in kinds["QP"][0].items() if k != "rebuilt_value"} == {k: v for k, v in kinds["QC"][0].items() if k != "rebuilt_value"},
+              f"dtypes of the read: {kinds}")
     eng = lambda rows: [{"update": r["science"]["input"]["update"], **{k: r["engineering"].get(k) for k in ("cycle_s", "wait_s", "train_call_s", "train_s", "save_s")}}
                         for r in rows]
     timing = {"schema": "r29-acceptance-timing-v1", "contract_sha256": c["contract_sha256"], "per_update": {n: eng(r) for n, r in paths.items()},
@@ -924,7 +938,8 @@ def r29_accept(c, out, counts):
     return {"stage": "accept-R29", "workload": c["workload"]["accept"], "N_equal_to_the_FG_receipts": True,
             "restore_replay_equal": {a: True for a in ARMS}, "read_active": active, "overlap_enabled": {a: True for a in ARMS},
             "formal_training_allowed": True, "equivalence": K.ref(out / "ACCEPT_EQUIVALENCE.json"), "timing": K.ref(out / "ACCEPT_TIMING.json"),
-            "read_readings": K.ref(out / "READ_READINGS.json"), "saved_states": {a: info[f"{a}-full"]["saved"] for a in ARMS},
+            "read_readings": K.ref(out / "READ_READINGS.json"), "read_dtypes": {a: kinds[a][0] for a in ARMS},
+            "saved_states": {a: info[f"{a}-full"]["saved"] for a in ARMS},
             "updates": want, "complete_detector_forwards": 2 * want, "refused": refusals,
             "max_displacement_feature_px_first_update": {a: reads[a]["max_displacement_feature_px_first_update"] for a in ARMS},
             "peak_allocated_bytes": {n: info[n]["peak_cuda_allocated_bytes"] for n in info}, "formal_state_usable": False}
@@ -1053,8 +1068,8 @@ def summarize(c, out, counts):
         d = K.formal_dir(c, a)
         closed = K.read_json(d / "CLOSED.json")
         K.require(closed["plan"]["mapping"] == ev[a]["mapping"] and closed["plan"]["read_mode"] == UZ.READ[a]
-                  and closed["rows_equal_to_the_arm_FG_ledger"] + closed["ledger_rows_copied_on_resume"] == K.ENDPOINT - K.PARENT_UPDATE
-                  or closed["resumed"], f"formal run of arm {a}")
+                  and closed["rows_equal_to_the_arm_FG_ledger"] + closed["ledger_rows_copied_on_resume"] == K.ENDPOINT - K.PARENT_UPDATE,
+                  f"formal run of arm {a}: mapping / read mode / rows compared with the arm FG ledger")
         formal[SHORT[a]] = {"directory": d.name, "resumed": closed["resumed"], "updates": closed["updates"], "input_pipeline": closed["plan"]["input_pipeline"],
                             "loop_wall_seconds": closed["loop_wall_seconds"], "update_seconds_sum": closed["update_seconds_sum"],
                             "seconds_per_update": closed["loop_wall_seconds"] / closed["updates"], "peak_cuda_bytes": closed["peak_cuda_bytes"],

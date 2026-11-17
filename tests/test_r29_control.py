@@ -271,6 +271,8 @@ def test_read_readings_fold(mode):
     row = RC.audit_row([fwd, fwd])
     assert all(layer["dn_queries"] == 2 and layer["dn"]["queries"] == 4 and layer["normal"]["queries"] == 10 for layer in fwd["layers"])
     assert RC._displacement(row) > 0 and RC._displacement(row, "mean") > 0
+    (kinds,) = RC._dtypes([row, row])
+    assert kinds["geometry"] == "torch.float64" and kinds["sampling_positions"] == "torch.float32" and kinds["autocast"] is None
     s = RC._read_summary([row, row])
     assert set(s) == {"normal", "dn"} and set(s["normal"]) == {"0", "1", "2"}
     one = s["dn"]["1"]
