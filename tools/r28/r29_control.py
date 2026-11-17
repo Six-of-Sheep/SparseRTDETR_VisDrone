@@ -429,14 +429,21 @@ def prepare(_args=None):
                        "statements": STATEMENTS, **host_refs})
     # the science of this contract is the science of release-001: every key outside the named engineering keys is equal
     fu, fuh = c["followup"], ch["followup"]
-    K.require(set(c) == set(ch) and all(c[k] == ch[k] for k in ch if k not in HOST_CONTRACT_DIFFERENT)
-              and set(fu) == set(fuh) | set(host_refs) and all(fu[k] == fuh[k] for k in fuh if k not in HOST_FOLLOWUP_DIFFERENT)
-              and all(fu[k]["sha256"] == fuh[k]["sha256"] for k in ("task", "decision"))
-              and fu["function_edits"] == fuh["function_edits"]
-              and {k: v for k, v in c["input_pipeline"].items() if k != "r29_window_delivery"} == ch["input_pipeline"]
-              and {k: v for k, v in c["resource_plan"].items() if k != "disk_free_bytes_at_prepare"}
-              == {k: v for k, v in ch["resource_plan"].items() if k != "disk_free_bytes_at_prepare"},
-              "the contract differs from the contract of release-001 outside the window delivery")
+    differs = {
+        "contract_keys": sorted(set(c) ^ set(ch)),
+        "contract_values": sorted(k for k in ch if k in c and k not in HOST_CONTRACT_DIFFERENT and c[k] != ch[k]),
+        "followup_keys": sorted(set(fu) ^ (set(fuh) | set(host_refs))),
+        "followup_values": sorted(k for k in fuh if k in fu and k not in HOST_FOLLOWUP_DIFFERENT and fu[k] != fuh[k]),
+        "task_decision_sha": [k for k in ("task", "decision") if fu[k]["sha256"] != fuh[k]["sha256"]],
+        "function_edits": sorted(k for k in set(fu["function_edits"]) | set(fuh["function_edits"])
+                                 if fu["function_edits"].get(k) != fuh["function_edits"].get(k)),
+        "input_pipeline": sorted(k for k in set(c["input_pipeline"]) | set(ch["input_pipeline"])
+                                 if k != "r29_window_delivery" and c["input_pipeline"].get(k) != ch["input_pipeline"].get(k)),
+        "resource_plan": sorted(k for k in set(c["resource_plan"]) | set(ch["resource_plan"])
+                                if k != "disk_free_bytes_at_prepare" and c["resource_plan"].get(k) != ch["resource_plan"].get(k)),
+    }
+    K.require(not any(differs.values()),
+              f"the contract differs from the contract of release-001 outside the window delivery: { {k: v for k, v in differs.items() if v} }")
     c["followup"]["host_contract_equal"] = {
         "equal_keys": sorted(k for k in ch if k not in HOST_CONTRACT_DIFFERENT),
         "different_keys": {"version": "contract version", "source_root / source_manifest / source_commit / source_dirty": "the release",
