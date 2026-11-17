@@ -28,6 +28,9 @@
                                      timing; two evaluation batches of the stored N endpoint against its stored
                                      predictions; joint acceptance N 2 / C 4 + 2 / P 4 + 2 updates)
 
+  r29-pipe                        -> r29_input            (CUDA, dev rounds only, run by hand: timing of the window delivery
+                                     modes on the real QP / QC loop; not in the chain)
+
 Every stage function returns a dict that is merged into <out>/CLOSED.json; an exception writes <out>/STOP.json and
 is re-raised.
 """
@@ -53,7 +56,8 @@ DISPATCH = {"cpu": "r28_checks", "zero": "r28_checks", "accept": "r28_checks", "
             "cal-wire": "r28_cal_control", "pipeline": "r28_cal_control",
             "geo-check": "r28_geo_control", "geo-confirm": "r28_geo_control", "geo-wire": "r28_geo_control",
             "geo-accept": "r28_geo_control", "ledger-means": "r28_geo_control",
-            "r29-check": "r29_control", "r29-wire": "r29_control", "r29-ncheck": "r29_control", "r29-accept": "r29_control"}
+            "r29-check": "r29_control", "r29-wire": "r29_control", "r29-ncheck": "r29_control", "r29-accept": "r29_control",
+            "r29-pipe": "r29_input"}
 CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium", "fovea-check", "cal-check", "cal-fixture",
                "geo-check", "ledger-means", "r29-check")
 

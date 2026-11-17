@@ -291,13 +291,16 @@ def guard(c, out, resume, arm):
     return path, side
 
 
-def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=None, pipeline="serial", base=None, audit=frozenset()):
+def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=None, pipeline="serial", base=None, audit=frozenset(),
+             delivery=None, scope="formal"):
     """pipeline: "serial" (the reference path) or "overlap" (r28_pipeline: the next window is fetched and audited
     while this one trains).  Both deliver the same windows in the same order; the checks below are the same.
     Arms QP / QC (TASK_R29_001): `base` holds per update the digests of the arm FG ledger fields that do not depend on
     the detector (input record, GT count, learning rate, demand / map / render readings) and every row is compared
     with them; on the updates listed in `audit` the read context records its geometry readings from the two forwards
-    of that update (ledger key "r29"; no extra model forward)."""
+    of that update (ledger key "r29"; no extra model forward).  `delivery` (r29_input.Delivery) opens the same audited
+    stream and hands each sealed window to the unchanged Engine.train_window as the host tensor or as its device copy;
+    `scope` is the state scope of the saves (anything but "formal" only in the dev-round pipeline measurement)."""
     import r28_pipeline as PL
     from formal_data import WINDOWS_PER_EPOCH
     from sparse_rtdetr.research import scale_baseline as S
@@ -308,6 +311,8 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
     base_rows, base = base, {"start": start, "recompute": S.RECOMPUTE["calls"], "bn": LL.bn_clocks(e.model), "hooks": dict(counts)}
     bn0 = base["bn"]
     K.require((arm in K.R29_ARMS) == (base_rows is not None) and (arm in K.R29_ARMS or not audit), "R29 base ledger / audit windows")
+    K.require((arm in K.R29_ARMS or delivery is None) and (scope == "formal" or (K.DEV and delivery is not None)),
+              "window delivery is an R29 path; another state scope is a dev-round measurement")
     based, audited = 0, []
     K.require(start < stop and all(start < p <= stop for p in save_points), "R28 loop span / save points")
     prior_rows = dict(prior_rows)
@@ -323,7 +328,8 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
 
     wall = time.monotonic()
     mark = time.perf_counter()
-    with PL.formal_stream(pipeline, data, start, stop, reference_check) as stream:
+    opened = PL.formal_stream(pipeline, data, start, stop, reference_check) if delivery is None else         delivery.stream(pipeline, data, start, stop, reference_check)
+    with opened as stream:
         with history.open("a", buffering=1) as ledger, (out / OBS).open("a", buffering=1) as obs_file, \
                 (out / TIMING).open("a", buffering=1) as timing_file:
             for item in stream:
@@ -344,8 +350,10 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
                 if inp["update"] in audit:
                     sink = vars(e.r28_ctx)["r29_audit"] = []
                 called = time.perf_counter()
-                res = e.train_window(x, t)
+                xd, moved = (x, {}) if delivery is None else delivery.take(item)
+                res = e.train_window(xd, t)
                 train_call = time.perf_counter() - called
+                del xd
                 K.require(res["update"] == inp["update"] and res["finite"] and e.ema.updates == e.completed_updates,
                           "R28 update clock/input")
                 row = {"input": inp, "gt_count": int(sum(len(v["labels"]) for v in t)), "loss": res["loss"],
@@ -390,12 +398,14 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
                     ep, rest = divmod(e.completed_updates, WINDOWS_PER_EPOCH)
                     name = K.endpoint_name(e.completed_updates)
                     role = "formal_save" if not rest and ep in K.FORMAL_SAVE_EPOCHS else "recovery"
-                    saves.append(K.save(c, e, out / name, "formal", {"ledger": K.ref(history), "observations": K.ref(out / OBS)}, role))
+                    saving = time.perf_counter()
+                    saves.append(K.save(c, e, out / name, scope, {"ledger": K.ref(history), "observations": K.ref(out / OBS)}, role))
+                    moved = {**moved, "save_s": time.perf_counter() - saving}
                 now = time.perf_counter()
                 timing_file.write(json.dumps({"update": res["update"], "cycle_s": now - mark, "wait_s": item.timing["wait_s"],
                                               "train_call_s": train_call, "train_s": res["elapsed_seconds"],
                                               "input": {k: item.timing.get(k) for k in ("next_s", "audit_s", "fetch_s", "reference_check_s")},
-                                              "prepared": stream.ready()}, separators=(",", ":")) + "\n")
+                                              "prepared": stream.ready(), **moved}, separators=(",", ":")) + "\n")
                 if e.completed_updates % 16 == 0:
                     print(json.dumps({"arm": arm, "update": e.completed_updates, "loss": res["loss"],
                                       "seconds": res["elapsed_seconds"], "cycle_seconds": now - mark,
@@ -418,6 +428,7 @@ def run_loop(c, e, out, stop, counts, *, save_points, refs, prior_rows, first=No
             "saves": saves, "accounting_checked_before_saves_at": checked, "prior_rows_replayed_exact": replayed,
             "shared_rows_compared_live": compared, "observation_epochs_written": epochs,
             "input_pipeline": pipe, "timing_file": TIMING,
+            **({} if delivery is None else {"window_delivery": delivery.account()}),
             "loop_wall_seconds": wall, "update_seconds_sum": seconds,
             "peak_cuda_bytes": K.torch_mod().cuda.max_memory_allocated() if e.device.type == "cuda" else None}
 
@@ -479,8 +490,11 @@ def train(c, out, counts, resume, *, stop, save_points):
     if arm in K.R29_ARMS:
         import r29_control as RC
         K.require(R.is_wrapped(e.model, arm) and R.is_wrapped(e.ema.module, arm), f"the engine is not an arm {arm} engine")
-        extra = {"base": RC.base_ledger(c), "audit": RC.audit_updates(start, stop)}
+        import r29_input as RI
+        delivery = RI.Delivery(RI.formal_mode(c, arm), e.device)
+        extra = {"base": RC.base_ledger(c), "audit": RC.audit_updates(start, stop), "delivery": delivery}
         plan["audit_updates"] = sorted(extra["audit"])
+        plan["window_delivery"] = delivery.binding()
     loop = run_loop(c, e, out, stop, counts, save_points=set(used), refs=refs, prior_rows=prior_rows, first=first,
                     pipeline=pipeline, **extra)
     with (out / LEDGER).open() as f:

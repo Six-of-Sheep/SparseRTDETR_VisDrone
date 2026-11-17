@@ -15,7 +15,9 @@
 # accept-R29: a read that does not act, an inexact save / restore replay or an N path that differs from the stored
 # accept-FG receipts closes nothing and ends the chain; no formal run starts.  The formal runs use the overlapped input
 # path only if the closed acceptance enabled it for that arm; R28_PIPELINE=serial in the environment keeps the serial
-# reference path (nothing else is accepted in that variable).
+# reference path (nothing else is accepted in that variable).  Window delivery (r29_input): the formal runs hand each
+# audited window to the unchanged engine as its device copy only if the acceptance found every update of both arms
+# bit-for-bit equal to the stored receipts of release-001 (host delivery); R29_DELIVERY=host keeps the host delivery.
 #
 # GPU: the UUID must equal the contract's gpu_uuid.  Unless the chain is limited to the CPU check (--until r29-check),
 # the GPU must hold no compute process at the start; a busy GPU ends the chain, nothing is pre-empted.  The compute
@@ -71,6 +73,9 @@ elif env | grep -q '^R28_DEV_'; then
 fi
 if [ -n "${R28_PIPELINE+x}" ] && [ "$R28_PIPELINE" != "serial" ]; then
   echo "R28_PIPELINE can only be 'serial' (the reference path)" >&2; exit 2
+fi
+if [ -n "${R29_DELIVERY+x}" ] && [ "$R29_DELIVERY" != "host" ]; then
+  echo "R29_DELIVERY can only be 'host' (the reference window delivery)" >&2; exit 2
 fi
 RUN="$R/$REL/source/tools/r28/r28_run.py"
 export R28_ROUND="$R"
@@ -136,7 +141,7 @@ formal_stage() {  # formal_stage <arm>
 
 exec 9> "$R/.chain.lock"
 flock -n 9 || { log "CHAIN STOP (another chain holds $R/.chain.lock)"; exit 5; }
-log "CHAIN START (R29 query-wise un-zoomed read: P then C) release=$REL pid=$$ resume=${RESUME_ARM:-none} ${RESUME_STATE:-} ${RESUME_N:-} until=${UNTIL:-end} pipeline_override=${R28_PIPELINE:-none} dev=$(env | grep '^R28_DEV_' | tr '\n' ' ')"
+log "CHAIN START (R29 query-wise un-zoomed read: P then C) release=$REL pid=$$ resume=${RESUME_ARM:-none} ${RESUME_STATE:-} ${RESUME_N:-} until=${UNTIL:-end} pipeline_override=${R28_PIPELINE:-none} delivery_override=${R29_DELIVERY:-none} dev=$(env | grep '^R28_DEV_' | tr '\n' ' ')"
 [ -f "$RUN" ] || stop "CHAIN STOP (release runner missing: $RUN)"
 [ -f "$R/CONTRACT.json" ] || stop "CHAIN STOP (CONTRACT.json missing: run prepare-r29 first)"
 BASIS=$("$PY" -c "import json,sys;c=json.load(open(sys.argv[1]));f=c['followup'];print(c.get('authorization_basis'), f['authorization_basis'], f['arm'], ','.join(f['arms']), ','.join(f['training_order']), f['width_selection']['fwhm_hex'], f['FG_contract_sha256'])" "$R/CONTRACT.json") || stop "CHAIN STOP (not an R29 contract)"
@@ -161,7 +166,7 @@ stage ncheck-FG QP "$PY" "$RUN" r29-ncheck --out "$R/ncheck-FG"
 log "ncheck-FG field_by_field_equal=$(flag ncheck-FG field_by_field_equal) images=$(flag ncheck-FG images) scored=$(flag ncheck-FG scored)"
 until_reached ncheck-FG
 stage accept-R29 QP "$PY" "$RUN" r29-accept --out "$R/accept-R29"
-log "accept-R29 N_equal_to_the_FG_receipts=$(flag accept-R29 N_equal_to_the_FG_receipts) restore_replay_equal=$(flag accept-R29 restore_replay_equal) read_active=$(flag accept-R29 read_active) overlap_enabled=$(flag accept-R29 overlap_enabled) (formal input path: $([ "${R28_PIPELINE:-}" = "serial" ] && echo "serial, forced by R28_PIPELINE" || echo "by the acceptance decision"))"
+log "accept-R29 N_equal_to_the_FG_receipts=$(flag accept-R29 N_equal_to_the_FG_receipts) restore_replay_equal=$(flag accept-R29 restore_replay_equal) read_active=$(flag accept-R29 read_active) overlap_enabled=$(flag accept-R29 overlap_enabled) window_delivery=$(flag accept-R29 window_delivery) (formal input path: $([ "${R28_PIPELINE:-}" = "serial" ] && echo "serial, forced by R28_PIPELINE" || echo "by the acceptance decision"))"
 until_reached accept-R29
 formal_stage QP
 until_reached formal-QP

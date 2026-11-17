@@ -25,6 +25,10 @@ source-frame sampling points are mapped onto the warped memory and read).  src/s
                not move any sampling position closes the stage without opening the formal runs.
   summarize    summary-R29: P - N, C - N, P - C, the same-process costs, the fixed rules of section 6.
 Formal training, evaluation and timing are r28_loop.formal, r28_eval.evaluate and r28_cost.cost with R28_ARM=QP / QC.
+
+Release 002 (engineering only, user instruction of 2026-11-17): the window delivery of r29_input.  The science tree is
+byte-identical to release-001 of the first R29 round; the contract equals that round's contract outside the named
+engineering keys; the joint acceptance compares every update of both arms with that round's stored receipts.
 """
 import gc
 import json
@@ -42,6 +46,7 @@ import r28_followup as FU
 import r28_fovea_control as FC
 import r28_cal_control as CC
 import r28_geo_control as GC
+import r29_input as RI
 
 REGISTRATION = ("R29 exploratory query-wise un-zoomed decoder read on the fixed strong F_geo input: two arms, single seed, "
                 "designed after the 009 result")
@@ -75,7 +80,7 @@ OWN_STAGES = ("r29-check", "wire-R29", "ncheck-FG", "accept-R29", "formal-QP", "
 ALLOWED_CHANGED = ("tools/r28/r28_common.py", "tools/r28/r28_loop.py", "tools/r28/r28_eval.py", "tools/r28/r28_cost.py",
                    "tools/r28/r28_run.py", "tests/test_r28_cal_control.py", "tests/test_r28_geo_control.py")
 ALLOWED_ADDED = ("src/sparse_rtdetr/research/r29_unzoom.py", "tests/test_r29_unzoom.py", "tests/test_r29_control.py",
-                 "tools/r28/r29_control.py", "tools/r28/r29_chain.sh")
+                 "tools/r28/r29_control.py", "tools/r28/r29_chain.sh", "tools/r28/r29_input.py", "tests/test_r29_input.py")
 SCIENCE_ADDED = ("src/sparse_rtdetr/research/r29_unzoom.py",)
 # files that must be byte-identical to the 009 release: the arm FG science, the frozen sampler and attention core, the
 # vendored decoder, the input pipeline, the loop base, the engine, the checkpoint code and the earlier control tools
@@ -97,7 +102,27 @@ KEPT = {"tools/r28/r28_common.py": ("save", "read_side", "read_state", "load", "
         "tools/r28/r28_loop.py": ("restore_files", "install_observer", "formal", "cal_row", "Observer.loss_boxes", "Observer.loss_labels_vfl"),
         "tools/r28/r28_eval.py": ("infer", "difference_pp", "apl6"),
         "tools/r28/r28_cost.py": ("aggregate", "_run", "load_arm", "load_reference", "Probe.mark", "Probe.start")}
-TESTS = GC.TESTS + ("tests/test_r29_unzoom.py", "tests/test_r29_control.py")
+TESTS = GC.TESTS + ("tests/test_r29_unzoom.py", "tests/test_r29_control.py", "tests/test_r29_input.py")
+# release-001 of the first R29 round: the accepted host delivery.  Read-only reference of the window delivery.
+HOST_ROUND = K.LD_ROOT / "r29-query-unzoom-20261116-001"
+PIN_HOST = {
+    "commit": "efc113dcd8324b32c7a862e3db4ff28985c813a6",
+    "manifest": "5607ec6cb86da2872305e67b046e55e6a92b124c11a084320626aa6d8e1c60bc",
+    "contract_file": "db772c99e53614bb721c4595fd31b1aad2550de804d526f8a6a30f9d4087ccff",
+    "contract": "17a2ca0cf3eb87870006b7879b49b3f188b23324e41b11faacdba8241e7550f8",
+    "accept_closed": "9d3ea07e81b60927c4d30c406486d71445ed59ebd264c2f6c7d2842602360af7",
+    "steps": {"QP-full": "e928c0d9c0fd9e2f40362a1aaa991e8e4acf8c27c1e88b32e1ff0426c2e731aa",
+              "QP-resumed": "26d186c4b90302c5f9be2c0dd2f273c40fd0dba5c44f60ba117914253fa57c80",
+              "QC-full": "9e3863fc4710aad284d059b8f07cb1f83ec5bf98d61d4258e638d9c72b2c64c9",
+              "QC-resumed": "9bec764092af9d5bd4d8e8b5a5a3bd4248dfc0cf216a975a39c2b592be87f3e6"},
+}
+HOST_CHANGED = ("tools/r28/r28_loop.py", "tools/r28/r28_run.py", "tools/r28/r29_control.py", "tools/r28/r29_chain.sh",
+                "tests/test_r29_control.py")
+HOST_ADDED = ("tools/r28/r29_input.py", "tests/test_r29_input.py")
+# keys in which the contract of this release may differ from the contract of release-001; every other key is equal
+HOST_CONTRACT_DIFFERENT = ("contract_sha256", "version", "source_root", "source_manifest", "source_commit", "source_dirty",
+                           "input_pipeline", "resource_plan", "outputs", "followup")
+HOST_FOLLOWUP_DIFFERENT = ("task", "decision", "source_delta", "function_edits")
 SCOPE = "r29-acceptance"
 ACCEPT = {"N_updates": 2, "steps": 4, "save_at": 2, "ready_limit": 1, "workers": 2}
 _ARM_UPDATES = ACCEPT["steps"] + (ACCEPT["steps"] - ACCEPT["save_at"])
@@ -294,12 +319,61 @@ def fg_references(fg_round=None):
                            "FG_sampling_backend": "deterministic_gather"}
 
 
+# ================================================================ references into release-001 of the first R29 round
+def host_references(new_files):
+    """The accepted host-delivery release: its contract, its closed joint acceptance and the per-update receipts of both
+    arms, pinned by file SHA; the file difference of this release against it.  Nothing is written."""
+    r = HOST_ROUND.resolve()
+    refs = {"contract_file": K.ref(r / "CONTRACT.json"), "manifest": K.ref(r / "release-001/MANIFEST.json"),
+            "accept_closed": K.ref(r / "accept-R29/CLOSED.json")}
+    steps = {n: K.ref(r / f"accept-R29/STEPS-{n}.jsonl") for n in PIN_HOST["steps"]}
+    bad = [k for k in refs if refs[k]["sha256"] != PIN_HOST[k]] + [n for n in steps if steps[n]["sha256"] != PIN_HOST["steps"][n]]
+    K.require(not bad, f"files of the first R29 round differ from their pins: {bad}")
+    ch = K.read_json(refs["contract_file"]["path"])
+    K.require(ch["contract_sha256"] == K.sha_bytes(K.canonical({k: v for k, v in ch.items() if k != "contract_sha256"})) == PIN_HOST["contract"]
+              and ch["source_commit"] == PIN_HOST["commit"] and ch["source_manifest"]["sha256"] == PIN_HOST["manifest"]
+              and ch["authorization_basis"] == K.R29_BASIS and Path(ch["outputs"]).resolve() == r, "contract of the first R29 round")
+    closed = K.read_json(refs["accept_closed"]["path"])
+    K.require(closed.get("status") == "PASS" and closed.get("contract_sha256") == PIN_HOST["contract"] and closed["N_equal_to_the_FG_receipts"] is True
+              and all(closed["restore_replay_equal"][a] is True and closed["read_active"][a] is True for a in ARMS),
+              "the joint acceptance of release-001 is not PASS under its contract")
+    old = K.read_json(refs["manifest"]["path"])["files"]
+    changed = sorted(k for k in old if k in new_files and old[k] != new_files[k])
+    added = sorted(k for k in new_files if k not in old)
+    removed = sorted(k for k in old if k not in new_files)
+    science = ("src/", "vendor/", "configs/")
+    K.require(not removed and set(changed) <= set(HOST_CHANGED) and set(added) <= set(HOST_ADDED)
+              and not any(p.startswith(science) for p in changed + added),
+              f"release differs from release-001 outside the window delivery: changed {changed}, added {added}, removed {removed}")
+    return ch, {"host_round": str(r), "host_contract": refs["contract_file"], "host_contract_sha256": ch["contract_sha256"],
+                "host_commit": ch["source_commit"], "host_manifest": refs["manifest"], "host_accept": refs["accept_closed"],
+                "host_accept_steps": steps,
+                "host_release_delta": {"against": "release-001 of the first R29 round", "changed": changed, "added": added, "removed": removed,
+                                       "identical_files": len(old) - len(changed), "science_tree_identical": True,
+                                       "note": "every file of src/, vendor/ and configs/ (the read operator of both arms, arm FG, the "
+                                               "detector, criterion, data, loader, engine, checkpoint) and the input pipeline module "
+                                               "are byte-identical to release-001; the change is the window delivery in the loop tools"}}
+
+
+def _forced_delivery(c):
+    old = os.environ.get("R29_DELIVERY")
+    os.environ["R29_DELIVERY"] = "device"
+    try:
+        RI.formal_mode(c, "QP")
+    finally:
+        if old is None:
+            del os.environ["R29_DELIVERY"]
+        else:
+            os.environ["R29_DELIVERY"] = old
+
+
 # ================================================================ contract of the independent round
 def prepare(_args=None):
     from sparse_rtdetr.research import r29_unzoom as UZ
     round_ = K.ROUND.resolve()
     K.require(K.ROOT.resolve().parent.parent == round_ and K.ROOT.name == "source", "prepare-r29 must run from a frozen release")
-    K.require("R28_ROUND" in os.environ and round_ != FG_ROUND.resolve() and FG_ROUND.resolve() not in round_.parents,
+    K.require("R28_ROUND" in os.environ and round_ != FG_ROUND.resolve() and FG_ROUND.resolve() not in round_.parents
+              and round_ != HOST_ROUND.resolve() and HOST_ROUND.resolve() not in round_.parents,
               "the R29 round must be an independent directory named by R28_ROUND")
     K.require(not K.DEV or round_.parent.parent == K.LD_ROOT.resolve(), "a dev round lives inside the round directory")
     manifest = K.read_json(K.ROOT.parent / "MANIFEST.json")
@@ -308,6 +382,7 @@ def prepare(_args=None):
     task, decision = (K.ref(K.ROUND / f[0]) for f in (TASK, DECISION))
     K.require(task["sha256"] == TASK[1] and decision["sha256"] == DECISION[1], "task / decision file SHA")
     c9, fg_inherited, fg_refs = fg_references()
+    ch, host_refs = host_references(manifest["files"])
     fu9 = c9["followup"]
     K.require(set(fu9["inherited"]).isdisjoint(fg_inherited) and set(OWN_STAGES).isdisjoint(set(fu9["inherited"]) | set(fg_inherited)),
               "stage names of the rounds overlap")
@@ -318,14 +393,15 @@ def prepare(_args=None):
                                                       "inherited", "inherited_contracts")}
     states = len(ARMS) * len(K.SAVE_EPOCHS)
     c = {k: v for k, v in c9.items() if k != "contract_sha256"}
-    c.update(version="R29-001-contract-v1", authorization_basis=K.R29_BASIS,
+    c.update(version="R29-001-contract-v2", authorization_basis=K.R29_BASIS,
              source_root=str(K.ROOT.resolve()), source_manifest=K.ref(K.ROOT.parent / "MANIFEST.json"),
              source_commit=manifest["commit"], source_dirty=bool(manifest.get("dirty", False)),
              identity={**c9["identity"], **UZ.IDENTITY}, identity_sha256={**c9["identity_sha256"], **UZ.IDENTITY_SHA256},
              r29_read_definition=UZ.DEFINITION, r29_rules=RULES, workload=WORKLOAD,
              input_pipeline={**c9["input_pipeline"], "r29": "the overlapped path accepted in task 009 (workers 2, one prepared window, "
                              "audit before consumption, restart from the committed cursor), unchanged; each arm uses it only if "
-                             "its own save / restore replay of the joint acceptance was exact"},
+                             "its own save / restore replay of the joint acceptance was exact",
+                             "r29_window_delivery": RI.RULE},
              cost={**c9["cost"], "cost-R29": {"endpoints": list(K.COST_ENDPOINTS["cost-R29"]),
                                               "rotations": [list(r) for r in K.COST_ROTATIONS["cost-R29"]], "exclusive_gpu": True,
                                               "stages": ["demand", "map", "render", "detector", "read", "unwarp", "other"]}},
@@ -350,7 +426,26 @@ def prepare(_args=None):
                                          "quoted, not retrained, not rescored)", "the F_geo formal ledger (input / plan identity per "
                                          "update) and its acceptance receipts"],
                        "analysis": {"pairs": ["QP-FG", "QC-FG", "QP-QC"], "reported_pairs": ["P-N", "C-N", "P-C"], "rules": "r29_rules"},
-                       "statements": STATEMENTS})
+                       "statements": STATEMENTS, **host_refs})
+    # the science of this contract is the science of release-001: every key outside the named engineering keys is equal
+    fu, fuh = c["followup"], ch["followup"]
+    K.require(set(c) == set(ch) and all(c[k] == ch[k] for k in ch if k not in HOST_CONTRACT_DIFFERENT)
+              and set(fu) == set(fuh) | set(host_refs) and all(fu[k] == fuh[k] for k in fuh if k not in HOST_FOLLOWUP_DIFFERENT)
+              and all(fu[k]["sha256"] == fuh[k]["sha256"] for k in ("task", "decision"))
+              and fu["function_edits"] == fuh["function_edits"]
+              and {k: v for k, v in c["input_pipeline"].items() if k != "r29_window_delivery"} == ch["input_pipeline"]
+              and {k: v for k, v in c["resource_plan"].items() if k != "disk_free_bytes_at_prepare"}
+              == {k: v for k, v in ch["resource_plan"].items() if k != "disk_free_bytes_at_prepare"},
+              "the contract differs from the contract of release-001 outside the window delivery")
+    c["followup"]["host_contract_equal"] = {
+        "equal_keys": sorted(k for k in ch if k not in HOST_CONTRACT_DIFFERENT),
+        "different_keys": {"version": "contract version", "source_root / source_manifest / source_commit / source_dirty": "the release",
+                           "input_pipeline": "one added key, r29_window_delivery; every other key equal",
+                           "resource_plan": "disk_free_bytes_at_prepare only", "outputs": "the round directory",
+                           "followup": "task / decision (same SHA, other path), source_delta (two added tool / test files), the "
+                                       "host_* references; function_edits and every other key equal"},
+        "note": "parent, data, recipe (8 x 2, BF16, optimizer, LR, EMA, BN, DN, schedule), identities of N / C / P, the read "
+                "definition, the rules of section 6, the evaluation policy and the workload are the equal keys"}
     K.require(c["resource_plan"]["disk_free_bytes_at_prepare"] > 4 * (c["resource_plan"]["formal_states_bytes"] + c["resource_plan"]["failure_margin_bytes"]),
               "less free space than four times the planned storage of this round")
     c["contract_sha256"] = K.sha_bytes(K.canonical(c))
@@ -494,6 +589,10 @@ def r29_check(c, out, counts):
     K.B.release_intact(Path(c9["source_root"]), old_manifest["files"])
     function_edits = edits(c9["source_root"], K.ROOT)
     K.require(delta == fu["source_delta"] and function_edits == fu["function_edits"], "source delta changed since prepare")
+    _, host_refs = host_references(manifest["files"])
+    K.require(all(fu[k] == v for k, v in host_refs.items()) and c["input_pipeline"]["r29_window_delivery"] == RI.RULE
+              and RI.FORMAL in RI.MODES and RI.RULE["workers"] == PL.WORKERS == ACCEPT["workers"] and RI.RULE["ready_limit"] == PL.READY_LIMIT,
+              "references into release-001 / window delivery rule changed since prepare")
     same = [k for k in c9 if k not in ("contract_sha256", "version", "authorization_basis", "source_root", "source_manifest", "source_commit",
                                        "source_dirty", "workload", "labels", "resource_plan", "outputs", "formal_started", "identity",
                                        "identity_sha256", "cost", "followup", "input_pipeline")]
@@ -540,6 +639,9 @@ def r29_check(c, out, counts):
         FU._refused("arm QP with a fixed (arm K) demand source", lambda: UZ.check_source("QP", {**source, "kind": "fixed"}, False)),
         FU._refused("R28_PIPELINE forcing the overlapped path", lambda: GC._forced_pipeline(c)),
         FU._refused("the overlapped path of arm QP before the acceptance", lambda: K.pipeline_mode(c, "QP")),
+        FU._refused("R29_DELIVERY forcing another delivery than the host reference", lambda: _forced_delivery(c)),
+        FU._refused("window delivery of arm FG", lambda: RI.formal_mode(c, "FG")),
+        *([] if RI.FORMAL == "host" else [FU._refused(f"the {RI.FORMAL} delivery of arm QP before the acceptance", lambda: RI.formal_mode(c, "QP"))]),
     ]
     K.require(not any(v.startswith("R28_DEV_") for v in os.environ) or K.DEV, "dev flags are refused outside a dev round")
     res["authorisation"] = {"round": str(K.ROUND), "independent_of": [str(r) for r in rounds], "refusals": cases}
@@ -594,7 +696,8 @@ def r29_check(c, out, counts):
     res["fixture"] = fixtures
     K.require(counts["actual_updates"] == 3 * len(ARMS) and counts["forwards"] == 6 * len(ARMS) + 3 * len(ARMS), f"r29-check counts {dict(counts)}")
     res.update(fixture_updates=counts["actual_updates"], full_forwards=counts["forwards"], formal_state_usable=False,
-               input_pipeline_version=PL.VERSION, cpu_seconds_wall=time.perf_counter() - t0,
+               input_pipeline_version=PL.VERSION, window_delivery=RI.RULE, host_release_delta=fu["host_release_delta"],
+               cpu_seconds_wall=time.perf_counter() - t0,
                scope="the read operator, its wiring into the real detector, the arm identities, the contract and the references; the "
                      "data, mapping, rendering, pipeline and restore evidence of the shared code is inherited from the 009 round")
     return res
@@ -785,10 +888,11 @@ def r29_accept(c, out, counts):
         if load is None:
             starts[name] = CC.state_digests(S.capture(e))
         rows, saved, state_file = [], None, out / f"{arm}-u{save_at:02d}.pth"
+        delivery = RI.Delivery("host" if arm == "FG" else RI.FORMAL, e.device)   # N: the reference delivery of the stored receipts
         torch.cuda.reset_peak_memory_stats()
         with PL.MemorySampler(0.5) as memory:
             opened = mark = time.perf_counter()
-            with PL.formal_stream(mode, data, first, last, check, fine=True) as stream:
+            with delivery.stream(mode, data, first, last, check, fine=True) as stream:
                 for item in stream:
                     x, t, inp = item.x, item.t, item.inp
                     K.PHASE["phase"] = f"accept:{name} update {e.completed_updates + 1}"
@@ -799,8 +903,10 @@ def r29_accept(c, out, counts):
                     if arm != "FG":
                         sink = vars(e.r28_ctx)["r29_audit"] = []
                     called = time.perf_counter()
-                    res = e.train_window(x, t, capture=True)
+                    xd, moved = delivery.take(item)
+                    res = e.train_window(xd, t, capture=True)
                     train_call = time.perf_counter() - called
+                    del xd
                     K.require(res["update"] == inp["update"] and res["finite"] and e.ema.updates == e.completed_updates, f"{name}: update clock")
                     science = {"input": inp, "gt_count": int(sum(len(v["labels"]) for v in t)), "result": _result_body(res),
                                "observer": obs.update_row(t)}
@@ -822,7 +928,7 @@ def r29_accept(c, out, counts):
                     now = time.perf_counter()
                     rows.append({"science": science,
                                  "engineering": {"cycle_s": now - mark, "wait_s": item.timing["wait_s"], "train_call_s": train_call,
-                                                 "train_s": res["elapsed_seconds"], "prepared_after": stream.ready(), **extra}})
+                                                 "train_s": res["elapsed_seconds"], "prepared_after": stream.ready(), **moved, **extra}})
                     mark = now
                     del item, x, t
                 account = stream.account()
@@ -831,12 +937,14 @@ def r29_accept(c, out, counts):
         if after is not None:
             after(e, arm, state_file)
         info[name] = {"arm": arm, "short_name": SHORT[arm], "mode": mode, "first_update": first + 1, "last_update": last, "updates": len(rows),
-                      "account": account, "resumed_from": None if loaded is None else loaded["file"], "saved": saved,
+                      "account": account, "window_delivery": delivery.account(),
+                      "resumed_from": None if loaded is None else loaded["file"], "saved": saved,
                       "wall_seconds_stream": closed - opened, "peak_cuda_allocated_bytes": torch.cuda.max_memory_allocated(),
                       "memory": memory.summary(),
                       "create_checks": {k: checks[k] for k in ("arm", "identity_sha256", "demand", "mapping", "new_parameters", "parameters",
                                                                "optimizer_parameters", "old_parameters_sha256", "EMA_updates")}}
-        del e, obs
+        delivery.close()
+        del e, obs, delivery
         gc.collect()
         torch.cuda.empty_cache()
         return rows
@@ -893,6 +1001,15 @@ def r29_accept(c, out, counts):
                       "summary_over_the_acceptance_forwards": _read_summary([r["r29"] for r in full])}
         first_loss[arm] = [r["result"]["loss"] for r in full]
     cross = sci(paths["QP-full"])[0]["result"]["output_sha256"] != sci(paths["QC-full"])[0]["result"]["output_sha256"]
+    # window delivery: every update of both arms against the stored receipts of release-001 (host delivery), bit for bit
+    host = {}
+    for name in fu["host_accept_steps"]:
+        with K.pinned(fu["host_accept_steps"][name]).open() as f:
+            host[name] = CC.differences([json.loads(line)["science"] for line in f], sci(paths[name]))
+    delivery_equal = {a: not host[f"{a}-full"] and not host[f"{a}-resumed"] for a in ARMS}
+    K.require(sorted(host) == sorted(f"{a}-{p}" for a in ARMS for p in ("full", "resumed"))
+              and all(info[f"{a}-{p}"]["window_delivery"]["mode"] == RI.FORMAL and info[f"{a}-{p}"]["window_delivery"]["taken"] == info[f"{a}-{p}"]["updates"]
+                      for a in ARMS for p in ("full", "resumed")) and info["N"]["window_delivery"]["mode"] == "host", "window delivery accounting")
     want = c["workload"]["accept"]["updates"]
     K.require(want == _ACCEPT_UPDATES == 14 and counts["actual_updates"] == want and counts["forwards"] == counts["forward_attempts"] == 2 * want == 28,
               f"acceptance counts {dict(counts)}")
@@ -904,6 +1021,10 @@ def r29_accept(c, out, counts):
                    "start_state_parts_different_from_N": start_equal, "start_arm_field_differs_from_N": arm_part,
                    "restore_replay": {a: {"steps": steps - save_at, "differences": replay[a], "equal": not replay[a]} for a in ARMS},
                    "input_and_plan_equal_to_the_FG_receipts": plan_equal, "read_active": active, "QP_and_QC_outputs_differ": cross,
+                   "window_delivery": {"rule": RI.RULE, "host_receipts": fu["host_accept_steps"], "host_contract_sha256": fu["host_contract_sha256"],
+                                       "differences": host, "equal": delivery_equal,
+                                       "compared": CC.COMPARED + ["science.r29 (the read readings of every acceptance forward)"],
+                                       "steps": {a: {"full": steps, "resumed": steps - save_at} for a in ARMS}},
                    "restore": "K.load compares the complete restored state with the saved one (exact) before the replay",
                    "final_state_digests": {n: r[-1]["science"]["state"] for n, r in paths.items()},
                    "steps_files": {n: K.ref(out / f"STEPS-{n}.jsonl") for n in paths},
@@ -917,6 +1038,8 @@ def r29_accept(c, out, counts):
     K.require(not d_n, f"N (the unchanged arm FG engine of this release) differs from the stored accept-FG receipts: {d_n[:5]}")
     K.require(all(not v for v in start_equal.values()) and all(arm_part.values()), f"start states differ from the parent state of N: {start_equal}")
     K.require(all(not v for v in replay.values()), f"save / restore replay differs: { {a: v[:5] for a, v in replay.items()} }")
+    K.require(all(delivery_equal.values()),
+              f"the {RI.FORMAL} window delivery differs from the stored host receipts of release-001: { {n: v[:5] for n, v in host.items() if v} }")
     K.require(all(plan_equal.values()), f"input / plan readings differ from the arm FG receipts: {plan_equal}")
     K.require(all(active.values()) and cross,
               f"the read of an arm did not act (read_active {active}, QP and QC outputs differ {cross}): check the wiring before any formal run")
@@ -937,6 +1060,7 @@ def r29_accept(c, out, counts):
     print(json.dumps({"N_equal_to_the_FG_receipts": True, "restore_replay_equal": True, "read_active": active, "refusals": len(refusals)}), flush=True)
     return {"stage": "accept-R29", "workload": c["workload"]["accept"], "N_equal_to_the_FG_receipts": True,
             "restore_replay_equal": {a: True for a in ARMS}, "read_active": active, "overlap_enabled": {a: True for a in ARMS},
+            "window_delivery": {a: {"mode": RI.FORMAL, "equal_to_the_host_receipts": True} for a in ARMS},
             "formal_training_allowed": True, "equivalence": K.ref(out / "ACCEPT_EQUIVALENCE.json"), "timing": K.ref(out / "ACCEPT_TIMING.json"),
             "read_readings": K.ref(out / "READ_READINGS.json"), "read_dtypes": {a: kinds[a][0] for a in ARMS},
             "saved_states": {a: info[f"{a}-full"]["saved"] for a in ARMS},
@@ -1071,6 +1195,7 @@ def summarize(c, out, counts):
                   and closed["rows_equal_to_the_arm_FG_ledger"] + closed["ledger_rows_copied_on_resume"] == K.ENDPOINT - K.PARENT_UPDATE,
                   f"formal run of arm {a}: mapping / read mode / rows compared with the arm FG ledger")
         formal[SHORT[a]] = {"directory": d.name, "resumed": closed["resumed"], "updates": closed["updates"], "input_pipeline": closed["plan"]["input_pipeline"],
+                            "window_delivery": closed["plan"]["window_delivery"],
                             "loop_wall_seconds": closed["loop_wall_seconds"], "update_seconds_sum": closed["update_seconds_sum"],
                             "seconds_per_update": closed["loop_wall_seconds"] / closed["updates"], "peak_cuda_bytes": closed["peak_cuda_bytes"],
                             "rows_equal_to_the_arm_FG_ledger": closed["rows_equal_to_the_arm_FG_ledger"],
