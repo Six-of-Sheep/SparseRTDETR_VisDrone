@@ -527,6 +527,7 @@ def endpoint_state(c, arm):
     """The only evaluation source of an arm: the endpoint state of its closed formal directory, EMA module only.
     In a follow-up round arm W is the pinned e120 state of the closed R28 round, read under the prior contract."""
     fu = followup(c)
+    require(not (fu is not None and r29(c)) or arm in R29_ARMS + ("FG",), f"the R29 round has no endpoint of arm {arm}")
     if fu is not None and arm == "W":
         side, s = read_state(prior_contract(c), pinned(fu["W_endpoint"]), "formal", "W")
         require(side["file"] == fu["W_endpoint"] and side["global_update"] == ENDPOINT
@@ -538,7 +539,6 @@ def endpoint_state(c, arm):
         require(side["file"] == fu["FG_endpoint"] and side["global_update"] == ENDPOINT
                 and s["engine"]["completed_updates"] == s["ema"]["updates"] == ENDPOINT, "stored FG endpoint clocks")
         return side, s["ema"]["module"]
-    require(not (fu is not None and r29(c)) or arm in R29_ARMS, f"the R29 round has no endpoint of arm {arm}")
     if fu is not None and followup_arm(c) in ("FS", "FG") and arm in ("K", "F"):
         # the FS / FG controls time the stored K and F endpoints: each is read under its own round's contract
         side, s = read_state(other_contract(c, arm), pinned(fu[f"{arm}_endpoint"]), "formal", arm)

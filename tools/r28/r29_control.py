@@ -506,10 +506,11 @@ def r29_check(c, out, counts):
     res["identities"] = {"FG_round_pins": dict(PIN_FG), "inherited_stages_of_the_FG_round": list(fg_inherited),
                          "contract_fields_equal_to_the_FG_round": len(same), "source_delta": delta, "function_edits": function_edits,
                          "identity_sha256": c["identity_sha256"], "parent_sha256": c["parent"]["sha256"], "release_009_intact": True,
-                         "sampling_backend": {"FG_accept": K.stage_closed(c, "accept-FG", "FG")["create_checks_backend"]
-                                              if "create_checks_backend" in K.stage_closed(c, "accept-FG", "FG") else "deterministic_gather",
-                                              "engine_config": S.production_config(0).binding()["sampling_backend"]}}
-    K.require(res["identities"]["sampling_backend"]["engine_config"] == "deterministic_gather", "sampling backend of the production recipe")
+                         "sampling_backend": {"accept-FG saved_state.config": K.stage_closed(c, "accept-FG", "FG")["saved_state"]["config"]["sampling_backend"],
+                                              "formal-FG install.engine_config": K.stage_closed(c, "formal-FG", "FG")["install"]["engine_config"]["sampling_backend"],
+                                              "engine_config_of_this_release": S.production_config(0).binding()["sampling_backend"]}}
+    K.require(set(res["identities"]["sampling_backend"].values()) == {"deterministic_gather"},
+              f"sampling backend of the 009 receipts / the production recipe: {res['identities']['sampling_backend']}")
 
     K.PHASE["phase"] = "r29-check:authorisation and isolation"
     for name in fu["inherited"]:
@@ -530,8 +531,8 @@ def r29_check(c, out, counts):
         FU._refused("a formal FG directory lookup in this round", lambda: K.formal_dir(c, "FG")),
         FU._refused("an endpoint of arm W in this round", lambda: K.endpoint_state(c, "W")),
         *[FU._refused(f"an evaluation output inside {r.name}", lambda r=r: E.round_stage(r / "eval-QP", "eval-QP")) for r in rounds],
-        FU._refused("the R29 block under the F_geo basis",
-                    lambda: K.followup({**c, "authorization_basis": K.GEO_BASIS, "followup": {**fu, "authorization_basis": K.GEO_BASIS}})),
+        FU._refused("an R29 arm under the F_geo basis",
+                    lambda: K.demand_source({**c, "authorization_basis": K.GEO_BASIS, "followup": {**fu, "authorization_basis": K.GEO_BASIS}}, "QP")),
         FU._refused("arm QP built by the arm FG module", lambda: FG.check_source("QP", source, False)),
         FU._refused("arm FG built by the R29 module", lambda: UZ.check_source("FG", source, False)),
         FU._refused("arm QP with arm F's width 4", lambda: UZ.check_source("QP", {**source, "fwhm": 4.0}, False)),
