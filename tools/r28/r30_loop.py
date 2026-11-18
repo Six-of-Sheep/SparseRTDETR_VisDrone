@@ -408,12 +408,21 @@ def scorecheck(c, out, counts):
     rows = data.records
     parsed = [data.raw(row) for row in rows]
     got = score(c, out, counts, rows, parsed, preds, fg["FG_predictions"], {"unit": "FG-s0 (stored predictions of task 009)"}, "FG-s0-stored")
-    K.require(got["values"] == ev["values"] == fg["values"] and got["per_class_APL_top600"] == ev["per_class_APL_top600"]
-              and got["per_class_APM_top600"] == ev["per_class_APM_top600"] and got["GT_counts"] == ev["GT_counts"],
-              "the scoring path does not reproduce the stored seed-0 F_geo evaluation")
-    return {"stage": "scorecheck", "reproduced": ["values (14 cells)", "per_class_APL_top600", "per_class_APM_top600", "GT_counts"],
-            "per_class_APS_top600": got["per_class_APS_top600"], "values": got["values"],
-            "note": "wiring check of the scoring code on stored predictions; no model was run; seed 0 is quoted, not re-evaluated"}
+    K.require(got["values"] == ev["values"] == fg["values"] and got["GT_counts"] == ev["GT_counts"],
+              "the scoring path does not reproduce the 14 stored cells / GT counts of the seed-0 F_geo evaluation")
+    classes = {}
+    for key in ("APL", "APM"):
+        mine, theirs = got[f"per_class_{key}_top600"], ev[f"per_class_{key}_top600"]
+        K.require([(r["category_id"], r["GT"], r[key] is None) for r in mine] == [(r["category_id"], r["GT"], r[key] is None) for r in theirs],
+                  f"per-class {key} rows: categories / GT counts")
+        gap = max(abs(a[key] - b[key]) for a, b in zip(mine, theirs) if a[key] is not None)
+        K.require(gap <= 1e-15, f"per-class {key} differs from the stored rows by {gap}")
+        classes[key] = {"bitwise_equal": mine == theirs, "max_abs_difference": gap}
+    return {"stage": "scorecheck", "reproduced_bitwise": ["values (14 cells)", "GT_counts"], "per_class_against_stored": classes,
+            "per_class_tolerance": 1e-15, "per_class_APS_top600": got["per_class_APS_top600"], "values": got["values"],
+            "note": "wiring check of the scoring code on stored predictions; no model was run; seed 0 is quoted, not re-evaluated.  The "
+                    "per-class rows are means over a precision tensor recomputed from the stored prediction file in a separate process; "
+                    "they are compared within 1e-15 and the bitwise outcome is recorded"}
 
 
 # ================================================================ summary

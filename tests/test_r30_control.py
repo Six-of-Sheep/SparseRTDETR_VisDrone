@@ -6,6 +6,7 @@ sample standard deviation, APM / APL signs, the scale trade-off registration).  
 """
 import copy
 import inspect
+import json
 import math
 import sys
 from pathlib import Path
@@ -200,3 +201,61 @@ def test_ledger_rows_and_class_table(tmp_path):
             "FG": [{"category_id": 1, "GT": 5, "APS": 0.3}, {"category_id": 2, "GT": 7, "APS": 0.2}]}
     assert RL.class_table(tabs, "APS") == [{"category_id": 1, "GT": 5, "L0": 0.1, "FG": 0.3}, {"category_id": 2, "GT": 7, "L0": None, "FG": 0.2}]
     assert RL.L0_ROW_KEYS == ("input", "gt_count", "loss", "lr", "gradient_norm_before_clip", "microbatch_losses", "update_seconds", "ema_updates")
+
+
+def _closed(path, body):
+    path.mkdir()
+    (path / "CLOSED.json").write_text(json.dumps({"status": "PASS", "contract_sha256": "c", **body}))
+
+
+def test_summarize_formal_branch(tmp_path, monkeypatch):
+    """The formal branch of summary-R30 on a synthetic round: four short ledgers, four evaluation receipts."""
+    n = 4
+    monkeypatch.setattr(K, "ROUND", tmp_path)
+    monkeypatch.setattr(K, "DEV", False)
+    monkeypatch.setattr(K, "ENDPOINT", K.PARENT_UPDATE + n)
+
+    def ref_rows(seed):
+        return {K.PARENT_UPDATE + 1 + i: {"input": {k: f"{k}-{seed}-{i}" for k in K.INPUT_FIELDS} | {"update": K.PARENT_UPDATE + 1 + i},
+                                           "lr": 1e-4, "gt_count": 10 + i, "ema_updates": K.PARENT_UPDATE + 1 + i, "loss": 9.0} for i in range(n)}
+
+    monkeypatch.setattr(R30, "reference_rows", lambda c, seed: (ref_rows(seed), {}))
+    cls = lambda key, v: [{"category_id": k, "GT": 3 + k, key: v + k / 100.} for k in range(1, 11)]
+    fg0, l00 = shifted(GAIN), BASE
+    c = {"contract_sha256": "c", "units": {u: {"reference_ledger": {"path": f"S15-{u}"}} for u in R30.ORDER},
+         "reference": {"values": {"FG-s0": fg0, "L0-s0": l00}, "GT_counts": {"600": 1, "300": 1},
+                       "seed0_F_geo_minus_L0_pp": R30.difference_pp(fg0, l00)},
+         "seed0": {"L0": {"per_class_APL_top600": cls("APL", 0.4), "per_class_note": "note"},
+                   "FG": {"per_class_APL_top600": cls("APL", 0.39), "per_class_APM_top600": cls("APM", 0.3)}},
+         "statements": {}, "reading": R30.READING, "demand": {}, "workload": R30.WORKLOAD}
+    values = {"L0-s1": BASE, "FG-s1": shifted({**GAIN, "APS": 1.4}), "L0-s2": BASE, "FG-s2": shifted({**GAIN, "APS": 0.4, "APL": 0.3})}
+    for u in R30.ORDER:
+        arm, seed = R30.parse(u)
+        d = tmp_path / f"formal-{u}"
+        _closed(d, {"unit": u, "updates": n, "ledger_rows": n, "ledger_rows_copied_on_resume": 0, "resumed": False, "hook_forwards": 2 * n,
+                    "plan": {"input_pipeline": "overlap", "window_delivery": {"mode": "device"}, "parent": {"sha256": "p"}},
+                    "gpu_at_start": {}, "gpu_at_end": {}, "loop_wall_seconds": 1.0, "peak_cuda_bytes": 1})
+        with (d / "UPDATES.jsonl").open("w") as f:
+            for row in ref_rows(seed).values():
+                f.write(json.dumps({**row, "loss": 8.0 if arm == "FG" else 9.5, "microbatch_losses": [1.0, 2.0], "update_seconds": 1.0,
+                                    "gradient_norm_before_clip": 3.0, **({"r28": {}} if arm == "FG" else {})}) + "\n")
+        state = d / "checkpoint-update-x.pth"
+        endpoint = {"path": str(state), "bytes": 1, "sha256": "s"}
+        K.side_of(state).write_text(json.dumps({"file": endpoint}))
+        _closed(tmp_path / f"eval-{u}", {"unit": u, "formal_stage": d.name, "endpoint": endpoint, "values": values[u], "global_update": K.ENDPOINT,
+                                           "GT_counts": {"600": 1, "300": 1}, "weights_sha256": "w", "predictions": {}, "metrics": {},
+                                           "cocoeval_top600_tensors": {}, "counts": {"forwards": 141, "score_budget_calls": 2, "per_class_COCOeval_calls": 1},
+                                           **{f"per_class_{k}_top600": cls(k, 0.2) for k in ("APS", "APM", "APL")}})
+    out = tmp_path / "summary-R30"
+    out.mkdir()
+    got = RL.summarize(c, out, {})
+    result = json.loads((out / "RESULT.json").read_text())
+    assert got["label"] == "small_gain_repeated_2of3" == result["label"] and got["scale_tradeoff"] is False
+    assert result["seeds_with_small_gain_repeated"] == ["0", "1"]
+    assert sorted(result["F_geo_minus_L0_pp"]) == ["0", "1", "2"]
+    # a ledger row that differs between the two units of a seed stops the ledger check
+    rows = (tmp_path / "formal-FG-s2" / "UPDATES.jsonl").read_text().splitlines()
+    bad = json.loads(rows[2]); bad["gt_count"] += 1
+    (tmp_path / "formal-FG-s2" / "UPDATES.jsonl").write_text("\n".join(rows[:2] + [json.dumps(bad)] + rows[3:]) + "\n")
+    with pytest.raises(Exception):
+        RL.ledger_check(c, {u: tmp_path / f"formal-{u}" for u in R30.ORDER})
