@@ -745,7 +745,8 @@ def _drive(c, out, counts, digester, refs, label, *, name, arm, seed, pipeline, 
                 now = time.perf_counter()
                 rows.append({"science": science,
                              "engineering": {"cycle_s": now - mark, "wait_s": item.timing["wait_s"], "train_call_s": train_call,
-                                             "train_s": res["elapsed_seconds"], "prepared_after": stream.ready(), **moved, **extra}})
+                                             "train_s": res["elapsed_seconds"], "prepared_after": stream.ready(),
+                                             "ema_clock": e.ema.updates, **moved, **extra}})
                 mark = now
                 del item, x, t
             account = stream.account()
@@ -803,10 +804,11 @@ def _l0_seed0_differences(c, rows, info):
     accept = K.read_json(K.pinned(s0["accept_closed"]))
     theirs = accept["first_updates"]
     mine = []
-    for r in _sci(rows):
-        res = r["result"]
+    for full in rows:
+        r, res = full["science"], full["science"]["result"]
+        # the stored rows carry the EMA clock of the engine after the update (result.ema_updates is the per-update count)
         mine.append({"input": r["input"], "gt_count": r["gt_count"], "loss": res["loss"], "lr": res["lr"],
-                     "gradient_norm_before_clip": res["gradient_norm_before_clip"], "ema_updates": res["ema_updates"],
+                     "gradient_norm_before_clip": res["gradient_norm_before_clip"], "ema_updates": full["engineering"]["ema_clock"],
                      "output_sha256": res["output_sha256"], "dn_noise_sha256": res["dn_noise_sha256"],
                      "gradient_sha256_before_clip": res["gradient_sha256_before_clip"], "microbatch_losses": res["microbatch_losses"]})
     out = {"acceptance_receipt": CC.differences([{k: t[k] for k in L0_RECEIPT_FIELDS} for t in theirs],
