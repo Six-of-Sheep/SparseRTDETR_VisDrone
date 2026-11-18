@@ -2,8 +2,9 @@
 
 Arms W (frozen demand network), K (fixed train_core mean demand), F (arm W's demand network with the FOVEA-style
 map, TASK_R28_FOVEA_MAPPING_CONTROL_004), FS (arm F with the calibrated kernel width,
-TASK_R28_CALIBRATED_F_CONTROL_006) and FG (arm F with the fixed geometry-selected kernel width,
-TASK_R28_STRONG_F_CONTROL_009); the arm of a process comes from R28_ARM.
+TASK_R28_CALIBRATED_F_CONTROL_006), FG (arm F with the fixed geometry-selected kernel width,
+TASK_R28_STRONG_F_CONTROL_009) and QP / QC (TASK_R29_001: arm FG with the query-wise un-zoomed decoder read, direct
+and dense; reported as P and C); the arm of a process comes from R28_ARM.
 Pure helpers (hashing, pinned references, ledger comparison) are the L0 ones, imported from tools/r27_l0/l0_common.py;
 nothing here writes into the L0 round.  The L0 round stays reachable through l0_common with its own default round,
 so the environment variable L0_ROUND must not be set in an R28 process.
@@ -34,9 +35,10 @@ require("L0_ROUND" not in os.environ, "L0_ROUND must not be set in an R28 proces
 LD_ROOT = B.LD_ROOT
 ROUND = Path(os.environ.get("R28_ROUND", str(LD_ROOT / "r28-budgeted-resampling-20261113-001")))
 DEV = ROUND.resolve().name.startswith("dev-round")
-ARMS = ("W", "K", "F", "FS", "FG")
+ARMS = ("W", "K", "F", "FS", "FG", "QP", "QC")
+R29_ARMS = ("QP", "QC")                 # TASK_R29_001: P (direct read) and C (dense un-zoom control) on the arm FG input
 ARM = os.environ.get("R28_ARM", "W")
-require(ARM in ARMS, f"R28_ARM must be W, K, F, FS or FG, got {ARM!r}")
+require(ARM in ARMS, f"R28_ARM must be W, K, F, FS, FG, QP or QC, got {ARM!r}")
 SCHEMA = "r28-state-v1"
 
 L0_ROUND = LD_ROOT / "r27-l0-control-20261111-001"
@@ -69,14 +71,17 @@ DEMAND["steps"] = DEMAND["epochs"] * WINDOWS_PER_EPOCH
 PRECOST_ENDPOINTS = ("L0", "Wpre")
 PRECOST_ROTATIONS = (("L0", "Wpre"), ("Wpre", "L0"), ("L0", "Wpre"))
 COST_ENDPOINTS = {"cost": ("A0", "L0", "W", "S15"), "cost-K": ("L0", "W", "K"), "cost-F": ("L0", "W", "F"),
-                  "cost-FS": ("L0", "K", "F", "FS", "W"), "cost-FG": ("L0", "K", "F", "FG", "W")}
+                  "cost-FS": ("L0", "K", "F", "FS", "W"), "cost-FG": ("L0", "K", "F", "FG", "W"),
+                  "cost-R29": ("FG", "QC", "QP")}
 COST_ROTATIONS = {"cost": (("A0", "L0", "W", "S15"), ("W", "S15", "A0", "L0"), ("L0", "A0", "S15", "W")),
                   "cost-K": (("L0", "W", "K"), ("K", "L0", "W"), ("W", "K", "L0")),
                   "cost-F": (("L0", "W", "F"), ("F", "L0", "W"), ("W", "F", "L0")),
                   # task 006 section 4: the fixed order, its reverse, the fixed order rotated left by two
                   "cost-FS": (("L0", "K", "F", "FS", "W"), ("W", "FS", "F", "K", "L0"), ("F", "FS", "W", "L0", "K")),
                   # task 009 section 4: the same three orders with FG in the place of FS
-                  "cost-FG": (("L0", "K", "F", "FG", "W"), ("W", "FG", "F", "K", "L0"), ("F", "FG", "W", "L0", "K"))}
+                  "cost-FG": (("L0", "K", "F", "FG", "W"), ("W", "FG", "F", "K", "L0"), ("F", "FG", "W", "L0", "K")),
+                  # TASK_R29_001 section 5: N-C-P, P-C-N, C-P-N (N is arm FG)
+                  "cost-R29": (("FG", "QC", "QP"), ("QP", "QC", "FG"), ("QC", "QP", "FG"))}
 EVALPATH_EXTRA = 2                      # non-identity deployment batches: one wrapped and one manual forward each
 
 WORKLOAD = {
@@ -98,6 +103,7 @@ WORKLOAD = {
     "cost-F": {"forwards": len(COST_ENDPOINTS["cost-F"]) * COST_PER_ENDPOINT},
     "cost-FS": {"forwards": len(COST_ENDPOINTS["cost-FS"]) * COST_PER_ENDPOINT},
     "cost-FG": {"forwards": len(COST_ENDPOINTS["cost-FG"]) * COST_PER_ENDPOINT},
+    "cost-R29": {"forwards": len(COST_ENDPOINTS["cost-R29"]) * COST_PER_ENDPOINT},
 }
 LABELS = {
     "G0_failed": "本固定需求预测未达到投入要求",
@@ -114,7 +120,14 @@ FOLLOWUP_BASIS = "post_W_user_approved_K_followup"
 FOVEA_BASIS = "post_K_user_forwarded_mapping_control"       # TASK_R28_FOVEA_MAPPING_CONTROL_004
 CAL_BASIS = "post_F_user_forwarded_calibrated_mapping_control"   # TASK_R28_CALIBRATED_F_CONTROL_006
 GEO_BASIS = "post_006_user_forwarded_fixed_geometry_selected_width_control"   # TASK_R28_STRONG_F_CONTROL_009
-FOLLOWUP_ARMS = {FOLLOWUP_BASIS: "K", FOVEA_BASIS: "F", CAL_BASIS: "FS", GEO_BASIS: "FG"}     # the only arm a round of each basis trains
+R29_BASIS = "post_009_user_forwarded_query_unzoom_read"                          # TASK_R29_001
+# the only arm a round of each basis trains; the R29 round trains two (R29_ARMS) and is marked by a name no arm has
+FOLLOWUP_ARMS = {FOLLOWUP_BASIS: "K", FOVEA_BASIS: "F", CAL_BASIS: "FS", GEO_BASIS: "FG", R29_BASIS: "R29"}
+
+
+def r29(c):
+    """True for the contract of the R29 round (arms QP and QC trained, arm FG read as N from its closed round)."""
+    return c.get("authorization_basis") == R29_BASIS and followup(c) is not None
 
 
 def followup(c):
@@ -128,7 +141,8 @@ def followup(c):
 
 
 def followup_arm(c):
-    """The arm a follow-up round trains (K or F), or None for the original R28 contract."""
+    """The arm a follow-up round trains (K, F, FS or FG; "R29" for the two-arm R29 round), or None for the original
+    R28 contract."""
     return None if followup(c) is None else FOLLOWUP_ARMS[c["authorization_basis"]]
 
 
@@ -136,7 +150,9 @@ def arm_module(arm):
     """The science module of an arm: r28_resample for W / K, r28_fovea for F, r28_fovea_cal for FS, r28_fovea_geo for
     FG (same create / build_eval_model interface)."""
     require(arm in ARMS, f"arm {arm}")
-    if arm == "FG":
+    if arm in R29_ARMS:
+        from sparse_rtdetr.research import r29_unzoom as M
+    elif arm == "FG":
         from sparse_rtdetr.research import r28_fovea_geo as M
     elif arm == "FS":
         from sparse_rtdetr.research import r28_fovea_cal as M
@@ -158,10 +174,10 @@ def prior_contract(c):
 
 
 def other_contract(c, which):
-    """The contract of the K round (which="K") or of the F round (which="F") a later control refers to: read-only,
-    pinned by file SHA and inner digest."""
+    """The contract of the K round (which="K"), of the F round (which="F") or of the F_geo round (which="FG", R29 only)
+    a later control refers to: read-only, pinned by file SHA and inner digest."""
     fu = followup(c)
-    require(fu is not None and which in ("K", "F") and f"{which}_contract" in fu, f"this contract has no reference to the {which} round")
+    require(fu is not None and which in ("K", "F", "FG") and f"{which}_contract" in fu, f"this contract has no reference to the {which} round")
     cx = read_json(pinned(fu[f"{which}_contract"]))
     body = {k: v for k, v in cx.items() if k != "contract_sha256"}
     require(cx["contract_sha256"] == sha_bytes(canonical(body)) == fu[f"{which}_contract_sha256"], f"{which} round contract digest")
@@ -275,7 +291,7 @@ def load_contract(path=None):
     if "F" in c["identity_sha256"]:
         from sparse_rtdetr.research import r28_fovea as FV
         want.update(FV.IDENTITY_SHA256)
-        require(c["fovea_definition"] == FV.DEFINITION and followup_arm(c) in ("F", "FS", "FG"), "R28-F mapping definition differs from the contract")
+        require(c["fovea_definition"] == FV.DEFINITION and followup_arm(c) in ("F", "FS", "FG", "R29"), "R28-F mapping definition differs from the contract")
     if "FS" in c["identity_sha256"]:
         from sparse_rtdetr.research import r28_fovea_cal as FS
         want.update(FS.IDENTITY_SHA256)
@@ -284,8 +300,13 @@ def load_contract(path=None):
     if "FG" in c["identity_sha256"]:
         from sparse_rtdetr.research import r28_fovea_geo as FG
         want.update(FG.IDENTITY_SHA256)
-        require(c["fovea_geo_definition"] == FG.DEFINITION and followup_arm(c) == "FG",
+        require(c["fovea_geo_definition"] == FG.DEFINITION and followup_arm(c) in ("FG", "R29"),
                 "R28-FG fixed-width mapping definition differs from the contract")
+    if any(a in c["identity_sha256"] for a in R29_ARMS):
+        from sparse_rtdetr.research import r29_unzoom as UZ
+        want.update(UZ.IDENTITY_SHA256)
+        require(c["r29_read_definition"] == UZ.DEFINITION and r29(c) and "FG" in c["identity_sha256"],
+                "R29 read definition differs from the contract")
     require(c["identity_sha256"] == want and c["definition"] == W.DEFINITION,
             "R28 behaviour identity differs from the contract")
     return c
@@ -331,7 +352,7 @@ def selected_width(c):
     """The fixed kernel width of the FG round (TASK_R28_STRONG_F_CONTROL_009): the contract's selection block, checked
     against the pinned calibration file of task 006, which must still read calibration_unmatched with h_star = null
     and name this width as its closest reading.  Returns the width (FP64, from the stored hex string) and the block."""
-    require(followup_arm(c) == "FG", "only the fixed-width strong mapping-control round has a selected width")
+    require(followup_arm(c) in ("FG", "R29"), "only the fixed-width strong mapping-control round and the R29 round have a selected width")
     from sparse_rtdetr.research import r28_fovea_geo as FG
     sel = FG.check_selection(followup(c).get("width_selection"))
     body = read_json(pinned(sel["calibration"]))
@@ -343,19 +364,23 @@ def selected_width(c):
 
 
 def pipeline_mode(c, arm):
-    """Input pipeline of a formal run: arms FS and FG use the overlapped path only if their closed acceptance enabled
-    it; every other arm, and R28_PIPELINE=serial, use the serial reference path."""
+    """Input pipeline of a formal run: arms FS, FG, QP and QC use the overlapped path only if their closed acceptance
+    enabled it; every other arm, and R28_PIPELINE=serial, use the serial reference path."""
     forced = os.environ.get("R28_PIPELINE")
     require(forced in (None, "serial"), "R28_PIPELINE can only select the serial reference path")
-    if arm not in ("FS", "FG") or forced:
+    if arm not in ("FS", "FG") + R29_ARMS or forced:
         return "serial"
+    if arm in R29_ARMS:                   # one acceptance stage covers both arms; each arm has its own decision
+        require(r29(c), "arms QP and QC are trained only in the R29 round")
+        return "overlap" if stage_closed(c, "accept-R29")["overlap_enabled"][arm] is True else "serial"
     stage = "pipeline" if arm == "FS" else "accept-FG"
     return "overlap" if stage_closed(c, stage, arm)["overlap_enabled"] is True else "serial"
 
 
 def demand_source(c, arm):
     """The formal demand source of an arm, read from the closed stage that produced it."""
-    if arm == "FG":                       # arm F's demand source plus the fixed geometry-selected kernel width
+    if arm == "FG" or arm in R29_ARMS:    # arm F's demand source plus the fixed geometry-selected kernel width
+        require(arm == "FG" or r29(c), "arms QP and QC exist only in the R29 round")
         return {"kind": "network", "file": stage_closed(c, "demand")["weights"], **selected_width(c)}
     if arm == "FS":                       # arm F's demand source plus the locked kernel width
         return {"kind": "network", "file": stage_closed(c, "demand")["weights"], **calibration(c)}
@@ -386,7 +411,7 @@ def binding(c, e, scope, audit=None, role=None):
     arm = getattr(e, "r28_arm", None)
     require(arm in ARMS and not hasattr(e, "l0_arm") and not hasattr(e, "r27_arm"), "engine is not an R28 engine")
     mapping = getattr(e, "r28_mapping", None)
-    require((arm in ("FS", "FG")) == (mapping is not None), "only an arm FS / FG engine carries a mapping width binding")
+    require((arm in ("FS", "FG") + R29_ARMS) == (mapping is not None), "only an arm FS / FG / QP / QC engine carries a mapping width binding")
     return {"schema": SCHEMA, "scope": scope, "arm": arm, "contract_sha256": c["contract_sha256"],
             "identity_sha256": c["identity_sha256"][arm], "parent_sha256": c["parent"]["sha256"],
             "global_update": e.completed_updates, "cursor": cursor(e.completed_updates), "config": e.config.binding(),
@@ -469,7 +494,8 @@ def formal_re(arm):
 
 
 def formal_dir(c, arm):
-    require(followup(c) is None or arm == followup_arm(c), f"this follow-up round has no formal directory of arm {arm}")
+    require(followup(c) is None or arm == followup_arm(c) or (r29(c) and arm in R29_ARMS),
+            f"this follow-up round has no formal directory of arm {arm}")
     found = []
     for d in sorted(ROUND.iterdir()) if ROUND.is_dir() else ():
         if not (d.is_dir() and formal_re(arm).fullmatch(d.name) and (d / "CLOSED.json").is_file()):
@@ -501,10 +527,17 @@ def endpoint_state(c, arm):
     """The only evaluation source of an arm: the endpoint state of its closed formal directory, EMA module only.
     In a follow-up round arm W is the pinned e120 state of the closed R28 round, read under the prior contract."""
     fu = followup(c)
+    require(not (fu is not None and r29(c)) or arm in R29_ARMS + ("FG",), f"the R29 round has no endpoint of arm {arm}")
     if fu is not None and arm == "W":
         side, s = read_state(prior_contract(c), pinned(fu["W_endpoint"]), "formal", "W")
         require(side["file"] == fu["W_endpoint"] and side["global_update"] == ENDPOINT
                 and s["engine"]["completed_updates"] == s["ema"]["updates"] == ENDPOINT, "prior W endpoint clocks")
+        return side, s["ema"]["module"]
+    if fu is not None and r29(c) and arm == "FG":
+        # R29: N is the stored e120 state of the closed F_geo round, read under that round's contract
+        side, s = read_state(other_contract(c, "FG"), pinned(fu["FG_endpoint"]), "formal", "FG")
+        require(side["file"] == fu["FG_endpoint"] and side["global_update"] == ENDPOINT
+                and s["engine"]["completed_updates"] == s["ema"]["updates"] == ENDPOINT, "stored FG endpoint clocks")
         return side, s["ema"]["module"]
     if fu is not None and followup_arm(c) in ("FS", "FG") and arm in ("K", "F"):
         # the FS / FG controls time the stored K and F endpoints: each is read under its own round's contract

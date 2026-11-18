@@ -22,6 +22,15 @@
                                      demand network only; wiring of evaluation / five-arm timing; the 4 + 4 + 2 update
                                      acceptance of the actual width)
 
+  prepare-r29                     -> r29_control.prepare  (TASK_R29_001: contract of the R29 round, arms QP = P and QC = C)
+  r29-check                       -> r29_control          (CPU: affected interfaces, operator checks, real-model CPU fixture)
+  r29-wire | r29-ncheck | r29-accept -> r29_control       (CUDA: wiring of the evaluation batch and of the staged N / C / P
+                                     timing; two evaluation batches of the stored N endpoint against its stored
+                                     predictions; joint acceptance N 2 / C 4 + 2 / P 4 + 2 updates)
+
+  r29-pipe                        -> r29_input            (CUDA, dev rounds only, run by hand: timing of the window delivery
+                                     modes on the real QP / QC loop; not in the chain)
+
 Every stage function returns a dict that is merged into <out>/CLOSED.json; an exception writes <out>/STOP.json and
 is re-raised.
 """
@@ -46,14 +55,17 @@ DISPATCH = {"cpu": "r28_checks", "zero": "r28_checks", "accept": "r28_checks", "
             "cal-check": "r28_cal_control", "cal-fixture": "r28_cal_control", "calibrate": "r28_cal_control",
             "cal-wire": "r28_cal_control", "pipeline": "r28_cal_control",
             "geo-check": "r28_geo_control", "geo-confirm": "r28_geo_control", "geo-wire": "r28_geo_control",
-            "geo-accept": "r28_geo_control", "ledger-means": "r28_geo_control"}
+            "geo-accept": "r28_geo_control", "ledger-means": "r28_geo_control",
+            "r29-check": "r29_control", "r29-wire": "r29_control", "r29-ncheck": "r29_control", "r29-accept": "r29_control",
+            "r29-pipe": "r29_input"}
 CPU_ACTIONS = ("cpu", "prior", "summarize", "dose", "followup-check", "medium", "fovea-check", "cal-check", "cal-fixture",
-               "geo-check", "ledger-means")
+               "geo-check", "ledger-means", "r29-check")
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=("prepare", "prepare-followup", "prepare-fovea", "prepare-cal", "prepare-geo") + tuple(DISPATCH))
+    ap.add_argument("action", choices=("prepare", "prepare-followup", "prepare-fovea", "prepare-cal", "prepare-geo", "prepare-r29")
+                    + tuple(DISPATCH))
     ap.add_argument("--out", type=Path)
     ap.add_argument("--resume", type=Path)
     args = ap.parse_args(argv)
@@ -76,6 +88,10 @@ def main(argv=None):
         K.require(args.out is None and args.resume is None, "prepare-geo takes no --out/--resume")
         import r28_geo_control as GC
         return GC.prepare(args)
+    if args.action == "prepare-r29":
+        K.require(args.out is None and args.resume is None, "prepare-r29 takes no --out/--resume")
+        import r29_control as RC
+        return RC.prepare(args)
     K.require(args.out is not None, "--out is required")
     K.require(args.resume is None or args.action == "formal", "--resume is only for formal")
     run = getattr(importlib.import_module(DISPATCH[args.action]), args.action.replace("-", "_"))

@@ -53,9 +53,10 @@ def geo_contract(sel=None, inherited=None):
 # ---------------------------------------------------------------- registration
 def test_basis_arm_module_and_five_arm_timing_order():
     assert K.GEO_BASIS == "post_006_user_forwarded_fixed_geometry_selected_width_control"
-    assert K.FOLLOWUP_ARMS == {"post_W_user_approved_K_followup": "K", "post_K_user_forwarded_mapping_control": "F",
-                               K.CAL_BASIS: "FS", K.GEO_BASIS: "FG"}
-    assert K.ARMS == ("W", "K", "F", "FS", "FG") and K.arm_module("FG") is FG and K.arm_module("FS") is FS and K.arm_module("F") is FV
+    assert {k: v for k, v in K.FOLLOWUP_ARMS.items() if v != "R29"} == {"post_W_user_approved_K_followup": "K",
+                                                                        "post_K_user_forwarded_mapping_control": "F",
+                                                                        K.CAL_BASIS: "FS", K.GEO_BASIS: "FG"}
+    assert K.ARMS[:5] == ("W", "K", "F", "FS", "FG") and K.arm_module("FG") is FG and K.arm_module("FS") is FS and K.arm_module("F") is FV
     assert K.arm_module("W") is R and K.followup_arm(geo_contract()) == "FG"
     for bad in ({"authorization_basis": K.GEO_BASIS, "followup": {"authorization_basis": K.GEO_BASIS, "arm": "FS"}},
                 {"authorization_basis": K.GEO_BASIS, "followup": {"authorization_basis": K.GEO_BASIS, "arm": "F"}},
