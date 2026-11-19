@@ -174,12 +174,12 @@ def swap(model, ctx):
 
 
 # ---------------------------------------------------------------- engine / evaluation model
-def create(parent, device, arm, source, *, fixture=False, activation_checkpoint=True, check=False):
+def create(parent, device, arm, source, *, fixture=False, activation_checkpoint=True, check=False, seed=0):
     """Arm FS's construction order with the fixed width: the demand context first (its network initialiser draws from
     the torch RNG), then L0.create, which restores the parent training RNG as its last step."""
     binding = check_source(arm, source, check)
     ctx = _context(source, binding)
-    e, checks = L0.create(parent, device, fixture=fixture, activation_checkpoint=activation_checkpoint)
+    e, checks = L0.create(parent, device, fixture=fixture, activation_checkpoint=activation_checkpoint, seed=seed)
     ctx.to(e.device)
     swap(e.model, ctx)
     swap(e.ema.module, ctx)
@@ -198,11 +198,11 @@ def create(parent, device, arm, source, *, fixture=False, activation_checkpoint=
     return e, checks
 
 
-def build_eval_model(state, device, arm, source, *, check=False):
+def build_eval_model(state, device, arm, source, *, check=False, seed=0):
     """FP32 evaluation model from a saved module state (native key set) with the arm's demand source and fixed width."""
     binding = check_source(arm, source, check)
     ctx = _context(source, binding).to(device)
-    model = L0.build_eval_model(state, device)
+    model = L0.build_eval_model(state, device, seed)
     swap(model, ctx)
     model.r28_arm = arm
     model.r28_mapping = binding

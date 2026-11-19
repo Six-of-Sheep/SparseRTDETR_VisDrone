@@ -87,9 +87,12 @@ def _settings(group):
 
 
 # ---------------------------------------------------------------- engine construction from the e060 parent
-def create(parent, device, *, fixture=False, activation_checkpoint=True):
+def create(parent, device, *, fixture=False, activation_checkpoint=True, seed=0):
     """The R27 ``create`` path without ``install`` and without the local recompute: global L network from the
-    native e060 complete state, online and EMA wrapped, engine at the S15 H recipe (or the CPU H fixture)."""
+    native e060 complete state, online and EMA wrapped, engine at the S15 H recipe (or the CPU H fixture).
+
+    ``seed`` (TASK_R30_SEEDS_002) selects the recipe seed and the only admissible parent of that seed
+    (scale_baseline.PARENT_SHAS); the default 0 is the R27-002 path, value for value."""
     from . import scale_baseline as S
     from ..protocol_r18 import checkpoint as native
     from ..protocol_r18.engine import Engine, learning_rate, tensor_digest
@@ -97,15 +100,17 @@ def create(parent, device, *, fixture=False, activation_checkpoint=True):
     from ..protocol_r18.model import CommonEMA, Config, build
     from ..baseline.training_v2b import _optimizer
     require(tuple(S.CHECKPOINT_SEGMENTS) == CHECKPOINT_SEGMENTS, "L0 activation checkpoint segments differ from S15")
-    gcfg = Config(seed=0)
-    ecfg = Config(seed=0, input_hw=H_HW, physical_batch_size=1, amp_dtype="float32") if fixture else S.production_config(0)
+    require(type(seed) is int and seed in S.PARENT_SHAS and S.PARENT_SHAS[0] == PARENT_SHA, "L0 seed has no certified parent")
+    parent_sha = S.PARENT_SHAS[seed]
+    gcfg = Config(seed=seed)
+    ecfg = Config(seed=seed, input_hw=H_HW, physical_batch_size=1, amp_dtype="float32") if fixture else S.production_config(seed)
     if not fixture:
         S.validate_production(ecfg)
-    require(native.file_sha(parent) == PARENT_SHA, "L0 parent identity")
+    require(native.file_sha(parent) == parent_sha, "L0 parent identity")
     s = torch.load(parent, map_location="cpu", weights_only=True)
     require(s["engine"]["completed_updates"] == PARENT_UPDATE, "L0 parent clock")
     require(s["binding"]["config"] == gcfg.binding() and s["engine"].get("config", s["binding"]["config"]) == gcfg.binding(),
-            "L0 parent recipe is not the common 768x1344 seed0 recipe")
+            "L0 parent recipe is not the common 768x1344 recipe of this seed")
     model, criterion, _ = build(gcfg, synthetic=True)
     require(native.old._model_layout(model) == s["model_layout"], "L0 global model layout differs from the parent")
     require(criterion.recipe() == s["behavior"]["criterion"], "L0 criterion behaviour differs")
@@ -151,7 +156,7 @@ def create(parent, device, *, fixture=False, activation_checkpoint=True):
     # scale_baseline.capture/restore copy these two into the saved "arm" / "parent_sha256" fields and refuse a state
     # of another arm.  "L0" is none of S15 (R27 N), R27-C, R27-P or A0; the parent SHA is the verified file fact.
     e.r25_arm = ARM
-    e.r25_parent = PARENT_SHA
+    e.r25_parent = parent_sha
     wrapped = S.install_activation_checkpoint(model) if activation_checkpoint else []
     e.s15_activation_checkpoint = bool(activation_checkpoint)
     validate_geometry(model)
@@ -179,7 +184,7 @@ def create(parent, device, *, fixture=False, activation_checkpoint=True):
         "old_parameters_sha256": tensor_digest(model.named_parameters()),
         "activation_checkpoint_segments": wrapped, "local_recompute_segments": [],
         "engine_config": ecfg.binding(), "global_model_config": gcfg.binding(),
-        "identity_sha256": IDENTITY_SHA256, "parent_sha256": PARENT_SHA,
+        "identity_sha256": IDENTITY_SHA256, "parent_sha256": parent_sha,
         "EMA_updates": ema.updates, "completed_updates": e.completed_updates,
         "lr_next": learning_rate(e.completed_updates + 1), "r25_arm": e.r25_arm, **info,
     }
@@ -196,12 +201,12 @@ def create(parent, device, *, fixture=False, activation_checkpoint=True):
     return e, checks
 
 
-def build_eval_model(state, device):
+def build_eval_model(state, device, seed=0):
     """FP32 evaluation model from a saved module state (EMA or online); native key set only; no activation checkpoint."""
     from ..protocol_r18.engine import tensor_digest
     from ..protocol_r18.geometry import validate_geometry
     from ..protocol_r18.model import Config, build
-    model, _, _ = build(Config(seed=0), synthetic=True)
+    model, _, _ = build(Config(seed=seed), synthetic=True)
     wrap(model)
     own = model.state_dict()
     extra, missing = sorted(set(state) - set(own)), sorted(set(own) - set(state))
