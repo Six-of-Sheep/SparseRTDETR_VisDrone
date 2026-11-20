@@ -10,7 +10,8 @@ usage: r31_external.py <action> --round <round> [--release <name>] [--unit <unit
             the three UAVDT packages, the frozen demand network and the mapping of task 009.
   data      CPU.  Package identity, the image package directory against the selection evidence, the 20 test sequences
             unpacked (every image asserted 1024 x 540), GT / ignore / attribute parsing against the selection census,
-            the ignore rule on the toolkit's own det_FRCNN results (task check 4).
+            the ignore rule on the toolkit's own det_FRCNN results (task check 4) and, because no det_FRCNN row
+            is deleted by it, on the toolkit's other detection sets as well.
   gtcheck   CPU.  Task check 2, first half: the GT boxes as detections through the scoring path.
   wire      CUDA, one unit.  Task check 1: the first 8 development images through this entry must give the stored
             top600 records field by field; only then does the chain run that unit on UAVDT.
@@ -96,6 +97,8 @@ DEVELOPMENT_PER_GT = ("r30-fgeo-diagnostic-20261118-001/infer/per_gt.json", 1327
 DEVELOPMENT_READING = {"GT": 38599, "small_GT": 26441, "small_bin_counts": [3143, 9414, 7840, 6044], "small_g_geomean_4dp": 1.2172}
 DEVELOPMENT_VEHICLE_CATEGORIES = (4, 5, 6, 9)                      # VisDrone car, van, truck, bus
 
+TOOLKIT_DETECTORS = ("det_FRCNN", "det_RFCN", "det_RON", "det_SSD")     # RES_DET of the toolkit; det_FRCNN is the task's
+RULE_COUNTS = ("detections_before", "deleted", "detections_after", "independent_deleted", "independent_after")
 MAIN_UNITS = ("L0-s0", "FG-s0", "L0-s1", "FG-s1", "L0-s2", "FG-s2")
 REFERENCE_UNITS = ("S15-s0", "S15-s1", "S15-s2")
 UNITS = MAIN_UNITS + REFERENCE_UNITS
@@ -468,7 +471,10 @@ def data(c, out, counts):
 
         gt = {s: C.parse_gt(member(f"/GT/{s}_gt_whole.txt").decode("ascii")) for s in C.TEST_SEQUENCES}
         ign = {s: C.parse_ignore(member(f"/GT/{s}_gt_ignore.txt").decode("ascii")) for s in C.TEST_SEQUENCES}
-        det = {s: C.parse_detections(member(f"/RES_DET/det_FRCNN/{s}.txt").decode("ascii")) for s in ("M0203", "M0701")}
+        shipped = sorted({n.split("/RES_DET/")[1].split("/")[0] for n in names if "/RES_DET/" in n and n.endswith(".txt")})
+        B.require(shipped == sorted(TOOLKIT_DETECTORS), f"detection sets of the toolkit: {shipped}")
+        det = {d: {s: C.parse_detections(member(f"/RES_DET/{d}/{s}.txt").decode("ascii")) for s in C.TEST_SEQUENCES}
+               for d in TOOLKIT_DETECTORS}
         rule_source = member("/utils/CalculateDetectionPR_overall.m")
     mine = C.census(gt, ign)
     want = evidence["splits"]["test"]
@@ -514,15 +520,21 @@ def data(c, out, counts):
     outside = [s for s in C.TEST_SEQUENCES if s not in pass_list]
     B.require(all(len(ign[s]) == 0 for s in outside) and set(pass_list) <= set(C.TEST_SEQUENCES),
               f"STOP AND HAND BACK: the toolkit skips the rule on sequences that carry ignore rectangles: {outside}")
-    rule = {}
-    for s, d in det.items():
-        mask = C.deleted_by_frame(d, ign[s].astype(np.float64))
-        independent = np.array(C.toolkit_deleted(d.tolist(), ign[s].tolist()), dtype=bool)
-        rule[s] = {"detections_before": int(len(d)), "deleted": int(mask.sum()), "detections_after": int((~mask).sum()),
-                   "independent_deleted": int(independent.sum()), "independent_after": int((~independent).sum()),
-                   "same_rows": bool((mask == independent).all()), "ignore_rectangles": int(len(ign[s]))}
-    B.require(all(v["same_rows"] and v["detections_before"] > 0 for v in rule.values()),
-              f"the ignore rule of the scoring path differs from the independent judgement: {rule}")
+    every = {}
+    for name, per in det.items():
+        every[name] = {}
+        for s, d in per.items():
+            mask = C.deleted_by_frame(d, ign[s].astype(np.float64))
+            independent = np.array(C.toolkit_deleted(d.tolist(), ign[s].tolist()), dtype=bool)
+            every[name][s] = {"detections_before": int(len(d)), "deleted": int(mask.sum()), "detections_after": int((~mask).sum()),
+                              "independent_deleted": int(independent.sum()), "independent_after": int((~independent).sum()),
+                              "same_rows": bool((mask == independent).all()), "ignore_rectangles": int(len(ign[s]))}
+    differ = {f"{name}/{s}": v for name, per in every.items() for s, v in per.items()
+              if not v["same_rows"] or v["detections_before"] <= 0}
+    B.require(not differ, f"the ignore rule of the scoring path differs from the independent judgement: {differ}")
+    rule = {s: every["det_FRCNN"][s] for s in ("M0203", "M0701")}                    # task check 4 as written
+    totals = {name: {k: sum(v[k] for v in per.values()) for k in RULE_COUNTS} for name, per in every.items()}
+    B.require(sum(t["deleted"] for t in totals.values()) > 0, "no toolkit detection row is deleted: the comparison exercises nothing")
 
     B.PHASE["phase"] = "data/annotations"
     gt_frame, gt_rows, gt_off, _ = _pack(gt, "GT", False)
@@ -549,7 +561,13 @@ def data(c, out, counts):
                             "their_ignore_rectangles": {s: int(len(ign[s])) for s in outside},
                             "note": "the toolkit applies the rule to the sequences of its pass list; the test sequences missing "
                                     "from it carry no ignore rectangle, so applying the rule to all 20 sequences is the same",
-                            "det_FRCNN": rule}}
+                            "det_FRCNN": rule,
+                            "every_toolkit_detection_set": {
+                                "note": "added to task check 4: the same before / after counts and the same independent "
+                                        "row-by-row judgement on all 20 test sequences of every detection set the "
+                                        "toolkit ships, because the rule deletes no det_FRCNN row",
+                                "sets": list(TOOLKIT_DETECTORS), "sequences": len(C.TEST_SEQUENCES),
+                                "same_rows_in_every_set_and_sequence": True, "totals": totals, "per_sequence": every}}}
 
 
 def load_data(c):
