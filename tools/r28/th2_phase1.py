@@ -995,7 +995,7 @@ def r14(c, out, counts):
     div = T.g_bin(gs["d"]) != T.g_bin(gs["b"])
     dl = np.log(gs["d"]) - np.log(gs["b"])
     r1 = {(r["group"], r["side"]): r["mean_of_seeds"]["value"] for r in res["R1"]["hit75"]["by_size"]}
-    binned = np.array([(r1[(T.SIZE_NAMES[b], "magnified" if v > 0 else "compressed")] or 0.0) / 10.0 for b, v in zip(gt.size, dl)]) * dl
+    binned = np.array([(r1[(T.SIZE_NAMES[b], "magnified" if v > 0 else "compressed")] or 0.0) * 10.0 for b, v in zip(gt.size, dl)]) * dl      # pp per 0.1 log g -> pp per log g
     predicted = {n: {"M2": float(100 * (beta["M2"] * dl)[sel].mean()), "M1": float(100 * (beta["M1"] * dl)[sel].mean()),
                      "R1_size_by_side_slopes": float(binned[sel].mean())} for n, sel in (("small", gt.small), ("medium", gt.medium))}
     res["sources"] = {
