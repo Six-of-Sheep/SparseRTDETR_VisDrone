@@ -656,11 +656,11 @@ def _pass(model, ctx, maps, images, device, counts, gt, rows, keep=None):
     ctx.start(torch.from_numpy(np.ascontiguousarray(maps)))
 
     def sink(off, boxes, logits):
-        scores = logits.sigmoid().numpy()
         bx = boxes.numpy()
         for j in range(X.BATCH):
             i = off + j
-            cat, score, box, _ = T.top600(scores[j], bx[j], rows[i]["width"], rows[i]["height"])
+            # per image, as r0.evaluation.rank_candidates: the CPU sigmoid of the whole batch differs by 1 ulp in a few scores
+            cat, score, box, _ = T.top600(logits[j].sigmoid().numpy(), bx[j], rows[i]["width"], rows[i]["height"])
             s = gt.sl(i)
             iou[s], q[s] = T.outcomes(gt.box[s], gt.cat[s], cat, score, box)
             if keep is not None:
