@@ -169,7 +169,7 @@ def prepare(round_dir, release):
     res_ref = B.ref(P1 / "tables/RESULT.json")
     B.require(res_ref["sha256"] == P1_RESULT_SHA, "phase-1 RESULT.json")
     res = B.read_json(res_ref["path"])
-    geo_a, e3 = res["E2"]["geometry"]["a"]["small"], res["E3"]
+    geo_a, e3 = res["E2"]["geometry"]["geometry"]["a"]["small"], res["E3"]
     B.require(geo_a["g_geomean"] == WIRE["P"]["small_g_geomean"] and geo_a["share_g_lt_1.2"] == WIRE["P"]["small_share_g_lt_1.2"]
               and e3["ideal_2d_allocation"]["small_GT_under_b_actual"]["g_geomean"] == WIRE["Lb"]["small_g_geomean"]
               and e3["ideal_2d_allocation"]["small_GT_under_b_actual"]["share_g_lt_1.2"] == WIRE["Lb"]["small_share_g_lt_1.2"]
