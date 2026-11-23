@@ -19,6 +19,7 @@ flock -n 9 || { echo "another chain holds $R/.chain.lock"; exit 1; }
 [ "$(nvidia-smi --query-gpu=uuid --format=csv,noheader)" = "$GPU_UUID" ] || { echo "GPU differs"; exit 1; }
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+# TH2B0_DEMAND_DEVICE=cpu runs the demand network on the CPU (when another user's job leaves no GPU memory).
 
 cpu() { env CUDA_VISIBLE_DEVICES= "$PY" -I "$RUN" "$@" --round "$R"; }
 gpu() { "$PY" -I "$RUN" "$@" --round "$R"; }
@@ -33,7 +34,7 @@ stage() {            # stage <name> <cpu|gpu>
 
 log "CHAIN START release=$REL"
 stage wire cpu
-stage demand_tc gpu
+if [ "${TH2B0_DEMAND_DEVICE:-cuda}" = cpu ]; then stage demand_tc cpu; else stage demand_tc gpu; fi
 stage tc cpu
 stage select cpu
 stage dev cpu

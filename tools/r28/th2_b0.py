@@ -471,14 +471,21 @@ def _decode(data, row):
         return TF.pil_to_tensor(data.transform.resize(im.convert("RGB")))
 
 
+def demand_device():
+    d = os.environ.get("TH2B0_DEMAND_DEVICE", "cuda")
+    B.require(d in ("cuda", "cpu"), "TH2B0_DEMAND_DEVICE")
+    return d
+
+
 def demand_tc(c, out, counts):
     from concurrent.futures import ThreadPoolExecutor
     from sparse_rtdetr.research import r28_resample as RS
     B.PHASE["phase"] = "demand_tc/load"
     torch = B.torch_mod()
-    B.require(X.nvidia("gpu=uuid") == [c["gpu_uuid"]], "GPU differs from the contract")
-    device = torch.device("cuda:0")
-    others = X.other_gpu_processes()
+    on_gpu = demand_device() == "cuda"
+    B.require(not on_gpu or X.nvidia("gpu=uuid") == [c["gpu_uuid"]], "GPU differs from the contract")
+    device = torch.device("cuda:0" if on_gpu else "cpu")
+    others = X.other_gpu_processes() if on_gpu else X.nvidia("compute-apps=pid,process_name,used_memory")
     ctx = RS.Context({"kind": "network", "file": c["demand"]["weights"]}).to(device)
     B.require(ctx.binding() == c["demand"]["binding"], "demand network binding")
     data, rows = tc_data(c)
@@ -491,9 +498,10 @@ def demand_tc(c, out, counts):
                 t1 = time.monotonic()
                 x = (torch.stack(images[b:b + X.BATCH]).float() / 255.).to(device)
                 B.require(tuple(x.shape[1:]) == (3, 1152, 2016) and x.dtype == torch.float32, "the input is not the FP32 H canvas")
-                with torch.autocast("cuda", enabled=False), torch.no_grad():
+                with torch.autocast(device.type, enabled=False), torch.no_grad():
                     d = ctx.demand(x)
-                torch.cuda.synchronize()
+                if on_gpu:
+                    torch.cuda.synchronize()
                 seconds += time.monotonic() - t1
                 counts.update(demand_forwards=1, demand_images=len(x))
                 maps.append(d.clone())
@@ -503,10 +511,13 @@ def demand_tc(c, out, counts):
     B.require(ctx.binding() == c["demand"]["binding"], "the forwards changed the demand network")
     B.require(counts["forwards"] == 0, "no detector forward")
     return {"stage": "demand_tc", "files": {"demand": X.save_npy(out / "demand_tc.npy", d)}, "images": len(rows),
-            "each_image_forwarded_once": True, "batch": X.BATCH, "gpu_forward_seconds": seconds, "stage_wall_seconds": time.monotonic() - t0,
+            "each_image_forwarded_once": True, "batch": X.BATCH, "device": device.type,
+            "device_note": "phase 1 ran this network on CUDA; on the CPU the FP32 result may differ in the last bits",
+            "gpu_forward_seconds": seconds if on_gpu else 0.0, "forward_seconds": seconds, "stage_wall_seconds": time.monotonic() - t0,
             "demand_min_max_mean": [float(d.min()), float(d.max()), float(d.mean())],
-            "other_gpu_compute_processes_at_start": others, "other_gpu_compute_processes_at_end": X.other_gpu_processes(),
-            "peak_cuda_bytes": torch.cuda.max_memory_allocated()}
+            "other_gpu_compute_processes_at_start": others,
+            "other_gpu_compute_processes_at_end": X.other_gpu_processes() if on_gpu else X.nvidia("compute-apps=pid,process_name,used_memory"),
+            "peak_cuda_bytes": torch.cuda.max_memory_allocated() if on_gpu else 0}
 
 
 # ================================================================ tc (CPU)
@@ -796,9 +807,10 @@ def tables(c, out, counts):
               "wire": stage_closed(c, "wire")["checks"], "official": c["official"],
               "timing": {"SELECTION_written_at": sel["written_at"],
                          "first_development_NS_computation_started_at": d["start"]["first_development_NS_computation_started_at"]},
-              "workload": {"stages": stages, "cpu_wall_seconds": sum(v["elapsed_seconds"] for k, v in stages.items() if k != "demand_tc"),
+              "workload": {"stages": stages, "cpu_wall_seconds": sum(v["elapsed_seconds"] for k, v in stages.items() if k != "demand_tc" or dm["device"] == "cpu"),
                            "demand_network_images_forwarded": dm["images"], "demand_network_forward_calls": dm["counts"]["demand_forwards"],
-                           "gpu_forward_seconds": dm["gpu_forward_seconds"], "gpu_stage_wall_seconds": dm["stage_wall_seconds"],
+                           "gpu_forward_seconds": dm["gpu_forward_seconds"], "demand_device": dm["device"],
+                           "demand_forward_seconds": dm["forward_seconds"], "demand_stage_wall_seconds": dm["stage_wall_seconds"],
                            "detector_forwards": 0, "updates": 0, "scoring_calls": 0,
                            "other_gpu_compute_processes_seen": sorted(set(dm["other_gpu_compute_processes_at_start"] + dm["other_gpu_compute_processes_at_end"])),
                            "bytes_in_round_directory_before_this_file": used},
@@ -822,6 +834,8 @@ def main(argv=None):
         B.require(args.release, "prepare needs --release")
         return prepare(args.round, args.release)
     run, mode = STAGES[args.action]
+    if args.action == "demand_tc":
+        mode = demand_device()
     B.require(args.release is None, "--release is for prepare")
     c = load_contract(args.round)
     out = Path(c["outputs"]) / args.action
