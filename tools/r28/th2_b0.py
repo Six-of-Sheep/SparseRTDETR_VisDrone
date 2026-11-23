@@ -42,7 +42,7 @@ import l0_common as B  # noqa: E402
 import r31_external as X  # noqa: E402
 import th2b0_core as C  # noqa: E402
 
-VERSION = "TH2-B0-001-v1"
+VERSION = "TH2-B0-001-v2"
 TASK = ("TASK_TH2_B0_001.md", "03e62a4aea680f6ab6b787a1a6db57bc4a1e2da463feeffd54c33109527181c2")
 P1 = B.WS / "experiments/thesis-study2/th2-phase1-20261122-001"
 P1_CONTRACT_SHA = "2471ad9271ebbae0c645cc283de137118e9571d1aefadf7d321028414ae8788d"
@@ -90,7 +90,9 @@ OFFICIAL = {
 DEFINITIONS = {
     "TC": "train_core, 4,869 images, unaugmented; boxes clipped to the image and normalised (r28_demand.deployment_xyxy)",
     "TC_GT": "the valid GT of the annotation file kept by deployment_xyxy that pass the evaluation filter of the development "
-             "table (r0.evaluation.bridge_inputs per image: raster ignore prefilter >= 0.5 removed, non-crowd)",
+             "table (r0.evaluation.bridge_inputs per image: raster ignore prefilter >= 0.5 removed, non-crowd).  Annotation rows "
+             "of non-positive extent (role nonpositive_area; they cover no pixel) are left out before the filter, which "
+             "refuses them; the tc receipt counts them",
     "DEV": "development 548 images; the per-GT table of phase 1 (geom/gt.npz): 38,759 deployment rows, 38,599 scored, 26,441 small",
     "P": "the frozen demand network's 12 x 21 map (without eps): development from phase 1 demand/demand.npy; train_core from "
          "one forward per image through r28_resample.Context.demand on the FP32 H canvas (CUDA, batch 4, as phase 1)",
@@ -482,6 +484,24 @@ def demand_tc(c, out, counts):
     from sparse_rtdetr.research import r28_resample as RS
     B.PHASE["phase"] = "demand_tc/load"
     torch = B.torch_mod()
+    prior = os.environ.get("TH2B0_DEMAND_ARCHIVE")
+    if prior:                                   # task section 2: an archive of the same convention is not recomputed
+        pc = B.read_json(Path(prior) / "CONTRACT.json")
+        closed = B.read_json(Path(prior) / "demand_tc/CLOSED.json")
+        B.require(closed["status"] == "PASS" and closed["contract_sha256"] == pc["contract_sha256"] and pc["tc_ids"] == c["tc_ids"]
+                  and pc["demand"] == c["demand"] and pc["dev"] is False and closed["images"] == len(c["tc_ids"]), "prior demand archive")
+        mine, theirs = B.read_json(c["source_manifest"]["path"])["files"], B.read_json(pc["source_manifest"]["path"])["files"]
+        same = ("src/sparse_rtdetr/research/r28_resample.py", "src/sparse_rtdetr/research/r28_warp.py", "tools/r28/r28_demand.py",
+                "src/sparse_rtdetr/research/scale_baseline.py")
+        B.require(all(mine[f] == theirs[f] for f in same), "the demand code differs from the archive's release")
+        d = np.load(B.pinned(closed["files"]["demand"]), allow_pickle=False)
+        B.require(d.shape == (len(c["tc_ids"]), 12, 21) and d.dtype == np.float64, "prior demand maps")
+        keep = ("images", "batch", "device", "device_note", "gpu_forward_seconds", "forward_seconds", "stage_wall_seconds",
+                "demand_min_max_mean", "other_gpu_compute_processes_at_start", "other_gpu_compute_processes_at_end", "peak_cuda_bytes")
+        counts.update(demand_forwards=0, demand_images=0)
+        return {"stage": "demand_tc", "files": {"demand": X.save_npy(out / "demand_tc.npy", d)}, "each_image_forwarded_once": True,
+                "adopted_from": closed["files"]["demand"], "adopted_stage_counts": closed["counts"], "forwards_in_this_stage": 0,
+                **{k: closed[k] for k in keep}}
     on_gpu = demand_device() == "cuda"
     B.require(not on_gpu or X.nvidia("gpu=uuid") == [c["gpu_uuid"]], "GPU differs from the contract")
     device = torch.device("cuda:0" if on_gpu else "cpu")
@@ -528,13 +548,16 @@ def tc_table(c):
     from sparse_rtdetr.research import r28_warp as W
     data, rows = tc_data(c)
     image, norm, area, scored, d_star, raw_ids = [], [], [], [], [], []
+    dropped = 0
     for i, row in enumerate(rows):
         p = DM._annotation(data, row)
         nb, keep = DM.deployment_xyxy(p, row["width"], row["height"])
         d_star.append(W.demand_from_boxes(nb).numpy())
         objs = [o for o, k in zip(p["gt"], keep) if k]
         if objs:
-            dataset, _, _ = bridge_inputs([row], [p], [])
+            usable = {**p, "rows": [o for o in p["rows"] if o["role"] != "nonpositive_area"]}
+            dropped += len(p["rows"]) - len(usable["rows"])
+            dataset, _, _ = bridge_inputs([row], [usable], [])
             ids = {a["raw_annotation_id"] for a in dataset["annotations"] if not a["iscrowd"]}
             image += [i] * len(objs)
             norm.append(nb.numpy().reshape(-1, 4))
@@ -543,12 +566,12 @@ def tc_table(c):
             raw_ids += [o["id"] for o in objs]
     z = {"image": np.array(image, dtype=np.int64), "norm": np.concatenate(norm), "area": np.array(area), "scored": np.array(scored)}
     z["size"] = C.size_bin(z["area"])
-    return z, np.stack(d_star), raw_ids
+    return z, np.stack(d_star), raw_ids, dropped
 
 
 def tc(c, out, counts):
     B.PHASE["phase"] = "tc/table"
-    z, d_star, raw_ids = tc_table(c)
+    z, d_star, raw_ids, dropped = tc_table(c)
     sc = z["scored"]
     maps = {"P": np.load(B.pinned(stage_closed(c, "demand_tc")["files"]["demand"]), allow_pickle=False), "Lb": d_star}
     B.require(maps["P"].shape == maps["Lb"].shape == (len(c["tc_ids"]), 12, 21), "train_core demand maps")
@@ -577,7 +600,8 @@ def tc(c, out, counts):
                                                                            "large96": int((size == 4).sum())}})
     B.require(counts["forwards"] == 0, "tc must not run a model")
     return {"stage": "tc", "files": {"metrics": B.ref(out / "metrics.npz"), "gt": B.ref(out / "gt.npz"), "raw_ids": B.ref(out / "raw_ids.json")},
-            "result": B.ref(out / "T1.json"), "images": len(c["tc_ids"]), "rows": len(t1), "development_read": False}
+            "result": B.ref(out / "T1.json"), "images": len(c["tc_ids"]),
+            "annotation_rows_of_non_positive_extent_left_out_of_the_filter": dropped, "rows": len(t1), "development_read": False}
 
 
 # ================================================================ select (CPU)
@@ -808,7 +832,8 @@ def tables(c, out, counts):
               "timing": {"SELECTION_written_at": sel["written_at"],
                          "first_development_NS_computation_started_at": d["start"]["first_development_NS_computation_started_at"]},
               "workload": {"stages": stages, "cpu_wall_seconds": sum(v["elapsed_seconds"] for k, v in stages.items() if k != "demand_tc" or dm["device"] == "cpu"),
-                           "demand_network_images_forwarded": dm["images"], "demand_network_forward_calls": dm["counts"]["demand_forwards"],
+                           "demand_network_images_forwarded": dm["images"], "demand_network_forward_calls": dm.get("adopted_stage_counts", dm["counts"])["demand_forwards"],
+                           "demand_archive_adopted_from": dm.get("adopted_from"),
                            "gpu_forward_seconds": dm["gpu_forward_seconds"], "demand_device": dm["device"],
                            "demand_forward_seconds": dm["forward_seconds"], "demand_stage_wall_seconds": dm["stage_wall_seconds"],
                            "detector_forwards": 0, "updates": 0, "scoring_calls": 0,
