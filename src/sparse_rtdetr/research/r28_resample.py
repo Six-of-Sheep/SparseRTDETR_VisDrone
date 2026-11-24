@@ -272,12 +272,15 @@ def check_source(arm, source, check):
 
 
 # ---------------------------------------------------------------- engine / evaluation model
-def create(parent, device, arm, source, *, fixture=False, activation_checkpoint=True, check=False):
+def create(parent, device, arm, source, *, fixture=False, activation_checkpoint=True, check=False, seed=0):
     """The L0 construction from the e060 parent with the forward swapped.  The demand context is built first: its
-    network initialiser draws from the torch RNG, and L0.create restores the parent training RNG as its last step."""
+    network initialiser draws from the torch RNG, and L0.create restores the parent training RNG as its last step.
+
+    ``seed`` (TASK_R32_W_SEEDS_001) is handed to L0.create, which selects the recipe seed and the only admissible
+    parent of that seed (scale_baseline.PARENT_SHAS); the default 0 is the R28-001 path, value for value."""
     check_source(arm, source, check)
     ctx = Context(source)
-    e, checks = L0.create(parent, device, fixture=fixture, activation_checkpoint=activation_checkpoint)
+    e, checks = L0.create(parent, device, fixture=fixture, activation_checkpoint=activation_checkpoint, seed=seed)
     ctx.to(e.device)
     swap(e.model, ctx)
     swap(e.ema.module, ctx)
@@ -294,11 +297,11 @@ def create(parent, device, arm, source, *, fixture=False, activation_checkpoint=
     return e, checks
 
 
-def build_eval_model(state, device, arm, source, *, check=False):
+def build_eval_model(state, device, arm, source, *, check=False, seed=0):
     """FP32 evaluation model from a saved module state (native key set) with the arm's demand source."""
     check_source(arm, source, check)
     ctx = Context(source).to(device)
-    model = L0.build_eval_model(state, device)
+    model = L0.build_eval_model(state, device, seed)
     swap(model, ctx)
     model.r28_arm = arm
     return model
