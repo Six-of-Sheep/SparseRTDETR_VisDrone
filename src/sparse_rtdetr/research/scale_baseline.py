@@ -42,12 +42,15 @@ PARENT_SHAS = {0: PARENT_SHA,
 PARENT_UPDATE = 18240
 PARENT_HW = (768, 1344)
 S15_HW = (1152, 2016)
+U896_HW = (896, 1568)
+# Arm registry (TASK_TH2_U1_001): production canvas and admissible seeds of every arm of this module.
+# "S15" is the default of every function below, so each existing S15 call behaves exactly as before.
+# The arm name is part of a complete state (capture) and of the engine identity (restore): a state of
+# one arm is refused by an engine of the other.  U896 exists for seed0 only.
+ARM_HW = {"S15": S15_HW, "U896": U896_HW}
+ARM_SEEDS = {"S15": (0, 1, 2), "U896": (0,)}
 SIZE_CACHE_BUFFERS = ("anchors", "valid_mask")
 CHECKPOINT_SEGMENTS = ("backbone.res_layers", "encoder.fpn_blocks", "encoder.pan_blocks")
-
-
-def production_config(seed=0):
-    return Config(seed=seed, input_hw=S15_HW)
 
 
 def require(ok, message):
@@ -55,16 +58,27 @@ def require(ok, message):
         raise ValueError(message)
 
 
-def validate_production(cfg):
+def arm_hw(arm):
+    """Production canvas of a registered arm; any other arm name is refused."""
+    require(type(arm) is str and arm in ARM_HW, f"unknown scale-baseline arm: {arm!r}")
+    return ARM_HW[arm]
+
+
+def production_config(seed=0, arm=ARM):
+    return Config(seed=seed, input_hw=arm_hw(arm))
+
+
+def validate_production(cfg, arm=ARM):
     """Only the canvas may differ from the frozen common recipe."""
-    require(type(cfg) is Config and cfg == production_config(cfg.seed), "S15 production recipe differs")
+    require(type(cfg) is Config and cfg == production_config(cfg.seed, arm), f"{arm} production recipe differs")
     parent = Config(seed=cfg.seed).binding()
     mine = cfg.binding()
     require({k for k in parent if parent[k] != mine[k]} == {"input_hw"}, "S15 binding differs beyond canvas")
 
 
-def binding(cfg, *, activation_checkpoint=False):
-    return {"version": VERSION, "arm": ARM, "config": cfg.binding(), "parent_sha256": PARENT_SHAS[cfg.seed],
+def binding(cfg, *, activation_checkpoint=False, arm=ARM):
+    arm_hw(arm)
+    return {"version": VERSION, "arm": arm, "config": cfg.binding(), "parent_sha256": PARENT_SHAS[cfg.seed],
             "parent_input_hw": list(PARENT_HW), "size_caches": "native regeneration at config.input_hw",
             "activation_checkpoint": bool(activation_checkpoint),
             "checkpoint_segments": list(CHECKPOINT_SEGMENTS) if activation_checkpoint else []}
@@ -177,19 +191,21 @@ def remove_activation_checkpoint(model):
 
 
 # ---------------------------------------------------------------- construction from the parent
-def create(parent, device="cpu", config=None, *, seed=0, fixture=False, activation_checkpoint=False):
+def create(parent, device="cpu", config=None, *, seed=0, fixture=False, activation_checkpoint=False, arm=ARM):
     """Bridge the seed's own native e060 complete state into an S15 engine; no parameter is added or reset.
 
     ``seed`` selects the only admissible parent (PARENT_SHAS) and recipe seed; a parent of another
     seed, or a config of another seed, is refused before any state is loaded into the engine.
+    ``arm`` selects the canvas (ARM_HW) and the admissible seeds (ARM_SEEDS); the default is S15.
     """
-    require(seed in PARENT_SHAS, "S15 seed has no certified parent")
-    cfg = config or production_config(seed)
+    hw = arm_hw(arm)
+    require(seed in PARENT_SHAS and seed in ARM_SEEDS[arm], f"{arm} seed has no certified parent")
+    cfg = config or production_config(seed, arm)
     require(cfg.seed == seed, "S15 config seed differs from the parent seed")
     if fixture:
-        require(cfg.input_hw == S15_HW and cfg != production_config(seed), "fixture must be S15 canvas")
+        require(cfg.input_hw == hw and cfg != production_config(seed, arm), f"fixture must be {arm} canvas")
     else:
-        validate_production(cfg)
+        validate_production(cfg, arm)
     require(native.file_sha(parent) == PARENT_SHAS[seed], "S15 parent identity (file of another seed or altered)")
     s = torch.load(parent, map_location="cpu", weights_only=True)
     require(s["engine"]["completed_updates"] == PARENT_UPDATE, "S15 parent clock")
@@ -232,7 +248,7 @@ def create(parent, device="cpu", config=None, *, seed=0, fixture=False, activati
     e = Engine(model, criterion, opt, ema, cfg)
     e.completed_updates = s["engine"]["completed_updates"]
     e.parameter_steps = {n: s["engine"]["parameter_optimizer_steps"][n] for n in e.parameter_steps}
-    e.r25_arm = ARM
+    e.r25_arm = arm
     e.r25_parent = PARENT_SHAS[seed]
     e.s15_activation_checkpoint = bool(activation_checkpoint)
     wrapped = install_activation_checkpoint(model) if activation_checkpoint else []

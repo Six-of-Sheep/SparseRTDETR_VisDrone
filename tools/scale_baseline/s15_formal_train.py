@@ -131,13 +131,28 @@ def bind_seed(seed):
     S.require(cursor(PARENT_UPDATE)["seed"] == seed, "formal cursor seed binding failed")
 
 
+def bind_arm(arm):
+    """Bind this process to one arm of the scale-baseline registry (TASK_TH2_U1_001).
+
+    Without a call the module is the S15 trainer, unchanged.  Like the seed, the arm is set once per
+    process and can never be switched afterwards; states carry the arm name (S.capture, _state_binding).
+    """
+    global ARM, _BOUND_ARM
+    S.arm_hw(arm)
+    S.require(_BOUND_ARM in (None, arm), f"process already bound to arm {_BOUND_ARM}")
+    ARM = _BOUND_ARM = arm
+
+
+_BOUND_ARM = None
+
+
 def fixture_config(seed):
-    return Config(seed=seed, input_hw=S.S15_HW, physical_batch_size=1, amp_dtype="float32")
+    return Config(seed=seed, input_hw=S.arm_hw(ARM), physical_batch_size=1, amp_dtype="float32")
 
 
 # ---------------------------------------------------------------- state binding
 def _cfg(c, fixture):
-    return fixture_config(c["seed"]) if fixture else S.production_config(c["seed"])
+    return fixture_config(c["seed"]) if fixture else S.production_config(c["seed"], ARM)
 
 
 def _state_binding(c, update, scope, audit, fixture=False):
@@ -294,11 +309,11 @@ def _result_body(result):
 def _make(c, device, *, fixture=False):
     PHASE["phase"] = "S15:construct"
     return S.create(c["parent"]["path"], device, _cfg(c, fixture) if fixture else None, seed=c["seed"],
-                    fixture=fixture, activation_checkpoint=c["workload"]["activation_checkpoint"])
+                    fixture=fixture, activation_checkpoint=c["workload"]["activation_checkpoint"], arm=ARM)
 
 
 def _data(c):
-    return S.train_dataset(c["data"]["train_core"], S.S15_HW, seed=c["seed"])
+    return S.train_dataset(c["data"]["train_core"], S.arm_hw(ARM), seed=c["seed"])
 
 
 def _update(e, images, targets, audit, *, exact=False):

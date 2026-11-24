@@ -51,6 +51,18 @@ EVALUATION = {
 LARGE_NAMES = ("AP", "AP50", "AP75", "APS", "APM", "APL", "AR1", "AR10", "AR100", "AR_small", "AR_medium", "AR_large")
 
 
+def bind_arm(arm):
+    """Bind this process to one arm of the scale-baseline registry (TASK_TH2_U1_001); default S15, unchanged.
+    EVALUATION, score, compare and cpu_checks stay the S15 seed1/seed2 readout and are not used by another arm."""
+    global ARM, _BOUND_ARM
+    S.arm_hw(arm)
+    require(_BOUND_ARM in (None, arm), f"process already bound to arm {_BOUND_ARM}")
+    ARM = _BOUND_ARM = arm
+
+
+_BOUND_ARM = None
+
+
 def _validate_policy(contract):
     require(contract["workload"]["evaluation"] == EVALUATION, "S15 endpoint workload differs")
     policy = contract["evaluation_policy"]
@@ -59,7 +71,7 @@ def _validate_policy(contract):
 
 
 def development(contract):
-    data = S.development(contract["data"]["development"], S.S15_HW)
+    data = S.development(contract["data"]["development"], S.arm_hw(ARM))
     require([r["stable_image_id"] for r in data.records] == contract["development_ids"],
             "S15 development members or order changed")
     return data
@@ -69,7 +81,7 @@ def _weights(payload, c, kind, flag):
     require(kind in ("EMA", "online"), "S15 evaluation endpoint kind")
     require((payload["version"], payload["arm"], payload["parent_sha256"], payload["config"],
              payload["activation_checkpoint"]) ==
-            (S.VERSION, ARM, c["parent"]["sha256"], S.production_config(c["seed"]).binding(), flag),
+            (S.VERSION, ARM, c["parent"]["sha256"], S.production_config(c["seed"], ARM).binding(), flag),
             "S15 evaluation state identity (seed, parent, recipe or memory mode)")
     require(payload["engine"]["completed_updates"] == payload["ema"]["updates"] == ENDPOINT,
             "S15 evaluation requires e120 (online and EMA clocks)")
@@ -81,7 +93,7 @@ def _weights(payload, c, kind, flag):
 
 def _load_model(payload, c, kind, device, flag):
     state = _weights(payload, c, kind, flag)
-    model, _, _ = build(S.production_config(c["seed"]), synthetic=True)
+    model, _, _ = build(S.production_config(c["seed"], ARM), synthetic=True)
     model.load_state_dict(state, strict=True)
     validate_geometry(model)  # 1152x2016 anchors/valid_mask/pos caches are the native regeneration
     model.eval().requires_grad_(False).to(device)
@@ -190,7 +202,7 @@ def _infer(contract, endpoint_ref, out, read_endpoint, counts):
         publish(path, all_predictions[budget])
         refs[str(budget)] = reference(path)
     result = {"status": "PASS", "arm": ARM, "seed": contract["seed"], "kind": KIND, "epoch": 120, "update": ENDPOINT,
-              "view": "A", "input_hw": list(S.S15_HW), "device": str(device), "FP32": True, "batch_size": BATCH,
+              "view": "A", "input_hw": list(S.arm_hw(ARM)), "device": str(device), "FP32": True, "batch_size": BATCH,
               "contract_sha256": contract["contract_sha256"], "formal_identity": contract["formal_identity"],
               "checkpoint": endpoint_ref, "weights_sha256": weight_sha, "predictions": refs,
               "images": len(data.records), "steady_forwards": len(measured), "warmup_forwards": len(warmup),
