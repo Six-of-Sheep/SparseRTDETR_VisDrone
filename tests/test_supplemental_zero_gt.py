@@ -17,7 +17,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'src'))
-import confirmation_prepare as prepare
+from tools.legacy_sahi import confirmation_prepare as prepare
 from sparse_rtdetr.localization.data import parse_raw
 from sparse_rtdetr.data_protocol.supplemental_zero_gt import SupplementalZeroGT, specification
 from sparse_rtdetr.baseline import primary_evaluator as primary
@@ -71,7 +71,7 @@ class ProductionZeroGTTests(unittest.TestCase):
                 self.policy.validate_gt(gt)
 
     def test_production_reader_extension_reference(self):
-        from supplemental_data import extension
+        from tools.legacy_sahi.supplemental_data import extension
         from sparse_rtdetr.localization.runio import reference
         self.assertIsNone(extension({}, self.rows, self.parsed))
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,9 +2,13 @@
 import copy
 import json
 from pathlib import Path
+import sys
 import unittest
 
-import aggregate_seeds as aggregate
+if __name__ == "__main__" and not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools.legacy_sahi import aggregate_seeds as aggregate
 
 
 def fixture(seed=0, change=.01, cost=4.5):

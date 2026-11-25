@@ -8,15 +8,15 @@ from pathlib import Path
 import subprocess
 import sys
 
-import supplemental_runtime as rt
-from supplemental_runtime import require, exact, read, publish, reference, digest, ROOT
+from tools.legacy_sahi import supplemental_runtime as rt
+from tools.legacy_sahi.supplemental_runtime import require, exact, read, publish, reference, digest, ROOT
 
 
 def check_real_inputs(template, context, base):
-    from supplemental_data import dataset, extension
-    from supplemental_job import environment, verify_phase
-    from supplemental_entry_check import tree
-    from confirmation_prepare import evaluator_inputs
+    from tools.legacy_sahi.supplemental_data import dataset, extension
+    from tools.legacy_sahi.supplemental_job import environment, verify_phase
+    from tools.legacy_sahi.supplemental_entry_check import tree
+    from tools.legacy_sahi.confirmation_prepare import evaluator_inputs
     from sparse_rtdetr.data_protocol.supplemental_zero_gt import SupplementalZeroGT, specification, ROWS
     from sparse_rtdetr.r0.evaluation import primary_inputs, bridge_inputs
     from sparse_rtdetr.baseline import primary_evaluator as primary
@@ -32,7 +32,7 @@ def check_real_inputs(template, context, base):
     publish(token, dict(task_id=rt.TASK,purpose=rt.PURPOSE,source_sha256=c['source_sha256'],job_root=c['job_root']))
     c['launch_token']=reference(token);c['contract_sha256']=digest(c);publish(c['contract_path'],c)
     env={**environment(c),'SUPPLEMENTAL_PYTHON':sys.executable}
-    argv=['bash',str(ROOT/'supplemental_launch.sh'),c['contract_path']]
+    argv=['bash',str(Path(__file__).with_name('supplemental_launch.sh')),c['contract_path']]
     with (base/'real-inputs.log').open('xb') as f:
         result=subprocess.run(argv,env=env,stdout=f,stderr=subprocess.STDOUT)
     require(result.returncode==0,'real1602 input launcher failure; inspect real-inputs.log')
@@ -40,7 +40,7 @@ def check_real_inputs(template, context, base):
     require(proof['members']==1602 and proof['physical_rows']==83478 and proof['admitted_zero_rows']==2 and not proof['AP_scored'],'real1602 coverage')
     root=Path(c['job_root']);before=tree(root)
     for action in ('start','run'):
-        command=argv if action=='start' else [sys.executable,'-B',str(ROOT/'supplemental_job.py'),'run','--contract',c['contract_path']]
+        command=argv if action=='start' else [sys.executable,'-B',str(Path(__file__).with_name('supplemental_job.py')),'run','--contract',c['contract_path']]
         with (base/('real-inputs-duplicate-'+action+'.log')).open('xb') as f:
             r=subprocess.run(command,env=env,stdout=f,stderr=subprocess.STDOUT)
         require(r.returncode!=0 and tree(root)==before,'real1602 duplicate changed evidence')

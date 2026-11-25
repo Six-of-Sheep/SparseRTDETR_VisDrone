@@ -7,7 +7,11 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-import confirmation_prepare as p
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.legacy_sahi import confirmation_prepare as p
 
 
 def tree(path):
@@ -32,7 +36,7 @@ def main():
         runtime=Path('/home/lyy/.cache')/p.TASK/base.name/name;runtime.parent.mkdir(parents=True,exist_ok=True)
         d.update(output=str(base/name),runtime=str(runtime),inject_worker_failure=failure)
         d['contract_sha256']=p.digest(d);p.publish(contract,d)
-        cmd=[sys.executable,'-B',str(p.ROOT/'confirmation_prepare.py'),'start','--contract',str(contract)]
+        cmd=[sys.executable,'-B',str(Path(p.__file__).resolve()),'start','--contract',str(contract)]
         with (base/(name+'.log')).open('xb') as f:r=subprocess.run(cmd,stdout=f,stderr=subprocess.STDOUT,env=dict(os.environ))
         root=base/name
         p.require(r.returncode==(2 if failure else 0),'real CLI returned unexpected code: '+name)
@@ -45,7 +49,7 @@ def main():
         before=tree(root)
         for action in ('start','run'):
             with (base/(name+'-duplicate-'+action+'.log')).open('xb') as f:
-                again=subprocess.run([sys.executable,'-B',str(p.ROOT/'confirmation_prepare.py'),action,'--contract',str(contract)],stdout=f,stderr=subprocess.STDOUT,env=dict(os.environ))
+                again=subprocess.run([sys.executable,'-B',str(Path(p.__file__).resolve()),action,'--contract',str(contract)],stdout=f,stderr=subprocess.STDOUT,env=dict(os.environ))
             p.require(again.returncode!=0 and tree(root)==before,'duplicate launch mutated attempt')
         results.append({'case':name,'returncode':r.returncode,'contract':p.reference(contract),'terminal':p.reference(root/('STOP.json' if failure else 'CLOSED.json')),'duplicate_start_and_run_rejected':True,'export':p.reference(root/'SLIM_EXPORT.json'),'exit':p.reference(root/'EXIT.json')})
     p.publish(base/'CPU_GATE.json',dict(status='PASS',source=p.reference(v.manifest),records=results,

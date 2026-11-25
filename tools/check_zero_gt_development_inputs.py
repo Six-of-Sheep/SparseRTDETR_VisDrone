@@ -21,7 +21,7 @@ def main():
     from sparse_rtdetr.baseline import primary_evaluator as primary
     from sparse_rtdetr.localization.data import parse_raw,read_bound
     from pycocotools import _mask
-    from confirmation_prepare import evaluator_inputs
+    from tools.legacy_sahi.confirmation_prepare import evaluator_inputs
     evaluation.score_budget=forbidden;evaluation.bridge_metrics=forbidden
     gate=json.loads(Path(a.review_gate).read_bytes());require(gate['status']=='REVIEW_CPU_PASS_PRODUCTION_REMAINS_STOP','prior review gate')
     mr=gate['development']['manifest'];rows=exact(mr)['records']

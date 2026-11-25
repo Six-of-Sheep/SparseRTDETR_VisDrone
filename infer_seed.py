@@ -237,8 +237,7 @@ def cpu_checks(c):
         rows.append({"image_id": image_id, "geometry": geometry[0],
                      "whole_pixels_sha256": hashlib.sha256(views[0][0].numpy().tobytes()).hexdigest()})
     import unittest
-    import test_slice_core
-    import test_seed_readout
+    from tests import test_slice_core, test_seed_readout
     tests = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromModule(module)
                                for module in (test_slice_core, test_seed_readout)])
     test_result = unittest.TextTestRunner(verbosity=1).run(tests)

@@ -1,4 +1,4 @@
-"""Synthetic CPU-only contract checks. Run: python -B test_slice_core.py."""
+"""Synthetic CPU contract checks. Run with python -m unittest tests.test_slice_core."""
 
 import json
 import math
@@ -7,6 +7,9 @@ import random
 import subprocess
 import sys
 import unittest
+
+if __name__ == "__main__" and not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from slice_core import (
     Candidate, Tile, box_iou64, classwise_nms, deserialize_candidates,
@@ -179,7 +182,7 @@ class SliceContractTests(unittest.TestCase):
             [sys.executable, "-B", "-c",
              "import random,sys; b=random.getstate(); import slice_core; "
              "assert random.getstate()==b; assert 'torch' not in sys.modules; print('PASS')"],
-            cwd=Path(__file__).parent, capture_output=True, text=True, check=True)
+            cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=True)
         self.assertEqual(result.stdout.strip(), "PASS")
 
     def test_vectorized_nms_matches_scalar_fixed_case(self):

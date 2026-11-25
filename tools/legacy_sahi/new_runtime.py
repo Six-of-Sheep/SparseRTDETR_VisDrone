@@ -3,9 +3,11 @@ import os
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 def _bootstrap(c=None):
-    root = Path(c["source_root"]) if c else Path(__file__).resolve().parent
+    root = Path(c["source_root"]) if c else ROOT
     path = str(root / "src")
     if path not in sys.path:
         sys.path.insert(0, path)
@@ -24,7 +26,7 @@ def install(c=None):
     from sparse_rtdetr.protocol_r18.control import install_resources
     install_resources()
     from sparse_rtdetr.protocol_r18 import transport
-    from seed_protocol import PROTOCOL, install as install_protocol, save_audit, validate_audit
+    from tools.legacy_sahi.seed_protocol import PROTOCOL, install as install_protocol, save_audit, validate_audit
     install_protocol()
     if not getattr(transport, "_paired_audit_installed", False):
         previous_save = transport.save_audit; previous_validate = transport.validate_audit
@@ -59,12 +61,12 @@ def load(path):
         raise RuntimeError("paired execution contract digest changed")
     install(c)
     from sparse_rtdetr.localization.runio import digest, read, reference, require, sha
-    from seed_protocol import TASK, ARM
+    from tools.legacy_sahi.seed_protocol import TASK, ARM
     seed = c.get("seed")
     require(type(seed) is int and seed in (1, 2) and c.get("task_id") == TASK + "-seed" + str(seed)
             and c.get("arm") == ARM, "paired execution task/seed/arm differs")
     root = Path(c["source_root"])
-    require(root == Path(__file__).resolve().parent and root.is_absolute() and not root.is_symlink(), "paired executable source root differs")
+    require(root == ROOT and root.is_absolute() and not root.is_symlink(), "paired executable source root differs")
     require(sha(c["source_manifest"]) == c["source_sha256"], "paired source manifest SHA differs")
     manifest = read(c["source_manifest"])
     for row in manifest["files"]:
@@ -106,7 +108,7 @@ def identity(c, mode):
     install(c)
     from sparse_rtdetr.localization import guard
     from sparse_rtdetr.localization.runio import read, reference, require
-    from seed_protocol import PROTOCOL, INFERENCE, SAHI
+    from tools.legacy_sahi.seed_protocol import PROTOCOL, INFERENCE, SAHI
     result = {**{k: c[k] for k in ("task_id", "seed", "arm", "source_sha256", "contract_sha256", "data_sha256")},
               "plan_sha256": c["plan"]["sha256"], "material_binding_sha256": material_binding(c),
               "progress_protocol": PROTOCOL, "mode": mode, "output_root": str(Path(c["job_root"]) / mode),

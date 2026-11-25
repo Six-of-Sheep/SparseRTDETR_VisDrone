@@ -6,8 +6,8 @@ import sys
 import time
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import supplemental_runtime as rt
-from supplemental_runtime import exact, read, reference, require, publish, digest, ROOT
+from tools.legacy_sahi import supplemental_runtime as rt
+from tools.legacy_sahi.supplemental_runtime import exact, read, reference, require, publish, digest, ROOT
 
 
 def main():

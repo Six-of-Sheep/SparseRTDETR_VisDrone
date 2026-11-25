@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import confirmation_prepare as p
+from tools.legacy_sahi import confirmation_prepare as p
 
 
 class PreparationTests(unittest.TestCase):

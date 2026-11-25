@@ -1,7 +1,11 @@
 """Import-safe independent seed1/2 entry. No legacy training dispatcher."""
 import argparse,json,os,subprocess,sys,time,traceback
 from pathlib import Path
-import new_runtime as rt
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.legacy_sahi import new_runtime as rt
 
 def prerequisite(c,mode,*,preview=False):
  from sparse_rtdetr.localization.runio import read,require,reference
@@ -99,10 +103,11 @@ def worker(c,mode):
    from sparse_rtdetr.protocol_r18.worker import cpu_state
    cpu_state(c,out,holder)
   elif mode=='cpu-protocol':
-   import test_seed_protocol,seed_cpu_tests
+   from tests import test_seed_protocol, seed_cpu_tests
    protocol=test_seed_protocol.run(out/'protocol',c)
    seed=seed_cpu_tests.run()
-   import cpu_front,infer_seed
+   from tools.legacy_sahi import cpu_front
+   import infer_seed
    front=cpu_front.run(c,out/'front')
    if c['seed']==1:publish(out/'CPU_INFERENCE_INTERFACE.json',infer_seed.cpu_checks(c))
    else:

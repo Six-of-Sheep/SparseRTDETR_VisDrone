@@ -22,6 +22,15 @@ python -m pytest -q tests/test_r28_warp.py::test_waterfill_random_marginals
 
 Each link opens a file at the revision for that row. The scripts use `FG` for F_geo. “Seed” identifies a paired training run.
 
+For the supplementary three-seed analysis and the W seed replication, use a full clone. These two experiments use separate commits outside the main source tag. In the clone, select the revision for the experiment you want to reproduce.
+
+```bash
+git clone https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone.git paper-experiments
+cd paper-experiments
+git switch --detach b24dec791b72812c8d9a1e6342ff637497bef770  # supplementary analysis
+# For the W replication, select f564e2589ef8732f522852d371c3ff026288187a instead.
+```
+
 | Paper arm or comparison | What changes | Source at the recorded revision |
 | --- | --- | --- |
 | L0, seed 0 | Uniform resizing to the smaller detection canvas | [Baseline driver](https://github.com/Six-of-Sheep/SparseRTDETR_VisDrone/blob/fac5f79dcec7f649a18392f29d3109a3db23f998/tools/r27_l0/l0_run.py) |

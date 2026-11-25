@@ -11,7 +11,7 @@ from pathlib import Path
 
 from sparse_rtdetr.localization import channel
 from sparse_rtdetr.localization.runio import canonical, digest, publish, read, reference, require, write
-from seed_protocol import ARM, BINDINGS, PROTOCOL, TASK, SAHI, install
+from tools.legacy_sahi.seed_protocol import ARM, BINDINGS, PROTOCOL, TASK, SAHI, install
 
 
 def run(root, c):

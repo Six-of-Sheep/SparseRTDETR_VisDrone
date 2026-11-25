@@ -3,7 +3,7 @@ import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from supplemental_runtime import exact, require, digest, reference, SEALED_SHA, TASK, PURPOSE
+from tools.legacy_sahi.supplemental_runtime import exact, require, digest, reference, SEALED_SHA, TASK, PURPOSE
 
 
 def regular(path):
@@ -100,7 +100,7 @@ def dataset(c):
         seen.add(key); raw = expected_lines[key]
         require(obj['annotation_id'] == raw['id'] and obj['raw_line_sha256'] == raw['raw_line_sha256'] and obj['bbox_xyxy'] == raw['box'] and obj['raw_category_id'] == raw['category'], 'lineage/raw identity')
     require(seen == set(expected_lines), 'lineage physical rows incomplete')
-    from confirmation_prepare import validate_parsed
+    from tools.legacy_sahi.confirmation_prepare import validate_parsed
     validate_parsed(rows, parsed, gt_extension=extension(c, rows, parsed))
     from torchvision.transforms import v2 as T
     data = SimpleNamespace(spec={'roots': {'images': spec['images']}}, records=rows,
