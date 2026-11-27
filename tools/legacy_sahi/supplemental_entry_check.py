@@ -8,8 +8,12 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-import supplemental_runtime as rt
-from supplemental_runtime import ROOT, read, exact, require, reference, digest, publish
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.legacy_sahi import supplemental_runtime as rt
+from tools.legacy_sahi.supplemental_runtime import ROOT, read, exact, require, reference, digest, publish
 
 
 def fixture(parent, base, real_context=None):
@@ -23,7 +27,7 @@ def fixture(parent, base, real_context=None):
     rows, lineage, source_refs = [], [], []
     selected = manifest['records'][:6]
     if real_context is not None:
-        from supplemental_data import dataset
+        from tools.legacy_sahi.supplemental_data import dataset
         _, all_rows, _ = dataset(real_context)
         from sparse_rtdetr.data_protocol.supplemental_zero_gt import ROWS
         special = {r[1] for r in ROWS}
@@ -95,9 +99,9 @@ def main():
         tok = base / (name + '-token.json')
         publish(tok, dict(task_id=rt.TASK, purpose=rt.PURPOSE, source_sha256=c['source_sha256'], job_root=c['job_root']))
         c['launch_token'] = reference(tok); c['contract_sha256'] = digest(c); publish(c['contract_path'], c)
-        from supplemental_job import environment, verify_phase
+        from tools.legacy_sahi.supplemental_job import environment, verify_phase
         env = {**environment(c), 'SUPPLEMENTAL_PYTHON': sys.executable}
-        argv = ['bash', str(ROOT / 'supplemental_launch.sh'), c['contract_path']]
+        argv = ['bash', str(Path(__file__).with_name('supplemental_launch.sh')), c['contract_path']]
         with (base / (name + '.log')).open('xb') as log:
             p = subprocess.run(argv, env=env, stdout=log, stderr=subprocess.STDOUT)
         root = Path(c['job_root'])
@@ -115,7 +119,7 @@ def main():
             require(summary['synthetic'] and summary['dual_evaluator_groups'] == 18 and summary['forward_calls'] == 0, 'actual dual evaluator scope')
         before = tree(root)
         for action in ('start', 'run'):
-            args = argv if action == 'start' else [sys.executable, '-B', str(ROOT / 'supplemental_job.py'), 'run', '--contract', c['contract_path']]
+            args = argv if action == 'start' else [sys.executable, '-B', str(Path(__file__).with_name('supplemental_job.py')), 'run', '--contract', c['contract_path']]
             with (base / (name + '-duplicate-' + action + '.log')).open('xb') as log:
                 duplicate = subprocess.run(args, env=env, stdout=log, stderr=subprocess.STDOUT)
             require(duplicate.returncode != 0 and tree(root) == before, 'duplicate start/run changed evidence')
@@ -138,7 +142,7 @@ def main():
             pass
         else:
             raise RuntimeError('invalid stream admitted: ' + name)
-    from supplemental_data import dataset
+    from tools.legacy_sahi.supplemental_data import dataset
     reader_refusals = []
     original = read(base / 'success-contract.json')
     for name in ('wrong_purpose', 'missing_member', 'duplicate_member', 'wrong_member_identity', 'training_overlap', 'manifest_SHA', 'lineage_SHA'):
@@ -169,7 +173,7 @@ def main():
             raise RuntimeError('bad reader input admitted: ' + name)
     # Exercise each actual strict restore -> adapted prepare_cuda -> original
     # live_admission path, stopping at CUDA.init rather than constructing a model.
-    from supplemental_gpu import restore
+    from tools.legacy_sahi.supplemental_gpu import restore
     saved_resource, saved_init = channel.resource, torch.cuda.init
     sample = guard.snapshot(base)
     admitted_seeds = []
@@ -221,7 +225,7 @@ def main():
     finally:
         channel.resource, torch.cuda.init = saved_resource, saved_init
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
-    from supplemental_zero_check import check_real_inputs
+    from tools.legacy_sahi.supplemental_zero_check import check_real_inputs
     real_proof = check_real_inputs(template, real_context, base)
     require(not torch.cuda.is_initialized(), 'CPU check initialized CUDA')
     publish(base / 'CPU_GATE.json', dict(status='PASS', entry='supplemental_job.py', source_sha256=template['source_sha256'],

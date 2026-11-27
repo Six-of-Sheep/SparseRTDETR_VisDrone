@@ -28,7 +28,7 @@ git archive --format=tar --output=../run-metadata/example-seed0/source.tar <回�
 
 ## 目录与检查
 
-源码留src，共享工具留tools，配置留configs，轻量实验索引留manifests。当前认证根入口先保留原路径；目录重构单独开展。数据与结果不进Git。
+源码放在 `src/`，工具放在 `tools/`，配置和实验索引分别放在 `configs/` 和 `manifests/`。早期整图与切片实验入口见 [tools/legacy_sahi](../tools/legacy_sahi/)，CPU 测试见 [tests](../tests/)。论文评价代码仍从根目录导入 `infer_seed.py` 和 `slice_core.py`。复现论文中的某个实验，请使用[论文代码索引](paper-code.md)中该行对应的提交。数据与运行结果另行管理。
 
 check --staged读取真实暂存字节，拒绝产物、凭据形态、机器目录、超2MiB文件及未审查链接；它不是完整秘密审计。确需大源码文件时先明确审查例外。
 

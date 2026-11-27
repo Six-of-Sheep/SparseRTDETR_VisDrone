@@ -4,9 +4,14 @@ import copy
 import json
 import os
 from pathlib import Path
+import sys
 import time
-import supplemental_runtime as rt
-from supplemental_runtime import exact, reference, require, publish
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.legacy_sahi import supplemental_runtime as rt
+from tools.legacy_sahi.supplemental_runtime import exact, reference, require, publish
 
 
 def main():
@@ -19,8 +24,8 @@ def main():
     p.add_argument('--output', required=True)
     a = p.parse_args(); rt.install()
     import torch
-    from supplemental_data import dataset, current_paths, member_path, read_bytes
-    from confirmation_prepare import evaluator_inputs
+    from tools.legacy_sahi.supplemental_data import dataset, current_paths, member_path, read_bytes
+    from tools.legacy_sahi.confirmation_prepare import evaluator_inputs
     require(os.environ.get('CUDA_VISIBLE_DEVICES') == '' and not torch.cuda.is_initialized(), 'CPU-only check')
     torch.set_num_threads(1)
     out = Path(a.output); out.mkdir(exist_ok=False)
@@ -60,7 +65,8 @@ def main():
     old = {x['path']: x for x in prior['files']}; new = {x['path']: x for x in source['files']}
     changed = [x for x in old if x not in new or old[x] != new[x]]
     changed_runtime = [x for x in changed if not x.startswith('docs/') and not x.startswith('manifests/')]
-    require(changed_runtime == ['supplemental_data.py'], 'unexpected prior runtime change: ' + repr(changed_runtime))
+    data_module = Path(__file__).with_name('supplemental_data.py').relative_to(rt.ROOT).as_posix()
+    require(changed_runtime == [data_module], 'unexpected prior runtime change: ' + repr(changed_runtime))
     for r in source['files']:
         require(reference(rt.ROOT / r['path']) == dict(path=str(rt.ROOT/r['path']), bytes=r['bytes'], sha256=r['sha256']), 'deployed source changed')
     require(not torch.cuda.is_initialized(), 'CUDA initialized during path checks')

@@ -8,8 +8,12 @@ import subprocess
 import sys
 import time
 import traceback
-import supplemental_runtime as rt
-from supplemental_runtime import ROOT, read, exact, require, reference, digest, publish
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.legacy_sahi import supplemental_runtime as rt
+from tools.legacy_sahi.supplemental_runtime import ROOT, read, exact, require, reference, digest, publish
 
 
 def environment(c, gpu=False):
@@ -20,7 +24,7 @@ def environment(c, gpu=False):
 
 
 def command(c, action, seed=None, mode=None):
-    argv = [c['python'], '-B', str(ROOT / 'supplemental_job.py'), action, '--contract', c['contract_path']]
+    argv = [c['python'], '-B', str(Path(__file__).resolve()), action, '--contract', c['contract_path']]
     if seed is not None:
         argv += ['--seed', str(seed), '--mode', mode]
     return argv
@@ -88,8 +92,8 @@ def phase(c, seed, mode):
 def synthesize(c, seed, mode, out, emit):
     """Explicit CPU fixture, shares reader/pixels/decode and dynamic batch path."""
     import torch
-    from supplemental_data import dataset
-    from supplemental_gpu import decode_merge
+    from tools.legacy_sahi.supplemental_data import dataset
+    from tools.legacy_sahi.supplemental_gpu import decode_merge
     from infer_seed import make_view_pixels
     require(os.environ['CUDA_VISIBLE_DEVICES'] == '' and not torch.cuda.is_initialized(), 'CPU fixture CUDA boundary')
     data, rows, parsed = dataset(c)
@@ -126,8 +130,8 @@ def synthesize(c, seed, mode, out, emit):
 
 
 def evaluation(c, seed, out, emit):
-    from supplemental_data import dataset, extension
-    from confirmation_prepare import evaluator_inputs
+    from tools.legacy_sahi.supplemental_data import dataset, extension
+    from tools.legacy_sahi.confirmation_prepare import evaluator_inputs
     from sparse_rtdetr.r0.evaluation import score_budget
     _, rows, parsed = dataset(c)
     gt_extension = extension(c, rows, parsed)
@@ -201,8 +205,8 @@ def worker(c, seed, mode):
                 raise RuntimeError('EXPECTED_CPU_WORKER_EXCEPTION')
         if mode == 'input-check':
             require(c.get('CPU_input_only') is True and not torch.cuda.is_initialized(), 'real input CPU check only')
-            from supplemental_data import dataset, extension
-            from confirmation_prepare import evaluator_inputs
+            from tools.legacy_sahi.supplemental_data import dataset, extension
+            from tools.legacy_sahi.confirmation_prepare import evaluator_inputs
             data, rows, parsed = dataset(c)
             policy = extension(c, rows, parsed)
             preds = [dict(image_id=r['stable_image_id'], category_id=4, score=.9, bbox_xyxy=[1.,1.,2.,2.]) for r in rows]
@@ -213,7 +217,7 @@ def worker(c, seed, mode):
             publish(out/'REAL_INPUTS.json', result); emit.emit('data_checked', proof=reference(out/'REAL_INPUTS.json'))
             publish(out/'RESULT.json', result); emit.emit('complete', result=reference(out/'RESULT.json'))
         elif mode == 'data-admission':
-            from supplemental_data import dataset, verify_images
+            from tools.legacy_sahi.supplemental_data import dataset, verify_images
             data, rows, parsed = dataset(c)
             result = verify_images(data, c); result.update(seed=seed, synthetic=c['synthetic'], detector_updates=0, forward_calls=0)
             publish(out / 'DATA_ADMISSION.json', result); emit.emit('data_checked', proof=reference(out / 'DATA_ADMISSION.json'))
@@ -224,7 +228,7 @@ def worker(c, seed, mode):
         elif c['synthetic']:
             synthesize(c, seed, mode, out, emit)
         else:
-            from supplemental_gpu import run as gpu_run
+            from tools.legacy_sahi.supplemental_gpu import run as gpu_run
             gpu_run(c, seed, mode, out, emit)
         publish(channel.receipt_root(out) / 'worker-exit.json', {'status': 'PASS', 'success': True, 'pid': os.getpid()})
     except BaseException as error:

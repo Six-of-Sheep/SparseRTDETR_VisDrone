@@ -3,7 +3,7 @@ import gc
 import io
 from pathlib import Path
 import time
-from supplemental_runtime import require,read,exact,reference,publish,ROOT,live
+from tools.legacy_sahi.supplemental_runtime import require,read,exact,reference,publish,ROOT,live
 
 def restore(c,seed,out):
     import torch
@@ -18,7 +18,7 @@ def restore(c,seed,out):
     require(b['config']==Config(seed=seed).binding() and b['scope']==f'formal_R18_seed{seed}_e120','real seed model recipe differs')
     # Build only the unchanged native model, then strict original full restore.
     # Original binding is preserved; new execution lineage is a separate receipt.
-    from supplemental_admission import adapt_resources
+    from tools.legacy_sahi.supplemental_admission import adapt_resources
     require(p['construction']['environment']==c['environment'],'parent/resource environment conflict')
     cfg=adapt_resources({**c,**p['construction'],'seed':seed,'runtime_root':c['runtime_root']})
     runtime=base.prepare_cuda(cfg,out)
@@ -73,7 +73,7 @@ def run(c, seed, mode, out, emit):
     from sparse_rtdetr.protocol_r18.geometry import forward_guards
     from sparse_rtdetr.localization import worker as base
     from sparse_rtdetr.r0.evaluation_data import Development548
-    from supplemental_data import dataset
+    from tools.legacy_sahi.supplemental_data import dataset
     previous_event = base.event
 
     def cuda_event(path, kind, **kw):

@@ -15,7 +15,9 @@ import sys
 import time
 import traceback
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
+if not __package__:
+    sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'src'))
 from sparse_rtdetr.localization.runio import read, require, reference, digest, publish, event
 
@@ -232,7 +234,7 @@ def run(c,path):
             identity=dict(task_id=TASK,seed=seed,progress_protocol=PROTOCOL,source_sha256=c['source_manifest']['sha256'],
                 contract_sha256=c['contract_sha256'],checkpoint_sha256=c['parents'][seed]['checkpoint_sha256'],
                 output_root=str(root),supervisor_pid=os.getpid(),supervisor_start=parent['start'])
-            code=guard.supervise([sys.executable,'-B',str(ROOT/'confirmation_prepare.py'),'worker','--contract',path,'--seed',str(seed)],root,dict(os.environ),
+            code=guard.supervise([sys.executable,'-B',str(Path(__file__).resolve()),'worker','--contract',path,'--seed',str(seed)],root,dict(os.environ),
                 gpu_uuid=None,boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),gpu=False,checkpoint_bytes=0,formal=False,runtime=runtime,run_identity=identity)
             require(code==0,'supervised CPU worker failed')
             b=read(runtime/'identity.json');channel.verify_archive(runtime,root,b)
@@ -251,7 +253,7 @@ def main():
     if a.action=='run':return run(c,a.contract)
     out=Path(c['output']);require(not out.exists(),'output/attempt already exists');out.mkdir(parents=True,exist_ok=False)
     publish(out/'LAUNCH.json',{'contract':reference(a.contract),'pid':os.getpid()})
-    code=subprocess.call([sys.executable,'-B',str(ROOT/'confirmation_prepare.py'),'run','--contract',a.contract],env=dict(os.environ))
+    code=subprocess.call([sys.executable,'-B',str(Path(__file__).resolve()),'run','--contract',a.contract],env=dict(os.environ))
     publish(out/'EXIT.json',{'returncode':code,'epoch':time.time()});return code
 
 

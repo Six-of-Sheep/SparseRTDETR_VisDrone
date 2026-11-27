@@ -1,7 +1,11 @@
 """One-shot laboratory-only paired chain; scientific FAIL completes fixed workload."""
 import argparse,json,os,subprocess,sys,time,traceback
 from pathlib import Path
-import new_runtime as rt
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.legacy_sahi import new_runtime as rt
 MODES=('gpu-acceptance','formal','infer-A','accept-A','accept-B','accept-C','full-C','evaluation')
 
 def verify(c,mode):
@@ -43,7 +47,7 @@ def admission(c,mode):
 
 def phase(c,mode):
  from sparse_rtdetr.localization.runio import publish,require,reference,read
- from new_entry import prerequisite
+ from tools.legacy_sahi.new_entry import prerequisite
  prerequisite(c,mode);root=Path(c['job_root']);require(not (root/mode).exists() and not (root/(mode+'-consumed.json')).exists(),'phase already used; no replay')
  sample=admission(c,mode);publish(root/(mode+'-admission.json'),{'status':'PASS','mode':mode,'seed':c['seed'],'snapshot':sample})
  command=[c['python'],'-B',str(Path(__file__).with_name('new_entry.py')),'supervise','--contract',c['contract_path'],'--mode',mode]
@@ -80,16 +84,16 @@ def main():
    # Scientific and matched cost failures are results, not permission to alter completion.
    done.append({'seed':seed,'comparison':reference(Path(c['job_root'])/'evaluation/COMPARISON.json'),'result':reference(Path(c['job_root'])/'evaluation/RESULT.json')})
    publish(root/f'seed{seed}-COMPLETE.json',{'status':'FIXED_SEED_COMPLETE','seed':seed,'results':done[-1],'finished_epoch':time.time()})
-  import aggregate_seeds
+  from tools.legacy_sahi import aggregate_seeds
   summary=aggregate_seeds.run(execution,root/'summary')
   publish(root/'CHAIN_RESULT.json',{'status':'FIXED_PAIRED_EXECUTION_COMPLETE','seeds':[1,2],'completed':done,'summary':summary,'started_epoch':start,'finished_epoch':time.time(),'elapsed_seconds':time.time()-start,'automatic_retry':False,'holdout_accessed':False})
-  import slim_delivery
+  from tools.legacy_sahi import slim_delivery
   slim_delivery.server_export(execution)
   return 0
  except BaseException as e:
   publish(root/'STOP.json',{'status':'STOP_PRESERVE_NO_RETRY','seed':seed,'mode':mode,'error':repr(e),'traceback':traceback.format_exc(),'started_epoch':start,'finished_epoch':time.time(),'completed':done,'automatic_retry':False})
   try:
-   import slim_delivery
+   from tools.legacy_sahi import slim_delivery
    slim_delivery.server_export(execution)
   except BaseException as x:publish(root/'EXPORT_ERROR.json',{'error':repr(x),'traceback':traceback.format_exc()})
   return 2
