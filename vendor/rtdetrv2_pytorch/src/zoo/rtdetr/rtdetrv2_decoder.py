@@ -558,7 +558,7 @@ class RTDETRTransformerv2(nn.Module):
         # prepare denoising training
         if self.training and self.num_denoising > 0:
             denoising_logits, denoising_bbox_unact, attn_mask, dn_meta = \
-                get_contrastive_denoising_training_group(targets, \
+                getattr(self, "_dn_generator", get_contrastive_denoising_training_group)(targets, \
                     self.num_classes, 
                     self.num_queries, 
                     self.denoising_class_embed, 
